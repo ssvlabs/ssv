@@ -3,7 +3,6 @@ package exporter
 import (
 	"encoding/hex"
 	"fmt"
-
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -54,6 +53,8 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 	nm.Msg = res
 }
 
+// TODO: un-lint
+//nolint
 func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),

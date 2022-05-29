@@ -3,20 +3,28 @@ package duties
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/validator"
+	"time"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
-	"time"
+
+	"github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+)
+
+//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
+const (
+	slotChanBuffer = 32
 )
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
-	ExecuteDuty(duty *beacon.Duty) error
+	ExecuteDuty(duty *beaconprotocol.Duty) error
 }
 
 // DutyController interface for dispatching duties execution according to slot ticker
@@ -30,19 +38,20 @@ type DutyController interface {
 type ControllerOptions struct {
 	Logger              *zap.Logger
 	Ctx                 context.Context
-	BeaconClient        beacon.Beacon
-	EthNetwork          core.Network
+	BeaconClient        beaconprotocol.Beacon
+	EthNetwork          beaconprotocol.Network
 	ValidatorController validator.Controller
 	Executor            DutyExecutor
 	GenesisEpoch        uint64
 	DutyLimit           uint64
+	ForkVersion         forksprotocol.ForkVersion
 }
 
 // dutyController internal implementation of DutyController
 type dutyController struct {
 	logger     *zap.Logger
 	ctx        context.Context
-	ethNetwork core.Network
+	ethNetwork beaconprotocol.Network
 	// executor enables to work with a custom execution
 	executor            DutyExecutor
 	fetcher             DutyFetcher
@@ -76,7 +85,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 func (dc *dutyController) Start() {
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices()
-	dc.logger.Debug("warming up indices, updating internal map (go-client)", zap.Int("count", len(indices)))
+	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
 	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
 	slotTicker := slots.NewSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
@@ -85,13 +94,13 @@ func (dc *dutyController) Start() {
 
 func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
 	if dc.currentSlotC == nil {
-		dc.currentSlotC = make(chan uint64)
+		dc.currentSlotC = make(chan uint64, slotChanBuffer)
 	}
 	return dc.currentSlotC
 }
 
 // ExecuteDuty tries to execute the given duty
-func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
+func (dc *dutyController) ExecuteDuty(duty *beaconprotocol.Duty) error {
 	if dc.executor != nil {
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(duty)
@@ -104,12 +113,13 @@ func (dc *dutyController) ExecuteDuty(duty *beacon.Duty) error {
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
 		go func() {
 			// force the validator to be started (subscribed to validator's topic and synced)
+			// TODO: handle error (return error
 			if err := v.Start(); err != nil {
 				logger.Error("could not start validator", zap.Error(err))
 				return
 			}
 			logger.Info("starting duty processing")
-			v.ExecuteDuty(dc.ctx, uint64(duty.Slot), duty)
+			v.ExecuteDuty(uint64(duty.Slot), duty)
 		}()
 	} else {
 		logger.Warn("could not find validator")
@@ -142,7 +152,7 @@ func (dc *dutyController) notifyCurrentSlot(slot types.Slot) {
 }
 
 // onDuty handles next duty
-func (dc *dutyController) onDuty(duty *beacon.Duty) {
+func (dc *dutyController) onDuty(duty *beaconprotocol.Duty) {
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	if dc.shouldExecute(duty) {
 		logger.Debug("duty was sent to execution")
@@ -155,7 +165,7 @@ func (dc *dutyController) onDuty(duty *beacon.Duty) {
 	logger.Warn("slot is irrelevant, ignoring duty")
 }
 
-func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {
+func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
 	if uint64(duty.Slot) < dc.getEpochFirstSlot(dc.genesisEpoch) {
 		// wait until genesis epoch starts
 		dc.logger.Debug("skipping slot, lower than genesis",
@@ -164,7 +174,7 @@ func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {
 		return false
 	}
 
-	currentSlot := uint64(dc.getCurrentSlot())
+	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
@@ -177,31 +187,15 @@ func (dc *dutyController) shouldExecute(duty *beacon.Duty) bool {
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beacon.Duty) *zap.Logger {
-	currentSlot := uint64(dc.getCurrentSlot())
+func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beaconprotocol.Duty) *zap.Logger {
+	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(zap.Uint64("current slot", currentSlot)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.getSlotStartTime(uint64(duty.Slot))))
-}
-
-// getSlotStartTime returns the start time for the given slot
-func (dc *dutyController) getSlotStartTime(slot uint64) time.Time {
-	timeSinceGenesisStart := slot * uint64(dc.ethNetwork.SlotDurationSec().Seconds())
-	start := time.Unix(int64(dc.ethNetwork.MinGenesisTime()+timeSinceGenesisStart), 0)
-	return start
-}
-
-// getCurrentSlot returns the current beacon node slot
-func (dc *dutyController) getCurrentSlot() int64 {
-	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
-	if genesisTime.After(time.Now()) {
-		return 0
-	}
-	return int64(time.Since(genesisTime).Seconds()) / secPerSlot
+		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(uint64(duty.Slot))))
 }
 
 // getEpochFirstSlot returns the beacon node first slot in epoch
@@ -218,7 +212,7 @@ type readOnlyDutyExec struct {
 	logger *zap.Logger
 }
 
-func (e *readOnlyDutyExec) ExecuteDuty(duty *beacon.Duty) error {
+func (e *readOnlyDutyExec) ExecuteDuty(duty *beaconprotocol.Duty) error {
 	e.logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
 		zap.Uint64("slot", uint64(duty.Slot)),

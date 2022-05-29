@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
@@ -16,15 +14,19 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/p2p"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	p2p "github.com/bloxapp/ssv/network/p2p"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/logex"
 
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 )
@@ -53,6 +55,8 @@ var cfg config
 
 var globalArgs global_config.Args
 
+// TODO: un-lint
+//nolint
 var exporterNode exporter.Exporter
 
 // StartExporterNodeCmd is the command to start SSV boot node
@@ -97,17 +101,24 @@ var StartExporterNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
+		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
+		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
+		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
+
 		cfg.P2pNetworkConfig.NetworkPrivateKey, err = utils.ECDSAPrivateKey(Logger.With(zap.String("who", "p2pNetworkPrivateKey")), cfg.NetworkPrivateKey)
 		if err != nil {
 			log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.ReportLastMsg = true
-		// TODO add fork interface for exporter or use the same forks as in operator
-		cfg.P2pNetworkConfig.Fork = networkForkV0.New()
-		cfg.P2pNetworkConfig.NodeType = p2p.Exporter
-		network, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
-		if err != nil {
-			Logger.Fatal("failed to create network", zap.Error(err))
+		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
+		cfg.P2pNetworkConfig.Logger = Logger
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenUserAgent(nil)
+		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		network := p2p.New(cmd.Context(), &cfg.P2pNetworkConfig)
+		if err := network.Setup(); err != nil {
+			Logger.Fatal("failed to setup network", zap.Error(err))
+		}
+		if err := network.Start(); err != nil {
+			Logger.Fatal("failed to start network", zap.Error(err))
 		}
 
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abiVersion", cfg.ETH1Options.AbiVersion.String()))
@@ -136,16 +147,16 @@ var StartExporterNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 		cfg.ETH2Options.DB = db
-		beaconClient, err := goclient.New(cfg.ETH2Options)
-		if err != nil {
-			Logger.Fatal("failed to create beacon go-client", zap.Error(err))
-		}
+		//beaconClient, err := goclient.New(cfg.ETH2Options)
+		//if err != nil {
+		//	Logger.Fatal("failed to create beacon go-client", zap.Error(err))
+		//}
 
 		exporterOptions := new(exporter.Options)
 		exporterOptions.Eth1Client = eth1Client
-		exporterOptions.Beacon = beaconClient
+		//exporterOptions.Beacon = beaconClient
 		exporterOptions.Logger = Logger
-		exporterOptions.Network = network
+		//exporterOptions.Network = network // TODO
 		exporterOptions.DB = db
 		exporterOptions.Ctx = cmd.Context()
 		exporterOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
@@ -153,25 +164,25 @@ var StartExporterNodeCmd = &cobra.Command{
 		exporterOptions.IbftSyncEnabled = cfg.IbftSyncEnabled
 		exporterOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		exporterOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
-		exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		//exporterOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
 		exporterOptions.NumOfInstances = cfg.NumOfInstances
 		exporterOptions.InstanceID = cfg.InstanceID
 
-		exporterNode = exporter.New(*exporterOptions)
-
-		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
-		}
-
-		metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
-		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
-
-		if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
-			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-		if err := exporterNode.Start(); err != nil {
-			Logger.Fatal("failed to start exporter", zap.Error(err))
-		}
+		//exporterNode = exporter.New(*exporterOptions)
+		//
+		//if cfg.MetricsAPIPort > 0 {
+		//	go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+		//}
+		//
+		//metrics.WaitUntilHealthy(Logger, eth1Client, "eth1 node")
+		//metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
+		//
+		//if err := exporterNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+		//	Logger.Fatal("failed to start eth1", zap.Error(err))
+		//}
+		//if err := exporterNode.Start(); err != nil {
+		//	Logger.Fatal("failed to start exporter", zap.Error(err))
+		//}
 	},
 }
 
@@ -179,6 +190,8 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartExporterNodeCmd)
 }
 
+// TODO: un-lint
+//nolint
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, exporterNode.(metrics.HealthCheckAgent))

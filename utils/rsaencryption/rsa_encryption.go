@@ -54,12 +54,12 @@ func DecodeKey(sk *rsa.PrivateKey, hashBase64 string) (string, error) {
 // ConvertPemToPrivateKey return rsa private key from secret key
 func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(skPem))
-	// TODO: https://github.com/golang/go/issues/8860
+	// TODO: resolve deprecation https://github.com/golang/go/issues/8860
 	enc := x509.IsEncryptedPEMBlock(block) //nolint
 	b := block.Bytes
 	if enc {
 		var err error
-		// TODO: https://github.com/golang/go/issues/8860
+		// TODO: resolve deprecation https://github.com/golang/go/issues/8860
 		b, err = x509.DecryptPEMBlock(block, nil) //nolint
 		if err != nil {
 			return nil, errors.Wrap(err, "Failed to decrypt private key")

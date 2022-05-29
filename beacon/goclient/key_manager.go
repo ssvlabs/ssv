@@ -1,7 +1,8 @@
 package goclient
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -13,6 +14,6 @@ func (gc *goClient) RemoveShare(pubKey string) error {
 	return gc.keyManager.RemoveShare(pubKey)
 }
 
-func (gc *goClient) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
-	return gc.keyManager.SignIBFTMessage(message, pk)
+func (gc *goClient) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+	return gc.keyManager.SignIBFTMessage(message, pk, forkVersion)
 }

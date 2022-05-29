@@ -17,3 +17,8 @@ func SetBuildData(app string, ver string) {
 func GetBuildData() string {
 	return fmt.Sprintf("%s:%s", appName, version)
 }
+
+// GetNodeVersion returns the current node version
+func GetNodeVersion() string {
+	return version
+}

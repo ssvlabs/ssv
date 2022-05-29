@@ -4,16 +4,19 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
 type farFutureSync struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
-	dbs        []collections.Iibft
+	nodes      []ibft.IController
+	dbs        []qbftstorage.QBFTStore
 	valueCheck valcheck.ValueCheck
 }
 
@@ -25,7 +28,7 @@ func FarFutureSync(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario
 	}
 }
 
-func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
+func (r *farFutureSync) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTStore) {
 	r.nodes = nodes
 	r.dbs = dbs
 	nodeCount := len(nodes)
@@ -34,7 +37,7 @@ func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) 
 	var wg sync.WaitGroup
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller) {
+		go func(node ibft.IController) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -46,13 +49,13 @@ func (r *farFutureSync) Start(nodes []ibft.Controller, dbs []collections.Iibft) 
 	wg.Wait()
 
 	// start several instances one by one
-	seqNumber := uint64(0)
+	seqNumber := message.Height(0)
 loop:
 	for {
 		r.logger.Info("started instances")
 		for i := uint64(1); i < uint64(nodeCount); i++ {
 			wg.Add(1)
-			go func(node ibft.Controller, index uint64) {
+			go func(node ibft.IController, index uint64) {
 				r.startNode(node, index, seqNumber)
 				wg.Done()
 			}(nodes[i-1], i)
@@ -74,29 +77,28 @@ loop:
 	if err != nil {
 		r.logger.Error("node #4 could not get state")
 	} else {
-		r.logger.Info("node #4 synced", zap.Uint64("highest decided", nextSeq-1))
+		r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 	}
 }
 
-func (r *farFutureSync) startNode(node ibft.Controller, index uint64, seqNumber uint64) {
-	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:     r.logger,
-		ValueCheck: r.valueCheck,
-		SeqNumber:  seqNumber,
-		Value:      []byte("value"),
+func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber message.Height) {
+	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
+		Logger:    r.logger,
+		SeqNumber: seqNumber,
+		Value:     []byte("value"),
 	})
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {
 		r.logger.Error("instance could not decide")
 	} else {
-		r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
+		r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Data)))
 	}
 
 	if err := r.dbs[index-1].SaveDecided(res.Msg); err != nil {
 		r.logger.Error("could not save decided msg", zap.Uint64("node_id", index), zap.Error(err))
 	}
-	if err := r.dbs[index-1].SaveHighestDecidedInstance(res.Msg); err != nil {
+	if err := r.dbs[index-1].SaveLastDecided(res.Msg); err != nil {
 		r.logger.Error("could not save decided msg", zap.Uint64("node_id", index), zap.Error(err))
 	}
 }

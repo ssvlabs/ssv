@@ -8,6 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
+
 const (
 	// prod contract genesis
 	defaultSyncOffset string = "4e706f"

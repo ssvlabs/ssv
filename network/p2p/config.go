@@ -1,114 +1,156 @@
-package p2p
+package p2pv1
 
 import (
 	"crypto/ecdsa"
-	"crypto/rsa"
+	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"strings"
 	"time"
+
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	uc "github.com/bloxapp/ssv/utils/commons"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/crypto"
+	noise "github.com/libp2p/go-libp2p-noise"
+	libp2ptcp "github.com/libp2p/go-tcp-transport"
+	ma "github.com/multiformats/go-multiaddr"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-// Config - describe the config options for p2p network
+// Config holds the configuration options for p2p network
 type Config struct {
-	// yaml/env arguments
-	Enr              string        `yaml:"Enr" env:"ENR_KEY" env-description:"enr used in discovery" env-default:""`
-	DiscoveryType    string        `yaml:"DiscoveryType" env:"DISCOVERY_TYPE_KEY" env-description:"Method to use in discovery" env-default:"discv5"`
-	TCPPort          int           `yaml:"TcpPort" env:"TCP_PORT" env-default:"13000"`
-	UDPPort          int           `yaml:"UdpPort" env:"UDP_PORT" env-default:"12000"`
-	HostAddress      string        `yaml:"HostAddress" env:"HOST_ADDRESS" env-required:"true" env-description:"External ip node is exposed for discovery"`
-	HostDNS          string        `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+	// TODO: ENR for compatibility
+	// Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
+	// stage enr
+	// Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
+	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
+
+	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
+	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
+	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
+	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
+
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
-	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"250" env-description:"Connected peers limit, starting from this number only relevant nodes will be connectable"`
-	PubSubTraceOut   string        `yaml:"PubSubTraceOut" env:"PUBSUB_TRACE_OUT" env-description:"File path to hold collected pubsub traces"`
-	//PubSubTracer     string        `yaml:"PubSubTracer" env:"PUBSUB_TRACER" env-description:"A remote tracer that collects pubsub traces"`
-
-	NetworkTrace          bool `yaml:"NetworkTrace" env:"NETWORK_TRACE" env-description:"A boolean flag to turn on network debugging"`
-	NetworkDiscoveryTrace bool `yaml:"NetworkDiscoveryTrace" env:"NETWORK_DISCOVERY_TRACE" env-description:"A boolean flag to turn on network discovery debugging (discv5)"`
-
-	UseMainTopic bool `yaml:"UseMainTopic" env:"USE_MAIN_TOPIC" env-description:"A boolean flag to turn on usage of main topic"`
-
-	ExporterPeerID string `yaml:"ExporterPeerID" env:"EXPORTER_PEER_ID"  env-default:"16Uiu2HAkvaBh2xjstjs1koEx3jpBn5Hsnz7Bv8pE4SuwFySkiAuf"  env-description:"peer id of exporter"`
-
-	Fork forks.Fork
-
-	// objects / instances
-	HostID        peer.ID
-	Topics        map[string]*pubsub.Topic
-	BootnodesENRs []string
-
-	// NetworkPrivateKey is used for network identity
+	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"50" env-description:"Maximum number of returned objects in a batch"`
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"150" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
+	// 	PubSubScoring is a flag to turn on/off pubsub scoring
+	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
+	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
+	PubSubTrace    bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
+	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
+	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
+	// NetworkID is the network of this node
+	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet" env-description:"Network ID is the network of this node"`
+	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorPrivateKey is used for operator identity
-	OperatorPrivateKey *rsa.PrivateKey
-	// ReportLastMsg whether to report last msg metric
-	ReportLastMsg bool
-	// NodeType differentiate exporters peers from others
-	NodeType NodeType
+	// OperatorPublicKey is used for operator identity, optional
+	OperatorID string
+	// Router propagate incoming network messages to the responsive components
+	Router network.MessageRouter
+	// UserAgent to use by libp2p identify protocol
+	UserAgent string
+	// ForkVersion to use
+	ForkVersion forksprotocol.ForkVersion
+	// Logger to used by network services
+	Logger *zap.Logger
 }
 
-// NodeType indicate node operation type. In purpose for distinguish between different types of peers
-type NodeType int64
-
-// NodeTypes are const types for NodeType
-const (
-	Unknown NodeType = iota
-	Operator
-	Exporter
-)
-
-// FromString convert string to NodeType. If not exist, return Unknown
-func (nt NodeType) FromString(nodeType string) NodeType {
-	switch nodeType {
-	case "operator":
-		return Operator
-	case "exporter":
-		return Exporter
-	case "unknown":
-		return Unknown
+// Libp2pOptions creates options list for the libp2p host
+// these are the most basic options required to start a network instance,
+// other options and libp2p components can be configured on top
+func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
+	if c.NetworkPrivateKey == nil {
+		return nil, errors.New("could not create options w/o network key")
 	}
-	return nt
+	sk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(c.NetworkPrivateKey))
+
+	opts := []libp2p.Option{
+		libp2p.Identity(sk),
+		libp2p.Transport(libp2ptcp.NewTCPTransport),
+		libp2p.UserAgent(c.UserAgent),
+	}
+
+	opts, err := c.configureAddrs(opts)
+	if err != nil {
+		return opts, errors.Wrap(err, "failed to setup addresses")
+	}
+
+	opts = append(opts, libp2p.Security(noise.ID, noise.New))
+
+	opts = fork.AddOptions(opts)
+
+	return opts, nil
 }
 
-func (nt NodeType) String() string {
-	switch nt {
-	case Operator:
-		return "operator"
-	case Exporter:
-		return "exporter"
+func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
+	addrs := make([]ma.Multiaddr, 0)
+	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
+	if err != nil {
+		return opts, errors.Wrap(err, "could not build multi address for zero address")
 	}
-	return "unknown"
+	addrs = append(addrs, maZero)
+	ipAddr, err := commons.IPAddr()
+	if err != nil {
+		return opts, errors.Wrap(err, "could not get ip addr")
+	}
+	if len(c.Bootnodes) > 0 { // not a local node
+		maIP, err := commons.BuildMultiAddress(ipAddr.String(), "tcp", uint(c.TCPPort), "")
+		if err != nil {
+			return opts, errors.Wrap(err, "could not build multi address for zero address")
+		}
+		addrs = append(addrs, maIP)
+	}
+	opts = append(opts, libp2p.ListenAddrs(addrs...))
+
+	// AddrFactory for host address if provided
+	if c.HostAddress != "" {
+		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
+			if err != nil {
+				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+			} else {
+				addrs = append(addrs, external)
+			}
+			return addrs
+		}))
+	}
+	// AddrFactory for DNS address if provided
+	if c.HostDNS != "" {
+		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
+			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
+			if err != nil {
+				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+			} else {
+				addrs = append(addrs, external)
+			}
+			return addrs
+		}))
+	}
+
+	return opts, nil
 }
 
-// TransformEnr converts defaults enr value and convert it to slice
-func TransformEnr(enr string) []string {
-	if len(enr) == 0 {
-		// stage enr
-		//enr = "enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
-
-		// prod enr
-		//internal ip
-		//enr = "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
-		//external ip
-		enr = "enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
+// TransformBootnodes converts bootnodes string and convert it to slice
+func (c *Config) TransformBootnodes() []string {
+	items := strings.Split(c.Bootnodes, ";")
+	if len(items) == 0 {
+		// STAGE
+		// items = append(items, "enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
+		// PROD
+		// internal ip
+		// items = append(items, "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
+		// external ip
+		items = append(items, "enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
 	}
-	return []string{
-		enr,
-	}
+	return items
 }
 
-//
-//// setupNetworkKey creates a private key if non configured
-//func (n *p2pNetwork) setupNetworkKey(priv *ecdsa.PrivateKey) error {
-//	if priv != nil {
-//		n.privKey = priv
-//	} else {
-//		privKey, err := n.privateKey()
-//		if err != nil {
-//			return errors.Wrap(err, "Failed to generate p2p private key")
-//		}
-//		n.privKey = privKey
-//	}
-//	return nil
-//}
+func userAgent(fromCfg string) string {
+	if len(fromCfg) > 0 {
+		return fromCfg
+	}
+	return uc.GetBuildData()
+}

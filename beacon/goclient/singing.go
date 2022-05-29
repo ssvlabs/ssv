@@ -3,11 +3,12 @@ package goclient
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-ssz"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // getSigningRoot returns signing root
@@ -26,7 +27,7 @@ func (gc *goClient) getSigningRoot(data *phase0spec.AttestationData) ([32]byte, 
 // getSigningRoot returns signing root
 func (gc *goClient) GetDomain(data *phase0spec.AttestationData) ([]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
-	domainType, err := gc.getDomainType(beacon.RoleTypeAttester)
+	domainType, err := gc.getDomainType(message.RoleTypeAttester)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func (gc *goClient) GetDomain(data *phase0spec.AttestationData) ([]byte, error) 
 }
 
 // getDomainType returns domain type by role type
-func (gc *goClient) getDomainType(roleType beacon.RoleType) (*phase0spec.DomainType, error) {
+func (gc *goClient) getDomainType(roleType message.RoleType) (*phase0spec.DomainType, error) {
 	if provider, isProvider := gc.client.(eth2client.SpecProvider); isProvider {
 		spec, err := provider.Spec(gc.ctx)
 		if err != nil {
@@ -47,11 +48,11 @@ func (gc *goClient) getDomainType(roleType beacon.RoleType) (*phase0spec.DomainT
 		var val interface{}
 		var exists bool
 		switch roleType {
-		case beacon.RoleTypeAttester:
+		case message.RoleTypeAttester:
 			val, exists = spec["DOMAIN_BEACON_ATTESTER"]
-		case beacon.RoleTypeAggregator:
+		case message.RoleTypeAggregator:
 			val, exists = spec["DOMAIN_AGGREGATE_AND_PROOF"]
-		case beacon.RoleTypeProposer:
+		case message.RoleTypeProposer:
 			val, exists = spec["DOMAIN_BEACON_PROPOSER"]
 		default:
 			return nil, errors.New("role type domain is not implemented")

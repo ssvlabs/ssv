@@ -155,6 +155,16 @@ func (msg *SignedMessage) DeepCopy() (*SignedMessage, error) {
 	return ret, nil
 }
 
+// Encode returns a msg encoded bytes or error
+func (msg *SignedMessage) Encode() ([]byte, error) {
+	return json.Marshal(msg)
+}
+
+// Decode returns error if decoding failed
+func (msg *SignedMessage) Decode(data []byte) error {
+	return json.Unmarshal(data, msg)
+}
+
 // VerifySig returns true if the justification signed msg verifies against the public key, false otherwise
 func (d *ChangeRoundData) VerifySig(pk bls.PublicKey) (bool, error) {
 	err := verifyUniqueSigners(d.SignerIds)

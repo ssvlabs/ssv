@@ -1,21 +1,22 @@
 package tasks
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/queue"
 	"sync"
 	"time"
 )
 
 // Fn represents a function to execute
-type Fn func() error
+type Fn = queue.Fn
 
-// Queue is an interface for event queue
-type Queue interface {
-	Start()
-	Stop()
-	Queue(fn Fn)
-	QueueDistinct(Fn, string)
-	Wait()
-	Errors() []error
+// ExecQueueOpt enables to inject more parameters
+type ExecQueueOpt func(*executionQueue)
+
+// WithoutErrors disables errors
+func WithoutErrors() ExecQueueOpt {
+	return func(q *executionQueue) {
+		q.errs = nil
+	}
 }
 
 // executionQueue implements Queue interface
@@ -34,7 +35,7 @@ type executionQueue struct {
 }
 
 // NewExecutionQueue creates a new instance
-func NewExecutionQueue(interval time.Duration) Queue {
+func NewExecutionQueue(interval time.Duration, opt ...ExecQueueOpt) queue.Queue {
 	if interval.Milliseconds() == 0 {
 		interval = 10 * time.Millisecond // default interval
 	}
@@ -45,6 +46,9 @@ func NewExecutionQueue(interval time.Duration) Queue {
 		visited:  &sync.Map{},
 		errs:     []error{},
 		interval: interval,
+	}
+	for _, o := range opt {
+		o(&q)
 	}
 	return &q
 }
@@ -120,7 +124,9 @@ func (eq *executionQueue) exec(fn Fn) {
 
 	if err := fn(); err != nil {
 		eq.lock.Lock()
-		eq.errs = append(eq.errs, err)
+		if eq.errs != nil {
+			eq.errs = append(eq.errs, err)
+		}
 		eq.lock.Unlock()
 	}
 }

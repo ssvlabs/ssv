@@ -3,11 +3,13 @@ package exporter
 import (
 	"crypto/sha256"
 	"fmt"
+	"log"
+
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
 
 var (
@@ -23,6 +25,8 @@ func init() {
 	}
 }
 
+// TODO: (un-lint)
+//nolint
 func reportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorData) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
 	metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))

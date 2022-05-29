@@ -1,6 +1,7 @@
 package storage
 
 import (
+	eth12 "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
 	"sync"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -18,7 +19,7 @@ type Storage interface {
 	eth1.SyncOffsetStorage
 	registrystorage.OperatorsCollection
 	ValidatorsCollection
-	basedb.RegistryStore
+	eth12.RegistryStore
 }
 
 type storage struct {

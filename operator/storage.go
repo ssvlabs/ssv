@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/bloxapp/ssv/eth1"
+	registry "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -22,7 +23,7 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
-	basedb.RegistryStore
+	registry.RegistryStore
 	registrystorage.OperatorsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
