@@ -143,4 +143,4 @@ fi
 #fi
 
 #deploy
-#kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-v1/ssv-node-v2-1-deployment.yml || exit 1
+kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-v1/ssv-node-v2-1-deployment.yml || exit 1
