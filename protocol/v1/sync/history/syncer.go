@@ -35,7 +35,7 @@ func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
 func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error {
 	visited := make(map[message.Height]bool)
 	var msgs []p2pprotocol.SyncResult
-	
+
 	lastBatch := from
 	var err error
 	for lastBatch < to {
