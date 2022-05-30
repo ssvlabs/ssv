@@ -257,13 +257,12 @@ func TestDecidedRequiresSync(t *testing.T) {
 			storage := newTestStorage(test.highestDecided)
 			currentInstanceLock := &sync.RWMutex{}
 			ctrl := Controller{
-				currentInstance:      test.currentInstance,
-				instanceStorage:      storage,
-				changeRoundStorage:   storage,
-				state:                test.initState,
-				currentInstanceLock:  currentInstanceLock,
-				currentInstanceRLock: currentInstanceLock.RLocker(),
-				forkLock:             &sync.Mutex{},
+				currentInstance:     test.currentInstance,
+				instanceStorage:     storage,
+				changeRoundStorage:  storage,
+				state:               test.initState,
+				currentInstanceLock: currentInstanceLock,
+				forkLock:            &sync.Mutex{},
 			}
 
 			ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
@@ -359,10 +358,9 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			currentInstanceLock := &sync.RWMutex{}
 			ibft := Controller{
-				currentInstance:      test.currentInstance,
-				currentInstanceLock:  currentInstanceLock,
-				currentInstanceRLock: currentInstanceLock.RLocker(),
-				forkLock:             &sync.Mutex{},
+				currentInstance:     test.currentInstance,
+				currentInstanceLock: currentInstanceLock,
+				forkLock:            &sync.Mutex{},
 			}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
@@ -627,11 +625,10 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 			Identifier: id,
 			Height:     height,
 		}),
-		instanceStorage:      storage,
-		changeRoundStorage:   storage,
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		instanceStorage:     storage,
+		changeRoundStorage:  storage,
+		currentInstanceLock: currentInstanceLock,
+		forkLock:            &sync.Mutex{},
 	}
 
 	ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)

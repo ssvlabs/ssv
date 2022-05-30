@@ -100,7 +100,7 @@ func New(opts Options) IController {
 
 	q, err := msgqueue.New(
 		logger.With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers(msgqueue.DefaultMsgIndexer(), msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
 	)
 	if err != nil {
 		// TODO: we should probably stop here, TBD

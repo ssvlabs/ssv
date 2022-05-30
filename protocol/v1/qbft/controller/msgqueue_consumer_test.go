@@ -31,14 +31,13 @@ func TestConsumeMessages(t *testing.T) {
 	require.NoError(t, err)
 	currentInstanceLock := &sync.RWMutex{}
 	ctrl := Controller{
-		ctx:                  context.Background(),
-		logger:               logex.GetLogger().With(zap.String("who", "controller")),
-		q:                    q,
-		signatureState:       SignatureState{},
-		Identifier:           message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		ctx:                 context.Background(),
+		logger:              logex.GetLogger().With(zap.String("who", "controller")),
+		q:                   q,
+		signatureState:      SignatureState{},
+		Identifier:          message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
+		currentInstanceLock: currentInstanceLock,
+		forkLock:            &sync.Mutex{},
 	}
 	ctrl.signatureState.setHeight(0)
 

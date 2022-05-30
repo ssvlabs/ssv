@@ -99,7 +99,7 @@ func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 		maxPeers *= 2
 	}
 	peers := pi.network.Peers()
-	return len(peers) < maxPeers
+	return len(peers) > maxPeers
 }
 
 func (pi *peersIndex) Self() *records.NodeInfo {
