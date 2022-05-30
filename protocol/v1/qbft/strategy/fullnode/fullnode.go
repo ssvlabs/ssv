@@ -1,6 +1,7 @@
 package fullnode
 
 import (
+	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -50,20 +51,19 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
+	logger.Debug("found higher remote than local: syncing range")
 	counter := 0
 	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
-		known, _, err := f.IsMsgKnown(msg)
+		shouldUpdate, knownMsg, err := f.IsMsgKnown(msg)
 		if err != nil {
 			return errors.Wrap(err, "could not check if message is known")
 		}
-		if known {
-			f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
+		if knownMsg != nil && !shouldUpdate { // msg is known but no need to update
 			return nil
 		}
-		//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
 		if err := f.store.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not save decided msg to storage")
 		}
@@ -105,12 +105,45 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 	return true, nil
 }
 
+// IsMsgKnown checks for known decided msg. Also checks if it needs to be updated
 func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
 	msgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	if err == nil && len(msgs) > 0 && msgs[0] != nil {
-		return true, msgs[0], nil
+	if err != nil || len(msgs) == 0 || msgs[0] == nil {
+		return false, nil, err
 	}
-	return false, nil, err
+
+	// if decided is known, check for a more complete message (more signers)
+	knownMsg := msgs[0]
+	if ignore := checkDecidedMessageSigners(knownMsg, msg); ignore {
+		// if no more complete signers, check if data is different
+		if shouldUpdate, err := checkDecidedData(knownMsg, msg); err != nil {
+			return false, knownMsg, errors.Wrap(err, "failed to check decided data")
+		} else if !shouldUpdate {
+			return false, knownMsg, nil // both checks are false
+		}
+	}
+	// one of the checks passed, need to update decided
+	return true, knownMsg, nil
+}
+
+// checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
+func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
+	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
+	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
+}
+
+// checkDecidedData checks if new decided msg target epoch is higher than the known decided target epoch
+func checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessage) (bool, error) {
+	knownCommitData, err := knownMsg.Message.GetCommitData()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get known msg commit data")
+	}
+
+	commitData, err := msg.Message.GetCommitData()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to get new msg commit data")
+	}
+	return bytes.Compare(commitData.Data, knownCommitData.Data) != 0, nil
 }
 
 func (f *fullNode) SaveLateCommit(msg *message.SignedMessage) error {
