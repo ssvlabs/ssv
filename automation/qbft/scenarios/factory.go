@@ -1,9 +1,11 @@
 package scenarios
 
 import (
-	"github.com/bloxapp/ssv/automation/qbft/runner"
-	"go.uber.org/zap"
 	"sync"
+
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/automation/qbft/runner"
 )
 
 var scenarios = &sync.Map{}
@@ -26,6 +28,8 @@ func NewScenario(name string, logger *zap.Logger) runner.Scenario {
 			s = newOnForkV1(logger)
 		case OnForkV13NodesScenario:
 			s = newOnForkV13Nodes(logger)
+		case OnForkV1NoHistoryScenario:
+			s = newOnForkV1NoHistory(logger)
 		case RegularScenario:
 			s = newRegularScenario(logger)
 		case SyncFailoverScenario:
