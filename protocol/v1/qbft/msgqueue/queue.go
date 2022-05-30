@@ -33,7 +33,7 @@ type MsgQueue interface {
 	Peek(idx string, n int) []*message.SSVMessage
 	// Pop clears and returns the first n messages for an index
 	Pop(n int, idx ...string) []*message.SSVMessage
-	// PopWithIndexGenerator clears and returns the first n messages for indices that are created on the fly
+	// PopWithIterator clears and returns the first n messages for indices that are created on the fly
 	PopWithIterator(n int, generator *IndexIterator) []*message.SSVMessage
 	// Count counts messages for the given index
 	Count(idx string) int
@@ -182,15 +182,19 @@ func (q *queue) Pop(n int, idxs ...string) []*message.SSVMessage {
 	return []*message.SSVMessage{}
 }
 
-func (q *queue) PopWithIterator(n int, generator *IndexIterator) []*message.SSVMessage {
+func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
 	var msgs []*message.SSVMessage
 
 	for len(msgs) < n {
-		createIndex := generator.Next()
-		if createIndex == nil {
+		genIndex := i.Next()
+		if genIndex == nil {
 			break
 		}
-		results := q.Pop(n, createIndex())
+		idx := genIndex()
+		if len(idx) == 0 {
+			continue
+		}
+		results := q.Pop(n, genIndex())
 		if len(results) > 0 {
 			msgs = append(msgs, results[:n]...)
 		}
