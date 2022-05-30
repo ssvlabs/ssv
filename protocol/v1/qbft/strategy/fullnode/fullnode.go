@@ -143,7 +143,7 @@ func checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessag
 	if err != nil {
 		return false, errors.Wrap(err, "failed to get new msg commit data")
 	}
-	return bytes.Compare(commitData.Data, knownCommitData.Data) != 0, nil
+	return !bytes.Equal(commitData.Data, knownCommitData.Data), nil
 }
 
 func (f *fullNode) SaveLateCommit(msg *message.SignedMessage) error {
