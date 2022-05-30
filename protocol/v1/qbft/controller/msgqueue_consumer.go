@@ -73,7 +73,7 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 		return false // only pop when no instance running
 	}
 
-	gen := msgqueue.NewIndexIterator().Add(func() string {
+	iterator := msgqueue.NewIndexIterator().Add(func() string {
 		return msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastHeight)
 	}, func() string {
 		return msgqueue.DecidedMsgIndex(c.Identifier)
@@ -85,7 +85,7 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 		return indices[0]
 	})
 
-	msgs := c.q.PopWithIterator(1, gen)
+	msgs := c.q.PopWithIterator(1, iterator)
 
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
@@ -126,20 +126,21 @@ func (c *Controller) processByState(handler MessageHandler) bool {
 // processDefault this phase is to allow late commit and decided msg's
 // we allow late commit and decided up to 1 height back. (only to support pre fork. after fork no need to support previews height)
 func (c *Controller) processDefault(handler MessageHandler, lastHeight message.Height) bool {
-	gen := msgqueue.NewIndexIterator().Add(func() string {
-		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)
-		if len(indices) == 0 {
-			return ""
-		}
-		return indices[0]
-	}, func() string {
+	iterator := msgqueue.NewIndexIterator().
+		Add(func() string {
+			indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)
+			if len(indices) == 0 {
+				return ""
+			}
+			return indices[0]
+		}).Add(func() string {
 		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)
 		if len(indices) == 0 {
 			return ""
 		}
 		return indices[0]
 	})
-	msgs := c.q.PopWithIterator(1, gen)
+	msgs := c.q.PopWithIterator(1, iterator)
 
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
@@ -154,32 +155,27 @@ func (c *Controller) processDefault(handler MessageHandler, lastHeight message.H
 // getNextMsgForState return msgs depended on the current instance stage
 func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 	height := state.GetHeight()
-	var index string
-	switch qbft.RoundState(state.Stage.Load()) {
-	case qbft.RoundStateNotStarted:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.ProposalMsgType)[0]
-	case qbft.RoundStatePrePrepare:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)[0] // looking for propose in case is leader
-	case qbft.RoundStatePrepare:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)[0]
-	case qbft.RoundStateCommit:
-		return nil // qbft.RoundStateCommit stage is NEVER set
-	case qbft.RoundStateChangeRound:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)[0]
-		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
-	}
-	// avoid creating redundant indexes in case we already found some,
-	// we try to pop messages with existing indexes and if not found continue to decided and signed msg indexes
-	if len(index) > 0 {
-		msgs := c.q.Pop(1, index)
-		if len(msgs) > 0 {
-			return msgs[0]
-		}
-	}
 
-	iterator := msgqueue.NewIndexIterator().Add(func() string {
+	iterator := msgqueue.NewIndexIterator().
+		Add(func() string {
+			var index string
+			switch qbft.RoundState(state.Stage.Load()) {
+			case qbft.RoundStateNotStarted:
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.ProposalMsgType)[0]
+			case qbft.RoundStatePrePrepare:
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)[0] // looking for propose in case is leader
+			case qbft.RoundStatePrepare:
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)[0]
+			case qbft.RoundStateCommit:
+				return "" // qbft.RoundStateCommit stage is NEVER set
+			case qbft.RoundStateChangeRound:
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)[0]
+				//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
+			}
+			return index
+		}).Add(func() string {
 		return msgqueue.DecidedMsgIndex(c.Identifier)
-	}, func() string {
+	}).Add(func() string {
 		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)
 		if len(indices) == 0 {
 			return ""

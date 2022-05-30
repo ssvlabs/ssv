@@ -196,10 +196,12 @@ func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
 		}
 		results := q.Pop(n, genIndex())
 		if len(results) > 0 {
-			msgs = append(msgs, results[:n]...)
+			msgs = append(msgs, results...)
 		}
 	}
-
+	if len(msgs) > n {
+		msgs = msgs[:n]
+	}
 	return msgs
 }
 
