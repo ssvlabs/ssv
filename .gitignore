@@ -18,6 +18,7 @@ vendor/
 /config/share*
 /config/config.yaml
 /config/config.exporter.yaml
+/config/config.local.yaml
 
 # User-specific stuff:
 .idea/**/workspace.xml

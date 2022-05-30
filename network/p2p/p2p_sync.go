@@ -29,9 +29,13 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, message.Height, error) {
+	if from >= to {
+		return nil, 0, nil
+	}
+
 	if !n.isReady() {
-		return nil, p2pprotocol.ErrNetworkIsNotReady
+		return nil, 0, p2pprotocol.ErrNetworkIsNotReady
 	}
 	protocolID, peerCount := n.fork.ProtocolID(p2pprotocol.DecidedHistoryProtocol)
 	peers := make([]peer.ID, 0)
@@ -46,13 +50,31 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 	if len(peers) == 0 {
 		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not get subset of peers")
+			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
 		peers = random
 	}
 	maxBatchRes := message.Height(n.cfg.MaxBatchResponse)
+
 	var results []p2pprotocol.SyncResult
-	for from < to {
+	var err error
+	currentEnd := to
+	if to-from > maxBatchRes {
+		currentEnd = from + maxBatchRes
+	}
+	results, err = n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
+		Params: &message.SyncParams{
+			Height:     []message.Height{from, currentEnd},
+			Identifier: mid,
+		},
+		Protocol: message.DecidedHistoryType,
+	})
+	if err != nil {
+		return results, 0, err
+	}
+	return results, currentEnd, nil
+
+	/*for from < to {
 		currentEnd := to
 		if to-from > maxBatchRes {
 			currentEnd = from + maxBatchRes
@@ -65,12 +87,12 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 			Protocol: message.DecidedHistoryType,
 		})
 		if err != nil {
-			return results, err
+			return results, 0, err
 		}
 		results = append(results, batchResults...)
 		from = currentEnd
 	}
-	return results, nil
+	return results, 0, nil*/
 }
 
 // LastChangeRound fetches last change round message from a random set of peers

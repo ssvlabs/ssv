@@ -1,6 +1,7 @@
 package records
 
 import (
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -35,13 +36,14 @@ func SetForkVersionEntry(node *enode.LocalNode, forkv string) error {
 }
 
 // GetForkVersionEntry extracts the value of operator-id entry ('oid')
-func GetForkVersionEntry(record *enr.Record) (string, error) {
+func GetForkVersionEntry(record *enr.Record) (forksprotocol.ForkVersion, error) {
 	oid := new(ForkVersionEntry)
 	if err := record.Load(oid); err != nil {
 		if enr.IsNotFound(err) {
-			return "", nil
+			// if not found, assuming v0 for compatibility
+			return forksprotocol.V0ForkVersion, nil
 		}
 		return "", err
 	}
-	return string(*oid), nil
+	return forksprotocol.ForkVersion(*oid), nil
 }

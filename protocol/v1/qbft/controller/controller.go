@@ -59,20 +59,21 @@ const (
 type Controller struct {
 	ctx context.Context
 
-	currentInstanceLock  sync.Locker
-	currentInstanceRLock sync.Locker
-	currentInstance      instance.Instancer
-	logger               *zap.Logger
-	instanceStorage      qbftstorage.InstanceStore
-	changeRoundStorage   qbftstorage.ChangeRoundStore
-	network              p2pprotocol.Network
-	instanceConfig       *qbft.InstanceConfig
-	ValidatorShare       *beaconprotocol.Share
-	Identifier           message.Identifier
-	forkLock             sync.Locker
-	fork                 forks.Fork
-	beacon               beaconprotocol.Beacon
-	signer               beaconprotocol.Signer
+	currentInstance    instance.Instancer
+	logger             *zap.Logger
+	instanceStorage    qbftstorage.InstanceStore
+	changeRoundStorage qbftstorage.ChangeRoundStore
+	network            p2pprotocol.Network
+	instanceConfig     *qbft.InstanceConfig
+	ValidatorShare     *beaconprotocol.Share
+	Identifier         message.Identifier
+	fork               forks.Fork
+	beacon             beaconprotocol.Beacon
+	signer             beaconprotocol.Signer
+
+	// lockers
+	currentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
+	forkLock            sync.Locker
 
 	// signature
 	signatureState SignatureState
@@ -105,7 +106,6 @@ func New(opts Options) IController {
 		// TODO: we should probably stop here, TBD
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
-	currentInstanceLock := &sync.RWMutex{}
 	ctrl := &Controller{
 		ctx:                opts.Context,
 		instanceStorage:    opts.Storage,
@@ -127,9 +127,8 @@ func New(opts Options) IController {
 
 		q: q,
 
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		currentInstanceLock: &sync.RWMutex{},
+		forkLock:            &sync.Mutex{},
 	}
 
 	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
@@ -142,8 +141,8 @@ func New(opts Options) IController {
 }
 
 func (c *Controller) getCurrentInstance() instance.Instancer {
-	c.currentInstanceRLock.Lock()
-	defer c.currentInstanceRLock.Unlock()
+	c.currentInstanceLock.RLock()
+	defer c.currentInstanceLock.RUnlock()
 
 	return c.currentInstance
 }
@@ -177,8 +176,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 func (c *Controller) syncDecided() error {
 	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
 	c.forkLock.Lock()
-	fork := c.fork
-	decidedStrategy := c.decidedStrategy
+	fork, decidedStrategy := c.fork, c.decidedStrategy
 	c.forkLock.Unlock()
 	return decidedStrategy.Sync(c.ctx, c.Identifier, fork.ValidateDecidedMsg(c.ValidatorShare))
 }

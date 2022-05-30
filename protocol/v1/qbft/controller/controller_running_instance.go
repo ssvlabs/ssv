@@ -166,6 +166,9 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	count := 0
 	f := changeround.NewLastRoundFetcher(c.logger, c.network)
 	handler := func(msg *message.SignedMessage) error {
+		if ctxErr := c.ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		if c.getCurrentInstance() == nil {
 			return errors.New("current instance is nil")
 		}

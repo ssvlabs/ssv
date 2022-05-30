@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"encoding/hex"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -46,14 +47,67 @@ func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
 
 // log prints event to log
 func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
-	pid := "unknown"
-	id, err := peer.IDFromBytes(evt.PeerID)
-	if err != nil {
-		pst.logger.Debug("could not convert peer.ID", zap.Error(err))
-	} else {
-		pid = id.String()
+	if evt == nil {
+		return
 	}
-	pst.logger.Debug("pubsub event",
+	fields := []zap.Field{
 		zap.String("type", evt.GetType().String()),
-		zap.String("peer", pid))
+	}
+	switch evt.GetType() {
+	case ps_pb.TraceEvent_PUBLISH_MESSAGE:
+		msg := evt.GetPublishMessage()
+		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
+	case ps_pb.TraceEvent_REJECT_MESSAGE:
+		msg := evt.GetRejectMessage()
+		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
+	case ps_pb.TraceEvent_DUPLICATE_MESSAGE:
+		msg := evt.GetDuplicateMessage()
+		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
+	case ps_pb.TraceEvent_DELIVER_MESSAGE:
+		msg := evt.GetDeliverMessage()
+		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
+	case ps_pb.TraceEvent_ADD_PEER:
+		pid, err := peer.IDFromBytes(evt.GetAddPeer().GetPeerID())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+	case ps_pb.TraceEvent_REMOVE_PEER:
+		pid, err := peer.IDFromBytes(evt.GetRemovePeer().GetPeerID())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+	case ps_pb.TraceEvent_JOIN:
+		fields = append(fields, zap.String("topic", evt.GetJoin().GetTopic()))
+	case ps_pb.TraceEvent_LEAVE:
+		fields = append(fields, zap.String("topic", evt.GetLeave().GetTopic()))
+	case ps_pb.TraceEvent_SEND_RPC:
+		msg := evt.GetSendRPC()
+		pid, err := peer.IDFromBytes(msg.GetSendTo())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+	case ps_pb.TraceEvent_DROP_RPC:
+		msg := evt.GetDropRPC()
+		pid, err := peer.IDFromBytes(msg.GetSendTo())
+		if err == nil {
+			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+	}
+	pst.logger.Debug("pubsub event", fields...)
 }
