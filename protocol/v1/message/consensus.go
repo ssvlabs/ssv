@@ -397,10 +397,6 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 						return nil, err
 					}
 					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: pd.Data})
-					//mJustificationMsg, err := json.Marshal(justificationMsg)
-					//if err != nil {
-					//	return nil, err
-					//}
 
 					value = append(value, KeyVal{Key: "justification_msg", Val: justificationMsg})
 					value = append(value, KeyVal{Key: "justification_sig", Val: []byte(rcj.GetSignature())})
