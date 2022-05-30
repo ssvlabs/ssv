@@ -27,7 +27,7 @@ func TestIbftStorage_CleanAllV1Decided(t *testing.T) {
 
 	var identifiers []message.Identifier
 	for i := 1; i <= 10; i++ {
-		identifiers = append(identifiers, message.NewIdentifier([]byte(fmt.Sprintf("pk-%d", i)), message.RoleTypeAttester))
+		identifiers = append(identifiers, message.NewIdentifier([]byte(fmt.Sprintf("publickey-%d", i)), message.RoleTypeAttester))
 	}
 
 	var msgs []*message.SignedMessage
@@ -36,7 +36,6 @@ func TestIbftStorage_CleanAllV1Decided(t *testing.T) {
 			commitData := message.CommitData{Data: []byte("data")}
 			encodedCommit, err := commitData.Encode()
 			require.NoError(t, err)
-
 			decided := &message.SignedMessage{
 				Signature: []byte("sig"),
 				Signers:   []message.OperatorID{1, 2},
@@ -53,6 +52,14 @@ func TestIbftStorage_CleanAllV1Decided(t *testing.T) {
 	}
 
 	require.NoError(t, storage.SaveDecided(msgs...))
+	for _, identifier := range identifiers {
+		r, err := storage.GetDecided(identifier, 1, 10)
+		require.NoError(t, err)
+		require.Equal(t, 10, len(r))
+	}
+
+	require.NoError(t, storage.CleanAllV1Decided(identifiers))
+
 	for _, identifier := range identifiers {
 		r, err := storage.GetDecided(identifier, 1, 10)
 		require.NoError(t, err)

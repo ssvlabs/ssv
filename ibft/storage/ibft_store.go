@@ -68,9 +68,11 @@ func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprot
 	return ibft
 }
 
-func (i *ibftStorage) CleanAllV1Decided(pks []message.Identifier) error {
-	for _, pk := range pks {
-		if err := i.delete(decidedKey, pk); err != nil {
+func (i *ibftStorage) CleanAllV1Decided(identifiers []message.Identifier) error {
+	for _, identifier := range identifiers {
+		prefix := append(i.prefix, identifier...)
+		prefix = append(prefix, []byte(decidedKey)...)
+		if err := i.db.RemoveAllByCollection(prefix); err != nil {
 			return err
 		}
 	}
@@ -189,7 +191,6 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*message.SignedMessage) error {
 			return basedb.Obj{}, err
 		}
 		identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
-		logex.GetLogger().Debug("----- save decided -----", zap.String("k", string(identifier)))
 		key := append(identifier, k...)
 		return basedb.Obj{Key: key, Value: value}, nil
 	})

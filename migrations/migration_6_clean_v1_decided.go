@@ -18,6 +18,6 @@ var migrationCleanV1Decided = Migration{
 		}
 
 		s := opt.qbftStorage()
-		return s.CleanAllV1Decided(pks)
+		return s.CleanAllV1Decided(pks) // fake migration
 	},
 }
