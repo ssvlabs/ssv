@@ -11,6 +11,8 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"sync"
@@ -48,6 +50,8 @@ type p2pNetwork struct {
 
 	activeValidatorsLock *sync.Mutex
 	activeValidators     map[string]int32
+
+	backoffConnector *libp2pdisc.BackoffConnector
 }
 
 // New creates a new p2p network
@@ -117,18 +121,25 @@ func (n *p2pNetwork) Start() error {
 // it will try to bootstrap discovery service, and inject a connect function
 // which will ignore the peer if it is connected or recently failed to connect
 func (n *p2pNetwork) startDiscovery() {
+	discoveredPeers := make(chan peer.AddrInfo, 128)
+	go func() {
+		ctx, cancel := context.WithCancel(n.ctx)
+		defer cancel()
+		n.backoffConnector.Connect(ctx, discoveredPeers)
+	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
-			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
-			defer cancel()
+			//ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
+			//defer cancel()
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
-			if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
-				n.logger.Warn("could not connect to peer", zap.Any("peer", e), zap.Error(err))
-				return
-			}
-			n.logger.Debug("connected peer from discovery", zap.Any("peer", e))
+			discoveredPeers <- e.AddrInfo
+			//if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
+			//	n.logger.Warn("could not connect to peer", zap.Any("peer", e), zap.Error(err))
+			//	return
+			//}
+			//n.logger.Debug("connected peer from discovery", zap.Any("peer", e))
 		})
 	}, 3)
 	if err != nil {

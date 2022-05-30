@@ -11,10 +11,12 @@ import (
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
@@ -69,6 +71,12 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "failed to create p2p host")
 	}
 	n.host = host
+	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(15*time.Second, 15*time.Minute, 2.0, rand.NewSource(0))
+	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, 512, 15*time.Second, backoffFactory)
+	if err != nil {
+		return errors.Wrap(err, "could not create backoff connector")
+	}
+	n.backoffConnector = backoffConnector
 	return nil
 }
 
