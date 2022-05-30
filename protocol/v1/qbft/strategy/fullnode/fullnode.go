@@ -62,10 +62,8 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 			return errors.Wrap(err, "could not check if message is known")
 		}
 		if knownMsg != nil && !shouldUpdate { // msg is known but no need to update
-			f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
 			return nil
 		}
-		//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
 		if err := f.store.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not save decided msg to storage")
 		}

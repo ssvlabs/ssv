@@ -35,12 +35,10 @@ func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
 func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error {
 	visited := make(map[message.Height]bool)
 	var msgs []p2pprotocol.SyncResult
-
-	s.logger.Debug("------ get history range -------", zap.Int64("from", int64(from)), zap.Int64("to", int64(to)))
+	
 	lastBatch := from
 	var err error
 	for lastBatch < to {
-		s.logger.Debug("------ get history range -------", zap.Int64("from", int64(lastBatch)), zap.Int64("to", int64(to)))
 		msgs, lastBatch, err = s.syncer.GetHistory(identifier, lastBatch, to, targetPeers...)
 		if err != nil {
 			return err
@@ -48,7 +46,6 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 		s.processMessages(ctx, msgs, handler, visited)
 	}
 
-	s.logger.Debug("------ DONE WITH HISTORY -------", zap.Any("total", visited))
 	if len(visited) != int(to-from)+1 {
 		s.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
 		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
