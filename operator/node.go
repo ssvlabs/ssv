@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
+	"github.com/bloxapp/ssv/mpc"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -49,6 +50,7 @@ type operatorNode struct {
 	ethNetwork     core.Network
 	context        context.Context
 	validatorsCtrl validator.Controller
+	mcpGroupsCtrl  mpc.Controller
 	logger         *zap.Logger
 	beacon         beacon.Beacon
 	net            network.Network
@@ -107,6 +109,7 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+	n.mcpGroupsCtrl.StartMpcGroups()
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkMediators()
 	if n.useMainTopic {
