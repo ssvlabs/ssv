@@ -44,12 +44,14 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 			return err
 		}
 		s.processMessages(ctx, msgs, handler, visited)
+		s.logger.Debug("received and processed history batch", zap.Int64("currentHighest", int64(lastBatch)), zap.Int64("needToSync", int64(to)))
 	}
 
 	if len(visited) != int(to-from)+1 {
 		s.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
 		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
+	s.logger.Debug("done with range history sync", zap.Int("totalProcessed", len(visited)))
 	return nil
 }
 

@@ -361,12 +361,18 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 			}
 			if len(cr.GetRoundChangeJustification()) > 0 {
 				m := cr.GetRoundChangeJustification()[0]
+
+				prepareData := new(message.PrepareData)
+				if err := prepareData.Decode(m.Message.Data); err != nil {
+					return nil, err
+				}
+
 				crV0.JustificationMsg = &proto.Message{
 					Type:      proto.RoundState_Prepare,
 					Round:     uint64(m.Message.Round),
 					Lambda:    []byte(format.IdentifierFormat(m.Message.Identifier.GetValidatorPK(), m.Message.Identifier.GetRoleType().String())),
 					SeqNumber: uint64(m.Message.Height),
-					Value:     m.Message.Data,
+					Value:     prepareData.Data,
 				}
 
 				crV0.JustificationSig = m.Signature
