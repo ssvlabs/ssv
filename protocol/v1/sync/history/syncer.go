@@ -70,7 +70,9 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 			s.logger.Warn("failed to extract sync msg", zap.Error(err))
 			continue
 		}
-
+		if sm == nil {
+			continue
+		}
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
 			height := signedMsg.Message.Height
