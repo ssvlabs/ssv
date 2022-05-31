@@ -70,11 +70,11 @@ type Instance struct {
 	initialized bool
 
 	// locks
-	runInitOnce                  sync.Once
-	runStopOnce                  sync.Once
-	processChangeRoundQuorumOnce sync.Once
-	processPrepareQuorumOnce     sync.Once
-	processCommitQuorumOnce      sync.Once
+	runInitOnce                  *sync.Once
+	runStopOnce                  *sync.Once
+	processChangeRoundQuorumOnce *sync.Once
+	processPrepareQuorumOnce     *sync.Once
+	processCommitQuorumOnce      *sync.Once
 	stopLock                     sync.Mutex
 	lastChangeRoundMsgLock       sync.RWMutex
 	stageChanCloseChan           sync.Mutex
@@ -113,11 +113,11 @@ func NewInstance(opts *Options) Instancer {
 		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
 
 		// locks
-		runInitOnce:                  sync.Once{},
-		runStopOnce:                  sync.Once{},
-		processChangeRoundQuorumOnce: sync.Once{},
-		processPrepareQuorumOnce:     sync.Once{},
-		processCommitQuorumOnce:      sync.Once{},
+		runInitOnce:                  &sync.Once{},
+		runStopOnce:                  &sync.Once{},
+		processChangeRoundQuorumOnce: &sync.Once{},
+		processPrepareQuorumOnce:     &sync.Once{},
+		processCommitQuorumOnce:      &sync.Once{},
 		stopLock:                     sync.Mutex{},
 		lastChangeRoundMsgLock:       sync.RWMutex{},
 		stageChanCloseChan:           sync.Mutex{},
@@ -279,8 +279,8 @@ func (i *Instance) BumpRound() {
 }
 
 func (i *Instance) bumpToRound(round message.Round) {
-	i.processChangeRoundQuorumOnce = sync.Once{}
-	i.processPrepareQuorumOnce = sync.Once{}
+	i.processChangeRoundQuorumOnce = &sync.Once{}
+	i.processPrepareQuorumOnce = &sync.Once{}
 	newRound := round
 	i.State().Round.Store(newRound)
 	role := i.State().GetIdentifier().GetRoleType()
