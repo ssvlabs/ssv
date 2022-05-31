@@ -1,7 +1,6 @@
 package msgqueue
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"strconv"
 	"strings"
@@ -62,7 +61,8 @@ func SignedMsgIndexer() Indexer {
 func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []string {
 	var res []string
 	for _, mt := range cmt {
-		res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
+		res = append(res, "/"+msgType.String()+"/id/"+mid+"height/"+strconv.FormatInt(int64(h), 10)+"/qbft_msg_type/"+mt.String())
+		//res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
 	}
 	return res
 }
@@ -82,7 +82,8 @@ func DecidedMsgIndexer() Indexer {
 
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
 func DecidedMsgIndex(mid string) string {
-	return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
+	return "/" + message.SSVDecidedMsgType.String() + "/id/" + mid + "/qbft_msg_type/" + message.CommitMsgType.String()
+	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 func getIndexHeight(idxParts ...string) message.Height {
