@@ -1,8 +1,6 @@
 package msgqueue
 
 import (
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -12,31 +10,31 @@ import (
 )
 
 // Cleaner is a function for iterating over keys and clean irrelevant ones
-type Cleaner func(string) bool
+type Cleaner func(Index) bool
 
 // AllIndicesCleaner is a cleaner that removes all existing indices
-func AllIndicesCleaner(k string) bool {
+func AllIndicesCleaner(k Index) bool {
 	return true
 }
 
 // Indexer indexes the given message, returns an empty string if not applicable
 // use WithIndexers to inject indexers upon start
-type Indexer func(msg *message.SSVMessage) string
+type Indexer func(msg *message.SSVMessage) Index
 
 // MsgQueue is a message broker for message.SSVMessage
 type MsgQueue interface {
 	// Add adds a new message
 	Add(msg *message.SSVMessage)
 	// Purge clears indexed messages for the given index
-	Purge(idx string)
+	Purge(idx Index)
 	// Peek returns the first n messages for an index
-	Peek(idx string, n int) []*message.SSVMessage
+	Peek(idx Index, n int) []*message.SSVMessage
 	// Pop clears and returns the first n messages for an index
-	Pop(n int, idx ...string) []*message.SSVMessage
+	Pop(n int, idx ...Index) []*message.SSVMessage
 	// PopWithIterator clears and returns the first n messages for indices that are created on the fly
 	PopWithIterator(n int, generator *IndexIterator) []*message.SSVMessage
 	// Count counts messages for the given index
-	Count(idx string) int
+	Count(idx Index) int
 	// Len counts all messages
 	Len() int
 	// Clean will clean irrelevant keys from the map
@@ -61,7 +59,7 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		logger:    logger,
 		indexers:  opts.Indexers,
 		itemsLock: &sync.RWMutex{},
-		items:     make(map[string][]*MsgContainer),
+		items:     make(map[Index][]*MsgContainer),
 	}, err
 }
 
@@ -70,13 +68,20 @@ type MsgContainer struct {
 	msg *message.SSVMessage
 }
 
+type Index struct {
+	Mt         message.MsgType
+	Identifier string
+	H          message.Height               // -1 count as nil
+	Cmt        message.ConsensusMessageType // -1 count as nil
+}
+
 // queue implements MsgQueue
 type queue struct {
 	logger   *zap.Logger
 	indexers []Indexer
 
 	itemsLock *sync.RWMutex
-	items     map[string][]*MsgContainer
+	items     map[Index][]*MsgContainer
 }
 
 func (q *queue) Add(msg *message.SSVMessage) {
@@ -88,7 +93,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		msg: msg,
 	}
 	for _, idx := range indices {
-		if len(idx) == 0 {
+		if idx == (Index{}) {
 			continue
 		}
 		msgs, ok := q.items[idx]
@@ -98,10 +103,10 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
 	}
-	q.logger.Debug("message added to queue", zap.Strings("indices", indices))
+	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
 
-func (q *queue) Purge(idx string) {
+func (q *queue) Purge(idx Index) {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
@@ -114,7 +119,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 
 	var cleaned int64
 
-	apply := func(k string) bool {
+	apply := func(k Index) bool {
 		for _, cleaner := range cleaners {
 			if cleaner(k) {
 				atomic.AddInt64(&cleaned, int64(len(q.items[k])))
@@ -133,7 +138,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 	return cleaned
 }
 
-func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
+func (q *queue) Peek(idx Index, n int) []*message.SSVMessage {
 	q.itemsLock.RLock()
 	defer q.itemsLock.RUnlock()
 
@@ -154,10 +159,10 @@ func (q *queue) Peek(idx string, n int) []*message.SSVMessage {
 }
 
 // Pop message by index. if no messages found within the index and more than 1 idxs passed, search on the next one.
-func (q *queue) Pop(n int, idxs ...string) []*message.SSVMessage {
+func (q *queue) Pop(n int, idxs ...Index) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
-
+	
 	for i, idx := range idxs {
 		containers, ok := q.items[idx]
 		if !ok {
@@ -191,7 +196,7 @@ func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
 			break
 		}
 		idx := genIndex()
-		if len(idx) == 0 {
+		if idx == (Index{}) {
 			continue
 		}
 		results := q.Pop(n, genIndex())
@@ -205,7 +210,7 @@ func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
 	return msgs
 }
 
-func (q *queue) Count(idx string) int {
+func (q *queue) Count(idx Index) int {
 	q.itemsLock.RLock()
 	defer q.itemsLock.RUnlock()
 
@@ -224,11 +229,11 @@ func (q *queue) Len() int {
 
 // indexMessage returns indexes for the given message.
 // NOTE: this function is not thread safe
-func (q *queue) indexMessage(msg *message.SSVMessage) []string {
-	indexes := make([]string, 0)
+func (q *queue) indexMessage(msg *message.SSVMessage) []Index {
+	indexes := make([]Index, 0)
 	for _, f := range q.indexers {
 		idx := f(msg)
-		if len(idx) > 0 {
+		if idx != (Index{}) {
 			indexes = append(indexes, idx)
 		}
 	}
@@ -239,33 +244,32 @@ func (q *queue) indexMessage(msg *message.SSVMessage) []string {
 // DefaultMsgCleaner cleans ssv msgs from the queue
 func DefaultMsgCleaner(mid message.Identifier, mts ...message.MsgType) Cleaner {
 	identifier := mid.String()
-	return func(k string) bool {
-		parts := strings.Split(k, "/")
-		if len(parts) < 2 {
-			return false // unknown
-		}
-		parts = parts[1:]
+	return func(k Index) bool {
 		for _, mt := range mts {
-			if parts[0] != mt.String() {
+			if k.Mt != mt {
 				return false
 			}
 		}
 		// clean if we reached here, and the identifier is equal
-		return parts[2] == identifier
+		return k.Identifier == identifier
 	}
 }
 
 // DefaultMsgIndexer returns the default msg indexer to use for message.SSVMessage
 func DefaultMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) string {
+	return func(msg *message.SSVMessage) Index {
 		if msg == nil {
-			return ""
+			return Index{}
 		}
 		return DefaultMsgIndex(msg.MsgType, msg.ID)
 	}
 }
 
 // DefaultMsgIndex is the default msg index
-func DefaultMsgIndex(mt message.MsgType, mid message.Identifier) string {
-	return fmt.Sprintf("/%s/id/%s", mt.String(), mid.String())
+func DefaultMsgIndex(mt message.MsgType, mid message.Identifier) Index {
+	return Index{
+		Mt:         mt,
+		Identifier: mid.String(),
+		Cmt:        -1,
+	}
 }

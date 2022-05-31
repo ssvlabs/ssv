@@ -1,7 +1,7 @@
 package msgqueue
 
 // IndexGenerator generates an index
-type IndexGenerator func() string
+type IndexGenerator func() Index
 
 // IndexIterator enables to iterate over future created indices
 type IndexIterator struct {
