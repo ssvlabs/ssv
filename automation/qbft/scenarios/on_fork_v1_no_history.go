@@ -27,7 +27,6 @@ type onForkV1NoHistory struct {
 	share      *beacon.Share
 	sks        map[uint64]*bls.SecretKey
 	validators []validator.IValidator
-	msgs       []*message.SignedMessage
 }
 
 // newOnForkV1NoHistory creates 'on fork v1' scenario
@@ -57,13 +56,6 @@ func (f *onForkV1NoHistory) PreExecution(ctx *runner.ScenarioContext) error {
 	f.validators = validators
 	f.sks = sks
 	f.share = share
-
-	oids := make([]message.OperatorID, 0)
-	keys := make(map[message.OperatorID]*bls.SecretKey)
-	for oid := range share.Committee {
-		keys[oid] = sks[uint64(oid)]
-		oids = append(oids, oid)
-	}
 
 	// setting up routers
 	routers := make([]*runner.Router, f.NumOfOperators())
