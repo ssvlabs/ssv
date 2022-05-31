@@ -42,7 +42,7 @@ func (f *onForkV1) NumOfOperators() int {
 }
 
 func (f *onForkV1) NumOfBootnodes() int {
-	return 1
+	return 0
 }
 
 func (f *onForkV1) Name() string {
