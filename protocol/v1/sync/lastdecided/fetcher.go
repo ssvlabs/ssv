@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	lastDecidedRetries = 5
+	lastDecidedInterval = 250 * time.Millisecond
+)
+
 // GetLastDecided reads last decided message from store
 type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
 
@@ -35,22 +40,24 @@ func (l *lastDecidedFetcher) GetLastDecided(identifier message.Identifier, getLa
 	logger := l.logger.With(zap.String("identifier", identifier.String()))
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
-	delay := 250 * time.Millisecond
-	retries := 2
+	retries := lastDecidedRetries
 	for retries > 0 && len(remoteMsgs) == 0 {
 		retries--
 		remoteMsgs, err = l.syncer.LastDecided(identifier)
 		if err != nil {
 			// if network is not ready yet, wait some more
 			if err == p2pprotocol.ErrNetworkIsNotReady {
-				time.Sleep(delay * 2)
+				time.Sleep(lastDecidedInterval * 2)
 				continue
 			}
-			return nil, "", 0, errors.Wrap(err, "could not get remote highest decided")
+			l.logger.Debug("could not get highest decided from remote peers", zap.Error(err))
 		}
 		if len(remoteMsgs) == 0 {
-			time.Sleep(delay)
+			time.Sleep(lastDecidedInterval)
 		}
+	}
+	if err != nil {
+		return nil, "", 0, errors.Wrap(err, "could not get remote highest decided")
 	}
 
 	localMsg, err := getLastDecided(identifier)
