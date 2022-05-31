@@ -11,17 +11,32 @@ import (
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
+	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"math/rand"
 	"net"
 	"sync/atomic"
 	"time"
 )
 
 const (
+	// defaultReqTimeout is the default timeout used for stream requests
 	defaultReqTimeout = 10 * time.Second
+	// backoffLow is when we start the backoff exponent interval
+	backoffLow = 15 * time.Second
+	// backoffLow is when we stop the backoff exponent interval
+	backoffHigh = 15 * time.Minute
+	// backoffExponentBase is the base of the backoff exponent
+	backoffExponentBase = 2.0
+	// backoffConnectorCacheSize is the cache size of the backoff connector
+	backoffConnectorCacheSize = 1024
+	// connectTimeout is the timeout used for connections
+	connectTimeout = 15 * time.Second
+	// connectorQueueSize is the buffer size of the channel used by the connector
+	connectorQueueSize = 256
 )
 
 // Setup is used to setup the network
@@ -58,7 +73,7 @@ func (n *p2pNetwork) initCfg() {
 	}
 }
 
-// SetupHost configures a libp2p host
+// SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost() error {
 	opts, err := n.cfg.Libp2pOptions(n.fork)
 	if err != nil {
@@ -69,6 +84,14 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "failed to create p2p host")
 	}
 	n.host = host
+
+	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
+	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	if err != nil {
+		return errors.Wrap(err, "could not create backoff connector")
+	}
+	n.backoffConnector = backoffConnector
+
 	return nil
 }
 

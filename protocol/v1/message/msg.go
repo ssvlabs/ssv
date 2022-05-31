@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/pkg/errors"
 )
 
@@ -53,7 +54,9 @@ type Identifier []byte
 func NewIdentifier(pk []byte, role RoleType) Identifier {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
-	return append(pk, roleByts...)
+	id := make([]byte, len(pk))
+	copy(id, pk)
+	return append(id, roleByts...)
 }
 
 // GetRoleType extracts the role type from the id
