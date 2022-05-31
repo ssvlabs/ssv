@@ -75,26 +75,6 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 		return results, 0, err
 	}
 	return results, currentEnd, nil
-
-	/*for from < to {
-		currentEnd := to
-		if to-from > maxBatchRes {
-			currentEnd = from + maxBatchRes
-		}
-		batchResults, err := n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
-			Params: &message.SyncParams{
-				Height:     []message.Height{from, currentEnd},
-				Identifier: mid,
-			},
-			Protocol: message.DecidedHistoryType,
-		})
-		if err != nil {
-			return results, 0, err
-		}
-		results = append(results, batchResults...)
-		from = currentEnd
-	}
-	return results, 0, nil*/
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
@@ -180,7 +160,6 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
 		}
-		n.logger.Info("stream handler done")
 	})
 }
 
@@ -233,12 +212,12 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			logger.Debug("could not make stream request")
+			logger.Debug("could not make stream request", zap.Error(err))
 			continue
 		}
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
-			logger.Debug("could not decode stream response")
+			logger.Debug("could not decode stream response", zap.Error(err))
 			continue
 		}
 		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()))

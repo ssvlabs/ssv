@@ -178,7 +178,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
-		h.logger.Debug("filtering peer", zap.Any("info", ni))
 		return errors.Errorf("peer [%s] was filtered during handshake", pid.String())
 	}
 	// adding to index

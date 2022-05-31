@@ -41,9 +41,13 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
 	ctx, cancel := context.WithTimeout(pctx, lastDecidedTimeout)
 	defer cancel()
-	logger := l.logger.With(zap.String("identifier", identifier.String()))
 	var err error
+	var sender string
 	var remoteMsgs []p2pprotocol.SyncResult
+	var localMsg, highest *message.SignedMessage
+
+	logger := l.logger.With(zap.String("identifier", identifier.String()))
+
 	retries := lastDecidedRetries
 	// TODO: use exponent interval?
 	for retries > 0 && len(remoteMsgs) == 0 && ctx.Err() == nil {
@@ -60,32 +64,34 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 		if len(remoteMsgs) == 0 {
 			time.Sleep(lastDecidedInterval)
 		}
-	}
-	if err != nil {
-		return nil, "", 0, errors.Wrap(err, "could not get remote highest decided")
-	}
 
-	localMsg, err := getLastDecided(identifier)
+		highest, sender = sync.GetHighest(l.logger, remoteMsgs...)
+		if highest == nil {
+			logger.Debug("remote highest decided not found", zap.Int("retryNumber", retries))
+			continue
+		}
+	}
+	var localHeight message.Height
+	localMsg, err = getLastDecided(identifier)
 	if err != nil {
 		return nil, "", 0, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
-	if len(remoteMsgs) == 0 && localMsg == nil {
-		logger.Info("node is synced: remote highest decided not found (V0), assuming 0")
-		return nil, "", 0, nil
-	}
-
-	var localHeight message.Height
-	if localMsg != nil {
+	if localMsg != nil && localMsg.Message != nil {
 		localHeight = localMsg.Message.Height
 	}
-
-	highest, height, sender := sync.GetHighest(l.logger, localMsg, remoteMsgs...)
-	if highest == nil {
+	// couldn't fetch highest from remote peers
+	if highest == nil || highest.Message == nil {
+		if localMsg == nil {
+			// couldn't find local highest decided -> height is 0
+			logger.Info("node is synced: local and remote highest decided not found, assuming 0")
+			return nil, "", 0, nil
+		}
+		// local was found while remote didn't
 		logger.Info("node is synced: remote highest decided not found")
 		return nil, "", localHeight, nil
 	}
 
-	if height <= localHeight {
+	if highest.Message.Height <= localHeight {
 		logger.Info("node is synced: local is higher or equal to remote")
 		return nil, "", localHeight, nil
 	}

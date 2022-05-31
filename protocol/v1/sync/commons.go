@@ -9,12 +9,8 @@ import (
 )
 
 // GetHighest returns the highest message from the given collection
-func GetHighest(logger *zap.Logger, localMsg *message.SignedMessage, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, height message.Height, sender string) {
-	var localHeight message.Height
-	if localMsg != nil {
-		localHeight = localMsg.Message.Height
-	}
-	height = localHeight
+func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, sender string) {
+	var height message.Height
 
 	for _, remoteMsg := range remoteMsgs {
 		sm, err := ExtractSyncMsg(remoteMsg.Msg)
