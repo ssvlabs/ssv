@@ -20,7 +20,7 @@ func (c *Controller) startQueueConsumer(handler MessageHandler) {
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := c.ConsumeQueue(handler, time.Millisecond*10)
+		err := c.ConsumeQueue(handler, time.Millisecond*50)
 		if err != nil {
 			c.logger.Warn("could not consume queue", zap.Error(err))
 		}
