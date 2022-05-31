@@ -52,17 +52,17 @@ func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
 func SignedMsgIndexer() Indexer {
 	return func(msg *message.SSVMessage) string {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.ID.String(), sm.Message.Height, sm.Message.MsgType)[0]
 		}
 		return ""
 	}
 }
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt ...message.ConsensusMessageType) []string {
+func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []string {
 	var res []string
 	for _, mt := range cmt {
-		res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid.String(), h, mt.String()))
+		res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
 	}
 	return res
 }
@@ -74,15 +74,15 @@ func DecidedMsgIndexer() Indexer {
 			return ""
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return DecidedMsgIndex(msg.ID)
+			return DecidedMsgIndex(msg.ID.String())
 		}
 		return ""
 	}
 }
 
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
-func DecidedMsgIndex(mid message.Identifier) string {
-	return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid.String(), message.CommitMsgType.String())
+func DecidedMsgIndex(mid string) string {
+	return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 func getIndexHeight(idxParts ...string) message.Height {

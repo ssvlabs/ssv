@@ -33,6 +33,8 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	ctx, cancel := context.WithCancel(c.ctx)
 	defer cancel()
 
+	identifier := c.Identifier.String()
+
 	for ctx.Err() == nil {
 		time.Sleep(interval)
 
@@ -49,15 +51,15 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 
 		lastHeight := c.signatureState.getHeight()
 
-		if processed := c.processNoRunningInstance(handler, lastHeight); processed {
+		if processed := c.processNoRunningInstance(handler, identifier, lastHeight); processed {
 			c.logger.Debug("process none running instance is done")
 			continue
 		}
-		if processed := c.processByState(handler); processed {
+		if processed := c.processByState(handler, identifier); processed {
 			c.logger.Debug("process by state is done")
 			continue
 		}
-		if processed := c.processDefault(handler, lastHeight); processed {
+		if processed := c.processDefault(handler, identifier, lastHeight); processed {
 			c.logger.Debug("process default is done")
 			continue
 		}
@@ -67,18 +69,18 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight message.Height) bool {
+func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier string, lastHeight message.Height) bool {
 	instance := c.getCurrentInstance()
 	if instance != nil {
 		return false // only pop when no instance running
 	}
 
 	iterator := msgqueue.NewIndexIterator().Add(func() string {
-		return msgqueue.SignedPostConsensusMsgIndex(c.Identifier, lastHeight)
+		return msgqueue.SignedPostConsensusMsgIndex(identifier, lastHeight)
 	}, func() string {
-		return msgqueue.DecidedMsgIndex(c.Identifier)
+		return msgqueue.DecidedMsgIndex(identifier)
 	}, func() string {
-		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight, message.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, lastHeight, message.CommitMsgType)
 		if len(indices) == 0 {
 			return ""
 		}
@@ -99,14 +101,14 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, lastHeight
 }
 
 // processByState if an instance is running -> get the state and get the relevant messages
-func (c *Controller) processByState(handler MessageHandler) bool {
+func (c *Controller) processByState(handler MessageHandler, identifier string) bool {
 	if c.getCurrentInstance() == nil {
 		return false
 	}
 
 	var msg *message.SSVMessage
 	currentState := c.getCurrentInstance().State()
-	msg = c.getNextMsgForState(currentState)
+	msg = c.getNextMsgForState(currentState, identifier)
 	if msg == nil {
 		return false // no msg found
 	}
@@ -125,16 +127,16 @@ func (c *Controller) processByState(handler MessageHandler) bool {
 
 // processDefault this phase is to allow late commit and decided msg's
 // we allow late commit and decided up to 1 height back. (only to support pre fork. after fork no need to support previews height)
-func (c *Controller) processDefault(handler MessageHandler, lastHeight message.Height) bool {
+func (c *Controller) processDefault(handler MessageHandler, identifier string, lastHeight message.Height) bool {
 	iterator := msgqueue.NewIndexIterator().
 		Add(func() string {
-			indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)
+			indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, lastHeight-1, message.CommitMsgType)
 			if len(indices) == 0 {
 				return ""
 			}
 			return indices[0]
 		}).Add(func() string {
-		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, c.Identifier, lastHeight-1, message.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, identifier, lastHeight-1, message.CommitMsgType)
 		if len(indices) == 0 {
 			return ""
 		}
@@ -153,7 +155,7 @@ func (c *Controller) processDefault(handler MessageHandler, lastHeight message.H
 }
 
 // getNextMsgForState return msgs depended on the current instance stage
-func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
+func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *message.SSVMessage {
 	height := state.GetHeight()
 
 	iterator := msgqueue.NewIndexIterator().
@@ -161,22 +163,22 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 			var index string
 			switch qbft.RoundState(state.Stage.Load()) {
 			case qbft.RoundStateNotStarted:
-				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.ProposalMsgType)[0]
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.ProposalMsgType)[0]
 			case qbft.RoundStatePrePrepare:
-				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.PrepareMsgType)[0] // looking for propose in case is leader
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.PrepareMsgType)[0] // looking for propose in case is leader
 			case qbft.RoundStatePrepare:
-				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.CommitMsgType)[0]
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.CommitMsgType)[0]
 			case qbft.RoundStateCommit:
 				return "" // qbft.RoundStateCommit stage is NEVER set
 			case qbft.RoundStateChangeRound:
-				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)[0]
+				index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.RoundChangeMsgType)[0]
 				//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 			}
 			return index
 		}).Add(func() string {
-		return msgqueue.DecidedMsgIndex(c.Identifier)
+		return msgqueue.DecidedMsgIndex(identifier)
 	}).Add(func() string {
-		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, c.Identifier, height, message.RoundChangeMsgType)
+		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.RoundChangeMsgType)
 		if len(indices) == 0 {
 			return ""
 		}
@@ -192,7 +194,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State) *message.SSVMessage {
 
 // processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
 func (c *Controller) processAllDecided(handler MessageHandler) {
-	idx := msgqueue.DecidedMsgIndex(c.Identifier)
+	idx := msgqueue.DecidedMsgIndex(c.Identifier.String())
 	msgs := c.q.Pop(1, idx)
 	for len(msgs) > 0 {
 		err := handler(msgs[0])

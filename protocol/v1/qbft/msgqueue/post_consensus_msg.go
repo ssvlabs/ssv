@@ -45,11 +45,11 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if sm.Message == nil {
 			return ""
 		}
-		return SignedPostConsensusMsgIndex(msg.ID, sm.Message.Height)
+		return SignedPostConsensusMsgIndex(msg.ID.String(), sm.Message.Height)
 	}
 }
 
 // SignedPostConsensusMsgIndex indexes a message.SignedPostConsensusMessage by identifier and height
-func SignedPostConsensusMsgIndex(mid message.Identifier, h message.Height) string {
-	return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid.String(), h)
+func SignedPostConsensusMsgIndex(mid string, h message.Height) string {
+	return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid, h)
 }
