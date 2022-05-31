@@ -1,6 +1,7 @@
 package lastdecided
 
 import (
+	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
@@ -10,8 +11,9 @@ import (
 )
 
 const (
-	lastDecidedRetries = 5
+	lastDecidedRetries  = 8
 	lastDecidedInterval = 250 * time.Millisecond
+	lastDecidedTimeout  = 25 * time.Second
 )
 
 // GetLastDecided reads last decided message from store
@@ -19,7 +21,7 @@ type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error)
+	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -36,12 +38,15 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-func (l *lastDecidedFetcher) GetLastDecided(identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
+func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
+	ctx, cancel := context.WithTimeout(pctx, lastDecidedTimeout)
+	defer cancel()
 	logger := l.logger.With(zap.String("identifier", identifier.String()))
 	var err error
 	var remoteMsgs []p2pprotocol.SyncResult
 	retries := lastDecidedRetries
-	for retries > 0 && len(remoteMsgs) == 0 {
+	// TODO: use exponent interval?
+	for retries > 0 && len(remoteMsgs) == 0 && ctx.Err() == nil {
 		retries--
 		remoteMsgs, err = l.syncer.LastDecided(identifier)
 		if err != nil {
