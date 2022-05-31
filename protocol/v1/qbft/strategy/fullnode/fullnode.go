@@ -33,7 +33,7 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 
 func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
-	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {

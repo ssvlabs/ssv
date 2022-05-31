@@ -158,6 +158,7 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 			n.logger.Warn("could not encode msg", zap.Error(err))
 			return
 		}
+		// TODO: remove after fork v1
 		if n.cfg.ForkVersion == forksprotocol.V0ForkVersion {
 			parsed := &network.Message{}
 			err := parsed.Decode(resultBytes)
@@ -168,12 +169,12 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 			if parsed != nil && parsed.SyncMessage != nil {
 				parsed.SyncMessage.FromPeerID = n.host.ID().String()
 			}
-			withPeerId, err := parsed.Encode()
+			withPeerID, err := parsed.Encode()
 			if err != nil {
 				n.logger.Warn("could not encode v0 msg with peer id", zap.Error(err))
 				return
 			}
-			resultBytes = withPeerId
+			resultBytes = withPeerID
 		}
 		if err := respond(resultBytes); err != nil {
 			n.logger.Warn("could not respond to stream", zap.Error(err))

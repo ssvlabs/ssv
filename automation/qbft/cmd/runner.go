@@ -13,7 +13,7 @@ func main() {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
 	scenariosToRun := []string{
 		scenarios.OnForkV1Scenario,
-		scenarios.OnForkV13NodesScenario,
+		//scenarios.OnForkV13NodesScenario,
 		// TODO: read from ENV
 	}
 
