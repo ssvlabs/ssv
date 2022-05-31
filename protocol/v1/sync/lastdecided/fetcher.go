@@ -71,6 +71,7 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 			continue
 		}
 	}
+
 	var localHeight message.Height
 	localMsg, err = getLastDecided(identifier)
 	if err != nil {
@@ -79,22 +80,27 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 	if localMsg != nil && localMsg.Message != nil {
 		localHeight = localMsg.Message.Height
 	}
+	logger = logger.With(zap.Int64("localHeight", int64(localHeight)))
 	// couldn't fetch highest from remote peers
 	if highest == nil || highest.Message == nil {
 		if localMsg == nil {
 			// couldn't find local highest decided -> height is 0
-			logger.Info("node is synced: local and remote highest decided not found, assuming 0")
+			logger.Debug("node is synced: local and remote highest decided not found, assuming 0")
 			return nil, "", 0, nil
 		}
 		// local was found while remote didn't
-		logger.Info("node is synced: remote highest decided not found")
+		logger.Debug("node is synced: remote highest decided not found")
 		return nil, "", localHeight, nil
 	}
 
 	if highest.Message.Height <= localHeight {
-		logger.Info("node is synced: local is higher or equal to remote")
+		logger.Debug("node is synced: local is higher or equal to remote",
+			zap.Int64("remoteHeight", int64(highest.Message.Height)))
 		return nil, "", localHeight, nil
 	}
+
+	logger.Debug("fetched last decided from remote peer",
+		zap.Int64("remoteHeight", int64(highest.Message.Height)), zap.String("remotePeer", sender))
 
 	return highest, sender, localHeight, nil
 }

@@ -51,7 +51,6 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
-	logger.Debug("found higher remote than local: syncing range")
 	counter := 0
 	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
@@ -82,6 +81,10 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 	if len(warnMsg) > 0 {
 		logger.Warn(warnMsg,
 			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
+			zap.Int64("to", int64(highest.Message.Height)))
+	} else {
+		logger.Debug("managed to sync all messages in range",
+			zap.Int64("from", int64(localHeight)),
 			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
