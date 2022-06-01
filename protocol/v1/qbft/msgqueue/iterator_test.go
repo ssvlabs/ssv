@@ -22,38 +22,43 @@ func TestIndexIterator(t *testing.T) {
 	}
 
 	q, err := New(logger, WithIndexers(DefaultMsgIndexer(),
-		dummyIndexer("test", "data-2"),
-		dummyIndexer("test", "data-3"),
-		dummyIndexer("test", "data-8")))
+		dummyIndexer("data-2"),
+		dummyIndexer("data-3"),
+		dummyIndexer("data-8")))
 	require.NoError(t, err)
 
 	for _, msg := range msgs {
 		q.Add(msg)
 	}
 
-	iterator := NewIndexIterator().Add(func() string {
-		return dummyIndex("test", msgs[1])
-	}).Add(func() string {
-		return dummyIndex("test", msgs[2])
-	}).Add(func() string {
-		return dummyIndex("test", msgs[6])
+	iterator := NewIndexIterator().Add(func() Index {
+		return dummyIndex(msgs[1])
+	}).Add(func() Index {
+		return dummyIndex(msgs[2])
+	}).Add(func() Index {
+		return dummyIndex(msgs[6])
 	})
 	res := q.PopWithIterator(3, iterator)
 	require.Len(t, res, 2)
 }
 
-func dummyIndex(prefix string, msg *message.SSVMessage) string {
-	return fmt.Sprintf("%s/%s/id/%s", prefix, msg.GetType().String(), msg.GetIdentifier().String())
+func dummyIndex(msg *message.SSVMessage) Index {
+	return Index{
+		Mt:         msg.GetType(),
+		Identifier: msg.GetIdentifier().String(),
+		H:          -1,
+		Cmt:        -1,
+	}
 }
 
-func dummyIndexer(prefix string, contained string) Indexer {
-	return func(msg *message.SSVMessage) string {
+func dummyIndexer(contained string) Indexer {
+	return func(msg *message.SSVMessage) Index {
 		if msg == nil {
-			return ""
+			return Index{}
 		}
 		if !strings.Contains(string(msg.GetData()), contained) {
-			return ""
+			return Index{}
 		}
-		return dummyIndex(prefix, msg)
+		return dummyIndex(msg)
 	}
 }

@@ -2,7 +2,6 @@ package msgqueue
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"strconv"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
@@ -87,15 +86,6 @@ func DecidedMsgIndex(mid string) Index {
 		Cmt:        message.CommitMsgType,
 	}
 	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
-}
-
-func getIndexHeight(idxParts ...string) message.Height {
-	hraw := idxParts[2]
-	h, err := strconv.Atoi(hraw)
-	if err != nil {
-		return message.Height(0)
-	}
-	return message.Height(h)
 }
 
 // getRound returns the round of the message if applicable

@@ -68,6 +68,7 @@ type MsgContainer struct {
 	msg *message.SSVMessage
 }
 
+// Index is a struct representing an index in msg queue
 type Index struct {
 	Mt         message.MsgType
 	Identifier string
@@ -162,7 +163,7 @@ func (q *queue) Peek(idx Index, n int) []*message.SSVMessage {
 func (q *queue) Pop(n int, idxs ...Index) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
-	
+
 	for i, idx := range idxs {
 		containers, ok := q.items[idx]
 		if !ok {
