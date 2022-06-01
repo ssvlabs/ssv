@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -92,9 +91,6 @@ type Controller struct {
 
 	decidedFactory  *factory.Factory
 	decidedStrategy strategy.Decided
-
-	// TODO for testing
-	sb bytes.Buffer
 }
 
 // New is the constructor of Controller

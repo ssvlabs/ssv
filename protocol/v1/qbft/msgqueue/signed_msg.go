@@ -1,7 +1,6 @@
 package msgqueue
 
 import (
-	"bytes"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"strconv"
 	"strings"
@@ -52,25 +51,17 @@ func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
 func SignedMsgIndexer() Indexer {
 	return func(msg *message.SSVMessage) string {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(bytes.Buffer{}, msg.MsgType, msg.ID.String(), sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.ID.String(), sm.Message.Height, sm.Message.MsgType)[0]
 		}
 		return ""
 	}
 }
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(sb bytes.Buffer, msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []string {
+func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []string {
 	var res []string
 	for _, mt := range cmt {
-		sb.WriteString(msgType.String())
-		sb.WriteString("/id/")
-		sb.WriteString(mid)
-		sb.WriteString("/height/")
-		sb.WriteString(strconv.FormatInt(int64(h), 10))
-		sb.WriteString("/qbft_msg_type/")
-		sb.WriteString(mt.String())
-		res = append(res, sb.String())
-		sb.Reset()
+		res = append(res, "/"+msgType.String()+"/id/"+mid+"height/"+strconv.FormatInt(int64(h), 10)+"/qbft_msg_type/"+mt.String())
 		//res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, mt.String()))
 	}
 	return res
@@ -83,21 +74,14 @@ func DecidedMsgIndexer() Indexer {
 			return ""
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return DecidedMsgIndex(bytes.Buffer{}, msg.ID.String())
+			return DecidedMsgIndex(msg.ID.String())
 		}
 		return ""
 	}
 }
 
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
-func DecidedMsgIndex(sb bytes.Buffer, mid string) string {
-	defer sb.Reset()
-	sb.WriteString(message.SSVDecidedMsgType.String())
-	sb.WriteString("/id/")
-	sb.WriteString("/id/")
-	sb.WriteString(mid)
-	sb.WriteString("/qbft_msg_type/")
-	sb.WriteString(message.CommitMsgType.String())
+func DecidedMsgIndex(mid string) string {
 	return "/" + message.SSVDecidedMsgType.String() + "/id/" + mid + "/qbft_msg_type/" + message.CommitMsgType.String()
 	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
