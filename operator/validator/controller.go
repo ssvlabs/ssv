@@ -735,18 +735,17 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 }
 
 // onShareRemove is called when a validator was removed
+// TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	// remove from validatorsMap
 	v := c.validatorsMap.RemoveValidator(pk)
 
 	// stop instance
 	if v != nil {
-		// TODO
-		//if err := v.Close(); err == nil {
-		//	return errors.Wrap(err, "could not close validator")
-		//}
+		if err := v.Close(); err == nil {
+			return errors.Wrap(err, "could not close validator")
+		}
 	}
-
 	// remove the share secret from key-manager
 	if removeSecret {
 		if err := c.keyManager.RemoveShare(pk); err != nil {
