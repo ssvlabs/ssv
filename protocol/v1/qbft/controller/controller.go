@@ -296,7 +296,11 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 			fields = append(fields, zap.String("stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
 		}
 	}
-	fields = append(fields, zap.Any("msg", msg))
+	fields = append(fields,
+		zap.Any("msg", msg),
+		zap.Int("msg_data_size", len(msg.Data)),
+		zap.Int("queue_len", c.q.Len()),
+	)
 	c.logger.Debug("got message, add to queue", fields...)
 	c.q.Add(msg)
 	return nil
