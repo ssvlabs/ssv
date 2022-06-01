@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"testing"
+
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 func Test_Automation_QBFTScenarios(t *testing.T) {
