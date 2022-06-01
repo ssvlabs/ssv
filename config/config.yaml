@@ -10,7 +10,7 @@ eth2:
   Network: prater
 
 eth1:
-### replace with your eth1 node address
+### replace with your eth1 node WebSocket address
   ETH1Addr: example.url
 
 p2p:
@@ -20,7 +20,7 @@ p2p:
 #  TcpPort:
 #  UdpPort:
 ### mdns for local network setup
-#  DiscoveryType: mdns
+#  Bootnodes: enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g
 
 ssv:
   DutyLimit: 32

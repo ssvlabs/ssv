@@ -113,6 +113,10 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
+        - name: TCP_PORT
+          value: "13002"
+        - name: UDP_PORT
+          value: "12002"
         - name: GENESIS_EPOCH
           value: "1"
         - name: LOGGER_LEVEL
@@ -125,6 +129,8 @@ spec:
           value: "15002"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: BOOTNODES
+          value: "enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-2

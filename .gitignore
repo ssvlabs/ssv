@@ -18,11 +18,16 @@ vendor/
 /config/share*
 /config/config.yaml
 /config/config.exporter.yaml
+/config/config.local.yaml
 
 # User-specific stuff:
 .idea/**/workspace.xml
 .idea/**/tasks.xml
+.idea/watcherTasks.xml
+.idea/misc.xml
 .idea/dictionaries
+.idea/codeStyles
+.idea/shelf
 
 # Sensitive or high-churn files:
 .idea/**/dataSources/

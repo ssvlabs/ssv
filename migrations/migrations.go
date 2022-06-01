@@ -3,11 +3,12 @@ package migrations
 import (
 	"bytes"
 	"context"
+	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
 
 	exporterstorage "github.com/bloxapp/ssv/exporter/storage"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/storage/basedb"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -51,8 +52,8 @@ type Options struct {
 	DbPath string
 }
 
-func (o *Options) getRegistryStores() []basedb.RegistryStore {
-	return []basedb.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.nodeStorage()}
+func (o *Options) getRegistryStores() []eth1.RegistryStore {
+	return []eth1.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.nodeStorage()}
 }
 
 func (o Options) exporterStorage() exporterstorage.Storage {

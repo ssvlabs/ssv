@@ -3,48 +3,57 @@ package operator
 import (
 	"context"
 	"fmt"
-	ssv_identity "github.com/bloxapp/ssv/identity"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/ilyakaznacheev/cleanenv"
+	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/prysmaticlabs/prysm/time/slots"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/network/p2p"
+	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties"
-	v0 "github.com/bloxapp/ssv/operator/forks/v0"
+	"github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/bloxapp/ssv/validator"
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
 )
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options   `yaml:"db"`
-	SSVOptions                 operator.Options `yaml:"ssv"`
-	ETH1Options                eth1.Options     `yaml:"eth1"`
-	ETH2Options                beacon.Options   `yaml:"eth2"`
-	P2pNetworkConfig           p2p.Config       `yaml:"p2p"`
+	DBOptions                  basedb.Options         `yaml:"db"`
+	SSVOptions                 operator.Options       `yaml:"ssv"`
+	ETH1Options                eth1.Options           `yaml:"eth1"`
+	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
+	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	ClearNetworkKey            bool   `yaml:"ClearNetworkKey" env:"CLEAR_NETWORK_KEY" env-description:"flag that turns on/off network key revocation"`
 
 	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
+
+	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
 }
 
 var cfg config
@@ -77,9 +86,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
 
-		// TODO - change via command line?
-		fork := v0.New()
-
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := storage.GetStorageFactory(cfg.DBOptions)
@@ -97,8 +103,14 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
-		eth2Network := core.NetworkFromString(cfg.ETH2Options.Network)
+		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
 
+		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
+		if cfg.ForkV1Epoch > 0 {
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
+		}
+		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
+		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))
 		// TODO Not refactored yet Start (refactor in exporter as well):
 		cfg.ETH2Options.Context = cmd.Context()
 		cfg.ETH2Options.Logger = Logger
@@ -122,39 +134,45 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to extract operator public key", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.OperatorPrivateKey = operatorPrivateKey
 
 		istore := ssv_identity.NewIdentityStore(db, Logger)
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 		if err != nil {
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
+
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-		cfg.P2pNetworkConfig.Fork = fork.NetworkFork()
-		cfg.P2pNetworkConfig.NodeType = p2p.Operator
-		p2pNet, err := p2p.New(cmd.Context(), Logger, &cfg.P2pNetworkConfig)
-		if err != nil {
-			Logger.Fatal("failed to create network", zap.Error(err))
+		cfg.P2pNetworkConfig.Logger = Logger
+		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
+		cfg.P2pNetworkConfig.UserAgent = forksv0.GenUserAgentWithOperatorID(cfg.P2pNetworkConfig.OperatorID)
+		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
+		if err := p2pNet.Setup(); err != nil {
+			Logger.Fatal("failed to setup network", zap.Error(err))
+		}
+		if err := p2pNet.Start(); err != nil {
+			Logger.Fatal("failed to start network", zap.Error(err))
 		}
 
 		ctx := cmd.Context()
-		cfg.SSVOptions.Fork = fork
+		cfg.SSVOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.Logger = Logger
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = beaconClient
-		cfg.SSVOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNet
 
-		cfg.SSVOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
+		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
 
-		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
-		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
+		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
-		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient // TODO need to be pointer?
+		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 

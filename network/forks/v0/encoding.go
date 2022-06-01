@@ -1,18 +1,27 @@
 package v0
 
 import (
-	"encoding/json"
+	"github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/pkg/errors"
 )
 
-// EncodeNetworkMsg - genesis version 0
-func (v0 *ForkV0) EncodeNetworkMsg(msg *network.Message) ([]byte, error) {
-	return json.Marshal(msg)
+// EncodeNetworkMsg converts the message to v0 and encodes it
+func (v0 *ForkV0) EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error) {
+	v0Msg, err := conversion.ToV0Message(msg)
+	if err != nil {
+		return nil, err
+	}
+	return v0Msg.Encode()
 }
 
-// DecodeNetworkMsg - genesis version 0
-func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*network.Message, error) {
-	ret := &network.Message{}
-	err := json.Unmarshal(data, ret)
-	return ret, err
+// DecodeNetworkMsg decodes network message and converts it to v1
+func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
+	v0Msg := &network.Message{}
+	err := v0Msg.Decode(data)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decode v0 message")
+	}
+	return conversion.ToV1Message(v0Msg)
 }

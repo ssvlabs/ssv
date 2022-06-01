@@ -15,8 +15,12 @@ import (
 type Container interface {
 	// Register registers a new listener and returns a function for de-registration
 	Register(l *Listener) func()
-	// GetListeners returns all active listeners
+	// GetListeners returns all active listeners by type
 	GetListeners(msgType network.NetworkMsg) []*Listener
+	// GetAllListeners returns all active listeners
+	GetAllListeners() listeners
+	// SetListeners set listeners
+	SetListeners(l listeners)
 }
 
 // listeners is the data structure where listeners are saved
@@ -61,6 +65,26 @@ func (lc *listenersContainer) GetListeners(msgType network.NetworkMsg) []*Listen
 	res := make([]*Listener, len(lss))
 	copy(res, lss)
 	return res
+}
+
+// GetAllListeners returns all active listeners
+func (lc *listenersContainer) GetAllListeners() listeners {
+	lc.lock.Lock()
+	defer lc.lock.Unlock()
+
+	// copy to avoid data races
+	res := listeners{}
+	for k, v := range lc.listeners {
+		res[k] = v
+	}
+	return res
+}
+
+// SetListeners set listeners
+func (lc *listenersContainer) SetListeners(l listeners) {
+	lc.lock.Lock()
+	defer lc.lock.Unlock()
+	lc.listeners = l
 }
 
 // addListener adds a new listener to its list
