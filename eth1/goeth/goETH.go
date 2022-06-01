@@ -319,7 +319,10 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 			if !errors.As(err, &unpackErr) {
 				nSuccess--
 			}
-			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
+			ec.logger.Error("Failed to handle event during sync",
+				zap.Uint64("blockNumber", vLog.BlockNumber),
+				zap.String("txHash", vLog.TxHash.Hex()),
+				zap.Error(err))
 			continue
 		}
 	}
@@ -368,14 +371,14 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		}
 		ec.fireEvent(vLog, eventName, *parsed)
 	case abiparser.AccountLiquidated:
-		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Data, contractAbi)
+		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Topics, contractAbi)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse AccountLiquidated event")
 		}
 		ec.fireEvent(vLog, eventName, *parsed)
 	case abiparser.AccountEnabled:
-		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Data, contractAbi)
+		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Topics, contractAbi)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse AccountEnabled event")

@@ -44,6 +44,7 @@ type OperatorAddedEvent struct {
 	Name         string
 	OwnerAddress common.Address
 	PublicKey    []byte
+	Fee          *big.Int
 }
 
 // ValidatorRemovedEvent struct represents event received by the smart contract
@@ -89,11 +90,10 @@ func (v2 *AbiV2) ParseOperatorAddedEvent(
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
 
-	if len(topics) > 1 {
-		operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
-	} else {
-		logger.Error("operator event missing topics. no owner address provided.")
+	if len(topics) < 2 {
+		return nil, errors.New("operator added event missing topics. no owner address provided")
 	}
+	operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
 	return &operatorAddedEvent, nil
 }
 
@@ -129,28 +129,24 @@ func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, con
 }
 
 // ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
-func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
+func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
 	var accountLiquidatedEvent AccountLiquidatedEvent
-	err := contractAbi.UnpackIntoInterface(&accountLiquidatedEvent, AccountLiquidated, data)
-	if err != nil {
-		return nil, &UnpackError{
-			Err: errors.Wrap(err, "failed to unpack AccountLiquidated event"),
-		}
-	}
 
+	if len(topics) < 2 {
+		return nil, errors.New("account liquidated event missing topics. no owner address provided")
+	}
+	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
 	return &accountLiquidatedEvent, nil
 }
 
 // ParseAccountEnabledEvent parses AccountEnabledEvent
-func (v2 *AbiV2) ParseAccountEnabledEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
+func (v2 *AbiV2) ParseAccountEnabledEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
 	var accountEnabledEvent AccountEnabledEvent
-	err := contractAbi.UnpackIntoInterface(&accountEnabledEvent, AccountEnabled, data)
-	if err != nil {
-		return nil, &UnpackError{
-			Err: errors.Wrap(err, "failed to unpack AccountEnabled event"),
-		}
-	}
 
+	if len(topics) < 2 {
+		return nil, errors.New("account enabled event missing topics. no owner address provided")
+	}
+	accountEnabledEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
 	return &accountEnabledEvent, nil
 }
 

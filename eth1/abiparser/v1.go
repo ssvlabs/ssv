@@ -79,12 +79,12 @@ func (a AdapterV1) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, c
 }
 
 // ParseAccountLiquidatedEvent event is not supported in v1 format
-func (a AdapterV1) ParseAccountLiquidatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
+func (a AdapterV1) ParseAccountLiquidatedEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountEnabledEvent event is not supported in v1 format
-func (a AdapterV1) ParseAccountEnabledEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
+func (a AdapterV1) ParseAccountEnabledEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
 	return nil, nil
 }
 

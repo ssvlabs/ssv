@@ -304,9 +304,15 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 			}
 		case abiparser.ValidatorRemoved:
 			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+			pubKey := hex.EncodeToString(ev.PublicKey)
 			err := c.handleValidatorRemovedEvent(ev, ongoingSync)
 			if err != nil {
-				c.logger.Error("could not handle ValidatorRemoved event", zap.Error(err))
+				c.logger.Error("could not handle ValidatorRemoved event",
+					zap.Uint64("blockNumber", e.Log.BlockNumber),
+					zap.String("txHash", e.Log.TxHash.Hex()),
+					zap.String("publicKey", pubKey),
+					zap.Error(err),
+				)
 				return err
 			}
 		case abiparser.OperatorAdded:
