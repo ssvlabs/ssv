@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
@@ -12,9 +16,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // SyncFailoverScenario is the sync fail over scenario name
@@ -122,23 +123,13 @@ loop:
 	}
 
 	r.logger.Info("starting node $4")
-	if err := ctx.LocalNet.Nodes[3].Subscribe(r.validators[3].GetShare().PublicKey.Serialize()); err != nil {
-		return errors.Wrap(err, "failed to subscribe topic")
-	}
-
-	if err := r.initNode(r.validators[3], ctx.LocalNet.Nodes[3]); err != nil {
+	if err := r.initNode(r.validators[3], &badNetwork{P2PNetwork: ctx.LocalNet.Nodes[3]}); err != nil {
 		r.logger.Debug("error initializing ibft (as planned)", zap.Error(err))
-		// fill DBs with correct highest decided and trying to init again
-
-		for _, store := range ctx.Stores {
-			if err := store.SaveLastDecided(msgs[seqNumber]); err != nil {
-				return errors.Wrap(err, "could not save decided messages")
-			}
-		}
-
 		if err := r.initNode(r.validators[3], ctx.LocalNet.Nodes[3]); err != nil {
 			r.logger.Error("failed to reinitialize IBFT", zap.Error(err))
 		}
+	} else {
+		return errors.New("init should fail")
 	}
 
 	ibftc := r.validators[3].(*validator.Validator).Ibfts()[message.RoleTypeAttester]
@@ -212,4 +203,12 @@ func (r *syncFailoverScenario) startNode(val validator.IValidator, seqNumber mes
 	}
 
 	return res.Msg, nil
+}
+
+type badNetwork struct {
+	network.P2PNetwork
+}
+
+func (b *badNetwork) Subscribe(message.ValidatorPK) error {
+	return errors.New("bad network")
 }
