@@ -37,7 +37,7 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 	s.logger.Debug("fetching range history sync", zap.Int64("from", int64(from)), zap.Int64("to", int64(to)))
 	visited := make(map[message.Height]bool)
 	var msgs []p2pprotocol.SyncResult
-
+	
 	lastBatch := from
 	var err error
 	for lastBatch < to {

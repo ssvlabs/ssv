@@ -1,8 +1,9 @@
 package msgqueue
 
 import (
-	"fmt"
+	"bytes"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"strconv"
 	"strings"
 )
 
@@ -45,11 +46,18 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if sm.Message == nil {
 			return ""
 		}
-		return SignedPostConsensusMsgIndex(msg.ID, sm.Message.Height)
+		return SignedPostConsensusMsgIndex(bytes.Buffer{}, msg.ID.String(), sm.Message.Height)
 	}
 }
 
 // SignedPostConsensusMsgIndex indexes a message.SignedPostConsensusMessage by identifier and height
-func SignedPostConsensusMsgIndex(mid message.Identifier, h message.Height) string {
-	return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid.String(), h)
+func SignedPostConsensusMsgIndex(sb bytes.Buffer, mid string, h message.Height) string {
+	defer sb.Reset()
+	sb.WriteString(message.SSVDecidedMsgType.String())
+	sb.WriteString("/id/")
+	sb.WriteString(mid)
+	sb.WriteString("/height/")
+	sb.WriteString(strconv.FormatInt(int64(h), 10))
+	return "/" + message.SSVPostConsensusMsgType.String() + "/id/" + mid + "height/" + strconv.FormatInt(int64(h), 10)
+	//return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid, h)
 }
