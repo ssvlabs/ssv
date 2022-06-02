@@ -9,12 +9,29 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/msgqueue"
 	"github.com/bloxapp/ssv/operator/forks"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/validator/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
 	"time"
 )
+
+// Options to add in group struct creation
+type Options struct {
+	Context                    context.Context
+	Logger                     *zap.Logger
+	Share                      *storage.Share
+	SignatureCollectionTimeout time.Duration
+	Network                    network.Network
+	ETHNetwork                 *core.Network
+	DB                         basedb.IDb
+	Fork                       forks.Fork
+	Signer                     beacon.Signer
+	SyncRateLimit              time.Duration
+
+	notifyOperatorID func(string)
+}
 
 // Group represents a group operators / mpc players to generate key, perform adhoc signing,
 // hence it has similiar structure to Validator, in future it may be merged into Validator,
@@ -25,7 +42,6 @@ type Group struct {
 	logger                     *zap.Logger
 	Share                      *storage.Share
 	ethNetwork                 *core.Network
-	beacon                     beacon.Beacon
 	ibfts                      map[beacon.RoleType]ibft.Controller
 	msgQueue                   *msgqueue.MessageQueue
 	network                    network.Network
@@ -46,7 +62,6 @@ func (g *Group) GetMsgResolver(networkMsg network.NetworkMsg) func(msg *proto.Si
 	// TODO: Implement, reference Validator code
 	return nil
 }
-
 
 // ExecuteDuty executes the given duty
 func (g *Group) ExecuteDuty(ctx context.Context, duty *Duty) {

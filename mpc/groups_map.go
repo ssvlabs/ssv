@@ -2,7 +2,6 @@ package mpc
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/validator"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -15,8 +14,20 @@ type groupsMap struct {
 	logger *zap.Logger
 	ctx    context.Context
 
-	optsTemplate *validator.Options
+	optsTemplate *Options
 
-	lock          sync.RWMutex
+	lock      sync.RWMutex
 	groupsMap map[string]*Group
+}
+
+func newGroupsMap(ctx context.Context, logger *zap.Logger, optsTemplate *Options) *groupsMap {
+	vm := groupsMap{
+		logger:       logger.With(zap.String("component", "groupsMap")),
+		ctx:          ctx,
+		lock:         sync.RWMutex{},
+		groupsMap:    make(map[string]*Group),
+		optsTemplate: optsTemplate,
+	}
+
+	return &vm
 }

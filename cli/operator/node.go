@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	ssv_identity "github.com/bloxapp/ssv/identity"
+	"github.com/bloxapp/ssv/mpc"
 	"log"
 	"net/http"
 
@@ -148,6 +149,20 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.UseMainTopic = cfg.P2pNetworkConfig.UseMainTopic
 
+		cfg.SSVOptions.MpcOptions.Fork = cfg.SSVOptions.Fork
+		cfg.SSVOptions.MpcOptions.ETHNetwork = &eth2Network
+		cfg.SSVOptions.MpcOptions.Logger = Logger
+		cfg.SSVOptions.MpcOptions.Context = ctx
+		cfg.SSVOptions.MpcOptions.DB = db
+		cfg.SSVOptions.MpcOptions.Network = p2pNet
+		cfg.SSVOptions.MpcOptions.Beacon = beaconClient // TODO need to be pointer?
+		cfg.SSVOptions.MpcOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		cfg.SSVOptions.MpcOptions.KeyManager = beaconClient
+
+		cfg.SSVOptions.MpcOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
+		cfg.SSVOptions.MpcOptions.OperatorPubKey = operatorPubKey
+		cfg.SSVOptions.MpcOptions.RegistryStorage = nodeStorage
+
 		cfg.SSVOptions.ValidatorOptions.Fork = cfg.SSVOptions.Fork
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = &eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
@@ -185,6 +200,9 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
+
+		mpcCtrl := mpc.NewController(cfg.SSVOptions.MpcOptions)
+		cfg.SSVOptions.MpcController = mpcCtrl
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl

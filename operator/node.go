@@ -7,13 +7,13 @@ import (
 	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/mpc"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/bloxapp/ssv/validator"
-	"github.com/bloxapp/ssv/mpc"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -33,12 +33,14 @@ type Options struct {
 	Logger              *zap.Logger
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
+	MpcController       mpc.Controller
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
 	// genesis epoch
 	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
+	MpcOptions       mpc.ControllerOptions       `yaml:"MpcOptions"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 	Fork             forks.Fork
 
@@ -49,8 +51,8 @@ type Options struct {
 type operatorNode struct {
 	ethNetwork     core.Network
 	context        context.Context
+	mpcCtrl        mpc.Controller
 	validatorsCtrl validator.Controller
-	mcpGroupsCtrl  mpc.Controller
 	logger         *zap.Logger
 	beacon         beacon.Beacon
 	net            network.Network
@@ -67,6 +69,7 @@ func New(opts Options) Node {
 	node := &operatorNode{
 		context:        opts.Context,
 		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
+		mpcCtrl:        opts.MpcController,
 		validatorsCtrl: opts.ValidatorController,
 		ethNetwork:     *opts.ETHNetwork,
 		beacon:         opts.Beacon,
@@ -109,7 +112,7 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
-	n.mcpGroupsCtrl.StartMpcGroups()
+	n.mpcCtrl.StartMpcGroups()
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkMediators()
 	if n.useMainTopic {

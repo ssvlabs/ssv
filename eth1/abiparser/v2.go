@@ -116,3 +116,7 @@ func (v2 *V2Abi) ParseValidatorAddedEvent(
 
 	return &validatorAddedEvent, isOperatorEvent, false, nil
 }
+
+func (v2 *V2Abi) ParseDistributedKeyRequestedEvent(logger *zap.Logger, operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*DistributedKeyRequestedEvent, bool, bool, error) {
+	return nil, false, false, nil
+}

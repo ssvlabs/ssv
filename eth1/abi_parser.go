@@ -27,6 +27,7 @@ type Version int64
 const (
 	Legacy Version = iota
 	V2
+	V3
 )
 
 func (v Version) String() string {
@@ -35,6 +36,8 @@ func (v Version) String() string {
 		return "legacy"
 	case V2:
 		return "v2"
+	case V3:
+		return "v3"
 	}
 	return "legacy"
 }
@@ -53,6 +56,8 @@ func NewParser(logger *zap.Logger, version Version) AbiParser {
 		parserVersion = abiparser.LegacyAdapter{}
 	case V2:
 		parserVersion = &abiparser.V2Abi{}
+	case V3:
+		parserVersion = &abiparser.V3Abi{}
 	}
 	return AbiParser{Logger: logger, Version: parserVersion}
 }
@@ -67,10 +72,15 @@ func (ap AbiParser) ParseValidatorAddedEvent(operatorPrivateKey *rsa.PrivateKey,
 	return ap.Version.ParseValidatorAddedEvent(ap.Logger, operatorPrivateKey, data, contractAbi)
 }
 
+func (ap AbiParser) ParseDistributedKeyRequestedEvent(operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.DistributedKeyRequestedEvent, bool, bool, error) {
+	return ap.Version.ParseDistributedKeyRequestedEvent(ap.Logger, operatorPubKey, data, topics, contractAbi)
+}
+
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
 	ParseOperatorAddedEvent(logger *zap.Logger, operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, bool, bool, error)
 	ParseValidatorAddedEvent(logger *zap.Logger, operatorPrivateKey *rsa.PrivateKey, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, bool, bool, error)
+	ParseDistributedKeyRequestedEvent(logger *zap.Logger, operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.DistributedKeyRequestedEvent, bool, bool, error)
 }
 
 // LoadABI enables to load a custom abi json

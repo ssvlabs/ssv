@@ -174,6 +174,10 @@ func (l *LegacyAbi) ParseValidatorAddedEvent(
 	return &validatorAddedEvent, isOperatorEvent, false, nil
 }
 
+func (adapter LegacyAdapter) ParseDistributedKeyRequestedEvent(logger *zap.Logger, operatorPubKey string, data []byte, topics []common.Hash, contractAbi abi.ABI) (*DistributedKeyRequestedEvent, bool, bool, error) {
+	return nil, false, false, nil
+}
+
 func readOperatorPubKey(operatorPublicKey []byte, outAbi abi.ABI) (string, error) {
 	outOperatorPublicKey, err := outAbi.Unpack("method", operatorPublicKey)
 	if err != nil {
