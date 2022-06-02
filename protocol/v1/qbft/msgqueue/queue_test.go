@@ -35,7 +35,7 @@ func TestNewMsgQueue(t *testing.T) {
 		q.Add(msg3)
 		idx := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-1"))
 		require.Equal(t, 2, q.Count(idx))
-		msgs := q.Peek(idx, 2)
+		msgs := q.Peek(2, idx)
 		require.Len(t, msgs, 2)
 		require.Equal(t, 2, q.Count(idx))
 		msgs = q.Pop(1, idx)

@@ -38,16 +38,16 @@ func TestIndexIterator(t *testing.T) {
 	}).Add(func() Index {
 		return dummyIndex(msgs[6])
 	})
-	res := q.PopWithIterator(3, iterator)
+	res := q.PopIndices(3, iterator)
 	require.Len(t, res, 2)
 }
 
 func dummyIndex(msg *message.SSVMessage) Index {
 	return Index{
-		Mt:         msg.GetType(),
-		Identifier: msg.GetIdentifier().String(),
-		H:          -1,
-		Cmt:        -1,
+		Mt:  msg.GetType(),
+		ID:  msg.GetIdentifier().String(),
+		H:   -1,
+		Cmt: -1,
 	}
 }
 
