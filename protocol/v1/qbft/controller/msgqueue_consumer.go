@@ -87,7 +87,7 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier
 		return indices[0]
 	})
 
-	msgs := c.q.PopWithIterator(1, iterator)
+	msgs := c.q.PopIndices(1, iterator)
 
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
@@ -142,7 +142,7 @@ func (c *Controller) processDefault(handler MessageHandler, identifier string, l
 		}
 		return indices[0]
 	})
-	msgs := c.q.PopWithIterator(1, iterator)
+	msgs := c.q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
@@ -184,7 +184,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *m
 		}
 		return indices[0]
 	})
-	msgs := c.q.PopWithIterator(1, iterator)
+	msgs := c.q.PopIndices(1, iterator)
 	if len(msgs) > 0 {
 		return msgs[0]
 	}

@@ -23,23 +23,23 @@ type Indexer func(msg *message.SSVMessage) Index
 
 // MsgQueue is a message broker for message.SSVMessage
 type MsgQueue interface {
-	// Add adds a new message
+	// Add adds a new message to the queue for the matching indices
 	Add(msg *message.SSVMessage)
-	// Purge clears indexed messages for the given index
-	Purge(idx Index)
 	// Peek returns the first n messages for an index
-	Peek(idx Index, n int) []*message.SSVMessage
+	Peek(n int, idx Index) []*message.SSVMessage
 	// Pop clears and returns the first n messages for an index
-	Pop(n int, idx ...Index) []*message.SSVMessage
-	// PopWithIterator clears and returns the first n messages for indices that are created on the fly
-	PopWithIterator(n int, generator *IndexIterator) []*message.SSVMessage
+	Pop(n int, idx Index) []*message.SSVMessage
+	// PopIndices clears and returns the first n messages for indices that are created on demand using the iterator
+	PopIndices(n int, generator *IndexIterator) []*message.SSVMessage
+	// Purge clears indexed messages for the given index
+	Purge(idx Index) int64
+	// Clean enables to aid in a custom Cleaner to clear any set of indices
+	// TODO: check performance
+	Clean(cleaners ...Cleaner) int64
 	// Count counts messages for the given index
 	Count(idx Index) int
 	// Len counts all messages
 	Len() int
-	// Clean will clean irrelevant keys from the map
-	// TODO: check performance
-	Clean(cleaners ...Cleaner) int64
 }
 
 // New creates a new MsgQueue
@@ -70,10 +70,14 @@ type MsgContainer struct {
 
 // Index is a struct representing an index in msg queue
 type Index struct {
-	Mt         message.MsgType
-	Identifier string
-	H          message.Height               // -1 count as nil
-	Cmt        message.ConsensusMessageType // -1 count as nil
+	// Mt is the message type
+	Mt message.MsgType
+	// ID is the identifier
+	ID string
+	// H (optional) is the height, -1 is treated as nil
+	H message.Height
+	// Cmt (optional) is the consensus msg type, -1 is treated as nil
+	Cmt message.ConsensusMessageType
 }
 
 // queue implements MsgQueue
@@ -103,15 +107,20 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
+		metricsMsgQSize.WithLabelValues(idx.ID).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
 
-func (q *queue) Purge(idx Index) {
+func (q *queue) Purge(idx Index) int64 {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	q.items[idx] = make([]*MsgContainer, 0)
+	size := len(q.items[idx])
+	delete(q.items, idx)
+	metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
+
+	return int64(size)
 }
 
 func (q *queue) Clean(cleaners ...Cleaner) int64 {
@@ -120,10 +129,12 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 
 	var cleaned int64
 
-	apply := func(k Index) bool {
+	apply := func(idx Index) bool {
 		for _, cleaner := range cleaners {
-			if cleaner(k) {
-				atomic.AddInt64(&cleaned, int64(len(q.items[k])))
+			if cleaner(idx) {
+				size := len(q.items[idx])
+				atomic.AddInt64(&cleaned, int64(size))
+				metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
 				return true
 			}
 		}
@@ -139,7 +150,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 	return cleaned
 }
 
-func (q *queue) Peek(idx Index, n int) []*message.SSVMessage {
+func (q *queue) Peek(n int, idx Index) []*message.SSVMessage {
 	q.itemsLock.RLock()
 	defer q.itemsLock.RUnlock()
 
@@ -159,36 +170,33 @@ func (q *queue) Peek(idx Index, n int) []*message.SSVMessage {
 	return msgs
 }
 
-// Pop message by index. if no messages found within the index and more than 1 idxs passed, search on the next one.
-func (q *queue) Pop(n int, idxs ...Index) []*message.SSVMessage {
+// Pop messages by index with a desired amount of messages to pop,
+// defaults to the all the messages in the index.
+func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	for i, idx := range idxs {
-		containers, ok := q.items[idx]
-		if !ok {
-			return []*message.SSVMessage{}
-		}
-		if n == 0 || n > len(containers) {
-			n = len(containers)
-		}
-		q.items[idx] = containers[n:]
-		containers = containers[:n]
-		msgs := make([]*message.SSVMessage, 0)
-		for _, mc := range containers {
-			msgs = append(msgs, mc.msg)
-		}
+	msgs := make([]*message.SSVMessage, 0)
 
-		// check if there are more idxs to search for and if msgs not found
-		if i < len(idxs)-1 && (len(msgs) == 0 || msgs[0] == nil) {
-			continue // move to next idx
-		}
+	msgContainers, ok := q.items[idx]
+	if !ok {
 		return msgs
 	}
-	return []*message.SSVMessage{}
+	if n == 0 || n > len(msgContainers) {
+		n = len(msgContainers)
+	}
+	q.items[idx] = msgContainers[n:]
+	msgContainers = msgContainers[:n]
+	for _, mc := range msgContainers {
+		if mc.msg != nil {
+			msgs = append(msgs, mc.msg)
+		}
+	}
+	metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(len(msgs)))
+	return msgs
 }
 
-func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
+func (q *queue) PopIndices(n int, i *IndexIterator) []*message.SSVMessage {
 	var msgs []*message.SSVMessage
 
 	for len(msgs) < n {
@@ -200,14 +208,12 @@ func (q *queue) PopWithIterator(n int, i *IndexIterator) []*message.SSVMessage {
 		if idx == (Index{}) {
 			continue
 		}
-		results := q.Pop(n, genIndex())
+		results := q.Pop(n-len(msgs), genIndex())
 		if len(results) > 0 {
 			msgs = append(msgs, results...)
 		}
 	}
-	if len(msgs) > n {
-		msgs = msgs[:n]
-	}
+
 	return msgs
 }
 
@@ -252,7 +258,7 @@ func DefaultMsgCleaner(mid message.Identifier, mts ...message.MsgType) Cleaner {
 			}
 		}
 		// clean if we reached here, and the identifier is equal
-		return k.Identifier == identifier
+		return k.ID == identifier
 	}
 }
 
@@ -269,8 +275,8 @@ func DefaultMsgIndexer() Indexer {
 // DefaultMsgIndex is the default msg index
 func DefaultMsgIndex(mt message.MsgType, mid message.Identifier) Index {
 	return Index{
-		Mt:         mt,
-		Identifier: mid.String(),
-		Cmt:        -1,
+		Mt:  mt,
+		ID:  mid.String(),
+		Cmt: -1,
 	}
 }
