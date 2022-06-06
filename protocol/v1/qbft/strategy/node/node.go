@@ -35,7 +35,7 @@ func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, p
 		return errors.Wrap(err, "could not get last decided from peers")
 	}
 
-	if err == nil && highest != nil {
+	if highest != nil {
 		return f.store.SaveLastDecided(highest)
 	}
 	return nil

@@ -88,7 +88,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
-	if err == nil && highest != nil {
+	if highest != nil {
 		return f.store.SaveLastDecided(highest)
 	}
 	return nil
@@ -110,12 +110,12 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 
 // IsMsgKnown checks for known decided msg. Also checks if it needs to be updated
 func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
-	msgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	msgs, err := f.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return false, nil, err
 	}
 	if len(msgs) == 0 || msgs[0] == nil {
-		return true, nil, err
+		return false, nil, err
 	}
 
 	// if decided is known, check for a more complete message (more signers)
