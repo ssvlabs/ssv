@@ -12,7 +12,7 @@ type ICollection interface {
 	GetDkgRequest(id uint64) (*DkgRequest, bool, error)
 	SaveDkgRequest(request *DkgRequest) error
 	DeleteDkgRequest(id uint64) error
-	ListDkgRequests(from int64, to int64) ([]DkgRequest, error)
+	ListDkgRequests() ([]DkgRequest, error)
 }
 
 func collectionPrefix() []byte {
@@ -74,7 +74,7 @@ func (s *Collection) DeleteDkgRequest(id uint64) error {
 	return s.db.Delete(collectionPrefix(), mkKey(id))
 }
 
-func (s *Collection) ListDkgRequests(from int64, to int64) ([]DkgRequest, error) {
+func (s *Collection) ListDkgRequests() ([]DkgRequest, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	var requests []DkgRequest
