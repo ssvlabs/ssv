@@ -121,6 +121,7 @@ func (q *queue) Purge(idx Index) int64 {
 	size := len(q.items[idx])
 	delete(q.items, idx)
 	metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
+	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
 
 	return int64(size)
 }
@@ -137,6 +138,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 				size := len(q.items[idx])
 				atomic.AddInt64(&cleaned, int64(size))
 				metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
+				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
 				return true
 			}
 		}
