@@ -1,7 +1,6 @@
 package fullnode
 
 import (
-	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -44,15 +43,15 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		logger.Debug("could not find highest decided from peers")
 		return nil
 	}
-	if localHeight > highest.Message.Height {
-		return nil // local is higher than remote, no need for sync or update
+	if localHeight >= highest.Message.Height {
+		return nil // local is equal or higher than remote
 	}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
 	counter := 0
-	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
+	handleDecided := func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
@@ -68,10 +67,19 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		}
 		counter++
 		return nil
-	}, localHeight, highest.Message.Height, sender)
-	if err != nil {
-		return errors.Wrap(err, "could not complete sync")
 	}
+	if localHeight+1 == highest.Message.Height {
+		// no need to sync, we already have highest so just need to handle it
+		if err := handleDecided(highest); err != nil {
+			return errors.Wrap(err, "could not handle highest decided")
+		}
+	} else {
+		err = f.historySyncer.SyncRange(ctx, identifier, handleDecided, localHeight, highest.Message.Height, sender)
+		if err != nil {
+			return errors.Wrap(err, "could not complete sync")
+		}
+	}
+
 	warnMsg := ""
 	if message.Height(counter) < highest.Message.Height-localHeight {
 		warnMsg = "could not sync all messages in range"
@@ -139,19 +147,19 @@ func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.Si
 	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
 }
 
-// checkDecidedData checks if new decided msg target epoch is higher than the known decided target epoch
-func checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessage) (bool, error) {
-	knownCommitData, err := knownMsg.Message.GetCommitData()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get known msg commit data")
-	}
-
-	commitData, err := msg.Message.GetCommitData()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get new msg commit data")
-	}
-	return !bytes.Equal(commitData.Data, knownCommitData.Data), nil
-}
+//// checkDecidedData checks if new decided msg target epoch is higher than the known decided target epoch
+//func checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessage) (bool, error) {
+//	knownCommitData, err := knownMsg.Message.GetCommitData()
+//	if err != nil {
+//		return false, errors.Wrap(err, "failed to get known msg commit data")
+//	}
+//
+//	commitData, err := msg.Message.GetCommitData()
+//	if err != nil {
+//		return false, errors.Wrap(err, "failed to get new msg commit data")
+//	}
+//	return !bytes.Equal(commitData.Data, knownCommitData.Data), nil
+//}
 
 func (f *fullNode) SaveLateCommit(msg *message.SignedMessage) error {
 	return f.store.SaveDecided(msg)
