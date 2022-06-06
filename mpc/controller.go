@@ -7,12 +7,13 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	controller2 "github.com/bloxapp/ssv/ibft/controller"
+	mpcstorage "github.com/bloxapp/ssv/mpc/storage"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/forks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
+	//validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 	"sync"
@@ -30,7 +31,7 @@ type ControllerOptions struct {
 	ETHNetwork                 *core.Network
 	Network                    network.Network
 	Beacon                     beacon.Beacon
-	Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
+	//Shares                     []validatorstorage.ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	Fork                       forks.Fork
@@ -45,12 +46,12 @@ type Controller interface {
 }
 
 type controller struct {
-	context    context.Context
-	collection validatorstorage.ICollection
-	storage    registrystorage.OperatorsCollection
-	logger     *zap.Logger
-	beacon     beacon.Beacon
-	keyManager beacon.KeyManager
+	context             context.Context
+	collection          mpcstorage.ICollection
+	operatorsCollection registrystorage.OperatorsCollection
+	logger              *zap.Logger
+	beacon              beacon.Beacon
+	keyManager          beacon.KeyManager
 
 	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -67,7 +68,7 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(options ControllerOptions) Controller {
-	collection := validatorstorage.NewCollection(validatorstorage.CollectionOptions{
+	collection := mpcstorage.NewCollection(mpcstorage.CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
@@ -82,7 +83,7 @@ func NewController(options ControllerOptions) Controller {
 
 	ctrl := controller{
 		collection:                 collection,
-		storage:                    options.RegistryStorage,
+		operatorsCollection:        options.RegistryStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
