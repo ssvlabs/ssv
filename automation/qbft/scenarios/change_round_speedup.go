@@ -44,6 +44,10 @@ func (r *changeRoundSpeedupScenario) NumOfBootnodes() int {
 	return 0
 }
 
+func (r *changeRoundSpeedupScenario) NumOfFullNodes() int {
+	return 0
+}
+
 func (r *changeRoundSpeedupScenario) Name() string {
 	return "changeRoundSpeedup"
 }

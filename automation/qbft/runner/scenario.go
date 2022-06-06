@@ -2,11 +2,13 @@ package runner
 
 import (
 	"context"
+
+	"go.uber.org/zap"
+
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // TODO:
@@ -37,6 +39,8 @@ type scenarioCfg interface {
 	// NumOfBootnodes returns the desired number of bootnodes for the test
 	// zero in case we want mdns
 	NumOfBootnodes() int
+	// NumOfFullNodes returns the desired number of full nodes for the test
+	NumOfFullNodes() int
 }
 
 // Scenario represents a testplan for a specific scenario
