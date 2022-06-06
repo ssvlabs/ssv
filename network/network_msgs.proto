@@ -15,6 +15,10 @@ enum NetworkMsg {
     SignatureType = 2;
     // SyncType is an SSV iBFT specific message that a node uses to sync up with other nodes
     SyncType = 3;
+    // MpcInitType is an SSV DKG specific message that a node uses to initiate an MPC task
+    MpcInitType = 4;
+    // MpcProtocolType is an SSV DKG specific message that carries the protocol message of an MPC task
+    MpcProtocolType = 5;
 }
 
 enum Sync {
