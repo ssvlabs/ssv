@@ -13,6 +13,8 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/pkg/errors"
+
 	//validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
@@ -139,7 +141,15 @@ func (c *controller) Eth1EventHandler() eth1.SyncEventHandler {
 	return func(e eth1.Event) error {
 		switch ev := e.Data.(type) {
 		case abiparser.DistributedKeyRequestedEvent:
-			// TODO<MPC>: Handle event
+			if _, ok := c.groupsMap.GetMpcGroup(ev.RequestId); ok {
+				c.logger.Debug("validator was loaded already")
+				return nil
+			}
+			err := c.handleDistributedKeyRequestedEvent(ev)
+			if err != nil {
+				c.logger.Error("could not handle DistributedKeyRequested event", zap.String("requestId", ev.RequestId.String()), zap.Error(err))
+				return err
+			}
 			c.logger.Debug("received", zap.Any("event", ev))
 		default:
 			c.logger.Warn("could not handle unknown event")
@@ -148,13 +158,58 @@ func (c *controller) Eth1EventHandler() eth1.SyncEventHandler {
 	}
 }
 
-// StartMpcGroups
 func (c *controller) StartMpcGroups() {
 	// TODO<MPC>: Implement, similar to StartValidators
+	requests, err := c.collection.ListDkgRequests()
+	if err != nil {
+		c.logger.Fatal("failed to get DKG requests", zap.Error(err))
+	}
+	if len(requests) == 0 {
+		c.logger.Info("could not find validators")
+		return
+	}
+	c.processMissedRequests(requests)
+	/**
+	// inject handler for finding relevant operators
+	p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
+		_, ok := c.operatorsIDs.Load(oid)
+		return ok
+	})
+	// print current relevant operators (ids)
+	ids := []string{}
+	c.operatorsIDs.Range(func(key, value interface{}) bool {
+		ids = append(ids, key.(string))
+		return true
+	})
+	c.logger.Debug("relevant operators", zap.Int("len", len(ids)), zap.Strings("op_ids", ids))
+	*/
 }
 
-// handleValidatorWithDkgAddedEvent parses the given event and triggers MPC operations
-//func (c *controller) handleValidatorWithDkgAddedEvent(event abiparser.ValidatorWithDkgAdded) error {
-//	// TODO<MPC>: Implement
-//	return errors.New("implement me")
-//}
+func (c *controller) processMissedRequests(requests []mpcstorage.DkgRequest) {
+
+}
+
+//handleValidatorWithDkgAddedEvent parses the given event and triggers MPC operations
+func (c *controller) handleDistributedKeyRequestedEvent(event abiparser.DistributedKeyRequestedEvent) error {
+	request, err := createRequest(event, c.operatorPubKey)
+	if err != nil {
+		return errors.Wrap(err, "failed to create dkg request")
+	}
+	c.handleRequest(request)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *controller) handleRequest(request *mpcstorage.DkgRequest) {
+	v := c.groupsMap.GetOrCreateMpcGroup(request)
+	_, err := c.startGroup(v)
+	if err != nil {
+		c.logger.Warn("could not start validator", zap.Error(err))
+	}
+}
+
+func (c *controller) startGroup(g *Group) (bool, error) {
+	return true, nil
+}

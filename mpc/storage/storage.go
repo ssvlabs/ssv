@@ -1,17 +1,17 @@
 package storage
 
 import (
-	"encoding/binary"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
+	"math/big"
 	"sync"
 )
 
 type ICollection interface {
 	basedb.RegistryStore
-	GetDkgRequest(id uint64) (*DkgRequest, bool, error)
+	GetDkgRequest(id *big.Int) (*DkgRequest, bool, error)
 	SaveDkgRequest(request *DkgRequest) error
-	DeleteDkgRequest(id uint64) error
+	DeleteDkgRequest(id *big.Int) error
 	ListDkgRequests() ([]DkgRequest, error)
 }
 
@@ -61,17 +61,17 @@ func (s *Collection) CleanRegistryData() error {
 	return s.db.RemoveAllByCollection(collectionPrefix())
 }
 
-func (s *Collection) GetDkgRequest(id uint64) (*DkgRequest, bool, error) {
+func (s *Collection) GetDkgRequest(id *big.Int) (*DkgRequest, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getUnsafe(mkKey(id))
+	return s.getUnsafe([]byte(id.String()))
 }
 
-func (s *Collection) DeleteDkgRequest(id uint64) error {
+func (s *Collection) DeleteDkgRequest(id *big.Int) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.db.Delete(collectionPrefix(), mkKey(id))
+	return s.db.Delete(collectionPrefix(), []byte(id.String()))
 }
 
 func (s *Collection) ListDkgRequests() ([]DkgRequest, error) {
@@ -94,7 +94,7 @@ func (s *Collection) saveUnsafe(request *DkgRequest) error {
 		s.logger.Error("failed to serialize DkgRequest", zap.Error(err))
 		return err
 	}
-	return s.db.Set(collectionPrefix(), mkKey(request.Id), value)
+	return s.db.Set(collectionPrefix(), []byte(request.Id.String()), value)
 }
 
 func (s *Collection) getUnsafe(key []byte) (*DkgRequest, bool, error) {
@@ -107,10 +107,4 @@ func (s *Collection) getUnsafe(key []byte) (*DkgRequest, bool, error) {
 	}
 	request, err := (&DkgRequest{}).Deserialize(obj)
 	return request, found, err
-}
-
-func mkKey(id uint64) []byte{
-	bytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(bytes, id)
-	return bytes
 }
