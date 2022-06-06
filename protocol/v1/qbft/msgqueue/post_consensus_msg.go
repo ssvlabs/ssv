@@ -45,10 +45,11 @@ func SignedPostConsensusMsgIndexer() Indexer {
 // SignedPostConsensusMsgIndex indexes a message.SignedPostConsensusMessage by identifier and height
 func SignedPostConsensusMsgIndex(mid string, h message.Height) Index {
 	return Index{
-		Mt:  message.SSVPostConsensusMsgType,
-		ID:  mid,
-		H:   h,
-		Cmt: -1, // as unknown
+		Name: "post_consensus_index",
+		Mt:   message.SSVPostConsensusMsgType,
+		ID:   mid,
+		H:    h,
+		Cmt:  -1, // as unknown
 	}
 	//return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid, h)
 }

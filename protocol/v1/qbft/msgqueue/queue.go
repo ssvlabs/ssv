@@ -70,6 +70,7 @@ type MsgContainer struct {
 
 // Index is a struct representing an index in msg queue
 type Index struct {
+	Name string
 	// Mt is the message type
 	Mt message.MsgType
 	// ID is the identifier
@@ -108,7 +109,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
 		metricsMsgQSize.WithLabelValues(idx.ID).Inc()
-		metricsMsgQRatio.WithLabelValues(msg.ID.String(), msg.MsgType.String()).Inc()
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
@@ -195,7 +196,7 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
 		metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(nMsgs))
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Mt.String()).Sub(float64(nMsgs))
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(nMsgs))
 	}
 	return msgs
 }

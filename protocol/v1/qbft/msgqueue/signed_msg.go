@@ -55,10 +55,11 @@ func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt .
 	var res []Index
 	for _, mt := range cmt {
 		res = append(res, Index{
-			Mt:  msgType,
-			ID:  mid,
-			H:   h,
-			Cmt: mt,
+			Name: "signed_index",
+			Mt:   msgType,
+			ID:   mid,
+			H:    h,
+			Cmt:  mt,
 		})
 		//res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
@@ -81,9 +82,10 @@ func DecidedMsgIndexer() Indexer {
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
 func DecidedMsgIndex(mid string) Index {
 	return Index{
-		Mt:  message.SSVDecidedMsgType,
-		ID:  mid,
-		Cmt: message.CommitMsgType,
+		Name: "decided_index",
+		Mt:   message.SSVDecidedMsgType,
+		ID:   mid,
+		Cmt:  message.CommitMsgType,
 	}
 	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
