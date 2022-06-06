@@ -108,7 +108,6 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
-		metricsMsgQSize.WithLabelValues(idx.ID).Inc()
 		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
@@ -120,7 +119,6 @@ func (q *queue) Purge(idx Index) int64 {
 
 	size := len(q.items[idx])
 	delete(q.items, idx)
-	metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
 	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
 
 	return int64(size)
@@ -137,7 +135,6 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 			if cleaner(idx) {
 				size := len(q.items[idx])
 				atomic.AddInt64(&cleaned, int64(size))
-				metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(size))
 				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
 				return true
 			}
@@ -197,7 +194,6 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 		}
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
-		metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(nMsgs))
 		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(nMsgs))
 	}
 	return msgs
