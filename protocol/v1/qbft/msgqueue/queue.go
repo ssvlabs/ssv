@@ -192,7 +192,10 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 			msgs = append(msgs, mc.msg)
 		}
 	}
-	metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(len(msgs)))
+	if nMsgs := len(msgs); nMsgs > 0 {
+		metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(nMsgs))
+		metricsMsgQPop.WithLabelValues(idx.ID, idx.Mt.String()).Add(float64(nMsgs))
+	}
 	return msgs
 }
 

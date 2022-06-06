@@ -32,3 +32,9 @@ func (ii *IndexIterator) Next() IndexGenerator {
 	ii.i++
 	return next
 }
+
+// Reset set iterator to 0.
+// NOTE: use only in case we want to reuse the iterator
+func (ii *IndexIterator) Reset() {
+	ii.i = 0
+}
