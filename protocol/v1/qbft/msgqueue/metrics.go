@@ -11,9 +11,9 @@ var (
 		Name: "ssv:ibft:msgq:size",
 		Help: "The amount of messages in queue",
 	}, []string{"lambda"})
-	metricsMsgQPop = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:ibft:msgq:pop",
-		Help: "The amount of messages that were pop-ed from the queue",
+	metricsMsgQRatio = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:ibft:msgq:ratio",
+		Help: "The messages ratio between pop and add",
 	}, []string{"lambda", "msg_type"})
 )
 
@@ -21,7 +21,7 @@ func init() {
 	if err := prometheus.Register(metricsMsgQSize); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsMsgQPop); err != nil {
+	if err := prometheus.Register(metricsMsgQRatio); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

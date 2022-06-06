@@ -97,6 +97,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	mc := &MsgContainer{
 		msg: msg,
 	}
+	metricsMsgQRatio.WithLabelValues(msg.ID.String(), msg.MsgType.String()).Add(1)
 	for _, idx := range indices {
 		if idx == (Index{}) {
 			continue
@@ -194,7 +195,7 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
 		metricsMsgQSize.WithLabelValues(idx.ID).Sub(float64(nMsgs))
-		metricsMsgQPop.WithLabelValues(idx.ID, idx.Mt.String()).Add(float64(nMsgs))
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Mt.String()).Sub(float64(nMsgs))
 	}
 	return msgs
 }
