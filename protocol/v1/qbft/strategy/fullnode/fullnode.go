@@ -122,11 +122,12 @@ func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Signed
 	knownMsg := msgs[0]
 	if ignore := checkDecidedMessageSigners(knownMsg, msg); ignore {
 		// if no more complete signers, check if data is different
-		if shouldUpdate, err := checkDecidedData(knownMsg, msg); err != nil {
-			return false, knownMsg, errors.Wrap(err, "failed to check decided data")
-		} else if !shouldUpdate {
-			return false, knownMsg, nil // both checks are false
-		}
+		//if shouldUpdate, err := checkDecidedData(knownMsg, msg); err != nil {
+		//	return false, knownMsg, errors.Wrap(err, "failed to check decided data")
+		//} else if !shouldUpdate {
+		//	return false, knownMsg, nil // both checks are false
+		//}
+		return false, knownMsg, nil
 	}
 	// one of the checks passed, need to update decided
 	return true, knownMsg, nil
