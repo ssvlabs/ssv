@@ -3,6 +3,7 @@ package records
 import (
 	crand "crypto/rand"
 	"github.com/bloxapp/ssv/network/commons"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -22,5 +23,5 @@ func Test_ForkVersionEntry(t *testing.T) {
 
 	fv, err := GetForkVersionEntry(node.Node().Record())
 	require.NoError(t, err)
-	require.Equal(t, "v0", fv)
+	require.Equal(t, forksprotocol.ForkVersion("v0"), fv)
 }

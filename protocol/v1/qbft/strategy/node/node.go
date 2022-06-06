@@ -57,9 +57,6 @@ func (f *regularNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Sig
 	if err != nil {
 		return false, nil, err
 	}
-	if res == nil {
-		return false, nil, nil
-	}
 	return true, res, nil
 }
 

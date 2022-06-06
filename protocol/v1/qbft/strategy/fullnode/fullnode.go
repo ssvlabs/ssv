@@ -111,8 +111,11 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 // IsMsgKnown checks for known decided msg. Also checks if it needs to be updated
 func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
 	msgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	if err != nil || len(msgs) == 0 || msgs[0] == nil {
+	if err != nil {
 		return false, nil, err
+	}
+	if len(msgs) == 0 || msgs[0] == nil {
+		return true, nil, err
 	}
 
 	// if decided is known, check for a more complete message (more signers)
