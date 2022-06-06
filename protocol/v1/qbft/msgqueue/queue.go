@@ -97,7 +97,6 @@ func (q *queue) Add(msg *message.SSVMessage) {
 	mc := &MsgContainer{
 		msg: msg,
 	}
-	added := false
 	for _, idx := range indices {
 		if idx == (Index{}) {
 			continue
@@ -108,10 +107,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
-		added = true
-	}
-	if added {
-		metricsMsgQSize.WithLabelValues(msg.ID.String()).Inc()
+		metricsMsgQSize.WithLabelValues(idx.ID).Inc()
 		metricsMsgQRatio.WithLabelValues(msg.ID.String(), msg.MsgType.String()).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
