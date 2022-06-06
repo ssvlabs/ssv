@@ -94,11 +94,11 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 		}
 		return
 	}
-	// didn't decided -> purge messages
+	// didn't decided -> purge messages with smaller height
 	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
 	idn := hex.EncodeToString(c.Identifier)
 	c.q.Clean(func(k msgqueue.Index) bool {
-		if k.ID == idn && k.H == height {
+		if k.ID == idn && k.H <= height {
 			return true
 		}
 		return false
