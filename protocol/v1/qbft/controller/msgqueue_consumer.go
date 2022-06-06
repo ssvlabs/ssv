@@ -174,11 +174,10 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *m
 			return indices[0]
 		})
 	msgs := c.q.PopIndices(1, iterator)
-	if len(msgs) > 0 {
-		return msgs[0]
+	if len(msgs) == 0 {
+		return nil
 	}
-
-	return nil
+	return msgs[0]
 }
 
 // processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
@@ -195,19 +194,22 @@ func (c *Controller) processAllDecided(handler MessageHandler) {
 }
 
 func stateIndex(identifier string, stage qbft.RoundState, height message.Height) msgqueue.Index {
-	var index msgqueue.Index
+	var res []msgqueue.Index
 	switch stage {
 	case qbft.RoundStateNotStarted:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.ProposalMsgType)[0]
+		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.ProposalMsgType)
 	case qbft.RoundStatePrePrepare:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.PrepareMsgType)[0] // looking for propose in case is leader
+		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.PrepareMsgType) // looking for propose in case is leader
 	case qbft.RoundStatePrepare:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.CommitMsgType)[0]
+		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.CommitMsgType)
 	case qbft.RoundStateCommit:
 		return msgqueue.Index{} // qbft.RoundStateCommit stage is NEVER set
 	case qbft.RoundStateChangeRound:
-		index = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.RoundChangeMsgType)[0]
+		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, message.RoundChangeMsgType)
 		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
-	return index
+	if len(res) == 0 {
+		return msgqueue.Index{}
+	}
+	return res[0]
 }
