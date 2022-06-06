@@ -298,8 +298,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	}
 	fields = append(fields,
 		zap.Int("queue_len", c.q.Len()),
-		zap.Int("msg_data_size", len(msg.Data)),
-		zap.Any("msg", msg),
+		zap.String("msgType", msg.MsgType.String()),
 	)
 	c.logger.Debug("got message, add to queue", fields...)
 	c.q.Add(msg)
