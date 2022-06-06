@@ -102,12 +102,14 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier
 
 // processByState if an instance is running -> get the state and get the relevant messages
 func (c *Controller) processByState(handler MessageHandler, identifier string) bool {
+	currentInstance := c.getCurrentInstance()
 	if c.getCurrentInstance() == nil {
 		return false
 	}
 
 	var msg *message.SSVMessage
-	currentState := c.getCurrentInstance().State()
+
+	currentState := currentInstance.State()
 	msg = c.getNextMsgForState(currentState, identifier)
 	if msg == nil {
 		return false // no msg found
