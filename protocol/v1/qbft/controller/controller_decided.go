@@ -86,6 +86,9 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	if shouldSync {
 		c.logger.Info("stopping current instance and syncing..")
+		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+			currentInstance.Stop()
+		}
 		if err := c.syncDecided(); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}

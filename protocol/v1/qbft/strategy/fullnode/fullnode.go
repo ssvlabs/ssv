@@ -73,7 +73,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		return errors.Wrap(err, "could not complete sync")
 	}
 	warnMsg := ""
-	if message.Height(counter-1) < highest.Message.Height-localHeight {
+	if message.Height(counter) < highest.Message.Height-localHeight {
 		warnMsg = "could not sync all messages in range"
 	} else if message.Height(counter-1) > highest.Message.Height-localHeight {
 		warnMsg = "got too many messages during sync"
