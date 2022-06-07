@@ -55,7 +55,7 @@ func (r *fullNodeScenario) Name() string {
 }
 
 func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
-	share, sks, validators, err := createShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores, r.NumOfOperators())
+	share, sks, validators, err := createShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores, r.NumOfOperators()+r.NumOfFullNodes())
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
 	}
