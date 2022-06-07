@@ -44,23 +44,21 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 
 	// if we already have this in storage, pass
-	known, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
+	shouldUpdate, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
 	}
-	if known {
-		// if decided is known, check for a more complete message (more signers)
-		if ignore := c.checkDecidedMessageSigners(knownMsg, msg); !ignore {
-			if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
-				logger.Error("can't update decided message", zap.Error(err))
-				return nil
-			}
-			logger.Debug("decided was updated")
-
-			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+	if shouldUpdate {
+		if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+			logger.Error("can't update decided message", zap.Error(err))
 			return nil
 		}
+		logger.Debug("decided was updated")
+
+		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
+		return nil
+	} else if knownMsg != nil {
 		logger.Debug("decided is known, skipped")
 		return nil
 	}
@@ -88,6 +86,9 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	if shouldSync {
 		c.logger.Info("stopping current instance and syncing..")
+		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+			currentInstance.Stop()
+		}
 		if err := c.syncDecided(); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}

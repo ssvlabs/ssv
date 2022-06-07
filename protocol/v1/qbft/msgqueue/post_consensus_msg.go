@@ -1,27 +1,20 @@
 package msgqueue
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"strings"
 )
 
 // SignedPostConsensusMsgCleaner cleans post consensus messages from the queue
 // it will clean messages of the given identifier and under the given height
 func SignedPostConsensusMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
-	return func(k string) bool {
-		parts := strings.Split(k, "/")
-		if len(parts) < 2 {
-			return false // unknown
-		}
-		parts = parts[1:] // remove empty string
-		if parts[0] != message.SSVPostConsensusMsgType.String() {
+	return func(k Index) bool {
+		if k.Mt != message.SSVPostConsensusMsgType {
 			return false
 		}
-		if parts[2] != mid.String() {
+		if k.ID != mid.String() {
 			return false
 		}
-		if getIndexHeight(parts...) > h {
+		if k.H > h {
 			return false
 		}
 		// clean
@@ -31,25 +24,32 @@ func SignedPostConsensusMsgCleaner(mid message.Identifier, h message.Height) Cle
 
 // SignedPostConsensusMsgIndexer is the Indexer used for message.SignedPostConsensusMessage
 func SignedPostConsensusMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) string {
+	return func(msg *message.SSVMessage) Index {
 		if msg == nil {
-			return ""
+			return Index{}
 		}
 		if msg.MsgType != message.SSVPostConsensusMsgType {
-			return ""
+			return Index{}
 		}
 		sm := message.SignedPostConsensusMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
-			return ""
+			return Index{}
 		}
 		if sm.Message == nil {
-			return ""
+			return Index{}
 		}
-		return SignedPostConsensusMsgIndex(msg.ID, sm.Message.Height)
+		return SignedPostConsensusMsgIndex(msg.ID.String(), sm.Message.Height)
 	}
 }
 
 // SignedPostConsensusMsgIndex indexes a message.SignedPostConsensusMessage by identifier and height
-func SignedPostConsensusMsgIndex(mid message.Identifier, h message.Height) string {
-	return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid.String(), h)
+func SignedPostConsensusMsgIndex(mid string, h message.Height) Index {
+	return Index{
+		Name: "post_consensus_index",
+		Mt:   message.SSVPostConsensusMsgType,
+		ID:   mid,
+		H:    h,
+		Cmt:  -1, // as unknown
+	}
+	//return fmt.Sprintf("/%s/id/%s/height/%d", message.SSVPostConsensusMsgType.String(), mid, h)
 }

@@ -49,8 +49,12 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				syncMsg.Status = message.StatusNotFound
 			}
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
-				logex.GetLogger().Warn("sync message error", zap.String("err", err))
-				syncMsg.Status = message.StatusError
+				if err == message.EntryNotFoundError {
+					syncMsg.Status = message.StatusNotFound
+				} else {
+					logex.GetLogger().Warn("sync message error", zap.String("fromPeers", msgV0.SyncMessage.FromPeerID), zap.String("symcType", msgV0.SyncMessage.Type.String()), zap.String("err", err))
+					syncMsg.Status = message.StatusError
+				}
 			}
 			switch msgV0.SyncMessage.Type {
 			case network.Sync_GetHighestType:
@@ -361,12 +365,18 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 			}
 			if len(cr.GetRoundChangeJustification()) > 0 {
 				m := cr.GetRoundChangeJustification()[0]
+
+				prepareData := new(message.PrepareData)
+				if err := prepareData.Decode(m.Message.Data); err != nil {
+					return nil, err
+				}
+
 				crV0.JustificationMsg = &proto.Message{
 					Type:      proto.RoundState_Prepare,
 					Round:     uint64(m.Message.Round),
 					Lambda:    []byte(format.IdentifierFormat(m.Message.Identifier.GetValidatorPK(), m.Message.Identifier.GetRoleType().String())),
 					SeqNumber: uint64(m.Message.Height),
-					Value:     m.Message.Data,
+					Value:     prepareData.Data,
 				}
 
 				crV0.JustificationSig = m.Signature

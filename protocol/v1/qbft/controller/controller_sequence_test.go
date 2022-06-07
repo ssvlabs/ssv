@@ -29,9 +29,8 @@ func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier: []byte("Identifier_11"),
 		// instances: make([]*Instance, 0),
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		currentInstanceLock: currentInstanceLock,
+		forkLock:            &sync.Mutex{},
 	}
 
 	ret.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
@@ -167,7 +166,6 @@ func TestCanStartNewInstance(t *testing.T) {
 			i.state = test.initState
 			currentInstanceLock := &sync.RWMutex{}
 			i.currentInstanceLock = currentInstanceLock
-			i.currentInstanceRLock = currentInstanceLock.RLocker()
 			i.forkLock = &sync.Mutex{}
 			if test.currentInstance != nil {
 				i.setCurrentInstance(test.currentInstance)

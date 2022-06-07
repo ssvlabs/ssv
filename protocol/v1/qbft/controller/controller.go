@@ -59,20 +59,21 @@ const (
 type Controller struct {
 	ctx context.Context
 
-	currentInstanceLock  sync.Locker
-	currentInstanceRLock sync.Locker
-	currentInstance      instance.Instancer
-	logger               *zap.Logger
-	instanceStorage      qbftstorage.InstanceStore
-	changeRoundStorage   qbftstorage.ChangeRoundStore
-	network              p2pprotocol.Network
-	instanceConfig       *qbft.InstanceConfig
-	ValidatorShare       *beaconprotocol.Share
-	Identifier           message.Identifier
-	forkLock             sync.Locker
-	fork                 forks.Fork
-	beacon               beaconprotocol.Beacon
-	signer               beaconprotocol.Signer
+	currentInstance    instance.Instancer
+	logger             *zap.Logger
+	instanceStorage    qbftstorage.InstanceStore
+	changeRoundStorage qbftstorage.ChangeRoundStore
+	network            p2pprotocol.Network
+	instanceConfig     *qbft.InstanceConfig
+	ValidatorShare     *beaconprotocol.Share
+	Identifier         message.Identifier
+	fork               forks.Fork
+	beacon             beaconprotocol.Beacon
+	signer             beaconprotocol.Signer
+
+	// lockers
+	currentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
+	forkLock            sync.Locker
 
 	// signature
 	signatureState SignatureState
@@ -99,13 +100,12 @@ func New(opts Options) IController {
 
 	q, err := msgqueue.New(
 		logger.With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers(msgqueue.DefaultMsgIndexer(), msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
 	)
 	if err != nil {
 		// TODO: we should probably stop here, TBD
 		logger.Warn("could not setup msg queue properly", zap.Error(err))
 	}
-	currentInstanceLock := &sync.RWMutex{}
 	ctrl := &Controller{
 		ctx:                opts.Context,
 		instanceStorage:    opts.Storage,
@@ -127,9 +127,8 @@ func New(opts Options) IController {
 
 		q: q,
 
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		currentInstanceLock: &sync.RWMutex{},
+		forkLock:            &sync.Mutex{},
 	}
 
 	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
@@ -142,8 +141,8 @@ func New(opts Options) IController {
 }
 
 func (c *Controller) getCurrentInstance() instance.Instancer {
-	c.currentInstanceRLock.Lock()
-	defer c.currentInstanceRLock.Unlock()
+	c.currentInstanceLock.RLock()
+	defer c.currentInstanceLock.RUnlock()
 
 	return c.currentInstance
 }
@@ -220,6 +219,7 @@ func (c *Controller) Init() error {
 			}
 			c.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+			atomic.StoreUint32(&c.state, InitiatedHandlers) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
@@ -297,7 +297,10 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 			fields = append(fields, zap.String("stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
 		}
 	}
-	fields = append(fields, zap.Any("msg", msg))
+	fields = append(fields,
+		zap.Int("queue_len", c.q.Len()),
+		zap.String("msgType", msg.MsgType.String()),
+	)
 	c.logger.Debug("got message, add to queue", fields...)
 	c.q.Add(msg)
 	return nil

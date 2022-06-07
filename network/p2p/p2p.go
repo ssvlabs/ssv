@@ -9,21 +9,29 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/prysmaticlabs/prysm/async"
+	"github.com/libp2p/go-libp2p-core/peer"
+	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
+// network states
 const (
 	stateInitializing int32 = 0
 	stateForking      int32 = 1
 	stateClosing      int32 = 1
 	stateClosed       int32 = 2
 	stateReady        int32 = 10
+)
+
+const (
+	peerIndexGCInterval = 15 * time.Minute
+	reportingInterval   = 30 * time.Second
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -48,6 +56,8 @@ type p2pNetwork struct {
 
 	activeValidatorsLock *sync.Mutex
 	activeValidators     map[string]int32
+
+	backoffConnector *libp2pdisc.BackoffConnector
 }
 
 // New creates a new p2p network
@@ -90,7 +100,7 @@ func (n *p2pNetwork) Close() error {
 	return n.host.Close()
 }
 
-// Start starts the required services
+// Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		//return errors.New("could not setup network: in ready state")
@@ -101,11 +111,11 @@ func (n *p2pNetwork) Start() error {
 
 	go n.startDiscovery()
 
-	async.RunEvery(n.ctx, 15*time.Minute, func() {
+	async.Interval(n.ctx, peerIndexGCInterval, func() {
 		n.idx.GC()
 	})
 
-	async.RunEvery(n.ctx, 30*time.Second, func() {
+	async.Interval(n.ctx, reportingInterval, func() {
 		go n.reportAllPeers()
 		n.reportTopics()
 	})
@@ -114,21 +124,21 @@ func (n *p2pNetwork) Start() error {
 }
 
 // startDiscovery starts the required services
-// it will try to bootstrap discovery service, and inject a connect function
-// which will ignore the peer if it is connected or recently failed to connect
+// it will try to bootstrap discovery service, and inject a connect function.
+// the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) startDiscovery() {
+	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
+	go func() {
+		ctx, cancel := context.WithCancel(n.ctx)
+		defer cancel()
+		n.backoffConnector.Connect(ctx, discoveredPeers)
+	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
-			ctx, cancel := context.WithTimeout(n.ctx, n.cfg.RequestTimeout)
-			defer cancel()
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
-			if err := n.host.Connect(ctx, e.AddrInfo); err != nil {
-				n.logger.Warn("could not connect to peer", zap.Any("peer", e), zap.Error(err))
-				return
-			}
-			n.logger.Debug("connected peer from discovery", zap.Any("peer", e))
+			discoveredPeers <- e.AddrInfo
 		})
 	}, 3)
 	if err != nil {

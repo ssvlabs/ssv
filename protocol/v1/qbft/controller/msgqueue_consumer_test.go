@@ -26,19 +26,18 @@ func init() {
 func TestConsumeMessages(t *testing.T) {
 	q, err := msgqueue.New(
 		logex.GetLogger().With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers(msgqueue.DefaultMsgIndexer(), msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
 	)
 	require.NoError(t, err)
 	currentInstanceLock := &sync.RWMutex{}
 	ctrl := Controller{
-		ctx:                  context.Background(),
-		logger:               logex.GetLogger().With(zap.String("who", "controller")),
-		q:                    q,
-		signatureState:       SignatureState{},
-		Identifier:           message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
-		currentInstanceLock:  currentInstanceLock,
-		currentInstanceRLock: currentInstanceLock.RLocker(),
-		forkLock:             &sync.Mutex{},
+		ctx:                 context.Background(),
+		logger:              logex.GetLogger().With(zap.String("who", "controller")),
+		q:                   q,
+		signatureState:      SignatureState{},
+		Identifier:          message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
+		currentInstanceLock: currentInstanceLock,
+		forkLock:            &sync.Mutex{},
 	}
 	ctrl.signatureState.setHeight(0)
 
@@ -245,7 +244,7 @@ func TestConsumeMessages(t *testing.T) {
 					panic("time out")
 				} else {
 					cancel()
-					q.Clean(func(s string) bool {
+					q.Clean(func(s msgqueue.Index) bool {
 						return true
 					})
 				}
@@ -279,7 +278,7 @@ func TestConsumeMessages(t *testing.T) {
 				if processed == len(test.expected) {
 					ctrl.logger.Debug("--------- done by procesed -----", zap.String("name", test.name))
 					cancel()
-					q.Clean(func(s string) bool {
+					q.Clean(func(s msgqueue.Index) bool {
 						return true
 					})
 				}

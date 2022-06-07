@@ -1,29 +1,21 @@
 package msgqueue
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"strconv"
-	"strings"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
 // it will clean messages of the given identifier and under the given height
 func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 	identifier := mid.String()
-	return func(k string) bool {
-		parts := strings.Split(k, "/")
-		if len(parts) < 2 {
-			return false // unknown
-		}
-		parts = parts[1:] // remove empty string
-		if parts[0] != message.SSVConsensusMsgType.String() {
+	return func(k Index) bool {
+		if k.Mt != message.SSVConsensusMsgType && k.Mt != message.SSVDecidedMsgType {
 			return false
 		}
-		if parts[2] != identifier {
+		if k.ID != identifier {
 			return false
 		}
-		if getIndexHeight(parts...) > h {
+		if k.H > h {
 			return false
 		}
 		// clean
@@ -50,48 +42,52 @@ func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
 
 // SignedMsgIndexer is the Indexer used for message.SignedMessage
 func SignedMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) string {
+	return func(msg *message.SSVMessage) Index {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(msg.MsgType, msg.ID, sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.ID.String(), sm.Message.Height, sm.Message.MsgType)[0]
 		}
-		return ""
+		return Index{}
 	}
 }
 
 // SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType message.MsgType, mid message.Identifier, h message.Height, cmt ...message.ConsensusMessageType) []string {
-	var res []string
+func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []Index {
+	var res []Index
 	for _, mt := range cmt {
-		res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid.String(), h, mt.String()))
+		res = append(res, Index{
+			Name: "signed_index",
+			Mt:   msgType,
+			ID:   mid,
+			H:    h,
+			Cmt:  mt,
+		})
+		//res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
 	return res
 }
 
 // DecidedMsgIndexer is the Indexer used for decided message.SignedMessage
 func DecidedMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) string {
+	return func(msg *message.SSVMessage) Index {
 		if msg.MsgType != message.SSVDecidedMsgType {
-			return ""
+			return Index{}
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return DecidedMsgIndex(msg.ID)
+			return DecidedMsgIndex(msg.ID.String())
 		}
-		return ""
+		return Index{}
 	}
 }
 
 // DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
-func DecidedMsgIndex(mid message.Identifier) string {
-	return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid.String(), message.CommitMsgType.String())
-}
-
-func getIndexHeight(idxParts ...string) message.Height {
-	hraw := idxParts[2]
-	h, err := strconv.Atoi(hraw)
-	if err != nil {
-		return message.Height(0)
+func DecidedMsgIndex(mid string) Index {
+	return Index{
+		Name: "decided_index",
+		Mt:   message.SSVDecidedMsgType,
+		ID:   mid,
+		Cmt:  message.CommitMsgType,
 	}
-	return message.Height(h)
+	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 // getRound returns the round of the message if applicable

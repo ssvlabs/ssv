@@ -28,14 +28,14 @@ func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStor
 }
 
 func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
-	highest, _, _, err := f.decidedFetcher.GetLastDecided(identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	highest, _, _, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not get last decided from peers")
 	}
 
-	if err == nil && highest != nil {
+	if highest != nil {
 		return f.store.SaveLastDecided(highest)
 	}
 	return nil
@@ -56,9 +56,6 @@ func (f *regularNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Sig
 	res, err := f.store.GetLastDecided(msg.Message.Identifier)
 	if err != nil {
 		return false, nil, err
-	}
-	if res == nil {
-		return false, nil, nil
 	}
 	return true, res, nil
 }

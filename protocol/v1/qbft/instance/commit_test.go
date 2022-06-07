@@ -209,7 +209,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	share := beacon.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[message.OperatorID]*beacon.Node, 4)
-	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String())
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String()) // TODO should using fork to get identifier?
 
 	var sigs []*message.SignedMessage
 	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()

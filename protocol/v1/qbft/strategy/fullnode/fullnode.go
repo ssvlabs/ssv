@@ -32,7 +32,7 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 
 func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
-	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 		return f.store.GetLastDecided(i)
 	})
 	if err != nil {
@@ -43,38 +43,45 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		logger.Debug("could not find highest decided from peers")
 		return nil
 	}
-	if localHeight > highest.Message.Height {
-		return nil // local is higher than remote, no need for sync or update
+	if localHeight >= highest.Message.Height {
+		return nil // local is equal or higher than remote
 	}
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
 	counter := 0
-	err = f.historySyncer.SyncRange(ctx, identifier, func(msg *message.SignedMessage) error {
+	handleDecided := func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
-		known, _, err := f.IsMsgKnown(msg)
+		shouldUpdate, knownMsg, err := f.IsMsgKnown(msg)
 		if err != nil {
 			return errors.Wrap(err, "could not check if message is known")
 		}
-		if known {
-			f.logger.Debug("msg is known", zap.Int64("h", int64(msg.Message.Height)))
+		if knownMsg != nil && !shouldUpdate { // msg is known but no need to update
 			return nil
 		}
-		//f.logger.Debug("saving synced decided", zap.Int64("h", int64(msg.Message.Height)))
 		if err := f.store.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not save decided msg to storage")
 		}
 		counter++
 		return nil
-	}, localHeight, highest.Message.Height, sender)
-	if err != nil {
-		return errors.Wrap(err, "could not complete sync")
 	}
+	if localHeight+1 == highest.Message.Height {
+		// no need to sync, we already have highest so just need to handle it
+		if err := handleDecided(highest); err != nil {
+			return errors.Wrap(err, "could not handle highest decided")
+		}
+	} else {
+		err = f.historySyncer.SyncRange(ctx, identifier, handleDecided, localHeight, highest.Message.Height, sender)
+		if err != nil {
+			return errors.Wrap(err, "could not complete sync")
+		}
+	}
+
 	warnMsg := ""
-	if message.Height(counter-1) < highest.Message.Height-localHeight {
+	if message.Height(counter) < highest.Message.Height-localHeight {
 		warnMsg = "could not sync all messages in range"
 	} else if message.Height(counter-1) > highest.Message.Height-localHeight {
 		warnMsg = "got too many messages during sync"
@@ -83,9 +90,13 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip 
 		logger.Warn(warnMsg,
 			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
 			zap.Int64("to", int64(highest.Message.Height)))
+	} else {
+		logger.Debug("managed to sync all messages in range",
+			zap.Int64("from", int64(localHeight)),
+			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
-	if err == nil && highest != nil {
+	if highest != nil {
 		return f.store.SaveLastDecided(highest)
 	}
 	return nil
@@ -105,13 +116,50 @@ func (f *fullNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
 	return true, nil
 }
 
+// IsMsgKnown checks for known decided msg. Also checks if it needs to be updated
 func (f *fullNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
-	msgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	if err == nil && len(msgs) > 0 && msgs[0] != nil {
-		return true, msgs[0], nil
+	msgs, err := f.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	if err != nil {
+		return false, nil, err
 	}
-	return false, nil, err
+	if len(msgs) == 0 || msgs[0] == nil {
+		return false, nil, err
+	}
+
+	// if decided is known, check for a more complete message (more signers)
+	knownMsg := msgs[0]
+	if ignore := checkDecidedMessageSigners(knownMsg, msg); ignore {
+		// if no more complete signers, check if data is different
+		//if shouldUpdate, err := checkDecidedData(knownMsg, msg); err != nil {
+		//	return false, knownMsg, errors.Wrap(err, "failed to check decided data")
+		//} else if !shouldUpdate {
+		//	return false, knownMsg, nil // both checks are false
+		//}
+		return false, knownMsg, nil
+	}
+	// one of the checks passed, need to update decided
+	return true, knownMsg, nil
 }
+
+// checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
+func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
+	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
+	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
+}
+
+//// checkDecidedData checks if new decided msg target epoch is higher than the known decided target epoch
+//func checkDecidedData(knownMsg *message.SignedMessage, msg *message.SignedMessage) (bool, error) {
+//	knownCommitData, err := knownMsg.Message.GetCommitData()
+//	if err != nil {
+//		return false, errors.Wrap(err, "failed to get known msg commit data")
+//	}
+//
+//	commitData, err := msg.Message.GetCommitData()
+//	if err != nil {
+//		return false, errors.Wrap(err, "failed to get new msg commit data")
+//	}
+//	return !bytes.Equal(commitData.Data, knownCommitData.Data), nil
+//}
 
 func (f *fullNode) SaveLateCommit(msg *message.SignedMessage) error {
 	return f.store.SaveDecided(msg)

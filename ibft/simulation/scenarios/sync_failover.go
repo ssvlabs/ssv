@@ -70,7 +70,6 @@ loop:
 		seqNumber++
 	}
 
-	// TODO: fix dummy
 	dummy := &message.SignedMessage{Message: &message.ConsensusMessage{Identifier: msgs[1].Message.Identifier, Height: 1}}
 	// overriding highest decided to make the system dirty
 	for i := 0; i < len(dbs)-1; i++ {

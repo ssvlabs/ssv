@@ -290,9 +290,9 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 	return m.PollLastDecidedMessages(), nil
 }
 
-func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, error) {
+func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, message.Height, error) {
 	// TODO: remove hardcoded return, use input parameters
-	return m.PollGetHistoryMessages(), nil
+	return m.PollGetHistoryMessages(), to, nil
 }
 
 func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error) {

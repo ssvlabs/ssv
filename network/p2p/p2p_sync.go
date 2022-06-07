@@ -1,6 +1,8 @@
 package p2pv1
 
 import (
+	"github.com/bloxapp/ssv/network"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -29,9 +31,13 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, message.Height, error) {
+	if from >= to {
+		return nil, 0, nil
+	}
+
 	if !n.isReady() {
-		return nil, p2pprotocol.ErrNetworkIsNotReady
+		return nil, 0, p2pprotocol.ErrNetworkIsNotReady
 	}
 	protocolID, peerCount := n.fork.ProtocolID(p2pprotocol.DecidedHistoryProtocol)
 	peers := make([]peer.ID, 0)
@@ -46,31 +52,29 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 	if len(peers) == 0 {
 		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
-			return nil, errors.Wrap(err, "could not get subset of peers")
+			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
 		peers = random
 	}
 	maxBatchRes := message.Height(n.cfg.MaxBatchResponse)
+
 	var results []p2pprotocol.SyncResult
-	for from < to {
-		currentEnd := to
-		if to-from > maxBatchRes {
-			currentEnd = from + maxBatchRes
-		}
-		batchResults, err := n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
-			Params: &message.SyncParams{
-				Height:     []message.Height{from, currentEnd},
-				Identifier: mid,
-			},
-			Protocol: message.DecidedHistoryType,
-		})
-		if err != nil {
-			return results, err
-		}
-		results = append(results, batchResults...)
-		from = currentEnd
+	var err error
+	currentEnd := to
+	if to-from > maxBatchRes {
+		currentEnd = from + maxBatchRes
 	}
-	return results, nil
+	results, err = n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
+		Params: &message.SyncParams{
+			Height:     []message.Height{from, currentEnd},
+			Identifier: mid,
+		},
+		Protocol: message.DecidedHistoryType,
+	})
+	if err != nil {
+		return results, 0, err
+	}
+	return results, currentEnd, nil
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
@@ -134,11 +138,28 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 			n.logger.Warn("could not encode msg", zap.Error(err))
 			return
 		}
+		// TODO: remove after fork v1
+		if n.cfg.ForkVersion == forksprotocol.V0ForkVersion {
+			parsed := &network.Message{}
+			err := parsed.Decode(resultBytes)
+			if err != nil {
+				n.logger.Warn("could not decode v0 msg", zap.Error(err))
+				return
+			}
+			if parsed != nil && parsed.SyncMessage != nil {
+				parsed.SyncMessage.FromPeerID = n.host.ID().String()
+			}
+			withPeerID, err := parsed.Encode()
+			if err != nil {
+				n.logger.Warn("could not encode v0 msg with peer id", zap.Error(err))
+				return
+			}
+			resultBytes = withPeerID
+		}
 		if err := respond(resultBytes); err != nil {
 			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
 		}
-		n.logger.Info("stream handler done")
 	})
 }
 
@@ -191,12 +212,12 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, pr
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			logger.Debug("could not make stream request")
+			logger.Debug("could not make stream request", zap.Error(err))
 			continue
 		}
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
-			logger.Debug("could not decode stream response")
+			logger.Debug("could not decode stream response", zap.Error(err))
 			continue
 		}
 		logger.Debug("got stream response", zap.String("res identifier", res.ID.String()))
