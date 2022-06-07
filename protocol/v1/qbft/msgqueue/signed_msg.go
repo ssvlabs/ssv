@@ -9,7 +9,7 @@ import (
 func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
-		if k.Mt != message.SSVConsensusMsgType {
+		if k.Mt != message.SSVConsensusMsgType && k.Mt != message.SSVDecidedMsgType {
 			return false
 		}
 		if k.ID != identifier {

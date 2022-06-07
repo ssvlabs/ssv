@@ -58,4 +58,91 @@ func TestNewMsgQueue(t *testing.T) {
 		require.Equal(t, int64(2), q.Clean(DefaultMsgCleaner([]byte("dummy-id-1"), message.SSVConsensusMsgType)))
 		require.Equal(t, 0, q.Count(idx))
 	})
+	t.Run("cleanSingedMsg", func(t *testing.T) {
+		q, err := New(logger, WithIndexers(SignedMsgIndexer()))
+		require.NoError(t, err)
+		identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(0), 1, identifier, message.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(0), 1, identifier, message.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(1), 1, identifier, message.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(1), 1, identifier, message.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(2), 1, identifier, message.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(2), 1, identifier, message.CommitMsgType))
+
+		for i := 0; i <= 2; i++ {
+			height := message.Height(i)
+			idxs := SignedMsgIndex(message.SSVConsensusMsgType, identifier.String(), height, message.CommitMsgType)
+			require.Equal(t, len(idxs), 1)
+			idx := idxs[0]
+			require.Equal(t, 1, q.Count(idx))
+			require.Equal(t, int64(2), q.Clean(SignedMsgCleaner(identifier, height)))
+			require.Equal(t, 0, q.Count(idx))
+		}
+	})
+
+	t.Run("cleanPostConsensusMsg", func(t *testing.T) {
+		q, err := New(logger, WithIndexers(SignedPostConsensusMsgIndexer()))
+		require.NoError(t, err)
+		identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
+		q.Add(generatePostConsensusMsg(t, 0, identifier))
+		q.Add(generatePostConsensusMsg(t, 1, identifier))
+		q.Add(generatePostConsensusMsg(t, 2, identifier))
+		q.Add(generatePostConsensusMsg(t, 3, identifier))
+
+		for i := 0; i <= 3; i++ {
+			height := message.Height(i)
+			idx := SignedPostConsensusMsgIndex(identifier.String(), height)
+			require.Equal(t, 1, q.Count(idx))
+			require.Equal(t, int64(1), q.Clean(SignedPostConsensusMsgCleaner(identifier, height)))
+			require.Equal(t, 0, q.Count(idx))
+		}
+	})
+}
+
+func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height message.Height, round message.Round, id message.Identifier, consensusType message.ConsensusMessageType) *message.SSVMessage {
+	ssvMsg := &message.SSVMessage{
+		MsgType: ssvMsgType,
+		ID:      id,
+	}
+
+	signedMsg := message.SignedMessage{
+		Signature: nil,
+		Signers:   nil,
+		Message: &message.ConsensusMessage{
+			MsgType:    consensusType,
+			Height:     height,
+			Round:      round,
+			Identifier: nil,
+			Data:       nil,
+		},
+	}
+	data, err := signedMsg.Encode()
+	require.NoError(t, err)
+	ssvMsg.Data = data
+	return ssvMsg
+}
+
+func generatePostConsensusMsg(t *testing.T, height message.Height, id message.Identifier) *message.SSVMessage {
+	ssvMsg := &message.SSVMessage{
+		MsgType: message.SSVPostConsensusMsgType,
+		ID:      id,
+	}
+
+	pcm := &message.PostConsensusMessage{
+		Height:          height,
+		DutySignature:   []byte("sig"),
+		DutySigningRoot: []byte("root"),
+		Signers:         []message.OperatorID{1, 2, 3},
+	}
+
+	spcm := message.SignedPostConsensusMessage{
+		Message:   pcm,
+		Signature: []byte("sig1"),
+		Signers:   []message.OperatorID{1, 2, 3},
+	}
+
+	encoded, err := spcm.Encode()
+	require.NoError(t, err)
+	ssvMsg.Data = encoded
+	return ssvMsg
 }
