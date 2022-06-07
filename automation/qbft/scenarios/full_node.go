@@ -18,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -28,13 +27,10 @@ const FullNodeScenario = "full-node"
 
 // fullNodeScenario is the scenario with 3 regular nodes and 1 full node
 type fullNodeScenario struct {
-	logger        *zap.Logger
-	sks           map[uint64]*bls.SecretKey
-	fullNodeSKs   map[uint64]*bls.SecretKey
-	share         *beacon.Share
-	fullNodeShare *beacon.Share
-	validators    []validator.IValidator
-	fullNodes     []validator.IValidator
+	logger     *zap.Logger
+	sks        map[uint64]*bls.SecretKey
+	share      *beacon.Share
+	validators []validator.IValidator
 }
 
 // newFullNodeScenario creates a fullNode scenario instance
@@ -43,7 +39,7 @@ func newFullNodeScenario(logger *zap.Logger) runner.Scenario {
 }
 
 func (r *fullNodeScenario) NumOfOperators() int {
-	return 3
+	return 2
 }
 
 func (r *fullNodeScenario) NumOfBootnodes() int {
@@ -51,7 +47,7 @@ func (r *fullNodeScenario) NumOfBootnodes() int {
 }
 
 func (r *fullNodeScenario) NumOfFullNodes() int {
-	return 1
+	return 2
 }
 
 func (r *fullNodeScenario) Name() string {
@@ -59,22 +55,7 @@ func (r *fullNodeScenario) Name() string {
 }
 
 func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
-	localNetWithoutFullNodes := *ctx.LocalNet
-	localNetWithoutFullNodes.Nodes = localNetWithoutFullNodes.Nodes[:r.NumOfOperators()]
-	localNetWithoutFullNodes.NodeKeys = localNetWithoutFullNodes.NodeKeys[:r.NumOfOperators()]
-	keyManagers := ctx.KeyManagers[:r.NumOfOperators()]
-	stores := ctx.Stores[:r.NumOfOperators()]
-
-	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, &localNetWithoutFullNodes, keyManagers, stores)
-	if err != nil {
-		return errors.Wrap(err, "could not create share")
-	}
-
-	localNetForFullNodes := *ctx.LocalNet
-	localNetForFullNodes.Nodes = localNetForFullNodes.Nodes[r.NumOfOperators():]
-	localNetForFullNodes.NodeKeys = localNetForFullNodes.NodeKeys[r.NumOfOperators():]
-
-	fullNodeShare, fullNodeSKs, fullNodes, err := createFullNode(ctx.Ctx, r.logger, &localNetWithoutFullNodes, keyManagers, stores)
+	share, sks, validators, err := createShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores, r.NumOfOperators())
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
 	}
@@ -83,9 +64,6 @@ func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	r.validators = validators
 	r.sks = sks
 	r.share = share
-	r.fullNodeShare = fullNodeShare
-	r.fullNodeSKs = fullNodeSKs
-	r.fullNodes = fullNodes
 
 	oids := make([]message.OperatorID, 0)
 	keys := make(map[message.OperatorID]*bls.SecretKey)
@@ -94,74 +72,31 @@ func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
 		oids = append(oids, oid)
 	}
 
-	msgs, err := testing.CreateMultipleSignedMessages(keys, message.Height(0), message.Height(2), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
-		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
-		commitDataBytes, err := commitData.Encode()
-		if err != nil {
-			panic(err)
-		}
+	routers := make([]*runner.Router, r.NumOfOperators()+r.NumOfFullNodes())
 
-		return oids, &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
-			Height:     height,
-			Round:      1,
-			Identifier: message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester),
-			Data:       commitDataBytes,
-		}
-	})
-	if err != nil {
-		return err
+	loggerFactory := func(who string) *zap.Logger {
+		logger := zap.L().With(zap.String("who", who))
+		return logger
 	}
 
-	fullNodeMsgs, err := testing.CreateMultipleSignedMessages(keys, message.Height(0), message.Height(4), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
-		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
-		commitDataBytes, err := commitData.Encode()
-		if err != nil {
-			panic(err)
+	for i, node := range ctx.LocalNet.Nodes {
+		routers[i] = &runner.Router{
+			Logger:      loggerFactory(fmt.Sprintf("msgRouter-%d", i)),
+			Controllers: r.validators[i].(*validator.Validator).Ibfts(),
 		}
-
-		return oids, &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
-			Height:     height,
-			Round:      1,
-			Identifier: message.NewIdentifier(fullNodeShare.PublicKey.Serialize(), message.RoleTypeAttester),
-			Data:       commitDataBytes,
-		}
-	})
-	if err != nil {
-		return err
-	}
-
-	for i, store := range ctx.Stores {
-		if i == 0 || i == len(ctx.Stores)-1 { // skip first and last store
-			continue
-		}
-		if err := store.SaveDecided(msgs...); err != nil {
-			return errors.Wrap(err, "could not save decided messages")
-		}
-		if err := store.SaveLastDecided(msgs[len(msgs)-1]); err != nil {
-			return errors.Wrap(err, "could not save last decided messages")
-		}
-	}
-
-	if err := ctx.Stores[len(ctx.Stores)-1].SaveDecided(fullNodeMsgs...); err != nil {
-		return errors.Wrap(err, "could not save decided messages")
-	}
-	if err := ctx.Stores[len(ctx.Stores)-1].SaveLastDecided(fullNodeMsgs[len(fullNodeMsgs)-1]); err != nil {
-		return errors.Wrap(err, "could not save last decided messages")
+		node.UseMessageRouter(routers[i])
 	}
 
 	return nil
 }
-
-func (r *fullNodeScenario) Execute(_ *runner.ScenarioContext) error {
-	if len(r.sks) == 0 || len(r.fullNodeSKs) == 0 || r.share == nil || r.fullNodeShare == nil {
+func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
+	if len(r.sks) == 0 || r.share == nil {
 		return errors.New("pre-execution failed")
 	}
 
 	var wg sync.WaitGroup
 	var startErr error
-	for _, val := range append(r.validators, r.fullNodes...) {
+	for _, val := range r.validators {
 		wg.Add(1)
 		go func(val validator.IValidator) {
 			defer wg.Done()
@@ -173,32 +108,31 @@ func (r *fullNodeScenario) Execute(_ *runner.ScenarioContext) error {
 	}
 	wg.Wait()
 
-	return startErr
+	if startErr != nil {
+		return errors.Wrap(startErr, "could not start validators")
+	}
+
+	if err := r.startInstances(message.Height(0), message.Height(3)); err != nil {
+		return errors.Wrap(err, "could not start instances")
+	}
+
+	return nil
 }
 
 func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
+	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
 	if err != nil {
 		return err
 	}
 	if len(msgs) < 4 {
-		//return errors.New("node-0 didn't sync all messages")
-	}
-	r.logger.Debug("msgs", zap.Any("msgs", msgs))
-
-	msgs, err = ctx.Stores[len(ctx.Stores)-1].GetDecided(message.NewIdentifier(r.fullNodeShare.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
-	if err != nil {
-		return err
-	}
-	if len(msgs) < 4 {
-		//return errors.New("full node didn't sync all messages")
+		return errors.New("node-0 didn't sync all messages")
 	}
 	r.logger.Debug("msgs", zap.Any("msgs", msgs))
 
 	return nil
 }
 
-func createFullNode(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore, regularNodes int) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
 	for _, k := range net.NodeKeys {
@@ -219,6 +153,7 @@ func createFullNode(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet
 		if err != nil {
 			return nil, nil, nil, err
 		}
+
 		val := validator.NewValidator(&validator.Options{
 			Context:     ctx,
 			Logger:      logger.With(zap.String("who", fmt.Sprintf("node-%d", i))),
@@ -238,10 +173,31 @@ func createFullNode(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet
 			Signer:                     km,
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
-			ReadMode:                   true,
-			FullNode:                   true,
+			ReadMode:                   false,
+			FullNode:                   i >= regularNodes,
 		})
 		validators = append(validators, val)
 	}
 	return share, sks, validators, nil
+}
+
+func (r *fullNodeScenario) startInstances(from, to message.Height) error {
+	var wg sync.WaitGroup
+
+	h := from
+
+	for h <= to {
+		for i := uint64(1); i < uint64(r.NumOfOperators()); i++ {
+			wg.Add(1)
+			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
+				if err := startNode(node, seqNumber, []byte("value"), r.logger); err != nil {
+					r.logger.Error("could not start node", zap.Uint64("node", index-1), zap.Error(err))
+				}
+				wg.Done()
+			}(r.validators[i-1], i, h)
+		}
+		wg.Wait()
+		h++
+	}
+	return nil
 }
