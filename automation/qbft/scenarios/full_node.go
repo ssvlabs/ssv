@@ -39,7 +39,7 @@ func newFullNodeScenario(logger *zap.Logger) runner.Scenario {
 }
 
 func (r *fullNodeScenario) NumOfOperators() int {
-	return 2
+	return 3
 }
 
 func (r *fullNodeScenario) NumOfBootnodes() int {
@@ -55,7 +55,8 @@ func (r *fullNodeScenario) Name() string {
 }
 
 func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
-	share, sks, validators, err := createShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores, r.NumOfOperators()+r.NumOfFullNodes())
+	totalNodes := r.NumOfOperators() + r.NumOfFullNodes()
+	share, sks, validators, err := createShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores, totalNodes, totalNodes-1)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
 	}
@@ -72,7 +73,7 @@ func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
 		oids = append(oids, oid)
 	}
 
-	routers := make([]*runner.Router, r.NumOfOperators()+r.NumOfFullNodes())
+	routers := make([]*runner.Router, totalNodes)
 
 	loggerFactory := func(who string) *zap.Logger {
 		logger := zap.L().With(zap.String("who", who))
@@ -112,21 +113,16 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(startErr, "could not start validators")
 	}
 
-	const fromHeight = message.Height(1)
-	const toHeight = message.Height(4)
+	const fromHeight = message.Height(0)
+	const toHeight = message.Height(3)
 	for height := fromHeight; height <= toHeight; height++ {
-		if err := r.startInstances(height, r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]...); err != nil {
+		allButOneValidators := r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]
+		if err := r.startInstances(height, allButOneValidators...); err != nil {
 			return errors.Wrap(err, "could not start instances")
 		}
 	}
 
-	if err := r.validators[r.NumOfOperators()].Start(); err != nil {
-		return errors.Wrap(err, "could not start first full node validator")
-	}
-
-	if err := r.startInstances(toHeight+1, r.validators...); err != nil {
-		return errors.Wrap(err, "could not start all instances")
-	}
+	<-time.After(time.Second * 3)
 
 	return nil
 }
@@ -136,19 +132,20 @@ func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	if err != nil {
 		return err
 	}
-	if len(msgs) < 4 {
-		return errors.New("node-4 didn't sync all messages")
+
+	if got, want := len(msgs), 4; got < want {
+		return fmt.Errorf("node-4 didn't sync all messages, got %d, want %d", got, want)
 	}
 	r.logger.Debug("msgs", zap.Any("msgs", msgs))
 
 	return nil
 }
 
-func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore, regularNodes int) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore, regularNodes, committeeNodes int) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
-	for _, k := range net.NodeKeys {
-		pub, err := rsaencryption.ExtractPublicKey(k.OperatorKey)
+	for i := 0; i < len(net.NodeKeys) && i < committeeNodes; i++ {
+		pub, err := rsaencryption.ExtractPublicKey(net.NodeKeys[i].OperatorKey)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -161,9 +158,11 @@ func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 	}
 	// add to key-managers and subscribe to topic
 	for i, km := range kms {
-		err = km.AddShare(sks[uint64(i+1)])
-		if err != nil {
-			return nil, nil, nil, err
+		if i < committeeNodes {
+			err = km.AddShare(sks[uint64(i+1)])
+			if err != nil {
+				return nil, nil, nil, err
+			}
 		}
 
 		val := validator.NewValidator(&validator.Options{
