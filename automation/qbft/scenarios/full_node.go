@@ -120,10 +120,12 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 		}
 	}
 
-	for height := fromHeight; height <= toHeight; height++ {
-		if err := startNode(r.validators[r.NumOfOperators()+r.NumOfFullNodes()-1], height, []byte("value"), r.logger); err != nil {
-			return errors.Wrap(err, "could not start last node")
-		}
+	if err := r.validators[r.NumOfOperators()].Start(); err != nil {
+		return errors.Wrap(err, "could not start first full node validator")
+	}
+
+	if err := r.startInstances(toHeight+1, r.validators...); err != nil {
+		return errors.Wrap(err, "could not start all instances")
 	}
 
 	return nil
