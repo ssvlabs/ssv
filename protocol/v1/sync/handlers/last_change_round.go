@@ -29,7 +29,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 			if err != nil {
 				logex.GetLogger().Warn("change round sync msg error", zap.Error(err))
 			}
-			plogger.Debug("last change round handler", zap.Any("msgs", res))
+			plogger.Debug("last change round handler", zap.Any("msgs", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}
 

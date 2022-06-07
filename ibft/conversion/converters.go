@@ -49,8 +49,12 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 				syncMsg.Status = message.StatusNotFound
 			}
 			if err := msgV0.SyncMessage.Error; len(err) > 0 {
-				logex.GetLogger().Warn("sync message error", zap.String("fromPeers", msgV0.SyncMessage.FromPeerID), zap.String("symcType", msgV0.SyncMessage.Type.String()), zap.String("err", err))
-				syncMsg.Status = message.StatusError
+				if err == message.EntryNotFoundError {
+					syncMsg.Status = message.StatusNotFound
+				} else {
+					logex.GetLogger().Warn("sync message error", zap.String("fromPeers", msgV0.SyncMessage.FromPeerID), zap.String("symcType", msgV0.SyncMessage.Type.String()), zap.String("err", err))
+					syncMsg.Status = message.StatusError
+				}
 			}
 			switch msgV0.SyncMessage.Type {
 			case network.Sync_GetHighestType:
