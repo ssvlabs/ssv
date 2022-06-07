@@ -112,8 +112,12 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(startErr, "could not start validators")
 	}
 
-	if err := r.startInstances(message.Height(0), message.Height(3)); err != nil {
+	if err := r.startInstances(r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]...); err != nil {
 		return errors.Wrap(err, "could not start instances")
+	}
+
+	if err := startNode(r.validators[r.NumOfOperators()+r.NumOfFullNodes()-1], 1, []byte("value"), r.logger); err != nil {
+		return errors.Wrap(err, "could not start last node")
 	}
 
 	return nil
@@ -125,7 +129,7 @@ func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
 		return err
 	}
 	if len(msgs) < 4 {
-		return errors.New("node-0 didn't sync all messages")
+		return errors.New("node-4 didn't sync all messages")
 	}
 	r.logger.Debug("msgs", zap.Any("msgs", msgs))
 
@@ -181,23 +185,20 @@ func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 	return share, sks, validators, nil
 }
 
-func (r *fullNodeScenario) startInstances(from, to message.Height) error {
+func (r *fullNodeScenario) startInstances(instances ...validator.IValidator) error {
 	var wg sync.WaitGroup
 
-	h := from
-
-	for h <= to {
-		for i := uint64(1); i < uint64(r.NumOfOperators()); i++ {
-			wg.Add(1)
-			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
-				if err := startNode(node, seqNumber, []byte("value"), r.logger); err != nil {
-					r.logger.Error("could not start node", zap.Uint64("node", index-1), zap.Error(err))
-				}
-				wg.Done()
-			}(r.validators[i-1], i, h)
-		}
-		wg.Wait()
-		h++
+	for i, instance := range instances {
+		wg.Add(1)
+		go func(node validator.IValidator, index int, seqNumber message.Height) {
+			if err := startNode(node, seqNumber, []byte("value"), r.logger); err != nil {
+				r.logger.Error("could not start node", zap.Int("node", index), zap.Error(err))
+			}
+			wg.Done()
+		}(instance, i, 1)
 	}
+
+	wg.Wait()
+
 	return nil
 }
