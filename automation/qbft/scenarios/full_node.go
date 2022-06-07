@@ -112,12 +112,18 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(startErr, "could not start validators")
 	}
 
-	if err := r.startInstances(r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]...); err != nil {
-		return errors.Wrap(err, "could not start instances")
+	const fromHeight = message.Height(1)
+	const toHeight = message.Height(4)
+	for height := fromHeight; height <= toHeight; height++ {
+		if err := r.startInstances(height, r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]...); err != nil {
+			return errors.Wrap(err, "could not start instances")
+		}
 	}
 
-	if err := startNode(r.validators[r.NumOfOperators()+r.NumOfFullNodes()-1], 1, []byte("value"), r.logger); err != nil {
-		return errors.Wrap(err, "could not start last node")
+	for height := fromHeight; height <= toHeight; height++ {
+		if err := startNode(r.validators[r.NumOfOperators()+r.NumOfFullNodes()-1], height, []byte("value"), r.logger); err != nil {
+			return errors.Wrap(err, "could not start last node")
+		}
 	}
 
 	return nil
@@ -185,7 +191,7 @@ func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 	return share, sks, validators, nil
 }
 
-func (r *fullNodeScenario) startInstances(instances ...validator.IValidator) error {
+func (r *fullNodeScenario) startInstances(height message.Height, instances ...validator.IValidator) error {
 	var wg sync.WaitGroup
 
 	for i, instance := range instances {
@@ -195,7 +201,7 @@ func (r *fullNodeScenario) startInstances(instances ...validator.IValidator) err
 				r.logger.Error("could not start node", zap.Int("node", index), zap.Error(err))
 			}
 			wg.Done()
-		}(instance, i, 1)
+		}(instance, i, height)
 	}
 
 	wg.Wait()
