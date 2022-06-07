@@ -66,6 +66,15 @@ func (e *UnpackError) Error() string {
 	return e.Err.Error()
 }
 
+// DecryptError is returned when the decryption of the share private key fails
+type DecryptError struct {
+	Err error
+}
+
+func (e *DecryptError) Error() string {
+	return e.Err.Error()
+}
+
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (v2 *AbiV2) ParseOperatorAddedEvent(
 	logger *zap.Logger,

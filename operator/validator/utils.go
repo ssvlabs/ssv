@@ -75,7 +75,9 @@ func ShareFromValidatorEvent(
 			shareSecret = &bls.SecretKey{}
 			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorAddedEvent.EncryptedKeys[i]))
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "failed to decrypt share private key")
+				return nil, nil, &abiparser.DecryptError{
+					Err: errors.Wrap(err, "failed to decrypt share private key"),
+				}
 			}
 			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {

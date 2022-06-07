@@ -315,14 +315,18 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	for _, vLog := range logs {
 		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
+			logger := logger.With(
+				zap.Uint64("block", vLog.BlockNumber),
+				zap.String("txHash", vLog.TxHash.Hex()),
+				zap.Error(err),
+			)
 			var unpackErr *abiparser.UnpackError
 			if !errors.As(err, &unpackErr) {
 				nSuccess--
+				logger.Error("Failed to handle event during sync")
+			} else {
+				logger.Warn("Failed to handle event during sync")
 			}
-			ec.logger.Error("Failed to handle event during sync",
-				zap.Uint64("blockNumber", vLog.BlockNumber),
-				zap.String("txHash", vLog.TxHash.Hex()),
-				zap.Error(err))
 			continue
 		}
 	}
