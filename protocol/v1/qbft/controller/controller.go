@@ -219,6 +219,7 @@ func (c *Controller) Init() error {
 			}
 			c.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+			atomic.StoreUint32(&c.state, InitiatedHandlers) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
