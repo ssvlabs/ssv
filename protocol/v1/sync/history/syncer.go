@@ -11,6 +11,10 @@ import (
 	"time"
 )
 
+const (
+	numOfRetries = 3
+)
+
 // DecidedHandler handles incoming decided messages
 type DecidedHandler func(*message.SignedMessage) error
 
@@ -52,7 +56,7 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 			elapsed := time.Since(start)
 			s.logger.Debug("received and processed history batch", zap.Int64("currentHighest", int64(lastBatch)), zap.Int64("needToSync", int64(to)), zap.Float64("duration", elapsed.Seconds()))
 			return nil
-		}, 3)
+		}, numOfRetries)
 		if err != nil {
 			return err
 		}
