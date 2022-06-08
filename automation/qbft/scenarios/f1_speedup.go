@@ -5,6 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
@@ -13,9 +17,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // F1SpeedupScenario is the f1 speedup scenario name
@@ -38,6 +39,10 @@ func (r *f1SpeedupScenario) NumOfOperators() int {
 }
 
 func (r *f1SpeedupScenario) NumOfBootnodes() int {
+	return 0
+}
+
+func (r *f1SpeedupScenario) NumOfFullNodes() int {
 	return 0
 }
 

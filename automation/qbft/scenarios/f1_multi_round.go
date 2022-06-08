@@ -43,6 +43,10 @@ func (r *f1MultiRoundScenario) NumOfBootnodes() int {
 	return 0
 }
 
+func (r *f1MultiRoundScenario) NumOfFullNodes() int {
+	return 0
+}
+
 func (r *f1MultiRoundScenario) Name() string {
 	return F1MultiRoundScenario
 }

@@ -3,6 +3,9 @@ package scenarios
 import (
 	"context"
 	"fmt"
+
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -14,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
 // QBFTScenarioBootstrapper bootstraps qbft scenarios
@@ -26,8 +28,9 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 		logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", scenario.Name()))
 		logger.Info("creating resources")
 
+		totalNodes := scenario.NumOfOperators() + scenario.NumOfFullNodes()
 		dbs := make([]basedb.IDb, 0)
-		for i := 0; i < scenario.NumOfOperators(); i++ {
+		for i := 0; i < totalNodes; i++ {
 			db, err := storage.GetStorageFactory(basedb.Options{
 				Type:   "badger-memory",
 				Path:   "",
@@ -40,7 +43,7 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 		}
 		forkVersion := forksprotocol.V0ForkVersion
 
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, scenario.NumOfOperators(), scenario.NumOfOperators()/2, scenario.NumOfBootnodes() > 0)
+		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, scenario.NumOfBootnodes() > 0)
 		if err != nil {
 			return nil, err
 		}

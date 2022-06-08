@@ -2,6 +2,13 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/ibft/conversion"
@@ -14,11 +21,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 // OnForkV1Scenario is the scenario name for OnForkV1
@@ -42,6 +44,10 @@ func (f *onForkV1) NumOfOperators() int {
 }
 
 func (f *onForkV1) NumOfBootnodes() int {
+	return 0
+}
+
+func (f *onForkV1) NumOfFullNodes() int {
 	return 0
 }
 
