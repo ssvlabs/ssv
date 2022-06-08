@@ -41,6 +41,10 @@ func (r *syncFailoverScenario) NumOfBootnodes() int {
 	return 0
 }
 
+func (r *syncFailoverScenario) NumOfFullNodes() int {
+	return 0
+}
+
 func (r *syncFailoverScenario) Name() string {
 	return SyncFailoverScenario
 }

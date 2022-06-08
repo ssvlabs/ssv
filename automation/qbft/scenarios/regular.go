@@ -5,15 +5,16 @@ import (
 	"sync"
 	"time"
 
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // RegularScenario is the regular scenario name
@@ -37,6 +38,10 @@ func (r *regularScenario) NumOfOperators() int {
 }
 
 func (r *regularScenario) NumOfBootnodes() int {
+	return 0
+}
+
+func (r *regularScenario) NumOfFullNodes() int {
 	return 0
 }
 

@@ -2,6 +2,13 @@ package scenarios
 
 import (
 	"fmt"
+	"sync"
+	"time"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/ibft/conversion"
@@ -15,11 +22,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 /// TODO: extract code duplicates with onForkV1
@@ -47,6 +49,10 @@ func (f *onForkV13Nodes) NumOfOperators() int {
 }
 
 func (f *onForkV13Nodes) NumOfBootnodes() int {
+	return 0
+}
+
+func (f *onForkV13Nodes) NumOfFullNodes() int {
 	return 0
 }
 

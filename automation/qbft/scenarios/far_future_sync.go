@@ -41,6 +41,10 @@ func (r *farFutureSyncScenario) NumOfBootnodes() int {
 	return 0
 }
 
+func (r *farFutureSyncScenario) NumOfFullNodes() int {
+	return 0
+}
+
 func (r *farFutureSyncScenario) Name() string {
 	return FarFutureSyncScenario
 }

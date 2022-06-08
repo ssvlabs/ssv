@@ -34,6 +34,8 @@ func NewScenario(name string, logger *zap.Logger) runner.Scenario {
 			s = newRegularScenario(logger)
 		case SyncFailoverScenario:
 			s = newSyncFailoverScenario(logger)
+		case FullNodeScenario:
+			s = newFullNodeScenario(logger)
 		default:
 			logger.Panic("could not find scenario")
 		}

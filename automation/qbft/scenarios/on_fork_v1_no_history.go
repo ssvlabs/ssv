@@ -42,6 +42,10 @@ func (f *onForkV1NoHistory) NumOfBootnodes() int {
 	return 0
 }
 
+func (f *onForkV1NoHistory) NumOfFullNodes() int {
+	return 0
+}
+
 func (f *onForkV1NoHistory) Name() string {
 	return OnForkV1NoHistoryScenario
 }

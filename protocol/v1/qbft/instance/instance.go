@@ -66,7 +66,7 @@ type Instance struct {
 	stageChangedChan chan qbft.RoundState
 
 	// flags
-	stopped     bool
+	stopped     atomic.Bool
 	initialized bool
 
 	// locks
@@ -75,7 +75,6 @@ type Instance struct {
 	processChangeRoundQuorumOnce *sync.Once
 	processPrepareQuorumOnce     *sync.Once
 	processCommitQuorumOnce      *sync.Once
-	stopLock                     sync.Mutex
 	lastChangeRoundMsgLock       sync.RWMutex
 	stageChanCloseChan           sync.Mutex
 
@@ -118,11 +117,12 @@ func NewInstance(opts *Options) Instancer {
 		processChangeRoundQuorumOnce: &sync.Once{},
 		processPrepareQuorumOnce:     &sync.Once{},
 		processCommitQuorumOnce:      &sync.Once{},
-		stopLock:                     sync.Mutex{},
 		lastChangeRoundMsgLock:       sync.RWMutex{},
 		stageChanCloseChan:           sync.Mutex{},
 
 		changeRoundStore: opts.ChangeRoundStore,
+
+		stopped: *atomic.NewBool(false),
 	}
 
 	ret.setFork(opts.Fork)
@@ -214,14 +214,13 @@ func (i *Instance) Stop() {
 // stop stops the instance
 func (i *Instance) stop() {
 	i.Logger.Info("stopping iBFT instance...")
-	i.stopLock.Lock()
-	defer i.stopLock.Unlock()
-	i.Logger.Debug("STOPPING IBFTController -> pass stopLock")
-	i.stopped = true
+	i.Logger.Debug("STOPPING IBFTController -> set stopped to true")
+	i.stopped.Store(true)
+	i.Logger.Debug("STOPPING IBFTController -> kill round timer")
 	i.roundTimer.Kill()
 	i.Logger.Debug("STOPPING IBFTController -> stopped round timer")
 	i.ProcessStageChange(qbft.RoundStateStopped)
-	i.Logger.Debug("STOPPING IBFTController -> round stage stopped")
+	i.Logger.Debug("STOPPING IBFTController -> round stage set stopped")
 	// stop stage chan
 	if i.stageChangedChan != nil {
 		i.Logger.Debug("STOPPING IBFTController -> lock stage chan")
@@ -234,16 +233,12 @@ func (i *Instance) stop() {
 		i.stageChanCloseChan.Unlock()
 		i.Logger.Debug("STOPPING IBFTController -> stageChangedChan chan unlocked")
 	}
-
 	i.Logger.Info("stopped iBFT instance")
 }
 
 // Stopped is stopping queue work
 func (i *Instance) Stopped() bool {
-	i.stopLock.Lock()
-	defer i.stopLock.Unlock()
-
-	return i.stopped
+	return i.stopped.Load()
 }
 
 // ProcessMsg will process the message
@@ -290,6 +285,11 @@ func (i *Instance) bumpToRound(round message.Round) {
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
 func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
+	// in order to prevent race condition between timer timeout and decided state. once decided we need to prevent any other new state
+	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) && stage != qbft.RoundStateStopped {
+		return
+	}
+
 	role := i.State().GetIdentifier().GetRoleType().String()
 	pk := i.State().GetIdentifier().GetValidatorPK()
 	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(stage))
