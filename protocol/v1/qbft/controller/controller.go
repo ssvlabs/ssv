@@ -131,7 +131,7 @@ func New(opts Options) IController {
 		forkLock:            &sync.Mutex{},
 	}
 
-	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
+	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.getNodeMode(), opts.Storage, opts.Network)
 	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	// set flags
@@ -334,14 +334,14 @@ func (c *Controller) messageHandler(msg *message.SSVMessage) error {
 	return nil
 }
 
-func (c *Controller) isFullNode() bool {
+func (c *Controller) getNodeMode() strategy.Mode {
 	isPostFork := c.fork.VersionName() != forksprotocol.V0ForkVersion.String()
-	if !isPostFork { // by default when pre fork, full sync is true
-		return true
+	if !isPostFork { // by default when pre fork, the mode is fullnode
+		return strategy.ModeFullNode
 	}
 	// otherwise, checking flag
 	if c.fullNode {
-		return true
+		return strategy.ModeFullNodeQuiet
 	}
-	return false
+	return strategy.ModeRegularNode
 }

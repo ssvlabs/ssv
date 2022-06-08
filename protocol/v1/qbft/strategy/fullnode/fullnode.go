@@ -21,12 +21,12 @@ type fullNode struct {
 }
 
 // NewFullNodeStrategy creates a new instance of fullNode strategy
-func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer) strategy.Decided {
+func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, syncer p2pprotocol.Syncer, quiet bool) strategy.Decided {
 	return &fullNode{
 		logger:         logger.With(zap.String("who", "FullNodeStrategy")),
 		store:          store,
 		decidedFetcher: lastdecided.NewLastDecidedFetcher(logger.With(zap.String("who", "LastDecidedFetcher")), syncer),
-		historySyncer:  history.NewSyncer(logger.With(zap.String("who", "HistorySyncer")), syncer),
+		historySyncer:  history.NewSyncer(logger.With(zap.String("who", "HistorySyncer")), syncer, quiet),
 	}
 }
 

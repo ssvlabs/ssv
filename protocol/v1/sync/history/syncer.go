@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	numOfRetries = 3
+	numOfRetries = 2
 )
 
 // DecidedHandler handles incoming decided messages
@@ -28,11 +28,13 @@ type Syncer interface {
 type syncer struct {
 	logger *zap.Logger
 	syncer p2pprotocol.Syncer
+	quiet  bool
 }
 
 // NewSyncer creates a new instance of history syncer
-func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
+func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer, quiet bool) Syncer {
 	return &syncer{
+		quiet:  quiet,
 		logger: logger,
 		syncer: netSyncer,
 	}
@@ -62,11 +64,17 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 		}
 	}
 
-	if len(visited) != int(to-from)+1 {
-		s.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
-		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+	logger := s.logger.With(zap.Int("msg_count", len(visited)), zap.Uint64("to", uint64(to)),
+		zap.Uint64("from", uint64(from)))
+	// if we didn't visit all messages in range > log warning
+	if len(visited) < int(to-from) {
+		logger.Warn("not all messages in range were saved", zap.Any("visited", visited))
+		if !s.quiet {
+			return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+		}
 	}
-	s.logger.Debug("done with range history sync", zap.Int("totalProcessed", len(visited)))
+	logger.Debug("done with range history sync")
+
 	return nil
 }
 
