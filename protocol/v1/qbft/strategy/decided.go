@@ -18,9 +18,6 @@ const (
 	ModeRegularNode Mode = iota
 	// ModeFullNode is a fullnode mode, default for v0
 	ModeFullNode
-	// ModeFullNodeQuiet is a quiet fullnode where we don't fail the sync if
-	// some subset of messages can't be fetched.
-	ModeFullNodeQuiet
 )
 
 // Decided helps to decouple regular from full-node mode where the node is saving decided history.

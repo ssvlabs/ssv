@@ -345,7 +345,7 @@ func (c *Controller) getNodeMode() strategy.Mode {
 	}
 	// otherwise, checking flag
 	if c.fullNode {
-		return strategy.ModeFullNodeQuiet
+		return strategy.ModeFullNode
 	}
 	return strategy.ModeRegularNode
 }

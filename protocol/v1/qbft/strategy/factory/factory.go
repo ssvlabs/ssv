@@ -32,10 +32,8 @@ func (f *Factory) GetStrategy() strategy.Decided {
 	switch f.mode {
 	case strategy.ModeRegularNode:
 		return node.NewRegularNodeStrategy(f.logger, f.decidedStore, f.network)
-	case strategy.ModeFullNodeQuiet:
-		return fullnode.NewFullNodeStrategy(f.logger, f.decidedStore, f.network, true)
 	case strategy.ModeFullNode:
-		return fullnode.NewFullNodeStrategy(f.logger, f.decidedStore, f.network, false)
+		return fullnode.NewFullNodeStrategy(f.logger, f.decidedStore, f.network)
 	default:
 		return nil
 	}

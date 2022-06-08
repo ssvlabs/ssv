@@ -6,7 +6,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 )
@@ -28,13 +27,11 @@ type Syncer interface {
 type syncer struct {
 	logger *zap.Logger
 	syncer p2pprotocol.Syncer
-	quiet  bool
 }
 
 // NewSyncer creates a new instance of history syncer
-func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer, quiet bool) Syncer {
+func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
 	return &syncer{
-		quiet:  quiet,
 		logger: logger,
 		syncer: netSyncer,
 	}
@@ -69,9 +66,7 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 	// if we didn't visit all messages in range > log warning
 	if len(visited) < int(to-from) {
 		logger.Warn("not all messages in range were saved", zap.Any("visited", visited))
-		if !s.quiet {
-			return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
-		}
+		//return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	logger.Debug("done with range history sync")
 
