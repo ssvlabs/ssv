@@ -184,7 +184,7 @@ func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			Signer:                     km,
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
-			ReadMode:                   false,
+			ReadMode:                   i >= committeeNodes,
 			FullNode:                   i >= regularNodes,
 		})
 		validators = append(validators, val)
