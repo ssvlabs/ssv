@@ -161,6 +161,10 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	atomic.StoreUint32(&c.state, Forking)
 	defer atomic.StoreUint32(&c.state, Ready)
 
+	if i := c.getCurrentInstance(); i != nil {
+		i.Stop()
+		c.setCurrentInstance(nil)
+	}
 	c.processAllDecided(c.messageHandler)
 	cleared := c.q.Clean(msgqueue.AllIndicesCleaner)
 	c.logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
