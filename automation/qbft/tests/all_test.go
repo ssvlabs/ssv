@@ -13,8 +13,7 @@ import (
 func Test_Automation_QBFTScenarios(t *testing.T) {
 	logger := logex.Build("simulation", zapcore.DebugLevel, nil)
 	scenariosToRun := []string{
-		//scenarios.OnForkV1Scenario,
-		scenarios.FullNodeScenario,
+		scenarios.OnForkV1Scenario,
 	}
 
 	for _, s := range scenariosToRun {
