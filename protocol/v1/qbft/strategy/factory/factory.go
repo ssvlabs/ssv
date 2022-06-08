@@ -12,16 +12,16 @@ import (
 // Factory is responsible for creating instances of decided strategies
 type Factory struct {
 	logger       *zap.Logger
-	isFullNode   bool
+	mode         strategy.Mode
 	decidedStore qbftstorage.DecidedMsgStore
 	network      p2pprotocol.Network
 }
 
 // NewDecidedFactory creates a new instance of Factory
-func NewDecidedFactory(logger *zap.Logger, isFullNode bool, decidedStore qbftstorage.DecidedMsgStore, network p2pprotocol.Network) *Factory {
+func NewDecidedFactory(logger *zap.Logger, mode strategy.Mode, decidedStore qbftstorage.DecidedMsgStore, network p2pprotocol.Network) *Factory {
 	return &Factory{
 		logger:       logger,
-		isFullNode:   isFullNode,
+		mode:         mode,
 		decidedStore: decidedStore,
 		network:      network,
 	}
@@ -29,9 +29,12 @@ func NewDecidedFactory(logger *zap.Logger, isFullNode bool, decidedStore qbftsto
 
 // GetStrategy returns the decided strategy
 func (f *Factory) GetStrategy() strategy.Decided {
-	// create decidedStrategy
-	if f.isFullNode {
+	switch f.mode {
+	case strategy.ModeRegularNode:
+		return node.NewRegularNodeStrategy(f.logger, f.decidedStore, f.network)
+	case strategy.ModeFullNode:
 		return fullnode.NewFullNodeStrategy(f.logger, f.decidedStore, f.network)
+	default:
+		return nil
 	}
-	return node.NewRegularNodeStrategy(f.logger, f.decidedStore, f.network)
 }

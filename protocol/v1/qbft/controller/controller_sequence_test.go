@@ -173,7 +173,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			if test.storage != nil {
 				i.instanceStorage = test.storage
 				i.changeRoundStorage = test.storage
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.isFullNode(), test.storage, nil)
+				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), test.storage, nil)
 			} else {
 				options := basedb.Options{
 					Type:   "badger-memory",
@@ -186,7 +186,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				store := qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
 				i.instanceStorage = store
 				i.changeRoundStorage = store
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.isFullNode(), store, nil)
+				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), store, nil)
 			}
 
 			i.decidedStrategy = i.decidedFactory.GetStrategy()
