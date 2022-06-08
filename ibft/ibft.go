@@ -1,10 +1,11 @@
 package ibft
 
 import (
-	"github.com/bloxapp/ssv/ibft/pipeline"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // ControllerStartInstanceOptions defines type for Controller instance options
@@ -59,17 +60,17 @@ type Instance interface {
 // Pipelines holds all major instance pipeline implementations
 type Pipelines interface {
 	// PrePrepareMsgPipeline is the full processing msg pipeline for a pre-prepare msg
-	PrePrepareMsgPipeline() pipeline.Pipeline
+	PrePrepareMsgPipeline() pipelines.SignedMessagePipeline
 	// PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
-	PrepareMsgPipeline() pipeline.Pipeline
+	PrepareMsgPipeline() pipelines.SignedMessagePipeline
 	// CommitMsgValidationPipeline is a msg validation ONLY pipeline
-	CommitMsgValidationPipeline() pipeline.Pipeline
+	CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 	// CommitMsgPipeline is the full processing msg pipeline for a commit msg
-	CommitMsgPipeline() pipeline.Pipeline
+	CommitMsgPipeline() pipelines.SignedMessagePipeline
 	// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
-	DecidedMsgPipeline() pipeline.Pipeline
-	// changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
-	ChangeRoundMsgValidationPipeline() pipeline.Pipeline
+	DecidedMsgPipeline() pipelines.SignedMessagePipeline
+	// ChangeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
+	ChangeRoundMsgValidationPipeline() pipelines.SignedMessagePipeline
 	// ChangeRoundMsgPipeline is the full processing msg pipeline for a change round msg
-	ChangeRoundMsgPipeline() pipeline.Pipeline
+	ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline
 }

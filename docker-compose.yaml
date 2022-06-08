@@ -73,7 +73,7 @@ services:
     << : *default-dev
     container_name: ssv-node-1-dev
 #    ports:
-#      - 40005:40005
+#      - "40005:40005"
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv

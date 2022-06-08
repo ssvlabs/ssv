@@ -4,17 +4,19 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
 type syncFailover struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
-	dbs        []collections.Iibft
+	nodes      []ibft.IController
+	dbs        []qbftstorage.QBFTStore
 	valueCheck valcheck.ValueCheck
 }
 
@@ -26,7 +28,7 @@ func SyncFailover(logger *zap.Logger, valueCheck valcheck.ValueCheck) IScenario 
 	}
 }
 
-func (sf *syncFailover) Start(nodes []ibft.Controller, dbs []collections.Iibft) {
+func (sf *syncFailover) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTStore) {
 	sf.nodes = nodes
 	sf.dbs = dbs
 	nodeCount := len(nodes)
@@ -35,7 +37,7 @@ func (sf *syncFailover) Start(nodes []ibft.Controller, dbs []collections.Iibft) 
 	var wg sync.WaitGroup
 	for i := uint64(1); i < uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller) {
+		go func(node ibft.IController) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -46,15 +48,15 @@ func (sf *syncFailover) Start(nodes []ibft.Controller, dbs []collections.Iibft) 
 	sf.logger.Info("waiting for nodes to init")
 	wg.Wait()
 
-	msgs := map[uint64]*proto.SignedMessage{}
+	msgs := map[message.Height]*message.SignedMessage{}
 	// start several instances one by one
-	seqNumber := uint64(0)
+	seqNumber := message.Height(0)
 loop:
 	for {
 		sf.logger.Info("started instances")
 		for i := uint64(1); i < uint64(nodeCount); i++ {
 			wg.Add(1)
-			go func(node ibft.Controller, index uint64) {
+			go func(node ibft.IController, index uint64) {
 				if msg := sf.startNode(node, index, seqNumber); msg != nil {
 					msgs[seqNumber] = msg
 				}
@@ -68,10 +70,10 @@ loop:
 		seqNumber++
 	}
 
-	dummy := &proto.SignedMessage{Message: &proto.Message{Lambda: msgs[1].Message.Lambda, SeqNumber: uint64(1)}}
+	dummy := &message.SignedMessage{Message: &message.ConsensusMessage{Identifier: msgs[1].Message.Identifier, Height: 1}}
 	// overriding highest decided to make the system dirty
 	for i := 0; i < len(dbs)-1; i++ {
-		_ = dbs[i].SaveHighestDecidedInstance(dummy)
+		_ = dbs[i].SaveLastDecided(dummy)
 	}
 
 	node4 := nodes[3]
@@ -80,7 +82,7 @@ loop:
 		sf.logger.Debug("error initializing ibft (as planned)", zap.Error(err))
 		// fill DBs with correct highest decided and trying to init again
 		for i := 0; i < len(dbs)-1; i++ {
-			_ = dbs[i].SaveHighestDecidedInstance(msgs[seqNumber])
+			_ = dbs[i].SaveLastDecided(msgs[seqNumber])
 		}
 		if err = node4.Init(); err != nil {
 			sf.logger.Error("failed to reinitialize IBFT", zap.Error(err))
@@ -91,10 +93,10 @@ loop:
 	if err != nil {
 		sf.logger.Error("node #4 could not get state", zap.Error(err))
 	} else {
-		sf.logger.Info("node #4 synced", zap.Uint64("highest decided", nextSeq-1))
+		sf.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 	}
 
-	decides, err := dbs[3].GetDecidedInRange(msgs[1].Message.Lambda, uint64(0), uint64(10))
+	decides, err := dbs[3].GetDecided(msgs[1].Message.Identifier, 0, 10)
 	if err != nil {
 		sf.logger.Error("node #4 could not get decided in range", zap.Error(err))
 	} else {
@@ -102,12 +104,11 @@ loop:
 	}
 }
 
-func (sf *syncFailover) startNode(node ibft.Controller, index uint64, seqNumber uint64) *proto.SignedMessage {
-	res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-		Logger:     sf.logger,
-		ValueCheck: sf.valueCheck,
-		SeqNumber:  seqNumber,
-		Value:      []byte("value"),
+func (sf *syncFailover) startNode(node ibft.IController, index uint64, seqNumber message.Height) *message.SignedMessage {
+	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
+		Logger:    sf.logger,
+		SeqNumber: seqNumber,
+		Value:     []byte("value"),
 	})
 	if err != nil {
 		sf.logger.Error("instance returned error", zap.Error(err))
@@ -116,13 +117,13 @@ func (sf *syncFailover) startNode(node ibft.Controller, index uint64, seqNumber 
 		sf.logger.Error("instance could not decide")
 		return nil
 	} else {
-		sf.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
+		sf.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Data)))
 	}
 
 	if err := sf.dbs[index-1].SaveDecided(res.Msg); err != nil {
 		sf.logger.Error("could not save decided msg", zap.Uint64("node_id", index), zap.Error(err))
 	}
-	if err := sf.dbs[index-1].SaveHighestDecidedInstance(res.Msg); err != nil {
+	if err := sf.dbs[index-1].SaveLastDecided(res.Msg); err != nil {
 		sf.logger.Error("could not save decided msg", zap.Uint64("node_id", index), zap.Error(err))
 	}
 	return res.Msg

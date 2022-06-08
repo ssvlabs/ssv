@@ -4,15 +4,17 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/storage/collections"
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/valcheck"
+	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
 type regular struct {
 	logger     *zap.Logger
-	nodes      []ibft.Controller
+	nodes      []ibft.IController
 	valueCheck valcheck.ValueCheck
 }
 
@@ -24,7 +26,7 @@ func NewRegularScenario(logger *zap.Logger, valueCheck valcheck.ValueCheck) ISce
 	}
 }
 
-func (r *regular) Start(nodes []ibft.Controller, _ []collections.Iibft) {
+func (r *regular) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTStore) {
 	r.nodes = nodes
 	nodeCount := len(nodes)
 
@@ -32,7 +34,7 @@ func (r *regular) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	var wg sync.WaitGroup
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller) {
+		go func(node ibft.IController) {
 			if err := node.Init(); err != nil {
 				fmt.Printf("error initializing ibft")
 			}
@@ -46,20 +48,19 @@ func (r *regular) Start(nodes []ibft.Controller, _ []collections.Iibft) {
 	r.logger.Info("start instances")
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		wg.Add(1)
-		go func(node ibft.Controller, index uint64) {
+		go func(node ibft.IController, index uint64) {
 			defer wg.Done()
-			res, err := node.StartInstance(ibft.ControllerStartInstanceOptions{
-				Logger:     r.logger,
-				ValueCheck: r.valueCheck,
-				SeqNumber:  1,
-				Value:      []byte("value"),
+			res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
+				Logger:    r.logger,
+				SeqNumber: 1,
+				Value:     []byte("value"),
 			})
 			if err != nil {
 				r.logger.Error("instance returned error", zap.Error(err))
 			} else if !res.Decided {
 				r.logger.Error("instance could not decide")
 			} else {
-				r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Value)))
+				r.logger.Info("decided with value", zap.String("decided value", string(res.Msg.Message.Data)))
 			}
 		}(nodes[i-1], i)
 	}

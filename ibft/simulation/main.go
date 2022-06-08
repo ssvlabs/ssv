@@ -6,28 +6,24 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/beacon"
-	"github.com/bloxapp/ssv/ibft"
-	"github.com/bloxapp/ssv/ibft/controller"
-	v0 "github.com/bloxapp/ssv/ibft/controller/forks/v0"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
-	"github.com/bloxapp/ssv/network"
-	networkForks "github.com/bloxapp/ssv/network/forks"
-	networkForkV0 "github.com/bloxapp/ssv/network/forks/v0"
-	"github.com/bloxapp/ssv/network/msgqueue"
-	"github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/logex"
-	validatorstorage "github.com/bloxapp/ssv/validator/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/ibft/simulation/scenarios"
+	"github.com/bloxapp/ssv/network"
+	p2p "github.com/bloxapp/ssv/network/p2p"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 /**
@@ -50,23 +46,29 @@ func (i *alwaysTrueValueCheck) Check(value []byte) error {
 	return nil
 }
 
-func networking(fork networkForks.Fork) network.Network {
+func networking(forkVersion forksprotocol.ForkVersion) network.P2PNetwork {
 	networkPrivateKey, err := utils.ECDSAPrivateKey(logger, "")
 	if err != nil {
 		logger.Fatal("failed to generate network key", zap.Error(err))
 	}
-	ret, err := p2p.New(context.Background(), logger, &p2p.Config{
-		DiscoveryType:     "mdns",
+
+	net := p2p.New(context.Background(), &p2p.Config{
+		Logger:            logger,
 		MaxBatchResponse:  10,
 		RequestTimeout:    time.Second * 5,
 		NetworkPrivateKey: networkPrivateKey,
-		Fork:              fork,
+		ForkVersion:       forkVersion,
 	})
-	if err != nil {
-		logger.Fatal("failed to create db", zap.Error(err))
+
+	if err := net.Setup(); err != nil {
+		panic(err)
 	}
 
-	return ret
+	if err := net.Start(); err != nil {
+		panic(err)
+	}
+
+	return net
 }
 
 type testSigner struct {
@@ -88,9 +90,9 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *proto.Message, pk []byte) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key)
+		sig, err := message.Sign(key, "")
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")
 		}
@@ -103,7 +105,7 @@ func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.D
 	return nil, nil, nil
 }
 
-func db() collections.Iibft {
+func db() qbftstorage.QBFTStore {
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",
@@ -113,23 +115,21 @@ func db() collections.Iibft {
 		logger.Fatal("failed to create db", zap.Error(err))
 	}
 
-	ret := collections.NewIbft(db, logger, "attestation")
-
-	return &ret
+	return qbftstorage.NewQBFTStore(db, logger, "attestation")
 }
 
-func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
+func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 
-	ret := make(map[uint64]*validatorstorage.Share)
+	ret := make(map[uint64]*beacon.Share)
 
 	for i := uint64(1); i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
-		nodes[i] = &proto.Node{
-			IbftId: i,
+		nodes[message.OperatorID(i)] = &beacon.Node{
+			IbftID: i,
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[i] = sk
@@ -139,8 +139,8 @@ func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.Secret
 	sk.SetByCSPRNG()
 
 	for i := uint64(1); i <= cnt; i++ {
-		ret[i] = &validatorstorage.Share{
-			NodeID:    i,
+		ret[i] = &beacon.Share{
+			NodeID:    message.OperatorID(i),
 			PublicKey: sk.GetPublicKey(),
 			Committee: nodes,
 		}
@@ -151,36 +151,35 @@ func generateShares(cnt uint64) (map[uint64]*validatorstorage.Share, *bls.Secret
 
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
-	identifier := format.IdentifierFormat(shareSk.GetPublicKey().Serialize(), beacon.RoleTypeAttester.String())
-	dbs := make([]collections.Iibft, 0)
+	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), message.RoleTypeAttester)
+	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
-	nodes := make([]ibft.Controller, 0)
+	nodes := make([]ibft.IController, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		net := networking(networkForkV0.New())
+		net := networking(forksprotocol.V0ForkVersion)
 		dbs = append(dbs, db())
 		signer := newTestSigner()
 		_ = signer.AddShare(sks[i])
-		if err := net.SubscribeToValidatorNetwork(shareSk.GetPublicKey()); err != nil {
+		if err := net.Subscribe(shareSk.GetPublicKey().Serialize()); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
-		node := controller.New(
-			beacon.RoleTypeAttester,
-			[]byte(identifier),
-			logger.With(zap.Uint64("simulation_node_id", i)),
-			dbs[i-1],
-			net,
-			msgqueue.New(),
-			&proto.InstanceConfig{
-				RoundChangeDurationSeconds:   3,
-				LeaderPreprepareDelaySeconds: 1,
-			},
-			shares[i],
-			v0.New(),
-			signer,
-			time.Millisecond*200,
-		)
-		nodes = append(nodes, node)
+
+		nodeOpts := ibft.Options{
+			Context:        context.Background(),
+			Role:           message.RoleTypeAttester,
+			Identifier:     identifier,
+			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
+			Storage:        dbs[i-1],
+			Network:        net,
+			InstanceConfig: qbft.DefaultConsensusParams(),
+			ValidatorShare: shares[i],
+			Version:        forksprotocol.V0ForkVersion,
+			SyncRateLimit:  time.Millisecond * 200,
+			Signer:         signer,
+		}
+
+		nodes = append(nodes, ibft.New(nodeOpts))
 	}
 
 	scenario.Start(nodes, dbs)
