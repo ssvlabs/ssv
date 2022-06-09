@@ -20,7 +20,7 @@ import (
 type IValidator interface {
 	Start() error
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
-	ProcessMsg(msg *message.SSVMessage) // TODO need to be as separate interface?
+	ProcessMsg(msg *message.SSVMessage) error // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 
 	forksprotocol.ForkHandler
@@ -115,15 +115,11 @@ func (v *Validator) GetShare() *beaconprotocol.Share {
 	return v.Share
 }
 
-// ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
-// Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
-func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
+// ProcessMsg processes a new msg
+func (v *Validator) ProcessMsg(msg *message.SSVMessage) error {
 	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 	// synchronize process
-	err := ibftController.ProcessMsg(msg)
-	if err != nil {
-		return
-	}
+	return ibftController.ProcessMsg(msg)
 }
 
 // OnFork updates all QFBT controllers with the new fork version

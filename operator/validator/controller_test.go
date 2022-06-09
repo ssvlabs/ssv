@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
@@ -11,23 +12,8 @@ import (
 	"testing"
 )
 
-func setupController(logger *zap.Logger, validators map[string]validator.IValidator) controller {
-	return controller{
-		context:                    context.Background(),
-		collection:                 nil,
-		logger:                     logger,
-		beacon:                     nil,
-		keyManager:                 nil,
-		shareEncryptionKeyProvider: nil,
-		validatorsMap: &validatorsMap{
-			logger:        logger.With(zap.String("component", "validatorsMap")),
-			ctx:           context.Background(),
-			lock:          sync.RWMutex{},
-			validatorsMap: validators,
-		},
-		metadataUpdateQueue:    nil,
-		metadataUpdateInterval: 0,
-	}
+func TestHandleNonCommitteeMessages(t *testing.T) {
+
 }
 
 func TestGetIndices(t *testing.T) {
@@ -91,6 +77,31 @@ func TestGetIndices(t *testing.T) {
 	indices := ctr.GetValidatorsIndices()
 	logger.Info("result", zap.Any("indices", indices))
 	require.Equal(t, 1, len(indices)) // should return only active indices
+}
+
+func setupController(logger *zap.Logger, validators map[string]validator.IValidator) controller {
+	return controller{
+		context:                    context.Background(),
+		collection:                 nil,
+		logger:                     logger,
+		beacon:                     nil,
+		keyManager:                 nil,
+		shareEncryptionKeyProvider: nil,
+		validatorsMap: &validatorsMap{
+			logger:        logger.With(zap.String("component", "validatorsMap")),
+			ctx:           context.Background(),
+			lock:          sync.RWMutex{},
+			validatorsMap: validators,
+		},
+		metadataUpdateQueue:    nil,
+		metadataUpdateInterval: 0,
+		messageWorker: worker.NewWorker(&worker.Config{
+			Ctx:          context.Background(),
+			Logger:       logger,
+			WorkersCount: 1,
+			Buffer:       100,
+		}),
+	}
 }
 
 func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {

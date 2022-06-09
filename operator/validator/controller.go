@@ -57,6 +57,10 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
+
+	// worker flags
+	WorkersCount    int
+	QueueBufferSize int
 }
 
 // Controller represent the validators controller,
@@ -147,8 +151,8 @@ func NewController(options ControllerOptions) Controller {
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
 		Logger:       options.Logger,
-		WorkersCount: 1,   // TODO flag
-		Buffer:       100, // TODO flag
+		WorkersCount: options.WorkersCount,
+		Buffer:       options.QueueBufferSize,
 	}
 
 	validatorOptions := &validator.Options{
@@ -234,7 +238,7 @@ func (c *controller) handleRouterMessages() {
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				v.ProcessMsg(&msg)
+				v.ProcessMsg(&msg) // TODO need to handle error?
 			} else if c.forkVersion != forksprotocol.V0ForkVersion && msg.MsgType == message.SSVDecidedMsgType {
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
@@ -249,9 +253,7 @@ func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
 	opts.ReadMode = true
 
 	val := validator.NewValidator(&opts)
-	// TODO(nkryuchkov): we might need to call val.Start(), we need to check it
-	val.ProcessMsg(msg) // TODO should return error
-	return nil
+	return val.ProcessMsg(msg)
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
@@ -377,7 +379,7 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 func (c *controller) StartNetworkHandlers() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
-	c.messageWorker.AddHandler(c.handleWorkerMessages)
+	c.messageWorker.SetHandler(c.handleWorkerMessages)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.
