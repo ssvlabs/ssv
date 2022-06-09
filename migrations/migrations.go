@@ -3,14 +3,15 @@ package migrations
 import (
 	"bytes"
 	"context"
-	validatorstorage "github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
 
-	exporterstorage "github.com/bloxapp/ssv/exporter/storage"
-	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	exporterstorage "github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/operator/storage"
+	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 var (
@@ -65,8 +66,8 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 		Logger: o.Logger,
 	})
 }
-func (o Options) nodeStorage() operator.Storage {
-	return operator.NewNodeStorage(o.Db, o.Logger)
+func (o Options) nodeStorage() storage.Storage {
+	return storage.NewNodeStorage(o.Db, o.Logger)
 }
 
 // Run executes the migrations.
