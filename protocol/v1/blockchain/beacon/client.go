@@ -40,6 +40,8 @@ type KeyManager interface {
 	Signer
 	// AddShare saves a share key
 	AddShare(shareKey *bls.SecretKey) error
+	// RemoveShare removes a share key
+	RemoveShare(pubKey string) error
 }
 
 // Signer is an interface responsible for all signing operations

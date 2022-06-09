@@ -1,11 +1,15 @@
 package validator
 
 import (
+	"math/big"
 	"strings"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -27,41 +31,26 @@ func UpdateShareMetadata(share *beaconprotocol.Share, bc beaconprotocol.Beacon) 
 	return true, nil
 }
 
-// createShareWithOperatorKey creates a new share object from event
-func createShareWithOperatorKey(
-	validatorAddedEvent abiparser.ValidatorAddedEvent,
-	operatorPubKey string,
-	isOperatorShare bool,
-) (*beaconprotocol.Share, *bls.SecretKey, error) {
-	validatorShare, shareSecret, err := ShareFromValidatorAddedEvent(validatorAddedEvent, operatorPubKey)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not extract validator share from event")
-	}
-
-	// handle the case where the validator share belongs to operator
-	if isOperatorShare {
-		if shareSecret == nil {
-			return nil, nil, errors.New("could not decode shareSecret key from ValidatorAdded event")
-		}
-		if !validatorShare.OperatorReady() {
-			return nil, nil, errors.New("operator validator share not ready")
-		}
-	}
-	return validatorShare, shareSecret, nil
-}
-
-// ShareFromValidatorAddedEvent takes the contract event data and creates the corresponding validator share.
+// ShareFromValidatorEvent takes the contract event data and creates the corresponding validator share.
 // share could return nil in case operator key is not present/ different
-func ShareFromValidatorAddedEvent(
+func ShareFromValidatorEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
+	registryStorage registrystorage.OperatorsCollection,
+	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
 ) (*beaconprotocol.Share, *bls.SecretKey, error) {
 	validatorShare := beaconprotocol.Share{}
+
+	// extract operator public keys from storage and fill the event
+	if err := SetOperatorPublicKeys(registryStorage, &validatorAddedEvent); err != nil {
+		return nil, nil, errors.Wrap(err, "could not extract and set operator public keys from storage")
+	}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 		return nil, nil, errors.Wrap(err, "failed to deserialize share public key")
 	}
+
 	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
@@ -73,15 +62,26 @@ func ShareFromValidatorAddedEvent(
 			Pk:     validatorAddedEvent.SharesPublicKeys[i],
 		}
 		if strings.EqualFold(string(validatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {
-			ibftCommittee[nodeID].Pk = validatorAddedEvent.SharesPublicKeys[i]
 			validatorShare.NodeID = nodeID
 
-			shareSecret = &bls.SecretKey{}
-			if len(validatorAddedEvent.EncryptedKeys[i]) == 0 {
-				return nil, nil, errors.New("share encrypted key invalid")
+			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
+			if err != nil {
+				return nil, nil, errors.Wrap(err, "could not get operator private key")
 			}
-			if err := shareSecret.SetHexString(string(validatorAddedEvent.EncryptedKeys[i])); err != nil {
-				return nil, nil, errors.Wrap(err, "failed to deserialize share private key")
+			if !found {
+				return nil, nil, errors.New("could not find operator private key")
+			}
+
+			shareSecret = &bls.SecretKey{}
+			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorAddedEvent.EncryptedKeys[i]))
+			if err != nil {
+				return nil, nil, &abiparser.DecryptError{
+					Err: errors.Wrap(err, "failed to decrypt share private key"),
+				}
+			}
+			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
+			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {
+				return nil, nil, errors.Wrap(err, "failed to set decrypted share private key")
 			}
 		}
 	}
@@ -89,4 +89,39 @@ func ShareFromValidatorAddedEvent(
 	validatorShare.SetOperators(validatorAddedEvent.OperatorPublicKeys)
 
 	return &validatorShare, shareSecret, nil
+}
+
+// SetOperatorPublicKeys extracts the operator public keys from the storage and fill the event
+func SetOperatorPublicKeys(
+	registryStorage registrystorage.OperatorsCollection,
+	validatorAddedEvent *abiparser.ValidatorAddedEvent,
+) error {
+	// TODO: implement get many operators instead of just getting one by one
+	// support Legacy contract
+	if validatorAddedEvent.OperatorIds == nil {
+		validatorAddedEvent.OperatorIds = make([]*big.Int, len(validatorAddedEvent.OperatorPublicKeys))
+		for i, opPubKey := range validatorAddedEvent.OperatorPublicKeys {
+			od, found, err := registryStorage.GetOperatorDataByPubKey(string(opPubKey))
+			if err != nil {
+				return errors.Wrap(err, "could not get operator's data")
+			}
+			if !found {
+				return errors.Wrap(err, "could not find operator's data")
+			}
+			validatorAddedEvent.OperatorIds[i] = big.NewInt(int64(od.Index))
+		}
+		return nil
+	}
+	validatorAddedEvent.OperatorPublicKeys = make([][]byte, len(validatorAddedEvent.OperatorIds))
+	for i, operatorID := range validatorAddedEvent.OperatorIds {
+		od, found, err := registryStorage.GetOperatorData(operatorID.Uint64())
+		if err != nil {
+			return errors.Wrap(err, "could not get operator's data")
+		}
+		if !found {
+			return errors.Wrap(err, "could not find operator's data")
+		}
+		validatorAddedEvent.OperatorPublicKeys[i] = []byte(od.PublicKey)
+	}
+	return nil
 }

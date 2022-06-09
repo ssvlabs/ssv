@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log"
 
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (
@@ -27,9 +27,9 @@ func init() {
 
 // TODO: (un-lint)
 //nolint
-func reportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorInformation) {
+func reportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorData) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
 	metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
 	logger.Debug("report operator", zap.String("pkHash", pkHash),
-		zap.String("name", op.Name), zap.Int64("index", op.Index))
+		zap.String("name", op.Name), zap.Uint64("index", op.Index))
 }

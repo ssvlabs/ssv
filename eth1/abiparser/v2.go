@@ -1,10 +1,7 @@
 package abiparser
 
 import (
-	"crypto/rsa"
-	"strings"
-
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -12,107 +9,168 @@ import (
 	"go.uber.org/zap"
 )
 
+// Event names
+const (
+	OperatorAdded     = "OperatorAdded"
+	ValidatorAdded    = "ValidatorAdded"
+	ValidatorRemoved  = "ValidatorRemoved"
+	AccountLiquidated = "AccountLiquidated"
+	AccountEnabled    = "AccountEnabled"
+)
+
 // ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
 	PublicKey          []byte
 	OwnerAddress       common.Address
 	OperatorPublicKeys [][]byte
+	OperatorIds        []*big.Int
 	SharesPublicKeys   [][]byte
 	EncryptedKeys      [][]byte
 }
 
+// AccountLiquidatedEvent struct represents event received by the smart contract
+type AccountLiquidatedEvent struct {
+	OwnerAddress common.Address
+}
+
+// AccountEnabledEvent struct represents event received by the smart contract
+type AccountEnabledEvent struct {
+	OwnerAddress common.Address
+}
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
+	Id           *big.Int //nolint
 	Name         string
+	OwnerAddress common.Address
+	PublicKey    []byte
+	Fee          *big.Int
+}
+
+// ValidatorRemovedEvent struct represents event received by the smart contract
+type ValidatorRemovedEvent struct {
 	OwnerAddress common.Address
 	PublicKey    []byte
 }
 
-// V2Abi parsing events from v2 abi contract
-type V2Abi struct {
+// AbiV2 parsing events from v2 abi contract
+type AbiV2 struct {
+}
+
+// UnpackError is returned when unpacking fails
+type UnpackError struct {
+	Err error
+}
+
+func (e *UnpackError) Error() string {
+	return e.Err.Error()
+}
+
+// DecryptError is returned when the decryption of the share private key fails
+type DecryptError struct {
+	Err error
+}
+
+func (e *DecryptError) Error() string {
+	return e.Err.Error()
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v2 *V2Abi) ParseOperatorAddedEvent(
+func (v2 *AbiV2) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	operatorPubKey string,
 	data []byte,
 	topics []common.Hash,
 	contractAbi abi.ABI,
-) (*OperatorAddedEvent, bool, bool, error) {
+) (*OperatorAddedEvent, error) {
 	var operatorAddedEvent OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, "OperatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
 	if err != nil {
-		return nil, false, true, errors.Wrap(err, "failed to unpack OperatorAdded event")
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack OperatorAdded event"),
+		}
 	}
 	outAbi, err := getOutAbi()
 	if err != nil {
-		return nil, false, false, err
+		return nil, err
 	}
 	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
 	if err != nil {
-		return nil, false, true, errors.Wrap(err, "failed to read OperatorPublicKey")
+		return nil, errors.Wrap(err, "failed to read OperatorPublicKey")
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
 
-	if len(topics) > 1 {
-		operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
-	} else {
-		logger.Error("operator event missing topics. no owner address provided.")
+	if len(topics) < 2 {
+		return nil, errors.New("operator added event missing topics. no owner address provided")
 	}
-	isOperatorEvent := strings.EqualFold(pubKey, operatorPubKey)
-	return &operatorAddedEvent, isOperatorEvent, false, nil
+	operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	return &operatorAddedEvent, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v2 *V2Abi) ParseValidatorAddedEvent(
+func (v2 *AbiV2) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	operatorPrivateKey *rsa.PrivateKey,
 	data []byte,
 	contractAbi abi.ABI,
-) (*ValidatorAddedEvent, bool, bool, error) {
+) (event *ValidatorAddedEvent, error error) {
 	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, "ValidatorAdded", data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
 	if err != nil {
-		return nil, false, true, errors.Wrap(err, "Failed to unpack ValidatorAdded event")
-	}
-
-	var isOperatorEvent bool
-	for i, operatorPublicKey := range validatorAddedEvent.OperatorPublicKeys {
-		outAbi, err := getOutAbi()
-		if err != nil {
-			return nil, false, false, errors.Wrap(err, "failed to define ABI")
-		}
-		operatorPublicKey, err := readOperatorPubKey(operatorPublicKey, outAbi)
-		if err != nil {
-			return nil, false, true, errors.Wrap(err, "failed to read OperatorPublicKey")
-		}
-
-		validatorAddedEvent.OperatorPublicKeys[i] = []byte(operatorPublicKey) // set for further use in code
-		if operatorPrivateKey == nil {
-			continue
-		}
-		nodeOperatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
-		if err != nil {
-			return nil, false, false, errors.Wrap(err, "failed to extract public key")
-		}
-		if strings.EqualFold(operatorPublicKey, nodeOperatorPubKey) {
-			out, err := outAbi.Unpack("method", validatorAddedEvent.EncryptedKeys[i])
-			if err != nil {
-				return nil, false, true, errors.Wrap(err, "failed to unpack EncryptedKey")
-			}
-
-			if encryptedSharePrivateKey, ok := out[0].(string); ok {
-				decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedSharePrivateKey)
-				decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-				if err != nil {
-					return nil, false, false, errors.Wrap(err, "failed to decrypt share private key")
-				}
-				validatorAddedEvent.EncryptedKeys[i] = []byte(decryptedSharePrivateKey)
-				isOperatorEvent = true
-			}
+		return nil, &UnpackError{
+			Err: errors.Wrapf(err, "Failed to unpack %s event", ValidatorAdded),
 		}
 	}
 
-	return &validatorAddedEvent, isOperatorEvent, false, nil
+	outAbi, err := getOutAbi()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to define ABI")
+	}
+
+	for i, ek := range validatorAddedEvent.EncryptedKeys {
+		out, err := outAbi.Unpack("method", ek)
+		if err != nil {
+			return nil, &UnpackError{
+				Err: errors.Wrap(err, "failed to unpack EncryptedKey"),
+			}
+		}
+		if encryptedSharePrivateKey, ok := out[0].(string); ok {
+			validatorAddedEvent.EncryptedKeys[i] = []byte(encryptedSharePrivateKey)
+		}
+	}
+
+	return &validatorAddedEvent, nil
+}
+
+// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
+func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+	var validatorRemovedEvent ValidatorRemovedEvent
+	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, data)
+	if err != nil {
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack ValidatorRemoved event"),
+		}
+	}
+
+	return &validatorRemovedEvent, nil
+}
+
+// ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
+func (v2 *AbiV2) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
+	var accountLiquidatedEvent AccountLiquidatedEvent
+
+	if len(topics) < 2 {
+		return nil, errors.New("account liquidated event missing topics. no owner address provided")
+	}
+	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	return &accountLiquidatedEvent, nil
+}
+
+// ParseAccountEnabledEvent parses AccountEnabledEvent
+func (v2 *AbiV2) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
+	var accountEnabledEvent AccountEnabledEvent
+
+	if len(topics) < 2 {
+		return nil, errors.New("account enabled event missing topics. no owner address provided")
+	}
+	accountEnabledEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	return &accountEnabledEvent, nil
 }

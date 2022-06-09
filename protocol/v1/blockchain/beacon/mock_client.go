@@ -75,6 +75,11 @@ func (m *MockBeacon) AddShare(shareKey *bls.SecretKey) error {
 	return ret0
 }
 
+func (m *MockBeacon) RemoveShare(pubKey string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 // AddShare indicates an expected call of AddShare
 func (mr *MockBeaconMockRecorder) AddShare(shareKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()

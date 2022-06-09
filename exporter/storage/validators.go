@@ -23,6 +23,7 @@ type ValidatorInformation struct {
 type ValidatorsCollection interface {
 	GetValidatorInformation(validatorPubKey string) (*ValidatorInformation, bool, error)
 	SaveValidatorInformation(validatorInformation *ValidatorInformation) error
+	// ListValidators TODO: should use uint64 instead of int64
 	ListValidators(from int64, to int64) ([]ValidatorInformation, error)
 }
 

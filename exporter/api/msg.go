@@ -18,9 +18,9 @@ type Message struct {
 // MessageFilter is a criteria for query in request messages and projection in responses
 type MessageFilter struct {
 	// From is the starting index of the desired data
-	From int64 `json:"from"`
+	From uint64 `json:"from"`
 	// To is the ending index of the desired data
-	To int64 `json:"to"`
+	To uint64 `json:"to"`
 	// Role is the duty type enum, optional as it's relevant for IBFT data
 	Role DutyRole `json:"role,omitempty"`
 	// PublicKey is optional, used for fetching decided messages or information about specific validator/operator
@@ -60,5 +60,5 @@ type ValidatorsMessage struct {
 
 // OperatorsMessage represents message for operators response
 type OperatorsMessage struct {
-	Data []registrystorage.OperatorInformation `json:"data,omitempty"`
+	Data []registrystorage.OperatorData `json:"data,omitempty"`
 }
