@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"math/big"
 	"strings"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -34,14 +35,14 @@ func UpdateShareMetadata(share *beaconprotocol.Share, bc beaconprotocol.Beacon) 
 // share could return nil in case operator key is not present/ different
 func ShareFromValidatorEvent(
 	validatorAddedEvent abiparser.ValidatorAddedEvent,
-	getOperatorData registrystorage.GetOperatorData,
+	registryStorage registrystorage.OperatorsCollection,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
 ) (*beaconprotocol.Share, *bls.SecretKey, error) {
 	validatorShare := beaconprotocol.Share{}
 
 	// extract operator public keys from storage and fill the event
-	if err := SetOperatorPublicKeys(getOperatorData, &validatorAddedEvent); err != nil {
+	if err := SetOperatorPublicKeys(registryStorage, &validatorAddedEvent); err != nil {
 		return nil, nil, errors.Wrap(err, "could not extract and set operator public keys from storage")
 	}
 
@@ -61,7 +62,6 @@ func ShareFromValidatorEvent(
 			Pk:     validatorAddedEvent.SharesPublicKeys[i],
 		}
 		if strings.EqualFold(string(validatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {
-			ibftCommittee[nodeID].Pk = validatorAddedEvent.SharesPublicKeys[i]
 			validatorShare.NodeID = nodeID
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
@@ -93,13 +93,28 @@ func ShareFromValidatorEvent(
 
 // SetOperatorPublicKeys extracts the operator public keys from the storage and fill the event
 func SetOperatorPublicKeys(
-	getOperatorData registrystorage.GetOperatorData,
+	registryStorage registrystorage.OperatorsCollection,
 	validatorAddedEvent *abiparser.ValidatorAddedEvent,
 ) error {
-	validatorAddedEvent.OperatorPublicKeys = make([][]byte, len(validatorAddedEvent.OperatorIds))
 	// TODO: implement get many operators instead of just getting one by one
+	// support Legacy contract
+	if validatorAddedEvent.OperatorIds == nil {
+		validatorAddedEvent.OperatorIds = make([]*big.Int, len(validatorAddedEvent.OperatorPublicKeys))
+		for i, opPubKey := range validatorAddedEvent.OperatorPublicKeys {
+			od, found, err := registryStorage.GetOperatorDataByPubKey(string(opPubKey))
+			if err != nil {
+				return errors.Wrap(err, "could not get operator's data")
+			}
+			if !found {
+				return errors.Wrap(err, "could not find operator's data")
+			}
+			validatorAddedEvent.OperatorIds[i] = big.NewInt(int64(od.Index))
+		}
+		return nil
+	}
+	validatorAddedEvent.OperatorPublicKeys = make([][]byte, len(validatorAddedEvent.OperatorIds))
 	for i, operatorID := range validatorAddedEvent.OperatorIds {
-		od, found, err := getOperatorData(operatorID.Uint64())
+		od, found, err := registryStorage.GetOperatorData(operatorID.Uint64())
 		if err != nil {
 			return errors.Wrap(err, "could not get operator's data")
 		}

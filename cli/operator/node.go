@@ -151,9 +151,6 @@ var StartNodeCmd = &cobra.Command{
 		if err := p2pNet.Setup(); err != nil {
 			Logger.Fatal("failed to setup network", zap.Error(err))
 		}
-		if err := p2pNet.Start(); err != nil {
-			Logger.Fatal("failed to start network", zap.Error(err))
-		}
 
 		ctx := cmd.Context()
 		cfg.SSVOptions.ForkVersion = ssvForkVersion
@@ -218,6 +215,9 @@ var StartNodeCmd = &cobra.Command{
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
+		}
+		if err := p2pNet.Start(); err != nil {
+			Logger.Fatal("failed to start network", zap.Error(err))
 		}
 		if err := operatorNode.Start(); err != nil {
 			Logger.Fatal("failed to start SSV node", zap.Error(err))

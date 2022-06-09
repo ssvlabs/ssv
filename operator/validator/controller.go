@@ -427,7 +427,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*beaconprotocol.Share, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
-		c.storage.GetOperatorData,
+		c.storage,
 		c.shareEncryptionKeyProvider,
 		c.operatorPubKey,
 	)

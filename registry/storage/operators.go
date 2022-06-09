@@ -131,6 +131,14 @@ func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	if operatorData.Index == 0 {
+		nextIndex, err := s.nextIndex()
+		if err != nil {
+			return errors.Wrap(err, "could not calculate next operator index")
+		}
+		operatorData.Index = uint64(nextIndex)
+	}
+
 	_, found, err := s.getOperatorData(operatorData.Index)
 	if err != nil {
 		return errors.Wrap(err, "could not get operator's data")
@@ -152,4 +160,8 @@ func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(index uint64) []byte {
 	return bytes.Join([][]byte{operatorsPrefix[:], []byte(strconv.FormatUint(index, 10))}, []byte("/"))
+}
+
+func (s *operatorsStorage) nextIndex() (int64, error) {
+	return s.db.CountByCollection(append(s.prefix, operatorsPrefix...))
 }

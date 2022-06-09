@@ -49,9 +49,11 @@ func (a AdapterLegacy) ParseOperatorAddedEvent(
 		return nil, err
 	}
 	return &OperatorAddedEvent{
+		Id:           big.NewInt(0),
 		Name:         event.Name,
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.OwnerAddress,
+		Fee:          big.NewInt(0),
 	}, err
 }
 
