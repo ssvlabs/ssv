@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/api"
@@ -17,8 +18,8 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/collections"
 )
 
 // Node represents the behavior of SSV node
@@ -62,7 +63,7 @@ type operatorNode struct {
 	net              network.P2PNetwork
 	storage          storage.Storage
 	validatorStorage validator.ICollection
-	ibftStorage      collections.Iibft
+	qbftStorage      qbftstorageprotocol.QBFTStore
 	eth1Client       eth1.Client
 	dutyCtrl         duties.DutyController
 	//fork           *forks.Forker
@@ -76,7 +77,8 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, "attestation", opts.ForkVersion)
+
 	validatorStorage := validator.NewCollection(
 		validator.CollectionOptions{
 			DB:     opts.DB,
@@ -93,7 +95,7 @@ func New(opts Options) Node {
 		net:              opts.Network,
 		eth1Client:       opts.Eth1Client,
 		storage:          storage.NewNodeStorage(opts.DB, opts.Logger),
-		ibftStorage:      &ibftStorage,
+		qbftStorage:      qbftStorage,
 		validatorStorage: validatorStorage,
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
@@ -224,7 +226,7 @@ func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
 	case api.TypeValidator:
 		handleValidatorsQuery(n.logger, n.storage, nm)
 	case api.TypeDecided:
-		handleDecidedQuery(n.logger, n.storage, n.ibftStorage, nm)
+		handleDecidedQuery(n.logger, n.storage, n.qbftStorage, nm)
 	case api.TypeError:
 		handleErrorQuery(n.logger, nm)
 	default:

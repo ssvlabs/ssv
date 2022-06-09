@@ -8,8 +8,9 @@ import (
 
 	api2 "github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/collections"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -57,7 +58,7 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 
 // TODO: un-lint
 //nolint
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api2.NetworkMessage) {
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorageprotocol.QBFTStore, nm *api2.NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Int64("from", nm.Msg.Filter.From),
 		zap.Int64("to", nm.Msg.Filter.To),
@@ -81,9 +82,9 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 			res.Data = []string{"internal error - could not read validator key"}
 		} else {
 			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
-			from := uint64(nm.Msg.Filter.From)
-			to := uint64(nm.Msg.Filter.To)
-			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), from, to)
+			from := message.Height(nm.Msg.Filter.From)
+			to := message.Height(nm.Msg.Filter.To)
+			msgs, err := qbftStorage.GetDecided([]byte(identifier), from, to)
 			if err != nil {
 				logger.Warn("failed to get decided messages", zap.Error(err))
 				res.Data = []string{"internal error - could not get decided messages"}
