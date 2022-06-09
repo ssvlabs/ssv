@@ -6,13 +6,12 @@ import (
 	"math/big"
 	"sync"
 
-	eth12 "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	registry "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -25,7 +24,7 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
-	eth12.RegistryStore
+	registry.RegistryStore
 	registrystorage.OperatorsCollection
 	ValidatorsCollection
 
@@ -51,15 +50,19 @@ func NewNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	}
 }
 
-func (s *storage) GetOperatorInformation(operatorPubKey string) (*registrystorage.OperatorInformation, bool, error) {
-	return s.operatorStore.GetOperatorInformation(operatorPubKey)
+func (s *storage) GetOperatorDataByPubKey(operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorDataByPubKey(operatorPubKey)
 }
 
-func (s *storage) SaveOperatorInformation(operatorInformation *registrystorage.OperatorInformation) error {
-	return s.operatorStore.SaveOperatorInformation(operatorInformation)
+func (s *storage) GetOperatorData(index uint64) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorData(index)
 }
 
-func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.OperatorInformation, error) {
+func (s *storage) SaveOperatorData(operatorData *registrystorage.OperatorData) error {
+	return s.operatorStore.SaveOperatorData(operatorData)
+}
+
+func (s *storage) ListOperators(from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	return s.operatorStore.ListOperators(from, to)
 }
 

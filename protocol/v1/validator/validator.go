@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/pkg/errors"
@@ -24,6 +25,7 @@ type IValidator interface {
 	GetShare() *beaconprotocol.Share
 
 	forksprotocol.ForkHandler
+	io.Closer
 }
 
 // Options is the validator options
@@ -46,6 +48,7 @@ type Options struct {
 // Validator represents the validator
 type Validator struct {
 	ctx        context.Context
+	cancelCtx  context.CancelFunc
 	logger     *zap.Logger
 	network    beaconprotocol.Network
 	p2pNetwork p2pprotocol.Network
@@ -73,8 +76,10 @@ func NewValidator(opt *Options) IValidator {
 	ibfts := setupIbfts(opt, logger)
 
 	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
+	ctx, cancel := context.WithCancel(opt.Context)
 	return &Validator{
-		ctx:         opt.Context,
+		ctx:         ctx,
+		cancelCtx:   cancel,
 		logger:      logger,
 		network:     opt.Network,
 		p2pNetwork:  opt.P2pNetwork,
@@ -85,6 +90,12 @@ func NewValidator(opt *Options) IValidator {
 		readMode:    opt.ReadMode,
 		saveHistory: opt.FullNode,
 	}
+}
+
+// Close implements io.Closer
+func (v *Validator) Close() error {
+	v.cancelCtx()
+	return nil
 }
 
 // Start starts the validator

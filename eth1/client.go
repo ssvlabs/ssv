@@ -1,7 +1,6 @@
 package eth1
 
 import (
-	"crypto/rsa"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -14,10 +13,10 @@ import (
 type Event struct {
 	// Log is the raw event log
 	Log types.Log
+	// Name is the event name used for internal representation.
+	Name string
 	// Data is the parsed event
 	Data interface{}
-	// IsOperatorEvent indicates whether the event belongs to operator
-	IsOperatorEvent bool
 }
 
 // SyncEndedEvent meant to notify an observer that the sync is over
@@ -27,9 +26,6 @@ type SyncEndedEvent struct {
 	// Logs is the actual logs that we got from eth1
 	Logs []types.Log
 }
-
-// ShareEncryptionKeyProvider is a function that returns the operator private key
-type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // Client represents the required interface for eth1 client
 type Client interface {

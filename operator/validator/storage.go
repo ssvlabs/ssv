@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"strings"
 	"sync"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -20,7 +21,9 @@ type ICollection interface {
 	SaveValidatorShare(share *beaconprotocol.Share) error
 	GetValidatorShare(key []byte) (*beaconprotocol.Share, bool, error)
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
-	GetOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error)
+	GetEnabledOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error)
+	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol.Share, error)
+	DeleteValidatorShare(key []byte) error
 }
 
 func collectionPrefix() []byte {
@@ -121,8 +124,8 @@ func (s *Collection) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 	return res, err
 }
 
-// GetOperatorValidatorShares returns all validator shares belongs to operator
-func (s *Collection) GetOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error) {
+// GetEnabledOperatorValidatorShares returns all not liquidated validator shares belongs to operator
+func (s *Collection) GetEnabledOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -133,14 +136,44 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string) ([]*beaco
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}
-		ok := val.IsOperatorShare(operatorPubKey)
-		if ok {
+		if !val.Liquidated {
+			if ok := val.IsOperatorShare(operatorPubKey); ok {
+				res = append(res, val)
+			}
+		}
+		return nil
+	})
+
+	return res, err
+}
+
+// GetValidatorSharesByOwnerAddress returns all validator shares belongs to owner address
+func (s *Collection) GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol.Share, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var res []*beaconprotocol.Share
+
+	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
+		val, err := (&beaconprotocol.Share{}).Deserialize(obj.Key, obj.Value)
+		if err != nil {
+			return errors.Wrap(err, "failed to deserialize validator")
+		}
+		if strings.EqualFold(val.OwnerAddress, ownerAddress) {
 			res = append(res, val)
 		}
 		return nil
 	})
 
 	return res, err
+}
+
+// DeleteValidatorShare removes validator share by key
+func (s *Collection) DeleteValidatorShare(key []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(collectionPrefix(), key)
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator

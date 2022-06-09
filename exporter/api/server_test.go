@@ -20,7 +20,7 @@ func TestHandleQuery(t *testing.T) {
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
-		nm.Msg.Data = []registrystorage.OperatorInformation{
+		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
@@ -95,7 +95,7 @@ func TestHandleStream(t *testing.T) {
 		ws.out.Send(newTestMessage())
 
 		msg2 := newTestMessage()
-		msg2.Data = []registrystorage.OperatorInformation{
+		msg2.Data = []registrystorage.OperatorData{
 			{PublicKey: "pubkey-operator"},
 		}
 		ws.out.Send(msg2)
