@@ -73,7 +73,7 @@ func (v *Validator) ExecuteDuty(slot uint64, duty *beaconprotocol.Duty) {
 		zap.Uint64("slot", slot),
 		zap.String("duty_type", duty.Type.String()))
 
-	metricsCurrentSlot.WithLabelValues(v.share.PublicKey.SerializeToHexStr()).Set(float64(duty.Slot))
+	metricsCurrentSlot.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(duty.Slot))
 
 	logger.Debug("executing duty...")
 	qbftCtrl, signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)

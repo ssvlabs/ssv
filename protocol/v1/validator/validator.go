@@ -50,7 +50,7 @@ type Validator struct {
 	network    beaconprotocol.Network
 	p2pNetwork p2pprotocol.Network
 	beacon     beaconprotocol.Beacon
-	share      *beaconprotocol.Share
+	Share      *beaconprotocol.Share // var is exported to validator ctrl tests reasons
 	signer     beaconprotocol.Signer
 
 	ibfts controller.Controllers
@@ -79,7 +79,7 @@ func NewValidator(opt *Options) IValidator {
 		network:     opt.Network,
 		p2pNetwork:  opt.P2pNetwork,
 		beacon:      opt.Beacon,
-		share:       opt.Share,
+		Share:       opt.Share,
 		signer:      opt.Signer,
 		ibfts:       ibfts,
 		readMode:    opt.ReadMode,
@@ -112,7 +112,7 @@ func (v *Validator) Start() error {
 // GetShare returns the validator share
 func (v *Validator) GetShare() *beaconprotocol.Share {
 	// TODO need lock?
-	return v.share
+	return v.Share
 }
 
 // ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error

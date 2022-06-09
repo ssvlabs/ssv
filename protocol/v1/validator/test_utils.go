@@ -325,7 +325,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 
 	ret.p2pNetwork = p2pNet
 
-	ret.share = share
+	ret.Share = share
 
 	return ret
 }
