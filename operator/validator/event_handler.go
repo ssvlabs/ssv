@@ -50,13 +50,6 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 				}
 				return err
 			}
-		case abiparser.ValidatorUpdated:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
-			err := c.handleValidatorUpdatedEvent(ev, ongoingSync)
-			if err != nil {
-				c.logger.Error("could not handle ValidatorUpdated event", zap.Error(err))
-				return err
-			}
 		case abiparser.ValidatorRemoved:
 			ev := e.Data.(abiparser.ValidatorRemovedEvent)
 			pubKey := hex.EncodeToString(ev.PublicKey)
@@ -141,65 +134,6 @@ func (c *controller) handleValidatorAddedEvent(
 			c.onShareStart(validatorShare)
 		}
 	}
-	return nil
-}
-
-// handleValidatorUpdatedEvent handles registry contract event for validator updated
-func (c *controller) handleValidatorUpdatedEvent(
-	validatorUpdatedEvent abiparser.ValidatorAddedEvent,
-	ongoingSync bool,
-) error {
-	validatorShare, found, err := c.collection.GetValidatorShare(validatorUpdatedEvent.PublicKey)
-	if err != nil {
-		return errors.Wrap(err, "could not check if validator share exist")
-	}
-	if !found {
-		return errors.New("could not find validator share")
-	}
-
-	validatorUpdated, isOperatorEvent, err := c.onShareCreate(validatorUpdatedEvent)
-	if err != nil {
-		return err
-	}
-
-	if !ongoingSync {
-		return nil
-	}
-
-	// determine if validator share belongs to operator
-	isOperatorShare := validatorShare.IsOperatorShare(c.operatorPubKey)
-
-	// not mine
-	if !isOperatorShare && !isOperatorEvent {
-		// do nothing
-	}
-
-	// stay mine
-	if isOperatorShare && isOperatorEvent {
-		if err := c.onShareRemove(validatorShare.PublicKey.SerializeToHexStr(), false); err != nil {
-			return err
-		}
-		// TODO: validate removed from map, not running
-
-		// TODO: (wait few epochs logic)
-		c.onShareStart(validatorUpdated)
-	}
-
-	// was mine
-	if isOperatorShare && !isOperatorEvent {
-		if err := c.onShareRemove(validatorShare.PublicKey.SerializeToHexStr(), false); err != nil {
-			return err
-		}
-	}
-
-	// became mine
-	if !isOperatorShare && isOperatorEvent {
-		// TODO: validate the validator is not attesting (eth2)
-
-		// TODO: (wait few epochs logic)
-		c.onShareStart(validatorUpdated)
-	}
-
 	return nil
 }
 

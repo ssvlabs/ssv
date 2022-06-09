@@ -88,23 +88,18 @@ func (a AdapterLegacy) ParseValidatorAddedEvent(
 	}, err
 }
 
-// ParseValidatorUpdatedEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseValidatorUpdatedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
-	return nil, nil
-}
-
 // ParseValidatorRemovedEvent event is not supported in legacy format
 func (a AdapterLegacy) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountLiquidatedEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseAccountLiquidatedEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
+func (a AdapterLegacy) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountEnabledEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseAccountEnabledEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
+func (a AdapterLegacy) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
 	return nil, nil
 }
 

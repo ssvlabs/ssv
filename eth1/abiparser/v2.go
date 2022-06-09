@@ -1,18 +1,18 @@
 package abiparser
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"math/big"
 )
 
 // Event names
 const (
 	OperatorAdded     = "OperatorAdded"
 	ValidatorAdded    = "ValidatorAdded"
-	ValidatorUpdated  = "ValidatorUpdated"
 	ValidatorRemoved  = "ValidatorRemoved"
 	AccountLiquidated = "AccountLiquidated"
 	AccountEnabled    = "AccountEnabled"
@@ -112,59 +112,11 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(
 	data []byte,
 	contractAbi abi.ABI,
 ) (event *ValidatorAddedEvent, error error) {
-	return v2.parseValidatorEvent(logger, data, ValidatorAdded, contractAbi)
-}
-
-// ParseValidatorUpdatedEvent parses ValidatorUpdatedEvent
-func (v2 *AbiV2) ParseValidatorUpdatedEvent(
-	logger *zap.Logger,
-	data []byte,
-	contractAbi abi.ABI,
-) (*ValidatorAddedEvent, error) {
-	return v2.parseValidatorEvent(logger, data, ValidatorUpdated, contractAbi)
-}
-
-// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
-func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
-	var validatorRemovedEvent ValidatorRemovedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, data)
-	if err != nil {
-		return nil, &UnpackError{
-			Err: errors.Wrap(err, "failed to unpack ValidatorRemoved event"),
-		}
-	}
-
-	return &validatorRemovedEvent, nil
-}
-
-// ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
-func (v2 *AbiV2) ParseAccountLiquidatedEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountLiquidatedEvent, error) {
-	var accountLiquidatedEvent AccountLiquidatedEvent
-
-	if len(topics) < 2 {
-		return nil, errors.New("account liquidated event missing topics. no owner address provided")
-	}
-	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
-	return &accountLiquidatedEvent, nil
-}
-
-// ParseAccountEnabledEvent parses AccountEnabledEvent
-func (v2 *AbiV2) ParseAccountEnabledEvent(logger *zap.Logger, topics []common.Hash, contractAbi abi.ABI) (*AccountEnabledEvent, error) {
-	var accountEnabledEvent AccountEnabledEvent
-
-	if len(topics) < 2 {
-		return nil, errors.New("account enabled event missing topics. no owner address provided")
-	}
-	accountEnabledEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
-	return &accountEnabledEvent, nil
-}
-
-func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName string, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
 	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, eventName, data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
 	if err != nil {
 		return nil, &UnpackError{
-			Err: errors.Wrapf(err, "Failed to unpack %s event", eventName),
+			Err: errors.Wrapf(err, "Failed to unpack %s event", ValidatorAdded),
 		}
 	}
 
@@ -186,4 +138,39 @@ func (v2 *AbiV2) parseValidatorEvent(logger *zap.Logger, data []byte, eventName 
 	}
 
 	return &validatorAddedEvent, nil
+}
+
+// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
+func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+	var validatorRemovedEvent ValidatorRemovedEvent
+	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, data)
+	if err != nil {
+		return nil, &UnpackError{
+			Err: errors.Wrap(err, "failed to unpack ValidatorRemoved event"),
+		}
+	}
+
+	return &validatorRemovedEvent, nil
+}
+
+// ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
+func (v2 *AbiV2) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
+	var accountLiquidatedEvent AccountLiquidatedEvent
+
+	if len(topics) < 2 {
+		return nil, errors.New("account liquidated event missing topics. no owner address provided")
+	}
+	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	return &accountLiquidatedEvent, nil
+}
+
+// ParseAccountEnabledEvent parses AccountEnabledEvent
+func (v2 *AbiV2) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
+	var accountEnabledEvent AccountEnabledEvent
+
+	if len(topics) < 2 {
+		return nil, errors.New("account enabled event missing topics. no owner address provided")
+	}
+	accountEnabledEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	return &accountEnabledEvent, nil
 }

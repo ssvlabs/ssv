@@ -90,6 +90,7 @@ import (
 //	wg.Wait()
 //}
 
+//nolint
 func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
 	bnSk, err := commons.GenNetworkKey()
 	if err != nil {
@@ -108,21 +109,26 @@ func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Boo
 	})
 }
 
+//nolint
 type mockConnIndex struct {
 }
 
+//nolint
 func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return libp2pnetwork.NotConnected
 }
 
+//nolint
 func (c *mockConnIndex) CanConnect(id peer.ID) bool {
 	return true
 }
 
+//nolint
 func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
 	return false
 }
 
+//nolint
 func (c *mockConnIndex) IsBad(id peer.ID) bool {
 	return false
 }

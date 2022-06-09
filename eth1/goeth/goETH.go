@@ -360,13 +360,6 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
 		ec.fireEvent(vLog, eventName, *parsed)
-	case abiparser.ValidatorUpdated:
-		parsed, err := abiParser.ParseValidatorUpdatedEvent(vLog.Data, contractAbi)
-		reportSyncEvent(eventName, err)
-		if err != nil {
-			return errors.Wrap(err, "failed to parse ValidatorUpdated event")
-		}
-		ec.fireEvent(vLog, eventName, *parsed)
 	case abiparser.ValidatorRemoved:
 		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog.Data, contractAbi)
 		reportSyncEvent(eventName, err)
@@ -375,14 +368,14 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 		}
 		ec.fireEvent(vLog, eventName, *parsed)
 	case abiparser.AccountLiquidated:
-		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Topics, contractAbi)
+		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Topics)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse AccountLiquidated event")
 		}
 		ec.fireEvent(vLog, eventName, *parsed)
 	case abiparser.AccountEnabled:
-		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Topics, contractAbi)
+		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Topics)
 		reportSyncEvent(eventName, err)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse AccountEnabled event")
