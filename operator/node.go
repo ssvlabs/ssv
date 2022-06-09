@@ -29,14 +29,13 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork beaconprotocol.Network
-	Beacon     beaconprotocol.Beacon
-	Network    network.P2PNetwork
-	Context    context.Context
-	Logger     *zap.Logger
-	Eth1Client eth1.Client
-	DB         basedb.IDb
-
+	ETHNetwork          beaconprotocol.Network
+	Beacon              beaconprotocol.Beacon
+	Network             network.P2PNetwork
+	Context             context.Context
+	Logger              *zap.Logger
+	Eth1Client          eth1.Client
+	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
 	// genesis epoch

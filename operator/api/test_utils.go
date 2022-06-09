@@ -3,12 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"net/url"
-	"sync"
-
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"net/url"
+	"sync"
 )
 
 // WSClient represents a client connection to be used in tests

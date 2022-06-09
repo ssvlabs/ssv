@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"net"
 	"net/http"
 	"sync"
 	"time"
-
-	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var (

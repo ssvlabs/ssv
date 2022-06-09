@@ -12,17 +12,17 @@ import (
 )
 
 // operatorIndexSorter sorts operators by Index
-type operatorIndexSorter []registrystorage.OperatorInformation
+type operatorIndexSorter []registrystorage.OperatorData
 
 func (a operatorIndexSorter) Len() int           { return len(a) }
 func (a operatorIndexSorter) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a operatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Index }
 
 // getOperators returns a list operators according to the given filter
-func getOperators(s registrystorage.OperatorsCollection, filter api.MessageFilter) ([]registrystorage.OperatorInformation, error) {
-	var operators []registrystorage.OperatorInformation
+func getOperators(s registrystorage.OperatorsCollection, filter api.MessageFilter) ([]registrystorage.OperatorData, error) {
+	var operators []registrystorage.OperatorData
 	if len(filter.PublicKey) > 0 {
-		operator, found, err := s.GetOperatorInformation(filter.PublicKey)
+		operator, found, err := s.GetOperatorDataByPubKey(filter.PublicKey)
 		if !found {
 			return nil, errors.Wrap(err, fmt.Sprintf("could not find operator for %s", filter.PublicKey))
 		}
@@ -62,7 +62,7 @@ func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]
 		validators = append(validators, *validator)
 	} else {
 		var err error
-		validators, err = s.ListValidators(filter.From, filter.To)
+		validators, err = s.ListValidators(int64(filter.From), int64(filter.To))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not read validators")
 		}

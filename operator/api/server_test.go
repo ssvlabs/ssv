@@ -3,18 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/exporter/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 	"math/rand"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/exporter/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 func TestHandleQuery(t *testing.T) {
@@ -22,7 +20,7 @@ func TestHandleQuery(t *testing.T) {
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
-		nm.Msg.Data = []registrystorage.OperatorInformation{
+		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
 	}, mux, false).(*wsServer)
@@ -97,7 +95,7 @@ func TestHandleStream(t *testing.T) {
 		ws.out.Send(newTestMessage())
 
 		msg2 := newTestMessage()
-		msg2.Data = []registrystorage.OperatorInformation{
+		msg2.Data = []registrystorage.OperatorData{
 			{PublicKey: "pubkey-operator"},
 		}
 		ws.out.Send(msg2)

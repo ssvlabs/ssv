@@ -6,10 +6,10 @@ import (
 
 	"go.uber.org/zap"
 
-	api2 "github.com/bloxapp/ssv/operator/api"
+	"github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/format"
 )
@@ -18,13 +18,13 @@ const (
 	unknownError = "unknown error"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api2.NetworkMessage) {
+func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
-	res := api2.Message{
+	res := api.Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -37,12 +37,12 @@ func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsC
 	nm.Msg = res
 }
 
-func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api2.NetworkMessage) {
+func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles validators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
-	res := api2.Message{
+	res := api.Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -58,13 +58,13 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 
 // TODO: un-lint
 //nolint
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorageprotocol.QBFTStore, nm *api2.NetworkMessage) {
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorage.QBFTStore, nm *api.NetworkMessage) {
 	logger.Debug("handles decided request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey),
 		zap.String("role", string(nm.Msg.Filter.Role)))
-	res := api2.Message{
+	res := api.Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -96,7 +96,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 	nm.Msg = res
 }
 
-func handleErrorQuery(logger *zap.Logger, nm *api2.NetworkMessage) {
+func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 	logger.Warn("handles error message")
 	if _, ok := nm.Msg.Data.([]string); !ok {
 		nm.Msg.Data = []string{}
@@ -108,16 +108,16 @@ func handleErrorQuery(logger *zap.Logger, nm *api2.NetworkMessage) {
 	if len(errs) == 0 {
 		errs = append(errs, unknownError)
 	}
-	nm.Msg = api2.Message{
-		Type: api2.TypeError,
+	nm.Msg = api.Message{
+		Type: api.TypeError,
 		Data: errs,
 	}
 }
 
-func handleUnknownQuery(logger *zap.Logger, nm *api2.NetworkMessage) {
+func handleUnknownQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 	logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
-	nm.Msg = api2.Message{
-		Type: api2.TypeError,
+	nm.Msg = api.Message{
+		Type: api.TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
 }
