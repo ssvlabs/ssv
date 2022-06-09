@@ -66,11 +66,6 @@ func (r *fullNodeScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	keys := make(map[message.OperatorID]*bls.SecretKey)
-	for oid := range share.Committee {
-		keys[oid] = sks[uint64(oid)]
-	}
-
 	routers := make([]*runner.Router, totalNodes)
 
 	loggerFactory := func(who string) *zap.Logger {

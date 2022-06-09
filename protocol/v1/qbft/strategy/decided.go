@@ -8,6 +8,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Mode represents an internal mode of the node.
+// from user POV it can configure it as a fullnode,
+// but since v1 we will use a quiet fullnode for fullnodes.
+type Mode int32
+
+const (
+	// ModeRegularNode is the regular mode, default for v1
+	ModeRegularNode Mode = iota
+	// ModeFullNode is a fullnode mode, default for v0
+	ModeFullNode
+)
+
 // Decided helps to decouple regular from full-node mode where the node is saving decided history.
 // in regular mode, the node only cares about last decided messages.
 type Decided interface {

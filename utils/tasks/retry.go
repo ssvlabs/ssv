@@ -15,12 +15,11 @@ func Retry(fn Fn, retries int) error {
 }
 
 // RetryWithContext executes a function x times or until successful
-func RetryWithContext(ctx context.Context, fn Fn, retries int) error {
+func RetryWithContext(pctx context.Context, fn Fn, retries int) error {
 	var err error
-	for retries > 0 {
-		if ctx.Err() != nil {
-			return nil
-		}
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
+	for retries > 0 && ctx.Err() == nil {
 		if err = fn(); err == nil {
 			return nil
 		}

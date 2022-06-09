@@ -5,9 +5,13 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
-	"github.com/pkg/errors"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"go.uber.org/zap"
 	"time"
+)
+
+const (
+	numOfRetries = 2
 )
 
 // DecidedHandler handles incoming decided messages
@@ -41,22 +45,31 @@ func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, ha
 	lastBatch := from
 	var err error
 	for lastBatch < to {
-		// measuring sync batch process
-		start := time.Now()
-		msgs, lastBatch, err = s.syncer.GetHistory(identifier, lastBatch, to, targetPeers...)
+		err := tasks.RetryWithContext(ctx, func() error {
+			start := time.Now()
+			msgs, lastBatch, err = s.syncer.GetHistory(identifier, lastBatch, to, targetPeers...)
+			if err != nil {
+				return err
+			}
+			s.processMessages(ctx, msgs, handler, visited)
+			elapsed := time.Since(start)
+			s.logger.Debug("received and processed history batch", zap.Int64("currentHighest", int64(lastBatch)), zap.Int64("needToSync", int64(to)), zap.Float64("duration", elapsed.Seconds()))
+			return nil
+		}, numOfRetries)
 		if err != nil {
 			return err
 		}
-		s.processMessages(ctx, msgs, handler, visited)
-		elapsed := time.Since(start)
-		s.logger.Debug("received and processed history batch", zap.Int64("currentHighest", int64(lastBatch)), zap.Int64("needToSync", int64(to)), zap.Float64("duration", elapsed.Seconds()))
 	}
 
-	if len(visited) != int(to-from)+1 {
-		s.logger.Warn("not all messages in range", zap.Any("visited", visited), zap.Uint64("to", uint64(to)), zap.Uint64("from", uint64(from)))
-		return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+	logger := s.logger.With(zap.Int("msg_count", len(visited)), zap.Uint64("to", uint64(to)),
+		zap.Uint64("from", uint64(from)))
+	// if we didn't visit all messages in range > log warning
+	if len(visited) < int(to-from) {
+		logger.Warn("not all messages in range were saved", zap.Any("visited", visited))
+		//return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
-	s.logger.Debug("done with range history sync", zap.Int("totalProcessed", len(visited)))
+	logger.Debug("done with range history sync")
+
 	return nil
 }
 

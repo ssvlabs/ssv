@@ -1,15 +1,5 @@
 package discovery
 
-import (
-	"context"
-	"encoding/hex"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"go.uber.org/zap"
-)
-
 // TODO (:niv) disabled due to merging to main. need to fix
 //func TestNewService(t *testing.T) {
 //	ctx, cancel := context.WithCancel(context.Background())
@@ -89,46 +79,40 @@ import (
 //	}
 //	wg.Wait()
 //}
-
-//nolint
-func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
-	bnSk, err := commons.GenNetworkKey()
-	if err != nil {
-		return nil, err
-	}
-	interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(bnSk))
-	b, err := interfacePriv.Raw()
-	if err != nil {
-		return nil, err
-	}
-	return NewBootnode(ctx, &BootnodeOptions{
-		Logger:     logger.With(zap.String("component", "bootnode")),
-		PrivateKey: hex.EncodeToString(b),
-		ExternalIP: "127.0.0.1",
-		Port:       port,
-	})
-}
-
-//nolint
-type mockConnIndex struct {
-}
-
-//nolint
-func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
-	return libp2pnetwork.NotConnected
-}
-
-//nolint
-func (c *mockConnIndex) CanConnect(id peer.ID) bool {
-	return true
-}
-
-//nolint
-func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
-	return false
-}
-
-//nolint
-func (c *mockConnIndex) IsBad(id peer.ID) bool {
-	return false
-}
+//
+//func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
+//	bnSk, err := commons.GenNetworkKey()
+//	if err != nil {
+//		return nil, err
+//	}
+//	interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(bnSk))
+//	b, err := interfacePriv.Raw()
+//	if err != nil {
+//		return nil, err
+//	}
+//	return NewBootnode(ctx, &BootnodeOptions{
+//		Logger:     logger.With(zap.String("component", "bootnode")),
+//		PrivateKey: hex.EncodeToString(b),
+//		ExternalIP: "127.0.0.1",
+//		Port:       port,
+//	})
+//}
+//
+//type mockConnIndex struct {
+//}
+//
+//func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
+//	return libp2pnetwork.NotConnected
+//}
+//
+//func (c *mockConnIndex) CanConnect(id peer.ID) bool {
+//	return true
+//}
+//
+//func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
+//	return false
+//}
+//
+//func (c *mockConnIndex) IsBad(id peer.ID) bool {
+//	return false
+//}
