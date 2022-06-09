@@ -2,17 +2,23 @@ package operator
 
 import (
 	"context"
+	"fmt"
+	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/storage/collections"
 )
 
 // Node represents the behavior of SSV node
@@ -23,13 +29,14 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          beaconprotocol.Network
-	Beacon              beaconprotocol.Beacon
-	Network             network.P2PNetwork
-	Context             context.Context
-	Logger              *zap.Logger
-	Eth1Client          eth1.Client
-	DB                  basedb.IDb
+	ETHNetwork beaconprotocol.Network
+	Beacon     beaconprotocol.Beacon
+	Network    network.P2PNetwork
+	Context    context.Context
+	Logger     *zap.Logger
+	Eth1Client eth1.Client
+	DB         basedb.IDb
+
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
 	// genesis epoch
@@ -39,35 +46,55 @@ type Options struct {
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 
 	ForkVersion forksprotocol.ForkVersion
+
+	WS                              api.WebSocketServer
+	WsAPIPort                       int
+	ValidatorMetaDataUpdateInterval time.Duration
 }
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork     beaconprotocol.Network
-	context        context.Context
-	validatorsCtrl validator.Controller
-	logger         *zap.Logger
-	beacon         beaconprotocol.Beacon
-	net            network.P2PNetwork
-	storage        Storage
-	eth1Client     eth1.Client
-	dutyCtrl       duties.DutyController
+	ethNetwork       beaconprotocol.Network
+	context          context.Context
+	validatorsCtrl   validator.Controller
+	logger           *zap.Logger
+	beacon           beaconprotocol.Beacon
+	net              network.P2PNetwork
+	storage          storage.Storage
+	validatorStorage validator.ICollection
+	ibftStorage      collections.Iibft
+	eth1Client       eth1.Client
+	dutyCtrl         duties.DutyController
 	//fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
+
+	ws                              api.WebSocketServer
+	wsAPIPort                       int
+	validatorMetaDataUpdateInterval time.Duration
 }
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
+	ibftStorage := collections.NewIbft(opts.DB, opts.Logger, "attestation")
+	validatorStorage := validator.NewCollection(
+		validator.CollectionOptions{
+			DB:     opts.DB,
+			Logger: opts.Logger,
+		},
+	)
+
 	node := &operatorNode{
-		context:        opts.Context,
-		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
-		validatorsCtrl: opts.ValidatorController,
-		ethNetwork:     opts.ETHNetwork,
-		beacon:         opts.Beacon,
-		net:            opts.Network,
-		eth1Client:     opts.Eth1Client,
-		storage:        NewNodeStorage(opts.DB, opts.Logger),
+		context:          opts.Context,
+		logger:           opts.Logger.With(zap.String("component", "operatorNode")),
+		validatorsCtrl:   opts.ValidatorController,
+		ethNetwork:       opts.ETHNetwork,
+		beacon:           opts.Beacon,
+		net:              opts.Network,
+		eth1Client:       opts.Eth1Client,
+		storage:          storage.NewNodeStorage(opts.DB, opts.Logger),
+		ibftStorage:      &ibftStorage,
+		validatorStorage: validatorStorage,
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
@@ -82,6 +109,10 @@ func New(opts Options) Node {
 		}),
 
 		forkVersion: opts.ForkVersion,
+
+		ws:                              opts.WS,
+		wsAPIPort:                       opts.WsAPIPort,
+		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
 	}
 
 	if err := node.init(opts); err != nil {
@@ -103,11 +134,22 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
 	n.dutyCtrl.Start()
+
+	if n.ws != nil {
+		n.logger.Info("starting WS server")
+
+		n.ws.UseQueryHandler(n.handleQueryRequests)
+
+		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -167,4 +209,25 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// handleQueryRequests waits for incoming messages and
+func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
+	}
+	n.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+	switch nm.Msg.Type {
+	case api.TypeOperator:
+		handleOperatorsQuery(n.logger, n.storage, nm)
+	case api.TypeValidator:
+		handleValidatorsQuery(n.logger, n.storage, nm)
+	case api.TypeDecided:
+		handleDecidedQuery(n.logger, n.storage, n.ibftStorage, nm)
+	case api.TypeError:
+		handleErrorQuery(n.logger, nm)
+	default:
+		handleUnknownQuery(n.logger, nm)
+	}
 }

@@ -24,7 +24,9 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/duties"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -46,6 +48,7 @@ type config struct {
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
+	WithPing                   bool   `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
@@ -54,6 +57,9 @@ type config struct {
 	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
+
+	WsAPIPort                       *int          `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
+	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
 }
 
 var cfg config
@@ -122,7 +128,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		nodeStorage := operator.NewNodeStorage(db, Logger)
+		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
 		if err := nodeStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
@@ -209,6 +215,13 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.ReadOnlyMode {
 			cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
 		}
+
+		if cfg.WsAPIPort != nil {
+			cfg.SSVOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
+			cfg.SSVOptions.WsAPIPort = *cfg.WsAPIPort
+			cfg.SSVOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
+		}
+
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
