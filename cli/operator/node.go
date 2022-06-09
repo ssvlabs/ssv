@@ -107,7 +107,7 @@ var StartNodeCmd = &cobra.Command{
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		if cfg.ForkV1Epoch > 0 {
-			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion) // TODO need to do it dynamic to support more than 1 fork
 		}
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))

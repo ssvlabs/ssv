@@ -20,12 +20,18 @@ const (
 	V0ForkVersion ForkVersion = "v0"
 	// V1ForkVersion is the version for v1
 	V1ForkVersion ForkVersion = "v1"
+	// V2ForkVersion is the version for v2
+	V2ForkVersion ForkVersion = "v2"
 )
 
 var (
 	// v1ForkEpoch is the epoch for fork version 0
 	// TODO: set actual epoch when decided
 	v1ForkEpoch = types.Epoch(math.MaxUint64)
+
+	// v2ForkEpoch is the epoch for fork version 1
+	// TODO: set actual epoch when decided
+	v2ForkEpoch = types.Epoch(math.MaxUint64)
 )
 
 // ForkHandler handles a fork event
@@ -36,10 +42,14 @@ type ForkHandler interface {
 
 // GetCurrentForkVersion returns the current fork version
 func GetCurrentForkVersion(currentEpoch types.Epoch) ForkVersion {
-	if currentEpoch >= v1ForkEpoch {
+	switch epoch := currentEpoch; {
+	case epoch >= v1ForkEpoch:
 		return V1ForkVersion
+	case epoch >= v2ForkEpoch:
+		return V2ForkVersion
+	default:
+		return V0ForkVersion
 	}
-	return V0ForkVersion
 }
 
 // SetForkEpoch injects a custom epoch for a specific version
@@ -49,5 +59,7 @@ func SetForkEpoch(targetEpoch types.Epoch, forkVersion ForkVersion) {
 	switch forkVersion {
 	case V1ForkVersion:
 		v1ForkEpoch = targetEpoch
+	case V2ForkVersion:
+		v2ForkEpoch = targetEpoch
 	}
 }
