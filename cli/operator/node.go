@@ -58,8 +58,7 @@ type config struct {
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
 
-	WsAPIPort                       *int          `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
-	ValidatorMetaDataUpdateInterval time.Duration `yaml:"ValidatorMetaDataUpdateInterval" env:"VALIDATOR_METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"set the interval at which validator metadata gets updated"`
+	WsAPIPort *int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 }
 
 var cfg config
@@ -214,7 +213,6 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.WsAPIPort != nil {
 			cfg.SSVOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WsAPIPort = *cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorMetaDataUpdateInterval = cfg.ValidatorMetaDataUpdateInterval
 		}
 
 		operatorNode = operator.New(cfg.SSVOptions)

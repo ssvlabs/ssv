@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -48,9 +47,8 @@ type Options struct {
 
 	ForkVersion forksprotocol.ForkVersion
 
-	WS                              api.WebSocketServer
-	WsAPIPort                       int
-	ValidatorMetaDataUpdateInterval time.Duration
+	WS        api.WebSocketServer
+	WsAPIPort int
 }
 
 // operatorNode implements Node interface
@@ -70,9 +68,8 @@ type operatorNode struct {
 
 	forkVersion forksprotocol.ForkVersion
 
-	ws                              api.WebSocketServer
-	wsAPIPort                       int
-	validatorMetaDataUpdateInterval time.Duration
+	ws        api.WebSocketServer
+	wsAPIPort int
 }
 
 // New is the constructor of operatorNode
@@ -112,9 +109,8 @@ func New(opts Options) Node {
 
 		forkVersion: opts.ForkVersion,
 
-		ws:                              opts.WS,
-		wsAPIPort:                       opts.WsAPIPort,
-		validatorMetaDataUpdateInterval: opts.ValidatorMetaDataUpdateInterval,
+		ws:        opts.WS,
+		wsAPIPort: opts.WsAPIPort,
 	}
 
 	if err := node.init(opts); err != nil {
