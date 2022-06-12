@@ -65,7 +65,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
-	if c.readMode {
+	if c.readMode { // in order to prevent sync
 		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not update decided message")
 		}
