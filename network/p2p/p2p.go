@@ -14,6 +14,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
@@ -32,7 +33,6 @@ const (
 const (
 	peerIndexGCInterval = 15 * time.Minute
 	reportingInterval   = 30 * time.Second
-	decidedTopic        = "decided"
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -121,19 +121,21 @@ func (n *p2pNetwork) Start() error {
 		n.reportTopics()
 	})
 
-	go func() {
-		// start listening to decided topic
-		err := tasks.RetryWithContext(n.ctx, func() error {
-			if err := n.topicsCtrl.Subscribe(decidedTopic); err != nil {
-				n.logger.Warn("could not register to decided topic", zap.Error(err))
-				return err
-			}
-			return nil
-		}, 3)
-		if err != nil {
-			n.logger.Error("could not register to decided topic", zap.Error(err))
+	decidedTopic := n.fork.DecidedTopic()
+	if len(decidedTopic) == 0 {
+		return nil
+	}
+	// start listening to decided topic
+	err := tasks.RetryWithContext(n.ctx, func() error {
+		if err := n.topicsCtrl.Subscribe(decidedTopic); err != nil {
+			n.logger.Warn("could not register to decided topic", zap.Error(err))
+			return err
 		}
-	}()
+		return nil
+	}, 3)
+	if err != nil {
+		return errors.Wrap(err, "could not register to decided topic")
+	}
 
 	return nil
 }

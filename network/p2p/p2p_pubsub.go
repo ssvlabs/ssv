@@ -49,7 +49,7 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
 	// for decided message, send on decided channel as well
-	if msg.MsgType == message.SSVDecidedMsgType {
+	if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
 		topics = append(topics, decidedTopic)
 	}
 	for _, topic := range topics {

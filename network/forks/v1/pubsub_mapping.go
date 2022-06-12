@@ -9,10 +9,15 @@ import (
 const (
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
+	decidedTopic  = "decided"
 )
 
 // SubnetsCount returns the subnet count for v1
 var SubnetsCount uint64 = 128
+
+func (v1 *ForkV1) DecidedTopic() string {
+	return decidedTopic
+}
 
 // ValidatorTopicID returns the topic to use for the given validator
 func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) []string {
