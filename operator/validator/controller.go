@@ -238,7 +238,9 @@ func (c *controller) handleRouterMessages() {
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				v.ProcessMsg(&msg) // TODO need to handle error?
+				if err := v.ProcessMsg(&msg); err != nil {
+					c.logger.Warn("failed to process message", zap.Error(err))
+				}
 			} else if c.forkVersion != forksprotocol.V0ForkVersion && msg.MsgType == message.SSVDecidedMsgType {
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")

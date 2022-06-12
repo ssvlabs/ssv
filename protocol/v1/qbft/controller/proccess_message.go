@@ -12,7 +12,7 @@ import (
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
 	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
 	switch signedMessage.Message.MsgType {
-	case message.RoundChangeMsgType:
+	case message.RoundChangeMsgType: // supporting read-mode
 		if c.readMode {
 			return c.ProcessChangeRound(signedMessage)
 		}
