@@ -32,6 +32,7 @@ const (
 const (
 	peerIndexGCInterval = 15 * time.Minute
 	reportingInterval   = 30 * time.Second
+	decidedTopic        = "decided"
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -119,6 +120,20 @@ func (n *p2pNetwork) Start() error {
 		go n.reportAllPeers()
 		n.reportTopics()
 	})
+
+	go func() {
+		// start listening to decided topic
+		err := tasks.RetryWithContext(n.ctx, func() error {
+			if err := n.topicsCtrl.Subscribe(decidedTopic); err != nil {
+				n.logger.Warn("could not register to decided topic", zap.Error(err))
+				return err
+			}
+			return nil
+		}, 3)
+		if err != nil {
+			n.logger.Error("could not register to decided topic", zap.Error(err))
+		}
+	}()
 
 	return nil
 }
