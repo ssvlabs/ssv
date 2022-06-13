@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -87,7 +88,7 @@ func (cfg *PububConfig) initScoring() {
 }
 
 // NewPubsub creates a new pubsub router and the necessary components
-func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controller, error) {
+func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.validate(); err != nil {
 		return nil, nil, err
 	}
@@ -133,7 +134,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig) (*pubsub.PubSub, Controlle
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, nil)
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, nil)
 
 	return ps, ctrl, nil
 }

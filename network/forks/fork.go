@@ -26,6 +26,13 @@ type nodeRecord interface {
 type pubSubMapping interface {
 	// ValidatorTopicID maps the given validator public key to the corresponding pubsub topic
 	ValidatorTopicID(pk []byte) []string
+	// DecidedTopic returns the name used for main/decided topic,
+	// or empty string if the fork doesn't include a decided topic
+	DecidedTopic() string
+	// GetTopicFullName returns the topic full name, including prefix
+	GetTopicFullName(baseName string) string
+	// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
+	GetTopicBaseName(topicName string) string
 }
 
 type pubSubConfig interface {
