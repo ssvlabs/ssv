@@ -17,7 +17,8 @@ const (
 	unknownError = "unknown error"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *NetworkMessage) {
+// HandleOperatorsQuery handles TypeOperator queries.
+func HandleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -36,7 +37,8 @@ func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsC
 	nm.Msg = res
 }
 
-func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *NetworkMessage) {
+// HandleValidatorsQuery handles TypeValidator queries.
+func HandleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *NetworkMessage) {
 	logger.Debug("handles validators request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -55,9 +57,10 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 	nm.Msg = res
 }
 
+// HandleDecidedQuery handles TypeDecided queries.
 // TODO: un-lint
 //nolint
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorage.QBFTStore, nm *NetworkMessage) {
+func HandleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorage.QBFTStore, nm *NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -95,7 +98,8 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 	nm.Msg = res
 }
 
-func handleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
+// HandleErrorQuery handles TypeError queries.
+func HandleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
 	logger.Warn("handles error message")
 	if _, ok := nm.Msg.Data.([]string); !ok {
 		nm.Msg.Data = []string{}
@@ -113,7 +117,8 @@ func handleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
 	}
 }
 
-func handleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
+// HandleUnknownQuery handles unknown queries.
+func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 	logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
 	nm.Msg = Message{
 		Type: TypeError,

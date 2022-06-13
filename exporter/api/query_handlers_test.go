@@ -30,7 +30,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 		Conn: nil,
 	}
 
-	handleUnknownQuery(logger, &nm)
+	HandleUnknownQuery(logger, &nm)
 	errs, ok := nm.Msg.Data.([]string)
 	require.True(t, ok)
 	require.Equal(t, "bad request - unknown message type 'unknown_type'", errs[0])
@@ -66,7 +66,7 @@ func TestHandleErrorQuery(t *testing.T) {
 				Err:  test.netErr,
 				Conn: nil,
 			}
-			handleErrorQuery(logger, &nm)
+			HandleErrorQuery(logger, &nm)
 			errs, ok := nm.Msg.Data.([]string)
 			require.True(t, ok)
 			require.Equal(t, test.expectedErr, errs[0])
@@ -111,7 +111,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleOperatorsQuery(l, s, &nm)
+		HandleOperatorsQuery(l, s, &nm)
 		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
@@ -131,7 +131,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleOperatorsQuery(l, s, &nm)
+		HandleOperatorsQuery(l, s, &nm)
 		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
@@ -147,7 +147,7 @@ func TestHandleOperatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleOperatorsQuery(l, s, &nm)
+		HandleOperatorsQuery(l, s, &nm)
 		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
@@ -189,7 +189,7 @@ func TestHandleValidatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleValidatorsQuery(l, s, &nm)
+		HandleValidatorsQuery(l, s, &nm)
 		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)
@@ -211,7 +211,7 @@ func TestHandleValidatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleValidatorsQuery(l, s, &nm)
+		HandleValidatorsQuery(l, s, &nm)
 		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)
@@ -227,7 +227,7 @@ func TestHandleValidatorsQuery(t *testing.T) {
 			Err:  nil,
 			Conn: nil,
 		}
-		handleValidatorsQuery(l, s, &nm)
+		HandleValidatorsQuery(l, s, &nm)
 		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)

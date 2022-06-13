@@ -12,8 +12,6 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/exporter"
 )
 
 var (
@@ -143,7 +141,7 @@ func (c *conn) WriteLoop() {
 			c.writeLock.Lock()
 			n, err := c.sendMsg(message)
 			c.writeLock.Unlock()
-			exporter.reportStreamOutbound(c.ws.RemoteAddr().String(), err)
+			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
 				c.logger.Warn("failed to send message", zap.Error(err))
 				return
