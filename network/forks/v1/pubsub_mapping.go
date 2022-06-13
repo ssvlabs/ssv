@@ -15,6 +15,7 @@ const (
 // SubnetsCount returns the subnet count for v1
 var SubnetsCount uint64 = 128
 
+// DecidedTopic returns decided topic name for v1
 func (v1 *ForkV1) DecidedTopic() string {
 	return decidedTopic
 }

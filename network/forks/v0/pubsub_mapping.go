@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 )
 
+// DecidedTopic implements forks.Fork, for v0 there is no decided topic
 func (v0 *ForkV0) DecidedTopic() string {
 	return ""
 }
