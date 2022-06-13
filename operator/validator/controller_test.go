@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 	"sync"
 	"testing"
+	"time"
 )
 
 func init() {
@@ -25,31 +26,39 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	var wg sync.WaitGroup
 
 	ctr.messageWorker.SetHandler(func(msg *message.SSVMessage) error {
-		require.True(t, msg.MsgType == message.SSVDecidedMsgType)
 		wg.Done()
 		return nil
 	})
+
+	wg.Add(2)
+
+	identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
 	ctr.messageRouter.Route(message.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,
-		ID:      message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
+
 	ctr.messageRouter.Route(message.SSVMessage{
 		MsgType: message.SSVConsensusMsgType,
-		ID:      message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
-		Data:    []byte("data"), // TODO add change round msg
+		ID:      identifier,
+		Data:    generateChangeRoundMsg(t, identifier),
 	})
+
 	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
 		MsgType: message.SSVSyncMsgType,
-		ID:      message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
 	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
 		MsgType: message.SSVPostConsensusMsgType,
-		ID:      message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
-	wg.Add(2)
+	go func() {
+		time.Sleep(time.Second * 4)
+		panic("time out!")
+	}()
 	wg.Wait()
 
 }
@@ -150,4 +159,29 @@ func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {
 		Committee: nil,
 		Metadata:  metaData,
 	}}
+}
+
+func generateChangeRoundMsg(t *testing.T, identifier message.Identifier) []byte {
+	crd := message.RoundChangeData{
+		PreparedValue:            nil,
+		Round:                    0,
+		NextProposalData:         nil,
+		RoundChangeJustification: nil,
+	}
+	encoded, err := crd.Encode()
+	require.NoError(t, err)
+	sm := message.SignedMessage{
+		Signature: []byte("sig"),
+		Signers:   []message.OperatorID{1},
+		Message: &message.ConsensusMessage{
+			MsgType:    message.RoundChangeMsgType,
+			Height:     0,
+			Round:      1,
+			Identifier: identifier,
+			Data:       encoded,
+		},
+	}
+	res, err := sm.Encode()
+	require.NoError(t, err)
+	return res
 }

@@ -17,6 +17,13 @@ import (
 func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger := n.logger.With(zap.String("where", "OnFork"))
 	logger.Info("forking network")
+
+	if forkVersion == forksprotocol.V2ForkVersion { // on fork v2 only need to change fork (soft fork)
+		n.fork = forksfactory.NewFork(forkVersion)
+		n.cfg.ForkVersion = forkVersion
+		return nil
+	}
+
 	atomic.StoreInt32(&n.state, stateForking)
 	if err := n.Close(); err != nil {
 		return errors.Wrap(err, "could not close network")
