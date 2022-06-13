@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"sync"
 	"time"
 
@@ -98,6 +99,12 @@ func (md *localDiscovery) RegisterSubnets(subnets ...int64) error {
 
 // DeregisterSubnets implements Service
 func (md *localDiscovery) DeregisterSubnets(subnets ...int64) error {
+	// TODO
+	return nil
+}
+
+// UpdateForkVersion implements Service
+func (md *localDiscovery) UpdateForkVersion(forkv forksprotocol.ForkVersion) error {
 	// TODO
 	return nil
 }
