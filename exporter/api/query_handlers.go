@@ -1,27 +1,29 @@
-package exporter
+package api
 
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/collections"
-	"github.com/bloxapp/ssv/utils/format"
+
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
 	unknownError = "unknown error"
 )
 
-func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api.NetworkMessage) {
+func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *NetworkMessage) {
 	logger.Debug("handles operators request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
-	res := api.Message{
+	res := Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -34,12 +36,12 @@ func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsC
 	nm.Msg = res
 }
 
-func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
+func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *NetworkMessage) {
 	logger.Debug("handles validators request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
-	res := api.Message{
+	res := Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -55,13 +57,13 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 
 // TODO: un-lint
 //nolint
-func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
+func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, qbftStorage qbftstorage.QBFTStore, nm *NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey),
 		zap.String("role", string(nm.Msg.Filter.Role)))
-	res := api.Message{
+	res := Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
 	}
@@ -79,7 +81,9 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 			res.Data = []string{"internal error - could not read validator key"}
 		} else {
 			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
-			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), nm.Msg.Filter.From, nm.Msg.Filter.To)
+			from := message.Height(nm.Msg.Filter.From)
+			to := message.Height(nm.Msg.Filter.To)
+			msgs, err := qbftStorage.GetDecided([]byte(identifier), from, to)
 			if err != nil {
 				logger.Warn("failed to get decided messages", zap.Error(err))
 				res.Data = []string{"internal error - could not get decided messages"}
@@ -91,7 +95,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 	nm.Msg = res
 }
 
-func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
+func handleErrorQuery(logger *zap.Logger, nm *NetworkMessage) {
 	logger.Warn("handles error message")
 	if _, ok := nm.Msg.Data.([]string); !ok {
 		nm.Msg.Data = []string{}
@@ -103,16 +107,16 @@ func handleErrorQuery(logger *zap.Logger, nm *api.NetworkMessage) {
 	if len(errs) == 0 {
 		errs = append(errs, unknownError)
 	}
-	nm.Msg = api.Message{
-		Type: api.TypeError,
+	nm.Msg = Message{
+		Type: TypeError,
 		Data: errs,
 	}
 }
 
-func handleUnknownQuery(logger *zap.Logger, nm *api.NetworkMessage) {
+func handleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 	logger.Warn("unknown message type", zap.String("messageType", string(nm.Msg.Type)))
-	nm.Msg = api.Message{
-		Type: api.TypeError,
+	nm.Msg = Message{
+		Type: TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
 }

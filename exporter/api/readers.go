@@ -1,4 +1,4 @@
-package operator
+package api
 
 import (
 	"fmt"
@@ -6,7 +6,6 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
@@ -19,7 +18,7 @@ func (a operatorIndexSorter) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a operatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Index }
 
 // getOperators returns a list operators according to the given filter
-func getOperators(s registrystorage.OperatorsCollection, filter api.MessageFilter) ([]registrystorage.OperatorData, error) {
+func getOperators(s registrystorage.OperatorsCollection, filter MessageFilter) ([]registrystorage.OperatorData, error) {
 	var operators []registrystorage.OperatorData
 	if len(filter.PublicKey) > 0 {
 		operator, found, err := s.GetOperatorDataByPubKey(filter.PublicKey)
@@ -49,7 +48,7 @@ func (a validatorIndexSorter) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a validatorIndexSorter) Less(i, j int) bool { return a[i].Index < a[j].Index }
 
 // getValidators returns a list validators according to the given filter
-func getValidators(s storage.ValidatorsCollection, filter api.MessageFilter) ([]storage.ValidatorInformation, error) {
+func getValidators(s storage.ValidatorsCollection, filter MessageFilter) ([]storage.ValidatorInformation, error) {
 	var validators []storage.ValidatorInformation
 	if len(filter.PublicKey) > 0 {
 		validator, found, err := s.GetValidatorInformation(filter.PublicKey)

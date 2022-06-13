@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 

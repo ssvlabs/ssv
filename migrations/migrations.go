@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	exporterstorage "github.com/bloxapp/ssv/exporter/storage"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
@@ -54,12 +53,9 @@ type Options struct {
 }
 
 func (o *Options) getRegistryStores() []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.exporterStorage(), o.validatorStorage(), o.nodeStorage()}
+	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage()}
 }
 
-func (o Options) exporterStorage() exporterstorage.Storage {
-	return exporterstorage.NewExporterStorage(o.Db, o.Logger)
-}
 func (o Options) validatorStorage() validatorstorage.ICollection {
 	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB:     o.Db,

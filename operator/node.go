@@ -8,15 +8,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter/api"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/operator/api"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -73,7 +74,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, "attestation", opts.ForkVersion)
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, message.RoleTypeAttester.String(), opts.ForkVersion)
 
 	validatorStorage := validator.NewCollection(
 		validator.CollectionOptions{
@@ -217,14 +218,14 @@ func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeOperator:
-		handleOperatorsQuery(n.logger, n.storage, nm)
+		api.handleOperatorsQuery(n.logger, n.storage, nm)
 	case api.TypeValidator:
-		handleValidatorsQuery(n.logger, n.storage, nm)
+		api.handleValidatorsQuery(n.logger, n.storage, nm)
 	case api.TypeDecided:
-		handleDecidedQuery(n.logger, n.storage, n.qbftStorage, nm)
+		api.handleDecidedQuery(n.logger, n.storage, n.qbftStorage, nm)
 	case api.TypeError:
-		handleErrorQuery(n.logger, nm)
+		api.handleErrorQuery(n.logger, nm)
 	default:
-		handleUnknownQuery(n.logger, nm)
+		api.handleUnknownQuery(n.logger, nm)
 	}
 }

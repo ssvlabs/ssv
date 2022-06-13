@@ -3,16 +3,18 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/exporter/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"math/rand"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/operator/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 func TestHandleQuery(t *testing.T) {

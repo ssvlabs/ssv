@@ -1,4 +1,4 @@
-package exporter
+package api
 
 import (
 	"encoding/hex"
@@ -6,8 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/storage"
+	"github.com/bloxapp/ssv/operator/storage"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -22,10 +21,10 @@ import (
 func TestHandleUnknownQuery(t *testing.T) {
 	logger := zap.L()
 
-	nm := api.NetworkMessage{
-		Msg: api.Message{
+	nm := NetworkMessage{
+		Msg: Message{
 			Type:   "unknown_type",
-			Filter: api.MessageFilter{},
+			Filter: MessageFilter{},
 		},
 		Err:  nil,
 		Conn: nil,
@@ -59,10 +58,10 @@ func TestHandleErrorQuery(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			nm := api.NetworkMessage{
-				Msg: api.Message{
-					Type:   api.TypeError,
-					Filter: api.MessageFilter{},
+			nm := NetworkMessage{
+				Msg: Message{
+					Type:   TypeError,
+					Filter: MessageFilter{},
 				},
 				Err:  test.netErr,
 				Conn: nil,
@@ -104,16 +103,16 @@ func TestHandleOperatorsQuery(t *testing.T) {
 	}
 
 	t.Run("query by index", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeOperator,
-				Filter: api.MessageFilter{From: 0, To: 1},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeOperator,
+				Filter: MessageFilter{From: 0, To: 1},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleOperatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeOperator, nm.Msg.Type)
+		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 2, len(results))
@@ -124,32 +123,32 @@ func TestHandleOperatorsQuery(t *testing.T) {
 	})
 
 	t.Run("query non-existing index", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeOperator,
-				Filter: api.MessageFilter{From: 100, To: 101},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeOperator,
+				Filter: MessageFilter{From: 100, To: 101},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleOperatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeOperator, nm.Msg.Type)
+		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 0, len(results))
 	})
 
 	t.Run("query by pubKey", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeOperator,
-				Filter: api.MessageFilter{PublicKey: "03030303"},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeOperator,
+				Filter: MessageFilter{PublicKey: "03030303"},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleOperatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeOperator, nm.Msg.Type)
+		require.Equal(t, TypeOperator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
 		require.True(t, ok)
 		require.Equal(t, 1, len(results))
@@ -182,16 +181,16 @@ func TestHandleValidatorsQuery(t *testing.T) {
 	}
 
 	t.Run("query by index", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeValidator,
-				Filter: api.MessageFilter{From: 0, To: 1},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeValidator,
+				Filter: MessageFilter{From: 0, To: 1},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleValidatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeValidator, nm.Msg.Type)
+		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 2, len(results))
@@ -204,32 +203,32 @@ func TestHandleValidatorsQuery(t *testing.T) {
 	})
 
 	t.Run("query non-existing index", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeValidator,
-				Filter: api.MessageFilter{From: 100, To: 101},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeValidator,
+				Filter: MessageFilter{From: 100, To: 101},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleValidatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeValidator, nm.Msg.Type)
+		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 0, len(results))
 	})
 
 	t.Run("query by pubKey", func(t *testing.T) {
-		nm := api.NetworkMessage{
-			Msg: api.Message{
-				Type:   api.TypeValidator,
-				Filter: api.MessageFilter{PublicKey: "03030303"},
+		nm := NetworkMessage{
+			Msg: Message{
+				Type:   TypeValidator,
+				Filter: MessageFilter{PublicKey: "03030303"},
 			},
 			Err:  nil,
 			Conn: nil,
 		}
 		handleValidatorsQuery(l, s, &nm)
-		require.Equal(t, api.TypeValidator, nm.Msg.Type)
+		require.Equal(t, TypeValidator, nm.Msg.Type)
 		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
 		require.True(t, ok)
 		require.Equal(t, 1, len(results))
@@ -287,15 +286,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 // TODO: un-lint
 //nolint
-func newDecidedAPIMsg(pk string, from, to uint64) *api.NetworkMessage {
-	return &api.NetworkMessage{
-		Msg: api.Message{
-			Type: api.TypeDecided,
-			Filter: api.MessageFilter{
+func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
+	return &NetworkMessage{
+		Msg: Message{
+			Type: TypeDecided,
+			Filter: MessageFilter{
 				PublicKey: pk,
 				From:      from,
 				To:        to,
-				Role:      api.RoleAttester,
+				Role:      RoleAttester,
 			},
 		},
 		Err:  nil,
@@ -319,7 +318,7 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 }
 
 func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorage.QBFTStore) {
-	sExporter := storage.NewExporterStorage(db, logger)
+	sExporter := storage.NewNodeStorage(db, logger)
 	sIbft := qbftstorage.NewQBFTStore(db, logger, "attestation")
 	return sExporter, sIbft
 }

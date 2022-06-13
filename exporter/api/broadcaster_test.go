@@ -3,12 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/prysmaticlabs/prysm/async/event"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestConn_Send_FullQueue(t *testing.T) {
