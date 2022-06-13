@@ -107,7 +107,13 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
-	c.logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
+	logger := c.logger.With()
+	if ci := c.getCurrentInstance(); ci != nil {
+		if s := ci.State(); s != nil {
+			logger = logger.With(zap.Uint64("instanceHeight", uint64(s.GetHeight())))
+		}
+	}
+	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
 		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.getCurrentInstance().State()); err != nil {
@@ -127,12 +133,12 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
 			}
-			c.logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
+			logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
 			if err = c.network.Broadcast(ssvMsg); err != nil {
 				return errors.Wrap(err, "could not broadcast decided message")
 			}
-			c.logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
-				zap.Uint64("seqNum", uint64(agg.Message.Height)))
+			logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
+				zap.Uint64("msgHeight", uint64(agg.Message.Height)))
 			return nil
 		}
 
@@ -150,9 +156,8 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 		if err := c.getCurrentInstance().BroadcastChangeRound(); err != nil {
 			c.logger.Error("could not broadcast round change message", zap.Error(err))
 		}
-
 	case qbft.RoundStateStopped:
-		c.logger.Info("current iBFT instance stopped, nilling currentInstance", zap.Uint64("seqNum", uint64(c.getCurrentInstance().State().GetHeight())))
+		c.logger.Info("current iBFT instance stopped, nilling currentInstance")
 		return true, nil
 	}
 	return false, nil
