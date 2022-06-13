@@ -4,16 +4,29 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
 	decidedTopic  = "decided"
+
+	topicPrefix = "ssv.v1"
 )
 
 // SubnetsCount returns the subnet count for v1
 var SubnetsCount uint64 = 128
+
+// GetTopicFullName returns the topic full name, including prefix
+func (v1 *ForkV1) GetTopicFullName(baseName string) string {
+	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
+}
+
+// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
+func (v1 *ForkV1) GetTopicBaseName(topicName string) string {
+	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
+}
 
 // DecidedTopic returns decided topic name for v1
 func (v1 *ForkV1) DecidedTopic() string {

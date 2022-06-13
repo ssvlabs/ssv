@@ -2,19 +2,14 @@ package topics
 
 import (
 	"context"
-	"fmt"
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
-	"strings"
 	"sync"
 	"time"
-)
-
-const (
-	topicPrefix = "bloxstaking.ssv"
 )
 
 var (
@@ -54,12 +49,14 @@ type topicsCtrl struct {
 
 	containers map[string]*topicContainer
 	topicsLock *sync.RWMutex
+
+	fork forks.Fork
 }
 
 // NewTopicsController creates an instance of Controller
 func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
 	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
-	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+	fork forks.Fork, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	ctrl := &topicsCtrl{
 		ctx:                 ctx,
 		logger:              logger,
@@ -72,6 +69,8 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 		containers: make(map[string]*topicContainer),
 
 		subFilter: subFilter,
+
+		fork: fork,
 	}
 
 	return ctrl
@@ -81,7 +80,7 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
 	for _, tp := range topics {
-		if err := ctrl.Unsubscribe(getTopicBaseName(tp), true); err != nil {
+		if err := ctrl.Unsubscribe(ctrl.fork.GetTopicBaseName(tp), true); err != nil {
 			ctrl.logger.Warn("could not unsubscribe topic", zap.String("topic", tp), zap.Error(err))
 		}
 	}
@@ -90,7 +89,7 @@ func (ctrl *topicsCtrl) Close() error {
 
 // Peers returns the peers subscribed to the given topic
 func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
-	topicName = getTopicName(topicName)
+	topicName = ctrl.fork.GetTopicFullName(topicName)
 	cont := ctrl.getTopicContainer(topicName)
 	if cont == nil || cont.topic == nil {
 		return nil, ErrTopicNotReady
@@ -103,7 +102,7 @@ func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {
-		topics[i] = getTopicBaseName(tp)
+		topics[i] = ctrl.fork.GetTopicBaseName(tp)
 	}
 	return topics
 }
@@ -111,7 +110,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
 // it will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
-	name = getTopicName(name)
+	name = ctrl.fork.GetTopicFullName(name)
 	tc, err := ctrl.joinTopic(name)
 	if err == nil && tc != nil {
 		tc.incSubCount()
@@ -121,7 +120,7 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	name = getTopicName(name)
+	name = ctrl.fork.GetTopicFullName(name)
 
 	tc, err := ctrl.joinTopic(name)
 	if err != nil {
@@ -133,7 +132,11 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 	ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
 
-	return tc.Publish(ctx, data)
+	err = tc.Publish(ctx, data)
+	if err == nil {
+		metricsPubsubOutbound.WithLabelValues(ctrl.fork.GetTopicBaseName(tc.topic.String())).Inc()
+	}
+	return err
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
@@ -142,7 +145,7 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 	ctrl.topicsLock.Lock()
 	defer ctrl.topicsLock.Unlock()
 
-	name = getTopicName(name)
+	name = ctrl.fork.GetTopicFullName(name)
 
 	tc := ctrl.getTopicContainerUnsafe(name)
 	if tc == nil {
@@ -271,7 +274,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Warn("got empty message from subscription")
 			continue
 		}
-		metricsPubsubInbound.WithLabelValues(getTopicBaseName(topicName)).Inc()
+		metricsPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
 		//logger.Debug("got message from topic", zap.String("topic", topicName))
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
@@ -341,16 +344,4 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 	tc.sub = sub
 
 	return nil
-}
-
-// getTopicName returns the topic full name, including prefix
-// TODO: consider moving this to network fork
-func getTopicName(baseName string) string {
-	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
-}
-
-// getTopicBaseName return the base topic name of the topic, w/o ssv prefix
-// TODO: consider moving this to network fork
-func getTopicBaseName(topicName string) string {
-	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
 }

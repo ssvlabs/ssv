@@ -34,7 +34,7 @@ func TestMsgValidator(t *testing.T) {
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
 		topics := f.ValidatorTopicID(pk)
-		pmsg := newPBMsg(raw, getTopicName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
+		pmsg := newPBMsg(raw, f.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, res, pubsub.ValidationAccept)
 	})
