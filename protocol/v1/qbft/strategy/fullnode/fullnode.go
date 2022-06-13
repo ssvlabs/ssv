@@ -30,10 +30,10 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 	}
 }
 
-func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error {
+func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, knownMsg *message.SignedMessage, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
 	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
-		return f.store.GetLastDecided(i)
+		return knownMsg, nil
 	})
 	if err != nil {
 		return errors.Wrap(err, "could not get last decided from peers")

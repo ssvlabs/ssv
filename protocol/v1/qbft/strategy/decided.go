@@ -24,7 +24,7 @@ const (
 // in regular mode, the node only cares about last decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier message.Identifier, pip pipelines.SignedMessagePipeline) error
+	Sync(ctx context.Context, identifier message.Identifier, knownMsg *message.SignedMessage, pip pipelines.SignedMessagePipeline) error
 	// ValidateHeight validates the height of the given message
 	ValidateHeight(msg *message.SignedMessage) (bool, error)
 	// IsMsgKnown checks if the given decided message is known
