@@ -49,10 +49,10 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		RequireMinPeers: true,
 	})
 	if err != nil {
-		return nil, 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
+		return nil, 0, nil, 0, errors.Wrap(err, "ibft instance failed")
 	}
 	if result == nil {
-		return nil, 0, nil, height, errors.Wrap(err, "instance result returned nil")
+		return nil, 0, nil, height, errors.New("instance result returned nil")
 	}
 	if !result.Decided {
 		return nil, 0, nil, height, errors.New("instance did not decide")

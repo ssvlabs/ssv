@@ -151,11 +151,11 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				defer wg.Done()
 				for _, p := range peers {
 					// wait for messages
-					for ctxReadMessages.Err() == nil && p.getCount(getTopicName(validatorTopic(pk))) < minMsgCount {
+					for ctxReadMessages.Err() == nil && p.getCount(f.GetTopicFullName(validatorTopic(pk))) < minMsgCount {
 						time.Sleep(time.Millisecond * 100)
 					}
 					require.NoError(t, ctxReadMessages.Err())
-					c := p.getCount(getTopicName(validatorTopic(pk)))
+					c := p.getCount(f.GetTopicFullName(validatorTopic(pk)))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					require.LessOrEqual(t, c, maxMsgCount)
 				}
@@ -283,7 +283,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 				fork, h.ID())
 		}
 	}
-	ps, tm, err := NewPubsub(ctx, cfg)
+	ps, tm, err := NewPubsub(ctx, cfg, fork)
 	require.NoError(t, err)
 
 	p = &P{
