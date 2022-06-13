@@ -29,6 +29,9 @@ func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
 			NetworkID:   currentSlef.NetworkID,
 			Metadata:    currentSlef.Metadata,
 		})
+		if err := n.disc.UpdateForkVersion(forkVersion); err != nil {
+			logger.Panic("failed to update discv5 fork version", zap.Error(err))
+		}
 		atomic.StoreInt32(&n.state, stateReady)
 		return nil
 	}
