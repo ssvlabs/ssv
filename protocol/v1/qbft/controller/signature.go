@@ -142,7 +142,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 	case message.RoleTypeAttester:
 		s := &spec.AttestationData{}
 		if err := s.UnmarshalSSZ(decidedValue); err != nil {
-			return nil, nil, nil, errors.Wrap(err, "failed to marshal attestation")
+			return nil, nil, nil, errors.Wrap(err, "failed to unmarshal attestation")
 		}
 		signedAttestation, r, err := c.signer.SignAttestation(s, duty, pk.Serialize())
 		if err != nil {
