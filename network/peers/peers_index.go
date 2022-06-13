@@ -102,6 +102,14 @@ func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	return len(peers) > maxPeers
 }
 
+func (pi *peersIndex) UpdateSelfRecord(newSelf *records.NodeInfo) {
+	pi.selfLock.Lock()
+	defer pi.selfLock.Unlock()
+
+	pi.selfSealed = nil
+	pi.self = newSelf
+}
+
 func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }

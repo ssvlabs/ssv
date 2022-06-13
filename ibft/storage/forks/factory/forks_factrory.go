@@ -12,7 +12,7 @@ func NewFork(forkVersion forksprotocol.ForkVersion) forks.Fork {
 	switch forkVersion {
 	case forksprotocol.V0ForkVersion:
 		return &v0.ForkV0{}
-	case forksprotocol.V1ForkVersion:
+	case forksprotocol.V1ForkVersion, forksprotocol.V2ForkVersion: // v2 has no different from v1
 		return &v1.ForkV1{}
 	default:
 		return nil

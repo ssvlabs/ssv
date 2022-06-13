@@ -43,10 +43,10 @@ type ForkHandler interface {
 // GetCurrentForkVersion returns the current fork version
 func GetCurrentForkVersion(currentEpoch types.Epoch) ForkVersion {
 	switch epoch := currentEpoch; {
+	case epoch >= v2ForkEpoch: // check highest first
+		return V2ForkVersion
 	case epoch >= v1ForkEpoch:
 		return V1ForkVersion
-	case epoch >= v2ForkEpoch:
-		return V2ForkVersion
 	default:
 		return V0ForkVersion
 	}

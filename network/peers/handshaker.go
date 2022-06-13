@@ -259,11 +259,11 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 }
 
 // ForkVersionFilter determines whether we will connect to the given node by the fork version
-func ForkVersionFilter(forkVersion forksprotocol.ForkVersion) HandshakeFilter {
-	forkvStr := forkVersion.String()
+func ForkVersionFilter(forkVersion func() forksprotocol.ForkVersion) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
-		if forkVersion != ni.ForkVersion {
-			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), forkvStr)
+		version := forkVersion()
+		if version != ni.ForkVersion {
+			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), version)
 		}
 		return true, nil
 	}

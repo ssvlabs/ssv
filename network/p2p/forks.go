@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	"github.com/bloxapp/ssv/network/records"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,8 +20,16 @@ func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger.Info("forking network")
 
 	if forkVersion == forksprotocol.V2ForkVersion { // on fork v2 only need to change fork (soft fork)
+		atomic.StoreInt32(&n.state, stateForking)
 		n.fork = forksfactory.NewFork(forkVersion)
 		n.cfg.ForkVersion = forkVersion
+		currentSlef := n.idx.Self()
+		n.idx.UpdateSelfRecord(&records.NodeInfo{
+			ForkVersion: forkVersion,
+			NetworkID:   currentSlef.NetworkID,
+			Metadata:    currentSlef.Metadata,
+		})
+		atomic.StoreInt32(&n.state, stateReady)
 		return nil
 	}
 

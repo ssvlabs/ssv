@@ -54,6 +54,7 @@ type config struct {
 	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
+	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-description:"Target epoch for fork v2"`
 }
 
 var cfg config
@@ -107,7 +108,11 @@ var StartNodeCmd = &cobra.Command{
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		if cfg.ForkV1Epoch > 0 {
-			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion) // TODO need to do it dynamic to support more than 1 fork
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
+		}
+		if cfg.ForkV2Epoch > 0 {
+			Logger.Debug("setting v2 epoch", zap.Uint64("epoch", cfg.ForkV2Epoch))
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV2Epoch), forksprotocol.V2ForkVersion)
 		}
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))

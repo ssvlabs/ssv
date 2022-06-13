@@ -15,7 +15,7 @@ const (
 var SubnetsCount uint64 = 128
 
 // ValidatorTopicID returns the topic to use for the given validator
-func (v1 *ForkV2) ValidatorTopicID(pkByts []byte) []string {
+func (v2 *ForkV2) ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := validatorSubnet(pkHex)
 	return []string{topicOf(subnet)}
