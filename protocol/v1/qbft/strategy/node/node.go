@@ -58,7 +58,7 @@ func (f *regularNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Sig
 		return false, nil, err
 	}
 	if local == nil {
-		return false, local, nil
+		return false, nil, nil // local is nil anyway
 	}
 	if local.Message.Height == msg.Message.Height {
 		if ignore := checkDecidedMessageSigners(local, msg); ignore {
@@ -77,7 +77,7 @@ func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.Si
 }
 
 func (f *regularNode) UpdateDecided(msg *message.SignedMessage) error {
-	return f.store.SaveLastDecided(msg)
+	return f.SaveDecided(msg) // use the same func as SaveDecided func
 }
 
 func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error) {

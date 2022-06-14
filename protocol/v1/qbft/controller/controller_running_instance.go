@@ -53,6 +53,7 @@ instanceLoop:
 			retMsg, e := c.decidedStrategy.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
 			if e != nil {
 				err = e
+				c.logger.Error("failed to get decided when instance exist", zap.Error(e))
 				break instanceLoop
 			}
 			if len(retMsg) == 0 {
