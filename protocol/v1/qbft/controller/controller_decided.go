@@ -86,7 +86,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	if shouldSync {
 		logger.Info("should sync, update decided")
-		if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
 			logger.Error("failed to save decided when should sync", zap.Error(err))
 		}
 		logger.Info("stopping current instance and syncing..")
