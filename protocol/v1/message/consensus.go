@@ -240,6 +240,11 @@ func (msg *ConsensusMessage) Sign(sk *bls.SecretKey, forkVersion string) (*bls.S
 	return sk.SignByte(root), nil
 }
 
+// Higher checks if the message is higher than the other
+func (msg *ConsensusMessage) Higher(other *ConsensusMessage) bool {
+	return msg.Height > other.Height
+}
+
 // SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
 	Signature Signature
@@ -337,6 +342,11 @@ func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	copy(ret.Message.Identifier, signedMsg.Message.Identifier)
 	copy(ret.Message.Data, signedMsg.Message.Data)
 	return ret
+}
+
+// HasMoreSigners checks if the message has more signers than the other
+func (signedMsg *SignedMessage) HasMoreSigners(other *SignedMessage) bool {
+	return len(signedMsg.GetSigners()) > len(other.GetSigners())
 }
 
 func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
