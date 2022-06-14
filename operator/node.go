@@ -133,12 +133,6 @@ func (n *operatorNode) init(opts Options) error {
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
-	n.validatorsCtrl.StartValidators()
-	n.validatorsCtrl.StartNetworkHandlers()
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-	go n.listenForCurrentSlot()
-	n.dutyCtrl.Start()
-
 	if n.ws != nil {
 		n.logger.Info("starting WS server")
 
@@ -148,6 +142,12 @@ func (n *operatorNode) Start() error {
 			return err
 		}
 	}
+
+	n.validatorsCtrl.StartValidators()
+	n.validatorsCtrl.StartNetworkHandlers()
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.listenForCurrentSlot()
+	n.dutyCtrl.Start()
 
 	return nil
 }
