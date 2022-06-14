@@ -12,6 +12,7 @@ func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
 	return c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
 }
 
+// processDecidedMessage is responsible for processing an incoming decided message.
 func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
 		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
@@ -22,7 +23,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
 
-	localMsg, err := c.decidedStrategy.GetLastDecided(msg.Message.Identifier)
+	localMsg, err := c.highestKnownDecided()
 	if err != nil {
 		logger.Warn("could not read local decided message", zap.Error(err))
 		return err
@@ -30,7 +31,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	// if local msg is not higher, force decided or stop instance + sync for newer messages
 	if localMsg == nil || !localMsg.Message.Higher(msg.Message) {
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
-			// if current instance > force decided
+			// if current instance > force decided and exit
 			if currentInstance.State() != nil && currentInstance.State().GetHeight() == msg.Message.Height {
 				currentInstance.ForceDecide(msg)
 				return nil
@@ -43,8 +44,6 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 			return c.syncDecided(localMsg, msg)
 		}
 	}
-
-	_, err = c.decidedStrategy.UpdateDecided(msg)
 
 	return err
 }
