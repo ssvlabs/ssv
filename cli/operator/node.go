@@ -57,7 +57,7 @@ type config struct {
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
 
-	WsAPIPort *int `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
+	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 }
 
@@ -210,9 +210,9 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
 		}
 
-		if cfg.WsAPIPort != nil {
+		if cfg.WsAPIPort != 0 {
 			cfg.SSVOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
-			cfg.SSVOptions.WsAPIPort = *cfg.WsAPIPort
+			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 		}
 
 		operatorNode = operator.New(cfg.SSVOptions)
