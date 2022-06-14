@@ -192,12 +192,13 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		return nil
 	}
 
-	err := f.GetChangeRoundMessages(c.Identifier, instance.State().GetHeight(), handler)
+	h := instance.State().GetHeight()
+	err := f.GetChangeRoundMessages(c.Identifier, h, handler)
 
 	if err != nil {
 		c.logger.Warn("failed fast change round catchup", zap.Error(err))
 		return
 	}
 
-	c.logger.Info("fast change round catchup finished", zap.Int("count", count))
+	c.logger.Info("fast change round catchup finished", zap.Int("count", count), zap.Int64("height", int64(h)))
 }
