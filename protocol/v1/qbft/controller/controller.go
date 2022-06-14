@@ -179,12 +179,12 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (c *Controller) syncDecided(knownMsg *message.SignedMessage) error {
+func (c *Controller) syncDecided(from, to *message.SignedMessage) error {
 	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
 	c.forkLock.Lock()
 	fork, decidedStrategy := c.fork, c.decidedStrategy
 	c.forkLock.Unlock()
-	return decidedStrategy.Sync(c.ctx, c.Identifier, knownMsg, fork.ValidateDecidedMsg(c.ValidatorShare))
+	return decidedStrategy.Sync(c.ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -221,7 +221,7 @@ func (c *Controller) Init() error {
 		if err != nil {
 			c.logger.Error("failed to get last known", zap.Error(err))
 		}
-		if err := c.syncDecided(knownMsg); err != nil {
+		if err := c.syncDecided(knownMsg, nil); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")

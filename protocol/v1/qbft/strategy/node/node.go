@@ -27,65 +27,41 @@ func NewRegularNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStor
 	}
 }
 
-func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, knownMsg *message.SignedMessage, pip pipelines.SignedMessagePipeline) error {
-	highest, _, _, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
-		return knownMsg, nil
-	})
-	if err != nil {
-		return errors.Wrap(err, "could not get last decided from peers")
+func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, from, to *message.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+	if to == nil {
+		highest, _, _, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
+			return from, nil
+		})
+		if err != nil {
+			return errors.Wrap(err, "could not get last decided from peers")
+		}
+		to = highest
 	}
-
-	if highest != nil {
-		return f.store.SaveLastDecided(highest)
+	if to != nil {
+		_, err := f.SaveDecided(to)
+		return errors.Wrap(err, "could not save decided")
 	}
 	return nil
 }
 
-func (f *regularNode) ValidateHeight(msg *message.SignedMessage) (bool, error) {
-	lastDecided, err := f.store.GetLastDecided(msg.Message.Identifier)
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get last decided")
-	}
-	if lastDecided != nil && msg.Message.Height < lastDecided.Message.Height {
-		return false, nil
-	}
-	return true, nil
+func (f *regularNode) UpdateDecided(msg *message.SignedMessage) (bool, error) {
+	return f.SaveDecided(msg)
 }
 
-func (f *regularNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error) {
-	local, err := f.store.GetLastDecided(msg.Message.Identifier)
-	if err != nil {
-		return false, nil, err
-	}
-	if local == nil {
-		return false, nil, nil // local is nil anyway
-	}
-	if local.Message.Height == msg.Message.Height {
-		if ignore := checkDecidedMessageSigners(local, msg); ignore {
-			return false, local, nil
-		}
-		return true, local, nil
-	}
-	// if updated signers, return true
-	return false, nil, nil // need to return nil msg in order to check force decided or sync
-}
-
-// checkDecidedMessageSigners checks if signers of existing decided includes all signers of the newer message
-func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.SignedMessage) bool {
-	// decided message should have at least 3 signers, so if the new decided has 4 signers -> override
-	return len(msg.GetSigners()) <= len(knownMsg.GetSigners())
-}
-
-func (f *regularNode) UpdateDecided(msg *message.SignedMessage) error {
-	return f.SaveDecided(msg) // use the same func as SaveDecided func
-}
-
+// GetDecided in regular node will try to look for last decided and returns it if in the given range
 func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error) {
+	if len(heightRange) < 2 {
+		return nil, errors.New("missing height range")
+	}
 	ld, err := f.store.GetLastDecided(identifier)
 	if err != nil {
 		return nil, err
 	}
 	if ld == nil {
+		return nil, nil
+	}
+	height, from, to := ld.Message.Height, heightRange[0], heightRange[1]
+	if height < from || height > to {
 		return nil, nil
 	}
 	return []*message.SignedMessage{ld}, nil
@@ -95,6 +71,6 @@ func (f *regularNode) GetLastDecided(identifier message.Identifier) (*message.Si
 	return f.store.GetLastDecided(identifier)
 }
 
-func (f *regularNode) SaveDecided(signedMsgs ...*message.SignedMessage) error {
+func (f *regularNode) SaveDecided(signedMsgs ...*message.SignedMessage) (bool, error) {
 	return strategy.SaveLastDecided(f.logger, f.store, signedMsgs...)
 }

@@ -72,7 +72,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if err := c.decidedStrategy.UpdateDecided(updated); err != nil {
+		if _, err := c.decidedStrategy.UpdateDecided(updated); err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
@@ -89,11 +89,10 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			Data:    data,
 		}
 		if err := c.network.Broadcast(ssvMsg); err != nil {
-			logger.Warn("could not broadcast decided message", zap.Error(err))
+			logger.Error("could not broadcast decided message", zap.Error(err))
 		} else {
 			logger.Debug("updated decided was broadcasted")
 		}
-		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 	}
 	return true, nil
 }
