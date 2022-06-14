@@ -60,10 +60,6 @@ func (f *regularNode) IsMsgKnown(msg *message.SignedMessage) (bool, *message.Sig
 	return true, res, nil
 }
 
-func (f *regularNode) SaveLateCommit(msg *message.SignedMessage) error {
-	return f.store.SaveLastDecided(msg)
-}
-
 func (f *regularNode) UpdateDecided(msg *message.SignedMessage) error {
 	return f.store.SaveLastDecided(msg)
 }
@@ -72,6 +68,9 @@ func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...m
 	ld, err := f.store.GetLastDecided(identifier)
 	if err != nil {
 		return nil, err
+	}
+	if ld == nil {
+		return nil, nil
 	}
 	return []*message.SignedMessage{ld}, nil
 }

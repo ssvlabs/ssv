@@ -29,8 +29,6 @@ type Decided interface {
 	ValidateHeight(msg *message.SignedMessage) (bool, error)
 	// IsMsgKnown checks if the given decided message is known
 	IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error)
-	// SaveLateCommit saves a commit message that arrived late
-	SaveLateCommit(msg *message.SignedMessage) error
 	// UpdateDecided updates the given decided message
 	UpdateDecided(msg *message.SignedMessage) error
 	// GetDecided returns historical decided messages

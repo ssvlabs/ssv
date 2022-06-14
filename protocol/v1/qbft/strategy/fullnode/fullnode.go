@@ -161,10 +161,6 @@ func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.Si
 //	return !bytes.Equal(commitData.Data, knownCommitData.Data), nil
 //}
 
-func (f *fullNode) SaveLateCommit(msg *message.SignedMessage) error {
-	return f.store.SaveDecided(msg)
-}
-
 func (f *fullNode) UpdateDecided(msg *message.SignedMessage) error {
 	return f.store.SaveDecided(msg)
 }
