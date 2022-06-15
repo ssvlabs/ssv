@@ -162,7 +162,7 @@ func checkDecidedMessageSigners(knownMsg *message.SignedMessage, msg *message.Si
 //}
 
 func (f *fullNode) UpdateDecided(msg *message.SignedMessage) error {
-	return f.store.SaveDecided(msg)
+	return f.SaveDecided(msg)
 }
 
 func (f *fullNode) GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error) {
