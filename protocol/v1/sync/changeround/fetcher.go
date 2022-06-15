@@ -42,12 +42,14 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 		return errors.Wrap(err, "could not get change round messages")
 	}
 
-	crf.logger.Debug("got last change round msgs", zap.Int("msgs count", len(msgs)), zap.Any("msgs", msgs))
+	logger := crf.logger.With(zap.String("identifier", identifier.String()), zap.Int64("height", int64(height)))
+
+	logger.Debug("got last change round msgs", zap.Int("msgs count", len(msgs)), zap.Any("msgs", msgs))
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
 		err = syncMsg.Decode(msg.Msg.Data)
 		if err != nil {
-			crf.logger.Warn("could not decode change round message", zap.Error(err))
+			logger.Warn("could not decode change round message", zap.Error(err))
 			continue
 		}
 		err = crf.msgError(syncMsg)
@@ -55,12 +57,12 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			continue
 		}
 		if err != nil {
-			crf.logger.Warn("change round api error", zap.Error(err))
+			logger.Warn("change round api error", zap.Error(err))
 			continue
 		}
 		sm := syncMsg.Data[0]
 		if err := handler(sm); err != nil {
-			crf.logger.Warn("could not handle message", zap.Error(err))
+			logger.Warn("could not handle message", zap.Error(err))
 			continue
 		}
 	}

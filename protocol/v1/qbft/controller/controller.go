@@ -131,7 +131,7 @@ func New(opts Options) IController {
 		forkLock:            &sync.Mutex{},
 	}
 
-	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.isFullNode(), opts.Storage, opts.Network)
+	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.getNodeMode(), opts.Storage, opts.Network)
 	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	// set flags
@@ -161,6 +161,10 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	atomic.StoreUint32(&c.state, Forking)
 	defer atomic.StoreUint32(&c.state, Ready)
 
+	if i := c.getCurrentInstance(); i != nil {
+		i.Stop()
+		c.setCurrentInstance(nil)
+	}
 	c.processAllDecided(c.messageHandler)
 	cleared := c.q.Clean(msgqueue.AllIndicesCleaner)
 	c.logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
@@ -173,12 +177,12 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (c *Controller) syncDecided() error {
+func (c *Controller) syncDecided(knownMsg *message.SignedMessage) error {
 	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
 	c.forkLock.Lock()
 	fork, decidedStrategy := c.fork, c.decidedStrategy
 	c.forkLock.Unlock()
-	return decidedStrategy.Sync(c.ctx, c.Identifier, fork.ValidateDecidedMsg(c.ValidatorShare))
+	return decidedStrategy.Sync(c.ctx, c.Identifier, knownMsg, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -211,7 +215,11 @@ func (c *Controller) Init() error {
 		atomic.StoreUint32(&c.state, FoundPeers)
 
 		// IBFT sync to make sure the operator is aligned for this validator
-		if err := c.syncDecided(); err != nil {
+		knownMsg, err := c.decidedStrategy.GetLastDecided(c.Identifier)
+		if err != nil {
+			c.logger.Error("failed to get last known", zap.Error(err))
+		}
+		if err := c.syncDecided(knownMsg); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.logger.Debug("iBFT init is already running (syncing history)")
@@ -334,14 +342,14 @@ func (c *Controller) messageHandler(msg *message.SSVMessage) error {
 	return nil
 }
 
-func (c *Controller) isFullNode() bool {
+func (c *Controller) getNodeMode() strategy.Mode {
 	isPostFork := c.fork.VersionName() != forksprotocol.V0ForkVersion.String()
-	if !isPostFork { // by default when pre fork, full sync is true
-		return true
+	if !isPostFork { // by default when pre fork, the mode is fullnode
+		return strategy.ModeFullNode
 	}
 	// otherwise, checking flag
 	if c.fullNode {
-		return true
+		return strategy.ModeFullNode
 	}
-	return false
+	return strategy.ModeRegularNode
 }

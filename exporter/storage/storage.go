@@ -31,15 +31,19 @@ type storage struct {
 	operatorStore registrystorage.OperatorsCollection
 }
 
-func (s *storage) GetOperatorInformation(operatorPubKey string) (*registrystorage.OperatorInformation, bool, error) {
-	return s.operatorStore.GetOperatorInformation(operatorPubKey)
+func (s *storage) GetOperatorDataByPubKey(operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorDataByPubKey(operatorPubKey)
 }
 
-func (s *storage) SaveOperatorInformation(operatorInformation *registrystorage.OperatorInformation) error {
-	return s.operatorStore.SaveOperatorInformation(operatorInformation)
+func (s *storage) GetOperatorData(index uint64) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorData(index)
 }
 
-func (s *storage) ListOperators(from int64, to int64) ([]registrystorage.OperatorInformation, error) {
+func (s *storage) SaveOperatorData(operatorData *registrystorage.OperatorData) error {
+	return s.operatorStore.SaveOperatorData(operatorData)
+}
+
+func (s *storage) ListOperators(from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	return s.operatorStore.ListOperators(from, to)
 }
 
@@ -62,6 +66,7 @@ func (s *storage) CleanRegistryData() error {
 }
 
 // nextIndex returns the next index for operator
+// TODO: change to uint64
 func (s *storage) nextIndex(prefix []byte) (int64, error) {
 	n, err := s.db.CountByCollection(append(storagePrefix(), prefix...))
 	if err != nil {

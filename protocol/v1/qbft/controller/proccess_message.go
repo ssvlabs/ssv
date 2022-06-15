@@ -63,7 +63,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if err := c.decidedStrategy.SaveLateCommit(updated); err != nil {
+		if err := c.decidedStrategy.UpdateDecided(updated); err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))

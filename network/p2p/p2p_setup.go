@@ -224,7 +224,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}
-	_, tc, err := topics.NewPubsub(n.ctx, cfg)
+	_, tc, err := topics.NewPubsub(n.ctx, cfg, n.fork)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

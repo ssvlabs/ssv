@@ -266,7 +266,7 @@ func TestDecidedRequiresSync(t *testing.T) {
 			}
 
 			ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
-			ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.isFullNode(), storage, nil)
+			ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
 			ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 			res, err := ctrl.decidedRequiresSync(test.msg)
@@ -632,7 +632,7 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 	}
 
 	ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
-	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.isFullNode(), storage, nil)
+	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
 	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 
 	require.NoError(t, ctrl.decidedStrategy.SaveDecided(incompleteDecided))

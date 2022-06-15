@@ -26,7 +26,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		if err != nil {
 			return nil, 0, nil, 0, errors.Wrap(err, "failed to get attestation data")
 		}
-
+		v.logger.Debug("attestation data", zap.Any("attData", attData))
 		inputByts, err = attData.MarshalSSZ()
 		if err != nil {
 			return nil, 0, nil, 0, errors.Errorf("failed to marshal on attestation role: %s", duty.Type.String())
@@ -49,10 +49,10 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		RequireMinPeers: true,
 	})
 	if err != nil {
-		return nil, 0, nil, 0, errors.WithMessage(err, "ibft instance failed")
+		return nil, 0, nil, 0, errors.Wrap(err, "ibft instance failed")
 	}
 	if result == nil {
-		return nil, 0, nil, height, errors.Wrap(err, "instance result returned nil")
+		return nil, 0, nil, height, errors.New("instance result returned nil")
 	}
 	if !result.Decided {
 		return nil, 0, nil, height, errors.New("instance did not decide")
