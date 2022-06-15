@@ -24,7 +24,6 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -51,9 +50,7 @@ type config struct {
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 	ClearNetworkKey            bool   `yaml:"ClearNetworkKey" env:"CLEAR_NETWORK_KEY" env-description:"flag that turns on/off network key revocation"`
 
-	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
-
-	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
+	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
 }
 
 var cfg config
@@ -160,9 +157,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNet
-
-		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
-
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
@@ -201,9 +195,6 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		if cfg.ReadOnlyMode {
-			cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
-		}
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
