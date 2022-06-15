@@ -53,13 +53,14 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p host was configured", zap.String("peer", n.host.ID().String()))
+	n.logger = n.logger.With(zap.String("selfPeer", n.host.ID().String()))
+	n.logger.Debug("p2p host was configured")
 
 	err = n.SetupServices()
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p services were configured", zap.String("peer", n.host.ID().String()))
+	n.logger.Debug("p2p services were configured")
 
 	return nil
 }

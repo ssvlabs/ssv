@@ -252,7 +252,7 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 		}
 
 		// compare to highest found
-		if candidateChangeData.GetPreparedValue() != nil {
+		if candidateChangeData.GetPreparedValue() != nil && len(candidateChangeData.GetPreparedValue()) > 0 {
 			notPrepared = false
 			if highestPrepared != nil {
 				if candidateChangeData.GetPreparedRound() > highestPrepared.GetPreparedRound() {

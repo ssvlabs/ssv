@@ -182,12 +182,12 @@ func (i *Instance) Start(inputValue []byte) error {
 
 			msg, err := i.generatePrePrepareMessage(i.State().GetInputValue())
 			if err != nil {
-				i.Logger.Error("failed to generate pre-prepare message", zap.Error(err))
+				i.Logger.Warn("failed to generate pre-prepare message", zap.Error(err))
 				return
 			}
 
 			if err := i.SignAndBroadcast(&msg); err != nil {
-				i.Logger.Fatal("could not broadcast pre-prepare", zap.Error(err))
+				i.Logger.Error("could not broadcast pre-prepare", zap.Error(err))
 			}
 		}()
 	}

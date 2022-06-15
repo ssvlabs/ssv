@@ -19,11 +19,9 @@ func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highe
 			continue
 		}
 		if sm == nil {
-			logger.Debug("sync message not found")
 			continue
 		}
 		if len(sm.Data) == 0 {
-			logger.Warn("empty sync message")
 			continue
 		}
 		signedMsg := sm.Data[0]

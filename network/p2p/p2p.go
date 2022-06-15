@@ -90,13 +90,13 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.disc.Close(); err != nil {
-		n.logger.Error("could not close discovery", zap.Error(err))
+		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.logger.Error("could not close index", zap.Error(err))
+		n.logger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.logger.Error("could not close topics controller", zap.Error(err))
+		n.logger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }
