@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -54,6 +55,7 @@ func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
 			continue
 		}
 		if !bytes.Equal(p.Data, i.State().GetPreparedValue()) {
+			i.Logger.Warn("prepared value is not equal to prepare data", zap.String("stateValue", hex.EncodeToString(i.State().GetPreparedValue())), zap.String("prepareData", hex.EncodeToString(p.Data)))
 			continue
 		}
 		if ret == nil {
