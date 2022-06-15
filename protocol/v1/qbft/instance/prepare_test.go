@@ -22,7 +22,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			Committee: nodes,
 			NodeID:    1,
 		},
-		state: &qbft.State{},
+		state:  &qbft.State{},
 		Logger: zap.L(),
 	}
 
