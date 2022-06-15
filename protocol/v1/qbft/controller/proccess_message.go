@@ -80,9 +80,10 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			Data:    data,
 		}
 		if err := c.network.Broadcast(ssvMsg); err != nil {
-			logger.Error("could not broadcast decided message", zap.Error(err))
+			logger.Warn("could not broadcast decided message", zap.Error(err))
+		} else {
+			logger.Debug("updated decided was broadcasted")
 		}
-		logger.Debug("updated decided was broadcasted")
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 	}
 	return true, nil

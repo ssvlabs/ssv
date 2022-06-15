@@ -55,7 +55,7 @@ type ControllerOptions struct {
 	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	FullNode                   bool `yaml:"FullNode" env:"FORCE_HISTORY_KEY" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
+	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
 	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -269,10 +269,10 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 		select {
 		case e := <-cn:
 			if err := handler(*e); err != nil {
-				c.logger.Error("could not process ongoing eth1 event", zap.Error(err))
+				c.logger.Warn("could not process ongoing eth1 event", zap.Error(err))
 			}
 		case err := <-sub.Err():
-			c.logger.Error("event feed subscription error", zap.Error(err))
+			c.logger.Warn("event feed subscription error", zap.Error(err))
 		}
 	}
 }
@@ -348,7 +348,7 @@ func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		c.logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
 		if err := beaconprotocol.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
-			c.logger.Error("could not update all validators", zap.Error(err))
+			c.logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -365,7 +365,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		}
 		_, err := c.startValidator(v)
 		if err != nil {
-			c.logger.Error("could not start validator", zap.Error(err))
+			c.logger.Warn("could not start validator", zap.Error(err))
 		}
 	}
 	return nil
@@ -391,7 +391,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 		return nil
 	})
 	if err != nil {
-		c.logger.Error("failed to get all validators public keys", zap.Error(err))
+		c.logger.Warn("failed to get all validators public keys", zap.Error(err))
 	}
 
 	go c.updateValidatorsMetadata(toFetch)
@@ -417,7 +417,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 		}
 		_, err := c.startValidator(v)
 		if err != nil {
-			c.logger.Error("could not start validator after metadata update",
+			c.logger.Warn("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 	}
@@ -522,7 +522,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
 		if err != nil {
-			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue
 		}
 		var pks [][]byte
