@@ -157,9 +157,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNet
-
-		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
-
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
@@ -198,9 +195,6 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		//if cfg.ReadOnlyMode {
-		//	cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
-		//}
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
