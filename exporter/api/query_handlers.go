@@ -15,8 +15,6 @@ const (
 )
 
 // HandleDecidedQuery handles TypeDecided queries.
-// TODO: un-lint
-//nolint
 func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, nm *NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),

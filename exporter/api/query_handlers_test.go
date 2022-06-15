@@ -144,8 +144,6 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 }
 
-// TODO: un-lint
-//nolint
 func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
 	return &NetworkMessage{
 		Msg: Message{
