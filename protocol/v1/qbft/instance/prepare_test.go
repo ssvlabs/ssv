@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"go.uber.org/zap"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +23,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			NodeID:    1,
 		},
 		state: &qbft.State{},
+		Logger: zap.L(),
 	}
 
 	instance.state.Round.Store(message.Round(1))
