@@ -1,21 +1,23 @@
 package api
 
 import (
-	"encoding/hex"
 	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/operator/storage"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
+	"github.com/bloxapp/ssv/protocol/v1/validator"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
@@ -74,214 +76,72 @@ func TestHandleErrorQuery(t *testing.T) {
 	}
 }
 
-func TestHandleOperatorsQuery(t *testing.T) {
-	db, l, done := newDBAndLoggerForTest()
-	defer done()
-	s, _ := newStorageForTest(db, l)
-
-	ods := []registrystorage.OperatorData{
-		{
-			PublicKey:    "01010101",
-			Name:         "my_operator1",
-			OwnerAddress: common.Address{},
-			Index:        0,
-		}, {
-			PublicKey:    "02020202",
-			Name:         "my_operator2",
-			OwnerAddress: common.Address{},
-			Index:        1,
-		}, {
-			PublicKey:    "03030303",
-			Name:         "my_operator3",
-			OwnerAddress: common.Address{},
-			Index:        2,
-		},
-	}
-	for _, od := range ods {
-		err := s.SaveOperatorData(&od)
-		require.NoError(t, err)
-	}
-
-	t.Run("query by index", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeOperator,
-				Filter: MessageFilter{From: 0, To: 1},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleOperatorsQuery(l, s, &nm)
-		require.Equal(t, TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
-		require.True(t, ok)
-		require.Equal(t, 2, len(results))
-		for _, op := range results {
-			require.True(t, strings.Contains(op.Name, "my_operator"))
-			require.Less(t, op.Index, uint64(2))
-		}
-	})
-
-	t.Run("query non-existing index", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeOperator,
-				Filter: MessageFilter{From: 100, To: 101},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleOperatorsQuery(l, s, &nm)
-		require.Equal(t, TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
-		require.True(t, ok)
-		require.Equal(t, 0, len(results))
-	})
-
-	t.Run("query by pubKey", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeOperator,
-				Filter: MessageFilter{PublicKey: "03030303"},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleOperatorsQuery(l, s, &nm)
-		require.Equal(t, TypeOperator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]registrystorage.OperatorData)
-		require.True(t, ok)
-		require.Equal(t, 1, len(results))
-		require.Equal(t, "my_operator3", results[0].Name)
-		require.Equal(t, "03030303", results[0].PublicKey)
-		require.Equal(t, uint64(2), results[0].Index)
-	})
-}
-
-func TestHandleValidatorsQuery(t *testing.T) {
-	db, l, done := newDBAndLoggerForTest()
-	defer done()
-	s, _ := newStorageForTest(db, l)
-
-	vis := []storage.ValidatorInformation{
-		{
-			PublicKey: "01010101",
-			Operators: getMockOperatorLinks(),
-		}, {
-			PublicKey: "02020202",
-			Operators: getMockOperatorLinks(),
-		}, {
-			PublicKey: "03030303",
-			Operators: getMockOperatorLinks(),
-		},
-	}
-	for _, vi := range vis {
-		err := s.SaveValidatorInformation(&vi)
-		require.NoError(t, err)
-	}
-
-	t.Run("query by index", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeValidator,
-				Filter: MessageFilter{From: 0, To: 1},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleValidatorsQuery(l, s, &nm)
-		require.Equal(t, TypeValidator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
-		require.True(t, ok)
-		require.Equal(t, 2, len(results))
-		for i, v := range results {
-			pki := i + 1
-			pk := fmt.Sprintf("0%d0%d0%d0%d", pki, pki, pki, pki)
-			require.Equal(t, pk, v.PublicKey)
-			require.Less(t, v.Index, int64(2))
-		}
-	})
-
-	t.Run("query non-existing index", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeValidator,
-				Filter: MessageFilter{From: 100, To: 101},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleValidatorsQuery(l, s, &nm)
-		require.Equal(t, TypeValidator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
-		require.True(t, ok)
-		require.Equal(t, 0, len(results))
-	})
-
-	t.Run("query by pubKey", func(t *testing.T) {
-		nm := NetworkMessage{
-			Msg: Message{
-				Type:   TypeValidator,
-				Filter: MessageFilter{PublicKey: "03030303"},
-			},
-			Err:  nil,
-			Conn: nil,
-		}
-		HandleValidatorsQuery(l, s, &nm)
-		require.Equal(t, TypeValidator, nm.Msg.Type)
-		results, ok := nm.Msg.Data.([]storage.ValidatorInformation)
-		require.True(t, ok)
-		require.Equal(t, 1, len(results))
-		require.Equal(t, int64(2), results[0].Index)
-		require.Equal(t, "03030303", results[0].PublicKey)
-	})
-}
-
 func TestHandleDecidedQuery(t *testing.T) {
-	//db, l, done := newDBAndLoggerForTest()
-	//defer done()
-	//exporterStorage, ibftStorage := newStorageForTest(db, l)
-	//_ = bls.Init(bls.BLS12_381)
-	//
-	//sks, _ := sync.GenerateNodes(4)
-	//pk := sks[1].GetPublicKey()
-	//identifier := format.IdentifierFormat(pk.Serialize(), message.RoleTypeAttester.String())
-	//decided250Seq := sync.DecidedArr(t, 250, sks, []byte(identifier))
-	//
-	//// save decided
-	//for _, d := range decided250Seq {
-	//	require.NoError(t, ibftStorage.SaveDecided(d))
-	//}
-	//require.NoError(t, exporterStorage.SaveValidatorInformation(&storage.ValidatorInformation{
-	//	PublicKey: pk.SerializeToHexStr(),
-	//}))
-	//
-	//t.Run("valid range", func(t *testing.T) {
-	//	nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
-	//	handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
-	//	require.NotNil(t, nm.Msg.Data)
-	//	msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
-	//	require.True(t, ok)
-	//	require.Equal(t, 251, len(msgs)) // seq 0 - 250
-	//})
+	logex.Build("TestHandleDecidedQuery", zapcore.DebugLevel, nil)
 
-	//t.Run("invalid range", func(t *testing.T) {
-	//	nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
-	//	handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
-	//	require.NotNil(t, nm.Msg.Data)
-	//	msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
-	//	require.True(t, ok)
-	//	require.Equal(t, 0, len(msgs)) // seq 0 - 250
-	//})
-	//
-	//t.Run("non-exist validator", func(t *testing.T) {
-	//	nm := newDecidedAPIMsg("xxx", 400, 404)
-	//	handleDecidedQuery(l, exporterStorage, ibftStorage, nm)
-	//	require.NotNil(t, nm.Msg.Data)
-	//	errs, ok := nm.Msg.Data.([]string)
-	//	require.True(t, ok)
-	//	require.Equal(t, "internal error - could not find validator", errs[0])
-	//})
+	db, l, done := newDBAndLoggerForTest()
+	defer done()
+	exporterStorage, ibftStorage := newStorageForTest(db, l)
+	_ = bls.Init(bls.BLS12_381)
+
+	sks, _ := validator.GenerateNodes(4)
+	oids := make([]message.OperatorID, 0)
+	for oid := range sks {
+		oids = append(oids, oid)
+	}
+
+	pk := sks[1].GetPublicKey()
+	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, message.Height(0), message.Height(250), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
+		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
+		commitDataBytes, err := commitData.Encode()
+		if err != nil {
+			panic(err)
+		}
+
+		return oids, &message.ConsensusMessage{
+			MsgType:    message.CommitMsgType,
+			Height:     height,
+			Round:      1,
+			Identifier: message.NewIdentifier(pk.Serialize(), message.RoleTypeAttester),
+			Data:       commitDataBytes,
+		}
+	})
+	require.NoError(t, err)
+
+	// save decided
+	for _, d := range decided250Seq {
+		require.NoError(t, ibftStorage.SaveDecided(d))
+	}
+	require.NoError(t, exporterStorage.SaveValidatorInformation(&storage.ValidatorInformation{
+		PublicKey: pk.SerializeToHexStr(),
+	}))
+
+	t.Run("valid range", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		msgs, ok := nm.Msg.Data.([]*message.SignedMessage)
+		require.True(t, ok)
+		require.Equal(t, 251, len(msgs)) // seq 0 - 250
+	})
+
+	t.Run("invalid range", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		msgs, ok := nm.Msg.Data.([]*message.SignedMessage)
+		require.True(t, ok)
+		require.Equal(t, 0, len(msgs)) // seq 0 - 250
+	})
+
+	t.Run("non-exist validator", func(t *testing.T) {
+		nm := newDecidedAPIMsg("xxx", 400, 404)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "internal error - could not read validator key", errs[0])
+	})
 }
 
 // TODO: un-lint
@@ -321,25 +181,4 @@ func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbft
 	sExporter := storage.NewNodeStorage(db, logger)
 	sIbft := qbftstorage.NewQBFTStore(db, logger, "attestation")
 	return sExporter, sIbft
-}
-
-func getMockOperatorLinks() []storage.OperatorNodeLink {
-	return []storage.OperatorNodeLink{
-		{
-			ID:        1,
-			PublicKey: hex.EncodeToString([]byte{2, 2, 2, 2}),
-		},
-		{
-			ID:        2,
-			PublicKey: hex.EncodeToString([]byte{2, 2, 2, 2}),
-		},
-		{
-			ID:        3,
-			PublicKey: hex.EncodeToString([]byte{3, 3, 3, 3}),
-		},
-		{
-			ID:        4,
-			PublicKey: hex.EncodeToString([]byte{4, 4, 4, 4}),
-		},
-	}
 }

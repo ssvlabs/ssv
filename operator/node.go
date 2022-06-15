@@ -217,12 +217,8 @@ func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
 	n.logger.Debug("got incoming export request",
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
-	case api.TypeOperator:
-		api.HandleOperatorsQuery(n.logger, n.storage, nm)
-	case api.TypeValidator:
-		api.HandleValidatorsQuery(n.logger, n.storage, nm)
 	case api.TypeDecided:
-		api.HandleDecidedQuery(n.logger, n.storage, n.qbftStorage, nm)
+		api.HandleDecidedQuery(n.logger, n.qbftStorage, nm)
 	case api.TypeError:
 		api.HandleErrorQuery(n.logger, nm)
 	default:
