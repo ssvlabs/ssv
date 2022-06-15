@@ -126,7 +126,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if _, err = c.decidedStrategy.SaveDecided(agg); err != nil {
+			if _, err = c.decidedStrategy.UpdateDecided(agg); err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 
