@@ -67,7 +67,6 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 
 		highest, sender = sync.GetHighest(l.logger, remoteMsgs...)
 		if highest == nil {
-			logger.Debug("remote highest decided not found", zap.Int("retryNumber", retries))
 			continue
 		}
 	}

@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
@@ -426,8 +423,6 @@ func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode message")
 	}
-
-	logex.GetLogger().Debug("---- root ----", zap.String("r", string(marshaledRoot)))
 
 	hasher := sha256.New()
 	_, err = hasher.Write(marshaledRoot)

@@ -6,7 +6,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
@@ -54,7 +53,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		}
 	}
 
-	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
+	logger := c.logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
