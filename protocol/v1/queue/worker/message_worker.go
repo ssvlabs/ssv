@@ -64,8 +64,8 @@ func (w *Worker) startWorker(ch <-chan *message.SSVMessage) {
 	}
 }
 
-// AddHandler to work to listen to msg's
-func (w *Worker) AddHandler(handler workerHandler) {
+// SetHandler to work to listen to msg's
+func (w *Worker) SetHandler(handler workerHandler) {
 	w.handler = handler
 }
 

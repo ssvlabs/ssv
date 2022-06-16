@@ -21,7 +21,7 @@ import (
 type IValidator interface {
 	Start() error
 	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
-	ProcessMsg(msg *message.SSVMessage) // TODO need to be as separate interface?
+	ProcessMsg(msg *message.SSVMessage) error // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 
 	forksprotocol.ForkHandler
@@ -53,7 +53,7 @@ type Validator struct {
 	network    beaconprotocol.Network
 	p2pNetwork p2pprotocol.Network
 	beacon     beaconprotocol.Beacon
-	share      *beaconprotocol.Share
+	Share      *beaconprotocol.Share // var is exported to validator ctrl tests reasons
 	signer     beaconprotocol.Signer
 
 	ibfts controller.Controllers
@@ -84,7 +84,7 @@ func NewValidator(opt *Options) IValidator {
 		network:     opt.Network,
 		p2pNetwork:  opt.P2pNetwork,
 		beacon:      opt.Beacon,
-		share:       opt.Share,
+		Share:       opt.Share,
 		signer:      opt.Signer,
 		ibfts:       ibfts,
 		readMode:    opt.ReadMode,
@@ -123,18 +123,14 @@ func (v *Validator) Start() error {
 // GetShare returns the validator share
 func (v *Validator) GetShare() *beaconprotocol.Share {
 	// TODO need lock?
-	return v.share
+	return v.Share
 }
 
-// ProcessMsg processes a new msg, returns true if Decided, non nil byte slice if Decided (Decided value) and error
-// Decided returns just once per instance as true, following messages (for example additional commit msgs) will not return Decided true
-func (v *Validator) ProcessMsg(msg *message.SSVMessage) /*(bool, []byte, error)*/ {
+// ProcessMsg processes a new msg
+func (v *Validator) ProcessMsg(msg *message.SSVMessage) error {
 	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 	// synchronize process
-	err := ibftController.ProcessMsg(msg)
-	if err != nil {
-		return
-	}
+	return ibftController.ProcessMsg(msg)
 }
 
 // OnFork updates all QFBT controllers with the new fork version

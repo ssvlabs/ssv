@@ -11,6 +11,7 @@ import (
 type Fork interface {
 	InstanceFork() forks.Fork
 	ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessagePipeline
+	ValidateChangeRoundMsg(share *beacon.Share, identifier message.Identifier) pipelines.SignedMessagePipeline
 	VersionName() string
 	Identifier(pk []byte, role message.RoleType) []byte
 }

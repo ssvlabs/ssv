@@ -10,7 +10,17 @@ import (
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
 	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
+	if c.readMode {
+		if signedMessage.Message.MsgType != message.RoundChangeMsgType {
+			return nil // other types not supported in read mode
+		}
+	}
 	switch signedMessage.Message.MsgType {
+	case message.RoundChangeMsgType: // supporting read-mode
+		if c.readMode {
+			return c.ProcessChangeRound(signedMessage)
+		}
+		fallthrough // not in read mode, need to process regular way
 	case message.CommitMsgType:
 		if processed, err := c.processCommitMsg(signedMessage); err != nil {
 			return errors.Wrap(err, "failed to process late commit")
@@ -18,7 +28,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 			return nil
 		}
 		fallthrough // not processed, need to process as regular consensus commit msg
-	case message.ProposalMsgType, message.PrepareMsgType, message.RoundChangeMsgType:
+	case message.ProposalMsgType, message.PrepareMsgType:
 		if c.getCurrentInstance() == nil {
 			return errors.New("current instance is nil")
 		}

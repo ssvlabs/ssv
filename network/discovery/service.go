@@ -50,6 +50,7 @@ type Service interface {
 	RegisterSubnets(subnets ...int64) error
 	DeregisterSubnets(subnets ...int64) error
 	Bootstrap(handler HandleNewPeer) error
+	UpdateForkVersion(forkv forksprotocol.ForkVersion) error
 }
 
 // NewService creates new discovery.Service
