@@ -17,8 +17,8 @@ const (
 
 func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles operators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	operators, err := getOperators(storage, nm.Msg.Filter)
 	res := api.Message{
@@ -36,8 +36,8 @@ func handleOperatorsQuery(logger *zap.Logger, storage registrystorage.OperatorsC
 
 func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, nm *api.NetworkMessage) {
 	logger.Debug("handles validators request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey))
 	res := api.Message{
 		Type:   nm.Msg.Type,
@@ -57,8 +57,8 @@ func handleValidatorsQuery(logger *zap.Logger, s storage.ValidatorsCollection, n
 //nolint
 func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsCollection, ibftStorage collections.Iibft, nm *api.NetworkMessage) {
 	logger.Debug("handles decided request",
-		zap.Int64("from", nm.Msg.Filter.From),
-		zap.Int64("to", nm.Msg.Filter.To),
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey),
 		zap.String("role", string(nm.Msg.Filter.Role)))
 	res := api.Message{
@@ -79,7 +79,7 @@ func handleDecidedQuery(logger *zap.Logger, validatorStorage storage.ValidatorsC
 			res.Data = []string{"internal error - could not read validator key"}
 		} else {
 			identifier := format.IdentifierFormat(pkRaw, string(nm.Msg.Filter.Role))
-			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), uint64(nm.Msg.Filter.From), uint64(nm.Msg.Filter.To))
+			msgs, err := ibftStorage.GetDecidedInRange([]byte(identifier), nm.Msg.Filter.From, nm.Msg.Filter.To)
 			if err != nil {
 				logger.Warn("failed to get decided messages", zap.Error(err))
 				res.Data = []string{"internal error - could not get decided messages"}

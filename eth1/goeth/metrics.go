@@ -12,11 +12,11 @@ var (
 	metricSyncEventsCountSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:eth1:sync:count:success",
 		Help: "Count succeeded eth1 sync events",
-	}, []string{"etype", "self"})
+	}, []string{"etype"})
 	metricSyncEventsCountFailed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:eth1:sync:count:failed",
 		Help: "Count failed eth1 sync events",
-	}, []string{"etype", "self"})
+	}, []string{"etype"})
 	metricsEth1NodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:eth1:node_status",
 		Help: "Status of the connected eth1 node",
@@ -38,16 +38,12 @@ func init() {
 	}
 }
 
-func reportSyncEvent(eventType string, isOperatorEvent bool, err error) {
-	self := "0"
-	if isOperatorEvent {
-		self = "1"
-	}
+func reportSyncEvent(eventType string, err error) {
 	if err != nil {
-		metricSyncEventsCountFailed.WithLabelValues(eventType, self).Inc()
+		metricSyncEventsCountFailed.WithLabelValues(eventType).Inc()
 		return
 	}
-	metricSyncEventsCountSuccess.WithLabelValues(eventType, self).Inc()
+	metricSyncEventsCountSuccess.WithLabelValues(eventType).Inc()
 }
 
 func reportNodeStatus(status eth1NodeStatus) {

@@ -6,7 +6,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
@@ -64,7 +63,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		}
 	}
 
-	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
+	logger := c.logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
@@ -73,7 +72,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if err := c.decidedStrategy.SaveLateCommit(updated); err != nil {
+		if err := c.decidedStrategy.UpdateDecided(updated); err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
@@ -90,9 +89,10 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			Data:    data,
 		}
 		if err := c.network.Broadcast(ssvMsg); err != nil {
-			logger.Error("could not broadcast decided message", zap.Error(err))
+			logger.Warn("could not broadcast decided message", zap.Error(err))
+		} else {
+			logger.Debug("updated decided was broadcasted")
 		}
-		logger.Debug("updated decided was broadcasted")
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 	}
 	return true, nil

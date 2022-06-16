@@ -1,6 +1,7 @@
 package eth1
 
 import (
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"math/big"
 	"sync"
 
@@ -68,7 +69,8 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 			if handler != nil {
 				err := handler(*event)
-				if err != nil {
+				var decryptErr *abiparser.DecryptError
+				if err != nil && !errors.As(err, &decryptErr) {
 					errs = append(errs, err)
 				}
 			}
@@ -82,7 +84,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	syncWg.Wait()
 
 	if len(errs) > 0 {
-		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
+		logger.Warn("failed to handle all events from sync", zap.Any("errs", errs))
 		return errors.New("failed to handle all events from sync")
 	}
 

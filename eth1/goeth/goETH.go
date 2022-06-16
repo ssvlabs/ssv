@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 
@@ -28,14 +29,12 @@ const (
 
 // ClientOptions are the options for the client
 type ClientOptions struct {
-	Ctx                        context.Context
-	Logger                     *zap.Logger
-	NodeAddr                   string
-	RegistryContractAddr       string
-	ContractABI                string
-	ConnectionTimeout          time.Duration
-	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
-	OperatorPubKey             string
+	Ctx                  context.Context
+	Logger               *zap.Logger
+	NodeAddr             string
+	RegistryContractAddr string
+	ContractABI          string
+	ConnectionTimeout    time.Duration
 
 	AbiVersion eth1.Version
 }
@@ -45,9 +44,6 @@ type eth1Client struct {
 	ctx    context.Context
 	conn   *ethclient.Client
 	logger *zap.Logger
-
-	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
-	operatorPubKey             string
 
 	nodeAddr             string
 	registryContractAddr string
@@ -69,16 +65,14 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr))
 
 	ec := eth1Client{
-		ctx:                        opts.Ctx,
-		logger:                     logger,
-		shareEncryptionKeyProvider: opts.ShareEncryptionKeyProvider,
-		operatorPubKey:             opts.OperatorPubKey,
-		nodeAddr:                   opts.NodeAddr,
-		registryContractAddr:       opts.RegistryContractAddr,
-		contractABI:                opts.ContractABI,
-		connectionTimeout:          opts.ConnectionTimeout,
-		eventsFeed:                 new(event.Feed),
-		abiVersion:                 opts.AbiVersion,
+		ctx:                  opts.Ctx,
+		logger:               logger,
+		nodeAddr:             opts.NodeAddr,
+		registryContractAddr: opts.RegistryContractAddr,
+		contractABI:          opts.ContractABI,
+		connectionTimeout:    opts.ConnectionTimeout,
+		eventsFeed:           new(event.Feed),
+		abiVersion:           opts.AbiVersion,
 	}
 
 	if err := ec.connect(); err != nil {
@@ -174,8 +168,8 @@ func (ec *eth1Client) reconnect() {
 }
 
 // fireEvent notifies observers about some contract event
-func (ec *eth1Client) fireEvent(log types.Log, data interface{}, isOperatorEvent bool) {
-	e := eth1.Event{Log: log, Data: data, IsOperatorEvent: isOperatorEvent}
+func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
+	e := eth1.Event{Log: log, Name: name, Data: data}
 	_ = ec.eventsFeed.Send(&e)
 	// TODO: add trace
 	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
@@ -228,7 +222,7 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 			return err
 		case vLog := <-logs:
 			ec.logger.Debug("received contract event from stream")
-			_, err := ec.handleEvent(vLog, contractAbi)
+			err := ec.handleEvent(vLog, contractAbi)
 			if err != nil {
 				ec.logger.Error("Failed to handle event", zap.Error(err))
 				continue
@@ -293,7 +287,7 @@ func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
 	ec.logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
 	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)}, false)
+	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
 
 	return nil
 }
@@ -319,12 +313,20 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	logger.Debug("got event logs")
 
 	for _, vLog := range logs {
-		unpackErr, err := ec.handleEvent(vLog, contractAbi)
+		err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			if !unpackErr {
+			logger := logger.With(
+				zap.Uint64("block", vLog.BlockNumber),
+				zap.String("txHash", vLog.TxHash.Hex()),
+				zap.Error(err),
+			)
+			var unpackErr *abiparser.UnpackError
+			if !errors.As(err, &unpackErr) {
 				nSuccess--
+				logger.Error("Failed to handle event during sync")
+			} else {
+				logger.Warn("Failed to handle event during sync")
 			}
-			ec.logger.Error("Failed to handle event during sync", zap.Error(err))
 			continue
 		}
 	}
@@ -334,39 +336,54 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	return logs, nSuccess, nil
 }
 
-func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (bool, error) {
+func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) error {
 	eventType, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		ec.logger.Warn("failed to handle event, unknown event type", zap.Error(err), zap.String("txHash", vLog.TxHash.Hex()))
-		return false, nil
-	}
-	shareEncryptionKey, found, err := ec.shareEncryptionKeyProvider()
-	if !found {
-		return false, errors.New("failed to find operator private key")
-	}
-	if err != nil {
-		return false, errors.Wrap(err, "failed to get operator private key")
+		return nil
 	}
 
 	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
 
 	switch eventName := eventType.Name; eventName {
-	case "OperatorAdded":
-		parsed, isOperatorEvent, unpackErr, err := abiParser.ParseOperatorAddedEvent(ec.operatorPubKey, vLog.Data, vLog.Topics, contractAbi)
-		reportSyncEvent(eventName, isOperatorEvent, err)
+	case abiparser.OperatorAdded:
+		parsed, err := abiParser.ParseOperatorAddedEvent(vLog.Data, vLog.Topics, contractAbi)
+		reportSyncEvent(eventName, err)
 		if err != nil {
-			return unpackErr, errors.Wrap(err, "failed to parse OperatorAdded event")
+			return errors.Wrap(err, "failed to parse OperatorAdded event")
 		}
-		ec.fireEvent(vLog, *parsed, isOperatorEvent)
-	case "ValidatorAdded":
-		parsed, isOperatorEvent, unpackErr, err := abiParser.ParseValidatorAddedEvent(shareEncryptionKey, vLog.Data, contractAbi)
-		reportSyncEvent(eventName, isOperatorEvent, err)
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.ValidatorAdded:
+		parsed, err := abiParser.ParseValidatorAddedEvent(vLog.Data, contractAbi)
+		reportSyncEvent(eventName, err)
 		if err != nil {
-			return unpackErr, errors.Wrap(err, "failed to parse ValidatorAdded event")
+			return errors.Wrap(err, "failed to parse ValidatorAdded event")
 		}
-		ec.fireEvent(vLog, *parsed, isOperatorEvent)
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.ValidatorRemoved:
+		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog.Data, contractAbi)
+		reportSyncEvent(eventName, err)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse ValidatorRemoved event")
+		}
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.AccountLiquidated:
+		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Topics)
+		reportSyncEvent(eventName, err)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse AccountLiquidated event")
+		}
+		ec.fireEvent(vLog, eventName, *parsed)
+	case abiparser.AccountEnabled:
+		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Topics)
+		reportSyncEvent(eventName, err)
+		if err != nil {
+			return errors.Wrap(err, "failed to parse AccountEnabled event")
+		}
+		ec.fireEvent(vLog, eventName, *parsed)
+
 	default:
 		ec.logger.Debug("unknown contract event was received", zap.String("hash", vLog.TxHash.Hex()), zap.String("eventName", eventName))
 	}
-	return false, nil
+	return nil
 }

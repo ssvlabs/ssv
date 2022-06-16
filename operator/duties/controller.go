@@ -115,7 +115,7 @@ func (dc *dutyController) ExecuteDuty(duty *beaconprotocol.Duty) error {
 			// force the validator to be started (subscribed to validator's topic and synced)
 			// TODO: handle error (return error
 			if err := v.Start(); err != nil {
-				logger.Error("could not start validator", zap.Error(err))
+				logger.Warn("could not start validator", zap.Error(err))
 				return
 			}
 			logger.Info("starting duty processing")
@@ -137,7 +137,7 @@ func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
 		dc.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
-			dc.logger.Error("failed to get duties", zap.Error(err))
+			dc.logger.Warn("failed to get duties", zap.Error(err))
 		}
 		for i := range duties {
 			go dc.onDuty(&duties[i])
@@ -157,7 +157,7 @@ func (dc *dutyController) onDuty(duty *beaconprotocol.Duty) {
 	if dc.shouldExecute(duty) {
 		logger.Debug("duty was sent to execution")
 		if err := dc.ExecuteDuty(duty); err != nil {
-			logger.Error("could not dispatch duty", zap.Error(err))
+			logger.Warn("could not dispatch duty", zap.Error(err))
 			return
 		}
 		return

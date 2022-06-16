@@ -19,13 +19,13 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 	}
 
 	//	validate message
-	if len(msg.GetSigners()) == 0 { // no KeyManager, empty sig
-		c.logger.Error("missing KeyManager id", zap.Any("msg", msg))
+	if len(msg.GetSigners()) == 0 {
+		c.logger.Warn("missing signers", zap.Any("msg", msg))
 		return nil
 	}
 	//if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
 	if len(msg.Message.DutySignature) == 0 { // TODO need to add sig to msg and not use this sig
-		c.logger.Error("missing sig", zap.Any("msg", msg))
+		c.logger.Warn("missing duty signature", zap.Any("msg", msg))
 		return nil
 	}
 	logger := c.logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
@@ -39,7 +39,7 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
 
 	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
-		c.logger.Error("received invalid signature", zap.Error(err))
+		c.logger.Warn("received invalid signature", zap.Error(err))
 		return nil
 	}
 

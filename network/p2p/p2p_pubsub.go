@@ -38,23 +38,26 @@ func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(message message.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	raw, err := n.fork.EncodeNetworkMsg(&message)
+	raw, err := n.fork.EncodeNetworkMsg(&msg)
 	if err != nil {
-		return errors.Wrap(err, "could not decode message")
+		return errors.Wrap(err, "could not decode msg")
 	}
-	vpk := message.GetIdentifier().GetValidatorPK()
+	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
-
+	// for decided message, send on decided channel as well
+	if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
+		topics = append(topics, decidedTopic)
+	}
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			//return errors.Wrap(err, "could not broadcast message")
+			//return errors.Wrap(err, "could not broadcast msg")
 			return err
 		}
 	}

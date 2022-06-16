@@ -30,6 +30,11 @@ func (km *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
+func (km *testSigner) RemoveShare(pubKey string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }

@@ -53,13 +53,14 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p host was configured", zap.String("peer", n.host.ID().String()))
+	n.logger = n.logger.With(zap.String("selfPeer", n.host.ID().String()))
+	n.logger.Debug("p2p host was configured")
 
 	err = n.SetupServices()
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p services were configured", zap.String("peer", n.host.ID().String()))
+	n.logger.Debug("p2p services were configured")
 
 	return nil
 }
@@ -226,7 +227,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}
-	_, tc, err := topics.NewPubsub(n.ctx, cfg)
+	_, tc, err := topics.NewPubsub(n.ctx, cfg, n.fork)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

@@ -33,6 +33,9 @@ type Controller interface {
 	// StartInstance starts a new instance by the given options
 	StartInstance(opts ControllerStartInstanceOptions) (*InstanceResult, error)
 
+	// StopInstance stops the running instance
+	StopInstance() error
+
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
 	NextSeqNumber() (uint64, error)

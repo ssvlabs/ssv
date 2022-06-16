@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter/storage"
 	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 )
@@ -20,8 +21,8 @@ func (exp *exporter) listenToEth1Events(eventsFeed *event.Feed) <-chan error {
 		defer sub.Unsubscribe()
 		for {
 			select {
-			case event := <-cn:
-				if err := exp.handleEth1Event(*event); err != nil {
+			case e := <-cn:
+				if err := exp.handleEth1Event(*e); err != nil {
 					cnErr <- err
 				}
 			case err := <-sub.Err():
@@ -50,10 +51,10 @@ func (exp *exporter) handleEth1Event(e eth1.Event) error {
 // handleValidatorAddedEvent parses the given event and sync the ibft-data of the validator
 func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEvent) error {
 	//pubKeyHex := hex.EncodeToString(event.PublicKey)
-	//logger := exp.logger.With(zap.String("eventType", "ValidatorAdded"), zap.String("pubKey", pubKeyHex))
+	//logger := exp.logger.With(zap.String("eventType", abiparser.ValidatorAdded), zap.String("pubKey", pubKeyHex))
 	//logger.Info("validator added event")
 	//// save the share to be able to reuse IBFT functionality
-	//validatorShare, _, err := validator.ShareFromValidatorAddedEvent(event, "")
+	//validatorShare, _, err := validator.ShareFromValidatorEvent(event, exp.storage.GetOperatorData, nil, "")
 	//if err != nil {
 	//	return errors.Wrap(err, "could not create a share from ValidatorAddedEvent")
 	//}
@@ -80,7 +81,7 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 	//go func() {
 	//	n := exp.ws.BroadcastFeed().Send(api.Message{
 	//		Type:   api.TypeValidator,
-	//		Filter: api.MessageFilter{From: vi.Index, To: vi.Index},
+	//		Filter: api.MessageFilter{From: uint64(vi.Index), To: uint64(vi.Index)},
 	//		Data:   []storage.ValidatorInformation{*vi},
 	//	})
 	//	logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
@@ -98,28 +99,29 @@ func (exp *exporter) handleValidatorAddedEvent(event abiparser.ValidatorAddedEve
 //nolint
 // handleOperatorAddedEvent parses the given event and saves operator information
 func (exp *exporter) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
-	//logger := exp.logger.With(zap.String("eventType", "OperatorAdded"),
-	//	zap.String("pubKey", string(event.PublicKey)))
-	//oi := registrystorage.OperatorInformation{
-	//	PublicKey:    string(event.PublicKey),
-	//	Name:         event.Name,
-	//	OwnerAddress: event.OwnerAddress,
-	//}
-	//err := exp.storage.SaveOperatorInformation(&oi)
-	//if err != nil {
-	//	return err
-	//}
-	//reportOperatorIndex(exp.logger, &oi)
-	//
-	//go func() {
-	//	n := exp.ws.BroadcastFeed().Send(api.Message{
-	//		Type:   api.TypeOperator,
-	//		Filter: api.MessageFilter{From: oi.Index, To: oi.Index},
-	//		Data:   []registrystorage.OperatorInformation{oi},
-	//	})
-	//	logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
-	//}()
+	/*logger := exp.logger.With(zap.String("eventType", abiparser.OperatorAdded),
+		zap.String("pubKey", string(event.PublicKey)))
+	od := registrystorage.OperatorData{
+		PublicKey:    string(event.PublicKey),
+		Name:         event.Name,
+		OwnerAddress: event.OwnerAddress,
+	}
+	err := exp.storage.SaveOperatorData(&od)
+	if err != nil {
+		return err
+	}
+	reportOperatorIndex(exp.logger, &od)
 
+	go func() {
+		n := exp.ws.BroadcastFeed().Send(api.Message{
+			Type:   api.TypeOperator,
+			Filter: api.MessageFilter{From: od.Index, To: od.Index},
+			Data:   []registrystorage.OperatorData{od},
+		})
+		logger.Debug("msg was sent on outbound feed", zap.Int("num of subscribers", n))
+	}()
+
+	return nil*/
 	return nil
 }
 

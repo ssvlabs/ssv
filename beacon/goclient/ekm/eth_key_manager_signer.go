@@ -4,6 +4,11 @@ import (
 	"encoding/hex"
 	"sync"
 
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/storage/basedb"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -15,11 +20,6 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
-
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type ethKeyManagerSigner struct {
@@ -85,6 +85,22 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
+		}
+	}
+	return nil
+}
+
+func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
+	km.walletLock.Lock()
+	defer km.walletLock.Unlock()
+
+	acc, err := km.wallet.AccountByPublicKey(pubKey)
+	if err != nil && err.Error() != "account not found" {
+		return errors.Wrap(err, "could not check share existence")
+	}
+	if acc != nil {
+		if err := km.wallet.DeleteAccountByPublicKey(pubKey); err != nil {
+			return errors.Wrap(err, "could not delete share")
 		}
 	}
 	return nil

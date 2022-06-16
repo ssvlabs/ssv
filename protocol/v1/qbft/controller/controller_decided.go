@@ -85,13 +85,22 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		return nil
 	}
 	if shouldSync {
-		c.logger.Info("stopping current instance and syncing..")
+		logger.Info("should sync, update decided")
+		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
+			logger.Error("failed to save decided when should sync", zap.Error(err))
+		}
+		logger.Info("stopping current instance and syncing..")
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
 			currentInstance.Stop()
 		}
-		if err := c.syncDecided(); err != nil {
+		lastKnown, err := c.decidedStrategy.GetLastDecided(c.Identifier) // knownMsg can be nil in fullSync mode so need to fetch last known.
+		if err != nil {
+			logger.Error("failed to get last known decided", zap.Error(err))
+		}
+		if err := c.syncDecided(lastKnown); err != nil {
 			logger.Error("failed sync after decided received", zap.Error(err))
 		}
+
 	}
 	return nil
 }

@@ -258,6 +258,11 @@ func (b *testBeacon) AddShare(shareKey *bls.SecretKey) error {
 	panic("implement me")
 }
 
+func (b *testBeacon) RemoveShare(pubKey string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (b *testBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	panic("implement me")
 }

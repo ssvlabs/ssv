@@ -2,7 +2,6 @@ package goeth
 
 import (
 	"context"
-	"crypto/rsa"
 	"encoding/json"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -31,10 +30,10 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			validatorAdded: rawValidatorAdded,
 		},
 		{
-			name:           "v2 abi contract",
-			version:        eth1.V2,
-			operatorAdded:  v2RawOperatorAdded,
-			validatorAdded: v2RawValidatorAdded,
+			name:           "v1 abi contract",
+			version:        eth1.V1,
+			operatorAdded:  rawOperatorAddedV1,
+			validatorAdded: rawValidatorAddedV1,
 		},
 	}
 
@@ -75,12 +74,12 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			}()
 
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogOperatorAdded, contractAbi)
+			err = ec.handleEvent(vLogOperatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			time.Sleep(10 * time.Millisecond)
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogValidatorAdded, contractAbi)
+			err = ec.handleEvent(vLogValidatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			eventsWg.Wait()
@@ -90,12 +89,9 @@ func TestEth1Client_handleEvent(t *testing.T) {
 
 func newEth1Client(abiVersion eth1.Version) *eth1Client {
 	ec := eth1Client{
-		ctx:    context.TODO(),
-		conn:   nil,
-		logger: zap.L(),
-		shareEncryptionKeyProvider: func() (*rsa.PrivateKey, bool, error) {
-			return nil, true, nil
-		},
+		ctx:        context.TODO(),
+		conn:       nil,
+		logger:     zap.L(),
 		eventsFeed: new(event.Feed),
 		abiVersion: abiVersion,
 	}
@@ -116,7 +112,7 @@ var rawOperatorAdded = `{
   "removed": false
 }`
 
-var v2RawOperatorAdded = `{
+var rawOperatorAddedV1 = `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
       "0x39b34f12d0a1eb39d220d2acd5e293c894753a36ac66da43b832c9f1fdb8254e",
@@ -145,7 +141,7 @@ var rawValidatorAdded = `{
   "removed": false
 }`
 
-var v2RawValidatorAdded = `{
+var rawValidatorAddedV1 = `{
    "address":"0xd594c1ef4845713e86658cb42227a811625a285b",
    "topics":[
       "0x088097840a21a2c763dd9bd97cc2b0b27628bb6a42124a398260fac7f31ff571"

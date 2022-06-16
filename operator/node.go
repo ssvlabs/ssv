@@ -123,7 +123,7 @@ func (n *operatorNode) listenForCurrentSlot() {
 func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 	n.logger.Info("starting operator node syncing with eth1")
 
-	handler := n.validatorsCtrl.Eth1EventHandler()
+	handler := n.validatorsCtrl.Eth1EventHandler(false)
 	// sync past events
 	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")

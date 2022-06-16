@@ -2,30 +2,30 @@ package validator
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/storage"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"sync"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-	"github.com/prysmaticlabs/prysm/async/event"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 )
 
@@ -34,6 +34,9 @@ import (
 const (
 	metadataBatchSize = 25
 )
+
+// ShareEncryptionKeyProvider is a function that returns the operator private key
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *beaconprotocol.Share)
@@ -50,9 +53,9 @@ type ControllerOptions struct {
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
 	Shares                     []ShareOptions `yaml:"Shares"`
-	ShareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	FullNode                   bool `yaml:"FullNode" env:"FORCE_HISTORY_KEY" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
+	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
 	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -72,7 +75,7 @@ type Controller interface {
 	GetValidator(pubKey string) (validator.IValidator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
-	Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler
+	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	OnFork(forkVersion forksprotocol.ForkVersion) error
 }
@@ -86,7 +89,7 @@ type controller struct {
 	beacon     beaconprotocol.Beacon
 	keyManager beaconprotocol.KeyManager
 
-	shareEncryptionKeyProvider eth1.ShareEncryptionKeyProvider
+	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
 
 	validatorsMap    *validatorsMap
@@ -267,65 +270,23 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
 
-	handler := c.Eth1EventHandler(c.handleShare)
+	handler := c.Eth1EventHandler(true)
 
 	for {
 		select {
 		case e := <-cn:
 			if err := handler(*e); err != nil {
-				c.logger.Error("could not process ongoing eth1 event", zap.Error(err))
+				c.logger.Warn("could not process ongoing eth1 event", zap.Error(err))
 			}
 		case err := <-sub.Err():
-			c.logger.Error("event feed subscription error", zap.Error(err))
+			c.logger.Warn("event feed subscription error", zap.Error(err))
 		}
-	}
-}
-
-// Eth1EventHandler is a factory function for creating eth1 event handler
-func (c *controller) Eth1EventHandler(handlers ...ShareEventHandlerFunc) eth1.SyncEventHandler {
-	return func(e eth1.Event) error {
-		switch ev := e.Data.(type) {
-		case abiparser.ValidatorAddedEvent:
-			pubKey := hex.EncodeToString(ev.PublicKey)
-			// TODO: on history sync this should not be called
-			if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-				c.logger.Debug("validator was loaded already")
-				return nil
-			}
-			share, err := c.handleValidatorAddedEvent(ev, e.IsOperatorEvent)
-			if err != nil {
-				c.logger.Error("could not handle ValidatorAdded event", zap.String("pubkey", pubKey), zap.Error(err))
-				return err
-			}
-			if e.IsOperatorEvent {
-				for _, h := range handlers {
-					h(share)
-				}
-			}
-		case abiparser.OperatorAddedEvent:
-			err := c.handleOperatorAddedEvent(ev)
-			if err != nil {
-				c.logger.Error("could not handle OperatorAdded event", zap.Error(err))
-				return err
-			}
-		default:
-			c.logger.Warn("could not handle unknown event")
-		}
-		return nil
-	}
-}
-
-func (c *controller) handleShare(share *beaconprotocol.Share) {
-	v := c.validatorsMap.GetOrCreateValidator(share)
-	_, err := c.startValidator(v)
-	if err != nil {
-		c.logger.Warn("could not start validator", zap.Error(err))
 	}
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
+	shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -394,7 +355,7 @@ func (c *controller) updateValidatorsMetadata(pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		c.logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
 		if err := beaconprotocol.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
-			c.logger.Error("could not update all validators", zap.Error(err))
+			c.logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -411,7 +372,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		}
 		_, err := c.startValidator(v)
 		if err != nil {
-			c.logger.Error("could not start validator", zap.Error(err))
+			c.logger.Warn("could not start validator", zap.Error(err))
 		}
 	}
 	return nil
@@ -437,56 +398,12 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 		return nil
 	})
 	if err != nil {
-		c.logger.Error("failed to get all validators public keys", zap.Error(err))
+		c.logger.Warn("failed to get all validators public keys", zap.Error(err))
 	}
 
 	go c.updateValidatorsMetadata(toFetch)
 
 	return indices
-}
-
-// handleValidatorAddedEvent handles registry contract event for validator added
-func (c *controller) handleValidatorAddedEvent(
-	validatorAddedEvent abiparser.ValidatorAddedEvent,
-	isOperatorShare bool,
-) (*beaconprotocol.Share, error) {
-	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
-	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exist")
-	}
-	if !found {
-		newValShare, shareSecret, err := createShareWithOperatorKey(validatorAddedEvent, c.operatorPubKey, isOperatorShare)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to create share")
-		}
-		if err := c.onNewShare(newValShare, shareSecret, isOperatorShare); err != nil {
-			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
-			return nil, err
-		}
-		validatorShare = newValShare
-		if isOperatorShare {
-			logger := c.logger.With(zap.String("pubKey", pubKey))
-			logger.Debug("ValidatorAdded event was handled successfully")
-			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
-		}
-	}
-	return validatorShare, nil
-}
-
-// handleOperatorAddedEvent parses the given event and saves operator information
-func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
-	oi := registrystorage.OperatorInformation{
-		PublicKey:    string(event.PublicKey),
-		Name:         event.Name,
-		OwnerAddress: event.OwnerAddress,
-	}
-	err := c.storage.SaveOperatorInformation(&oi)
-	if err != nil {
-		return errors.Wrap(err, "could not save operator information")
-	}
-	return nil
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
@@ -507,38 +424,84 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 		}
 		_, err := c.startValidator(v)
 		if err != nil {
-			c.logger.Error("could not start validator after metadata update",
+			c.logger.Warn("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 	}
 }
 
-// onNewShare is called when a new validator was added or during registry sync
-// if the validator was persisted already, this function won't be called
-func (c *controller) onNewShare(share *beaconprotocol.Share, shareSecret *bls.SecretKey, isOperatorShare bool) error {
-	logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+// onShareCreate is called when a validator was added/updated during registry sync
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*beaconprotocol.Share, bool, error) {
+	share, shareSecret, err := ShareFromValidatorEvent(
+		validatorEvent,
+		c.storage,
+		c.shareEncryptionKeyProvider,
+		c.operatorPubKey,
+	)
+	if err != nil {
+		return nil, false, errors.Wrap(err, "could not extract validator share from event")
+	}
+
+	// determine if the share belongs to operator
+	isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+
 	if isOperatorShare {
+		if shareSecret == nil {
+			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorAdded event")
+		}
+
+		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+
+		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
 		} else if !updated {
 			logger.Warn("could not find validator metadata")
 		}
-	}
 
-	// in case this validator belongs to operator, the secret key is not nil
-	if shareSecret != nil {
 		// save secret key
 		if err := c.keyManager.AddShare(shareSecret); err != nil {
-			return errors.Wrap(err, "failed to save new share secret to key manager")
+			return nil, isOperatorShare, errors.Wrap(err, "could not add share secret to key manager")
 		}
 		logger.Info("share was added successfully to key manager")
 	}
 
 	// save validator data
 	if err := c.collection.SaveValidatorShare(share); err != nil {
-		return errors.Wrap(err, "failed to save new share")
+		return nil, isOperatorShare, errors.Wrap(err, "could not save validator share")
 	}
+
+	return share, isOperatorShare, nil
+}
+
+// onShareRemove is called when a validator was removed
+// TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
+func (c *controller) onShareRemove(pk string, removeSecret bool) error {
+	// remove from validatorsMap
+	v := c.validatorsMap.RemoveValidator(pk)
+
+	// stop instance
+	if v != nil {
+		if err := v.Close(); err == nil {
+			return errors.Wrap(err, "could not close validator")
+		}
+	}
+	// remove the share secret from key-manager
+	if removeSecret {
+		if err := c.keyManager.RemoveShare(pk); err != nil {
+			return errors.Wrap(err, "could not remove share secret from key manager")
+		}
+	}
+
 	return nil
+}
+
+func (c *controller) onShareStart(share *beaconprotocol.Share) {
+	v := c.validatorsMap.GetOrCreateValidator(share)
+	_, err := c.startValidator(v)
+	if err != nil {
+		c.logger.Warn("could not start validator", zap.Error(err))
+	}
 }
 
 // startValidator will start the given validator if applicable
@@ -564,9 +527,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey)
+		shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
 		if err != nil {
-			c.logger.Error("could not get validators shares for metadata update", zap.Error(err))
+			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue
 		}
 		var pks [][]byte
