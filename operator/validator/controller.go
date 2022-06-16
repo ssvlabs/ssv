@@ -110,6 +110,7 @@ type controller struct {
 // decided message processing in the qbft controllers
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
+	c.validatorOptions.ForkVersion = forkVersion
 
 	storageHandler, ok := c.validatorOptions.IbftStorage.(forksprotocol.ForkHandler)
 	if !ok {
@@ -256,12 +257,33 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
+// getShare returns the share of the given validator public key
+// TODO: optimize
+func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, error) {
+	share, found, err := c.collection.GetValidatorShare(pk)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
+	}
+	if !found {
+		return nil, nil
+	}
+	return share, nil
+}
+
 func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
+	share, err := c.getShare(msg.GetIdentifier().GetValidatorPK())
+	if err != nil {
+		return err
+	}
+	if share == nil {
+		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetIdentifier().GetValidatorPK()))
+	}
+
 	opts := *c.validatorOptions
+	opts.Share = share
 	opts.ReadMode = true
 
-	val := validator.NewValidator(&opts)
-	return val.ProcessMsg(msg)
+	return validator.NewValidator(&opts).ProcessMsg(msg)
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
