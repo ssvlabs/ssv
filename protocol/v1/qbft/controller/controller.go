@@ -98,14 +98,6 @@ func New(opts Options) IController {
 	logger := opts.Logger.With(zap.String("role", opts.Role.String()), zap.Bool("read mode", opts.ReadMode))
 	fork := forksfactory.NewFork(opts.Version)
 
-	q, err := msgqueue.New(
-		logger.With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
-	)
-	if err != nil {
-		// TODO: we should probably stop here, TBD
-		logger.Warn("could not setup msg queue properly", zap.Error(err))
-	}
 	ctrl := &Controller{
 		ctx:                opts.Context,
 		instanceStorage:    opts.Storage,
@@ -125,10 +117,20 @@ func New(opts Options) IController {
 		readMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
-		q: q,
-
 		currentInstanceLock: &sync.RWMutex{},
 		forkLock:            &sync.Mutex{},
+	}
+
+	if !opts.ReadMode {
+		q, err := msgqueue.New(
+			logger.With(zap.String("who", "msg_q")),
+			msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		)
+		if err != nil {
+			// TODO: we should probably stop here, TBD
+			logger.Warn("could not setup msg queue properly", zap.Error(err))
+		}
+		ctrl.q = q
 	}
 
 	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.getNodeMode(), opts.Storage, opts.Network)
