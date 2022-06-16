@@ -56,7 +56,7 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	stream := NewStream(s)
 	defer func() {
 		if err := stream.Close(); err != nil {
-			n.logger.Error("could not close stream", zap.Error(err))
+			n.logger.Warn("could not close stream", zap.Error(err))
 		}
 	}()
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
@@ -86,10 +86,9 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	protocolID := stream.Protocol()
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
 	logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
-	logger.Debug("handle stream", zap.Duration("timeout", n.requestTimeout))
 	done := func() {
 		if err := s.Close(); err != nil {
-			logger.Error("could not close stream", zap.Error(err))
+			logger.Warn("could not close stream", zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)

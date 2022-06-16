@@ -84,7 +84,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	syncWg.Wait()
 
 	if len(errs) > 0 {
-		logger.Error("failed to handle all events from sync", zap.Any("errs", errs))
+		logger.Warn("failed to handle all events from sync", zap.Any("errs", errs))
 		return errors.New("failed to handle all events from sync")
 	}
 

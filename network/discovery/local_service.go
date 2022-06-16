@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"sync"
 	"time"
 
@@ -19,8 +20,7 @@ const (
 	// localDiscoveryInterval is how often we re-publish our mDNS records.
 	localDiscoveryInterval = time.Second / 2
 	// LocalDiscoveryServiceTag is used in our mDNS advertisements to discover other peers
-	LocalDiscoveryServiceTag = "bloxstaking.ssv"
-	//LocalDiscoveryServiceTag = "ssv.discovery" // TODO: change
+	LocalDiscoveryServiceTag = "ssv.discovery"
 )
 
 // localDiscovery implements ssv_discovery.Service using mDNS and KAD-DHT
@@ -98,6 +98,12 @@ func (md *localDiscovery) RegisterSubnets(subnets ...int64) error {
 
 // DeregisterSubnets implements Service
 func (md *localDiscovery) DeregisterSubnets(subnets ...int64) error {
+	// TODO
+	return nil
+}
+
+// UpdateForkVersion implements Service
+func (md *localDiscovery) UpdateForkVersion(forkv forksprotocol.ForkVersion) error {
 	// TODO
 	return nil
 }

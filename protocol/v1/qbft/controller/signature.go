@@ -77,7 +77,7 @@ func (s *SignatureState) start(logger *zap.Logger, height message.Height, signat
 			logger.Debug("signatures were collected before timeout", zap.Int("received", len(s.signatures)))
 			return
 		}
-		logger.Error("could not process post consensus signature", zap.Error(errors.Errorf("timed out waiting for post consensus signatures, received %d", len(s.signatures))))
+		logger.Warn("could not process post consensus signature", zap.Error(errors.Errorf("timed out waiting for post consensus signatures, received %d", len(s.signatures))))
 	})
 	//s.timer = time.NewTimer(s.SignatureCollectionTimeout)
 	s.state.Store(StateRunning)

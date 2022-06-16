@@ -25,7 +25,6 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/duties"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -53,9 +52,8 @@ type config struct {
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 	ClearNetworkKey            bool   `yaml:"ClearNetworkKey" env:"CLEAR_NETWORK_KEY" env-description:"flag that turns on/off network key revocation"`
 
-	ReadOnlyMode bool `yaml:"ReadOnlyMode" env:"READ_ONLY_MODE" env-description:"a flag to turn on read only operator"`
-
-	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-description:"Target epoch for fork v1"`
+	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
+	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-description:"Target epoch for fork v2"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
@@ -114,6 +112,10 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.ForkV1Epoch > 0 {
 			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
 		}
+		if cfg.ForkV2Epoch > 0 {
+			Logger.Debug("setting v2 epoch", zap.Uint64("epoch", cfg.ForkV2Epoch))
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV2Epoch), forksprotocol.V2ForkVersion)
+		}
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))
 		// TODO Not refactored yet Start (refactor in exporter as well):
@@ -165,9 +167,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Beacon = beaconClient
 		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNet
-
-		//cfg.SSVOptions.UseMainTopic = false // which topics needs to be subscribed is determined by ssv protocol
-
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = ssvForkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Logger = Logger
@@ -181,6 +180,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
+
+		// validatorController worker flags
+		cfg.SSVOptions.ValidatorOptions.WorkersCount = 1      // TODO need as yaml flag?
+		cfg.SSVOptions.ValidatorOptions.QueueBufferSize = 100 // TODO need as yaml flag?
 
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 
@@ -206,9 +209,6 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		if cfg.ReadOnlyMode {
-			cfg.SSVOptions.DutyExec = duties.NewReadOnlyExecutor(Logger)
-		}
 
 		if cfg.WsAPIPort != 0 {
 			cfg.SSVOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)

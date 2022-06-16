@@ -72,6 +72,8 @@ type NodeInfoStore interface {
 	SelfSealed() ([]byte, error)
 	// Self returns the current node info
 	Self() *records.NodeInfo
+	// UpdateSelfRecord updating current self with new one
+	UpdateSelfRecord(newInfo *records.NodeInfo)
 	// Add indexes the given peer info
 	Add(id peer.ID, node *records.NodeInfo) (bool, error)
 	// NodeInfo returns the info of the given node

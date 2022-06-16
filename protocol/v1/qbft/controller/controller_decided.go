@@ -27,7 +27,7 @@ by calling Decide(λi,− , Qcommit) do
 */
 func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
-		c.logger.Warn("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
+		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
 	logger := c.logger.With(zap.String("who", "processDecided"),
@@ -46,15 +46,16 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	// if we already have this in storage, pass
 	shouldUpdate, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
 	if err != nil {
-		logger.Warn("can't check if decided msg is known", zap.Error(err))
+		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
 	}
 	if shouldUpdate {
 		if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
-			logger.Warn("can't update decided message", zap.Error(err))
+			logger.Error("can't update decided message", zap.Error(err))
 			return nil
 		}
 		logger.Debug("decided was updated")
+
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 		return nil
 	} else if knownMsg != nil {
@@ -64,6 +65,15 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
+	if c.readMode { // in order to prevent sync
+		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
+			return errors.Wrap(err, "could not update decided message")
+		}
+		logger.Debug("decided was updated for controller with read only mode")
+		return nil
+	}
+
+	// decided for current instance
 	if c.forceDecideCurrentInstance(msg) {
 		return nil
 	}
@@ -71,13 +81,13 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	// decided for later instances which require a full sync
 	shouldSync, err := c.decidedRequiresSync(msg)
 	if err != nil {
-		logger.Warn("can't check decided msg", zap.Error(err))
+		logger.Error("can't check decided msg", zap.Error(err))
 		return nil
 	}
 	if shouldSync {
 		logger.Info("should sync, update decided")
 		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
-			logger.Warn("failed to save decided when should sync", zap.Error(err))
+			logger.Error("failed to save decided when should sync", zap.Error(err))
 		}
 		logger.Info("stopping current instance and syncing..")
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
@@ -85,10 +95,10 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		}
 		lastKnown, err := c.decidedStrategy.GetLastDecided(c.Identifier) // knownMsg can be nil in fullSync mode so need to fetch last known.
 		if err != nil {
-			logger.Warn("failed to get last known decided", zap.Error(err))
+			logger.Error("failed to get last known decided", zap.Error(err))
 		}
 		if err := c.syncDecided(lastKnown); err != nil {
-			logger.Warn("failed sync after decided received", zap.Error(err))
+			logger.Error("failed sync after decided received", zap.Error(err))
 		}
 
 	}

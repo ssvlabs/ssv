@@ -31,8 +31,8 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 			// the handshake might have been triggered by the other node,
 			// therefore the handshake might be pending
 			if err == ErrIndexingInProcess || err == errHandshakeInProcess {
-				_logger.Debug("peer handshake already in process")
-				return err
+				//_logger.Debug("peer handshake already in process")
+				return nil
 			}
 			_logger.Warn("could not handshake with peer", zap.Error(err))
 			err := net.ClosePeer(id)

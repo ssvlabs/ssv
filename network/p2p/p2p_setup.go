@@ -53,13 +53,14 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p host was configured", zap.String("peer", n.host.ID().String()))
+	n.logger = n.logger.With(zap.String("selfPeer", n.host.ID().String()))
+	n.logger.Debug("p2p host was configured")
 
 	err = n.SetupServices()
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p services were configured", zap.String("peer", n.host.ID().String()))
+	n.logger.Debug("p2p services were configured")
 
 	return nil
 }
@@ -143,7 +144,9 @@ func (n *p2pNetwork) setupPeerServices() error {
 	filters := make([]peers.HandshakeFilter, 0)
 	// v0 was before we checked forks, therefore asking if we are above v0
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion), peers.NetworkIDFilter(n.cfg.NetworkID))
+		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
+			return n.cfg.ForkVersion
+		}), peers.NetworkIDFilter(n.cfg.NetworkID))
 	}
 	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
@@ -220,7 +223,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
 			n.fork, time.Minute*2)
 		n.msgResolver = midHandler
-		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
+		cfg.MsgIDHandler = midHandler
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}

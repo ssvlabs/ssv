@@ -275,7 +275,6 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			continue
 		}
 		metricsPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
-		//logger.Debug("got message from topic", zap.String("topic", topicName))
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
@@ -293,7 +292,6 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 			pubsub.WithValidatorConcurrency(256)) // TODO: find the best value for concurrency
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
-			//ctrl.logger.Warn("could not register topic validator", zap.Error(err))
 			return errors.Wrap(err, "could not register topic validator")
 		}
 	}

@@ -94,7 +94,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			h.logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
-		h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
+		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
 		if !h.applyFilters(&ni) {
 			h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
@@ -251,7 +251,6 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 			return false
 		}
 		if !ok {
-			h.logger.Debug("filtering peer", zap.Any("identity", nodeInfo))
 			return false
 		}
 	}
@@ -259,11 +258,11 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 }
 
 // ForkVersionFilter determines whether we will connect to the given node by the fork version
-func ForkVersionFilter(forkVersion forksprotocol.ForkVersion) HandshakeFilter {
-	forkvStr := forkVersion.String()
+func ForkVersionFilter(forkVersion func() forksprotocol.ForkVersion) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
-		if forkVersion != ni.ForkVersion {
-			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), forkvStr)
+		version := forkVersion()
+		if version != ni.ForkVersion {
+			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), version)
 		}
 		return true, nil
 	}
