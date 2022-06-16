@@ -54,6 +54,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			if len(topics) == 1 || fork.GetTopicFullName(topics[1]) != currentTopic {
 				logger.Debug("invalid: wrong topic",
 					zap.Strings("actual", topics),
+					zap.String("type", msg.MsgType.String()),
 					zap.String("expected", fork.GetTopicBaseName(currentTopic)),
 					zap.ByteString("smsg.ID", msg.GetIdentifier()))
 				reportValidationResult(validationResultTopic)
