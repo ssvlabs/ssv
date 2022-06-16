@@ -110,6 +110,7 @@ type controller struct {
 // decided message processing in the qbft controllers
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
+	c.validatorOptions.ForkVersion = forkVersion
 
 	storageHandler, ok := c.validatorOptions.IbftStorage.(forksprotocol.ForkHandler)
 	if !ok {
