@@ -9,7 +9,7 @@ import (
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
-	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
+	c.Logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
 	if c.readMode {
 		if signedMessage.Message.MsgType != message.RoundChangeMsgType {
 			return nil // other types not supported in read mode
@@ -36,7 +36,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
-		c.logger.Debug("current instance processed message", zap.Bool("decided", decided))
+		c.Logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	default:
 		return errors.Errorf("message type is not suported")
 	}
@@ -44,7 +44,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 }
 
 func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message.SignedPostConsensusMessage) error {
-	c.logger.Debug("process post consensus message", zap.Int64("height", int64(signedPostConsensusMessage.Message.Height)), zap.Int64("signer_id", int64(signedPostConsensusMessage.Message.Signers[0])))
+	c.Logger.Debug("process post consensus message", zap.Int64("height", int64(signedPostConsensusMessage.Message.Height)), zap.Int64("signer_id", int64(signedPostConsensusMessage.Message.Signers[0])))
 	return c.ProcessSignatureMessage(signedPostConsensusMessage)
 }
 
@@ -63,7 +63,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		}
 	}
 
-	logger := c.logger.With(zap.String("who", "ProcessLateCommitMsg"),
+	logger := c.Logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
@@ -72,7 +72,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if err := c.decidedStrategy.UpdateDecided(updated); err != nil {
+		if err := c.DecidedStrategy.UpdateDecided(updated); err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
@@ -88,7 +88,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			ID:      c.Identifier,
 			Data:    data,
 		}
-		if err := c.network.Broadcast(ssvMsg); err != nil {
+		if err := c.Network.Broadcast(ssvMsg); err != nil {
 			logger.Warn("could not broadcast decided message", zap.Error(err))
 		} else {
 			logger.Debug("updated decided was broadcasted")
@@ -100,7 +100,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
 func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.SignedMessage) (*message.SignedMessage, error) {
-	decidedMessages, err := c.decidedStrategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	decidedMessages, err := c.DecidedStrategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided for late commit")

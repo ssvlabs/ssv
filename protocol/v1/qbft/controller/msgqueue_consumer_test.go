@@ -31,15 +31,15 @@ func TestConsumeMessages(t *testing.T) {
 	require.NoError(t, err)
 	currentInstanceLock := &sync.RWMutex{}
 	ctrl := Controller{
-		ctx:                 context.Background(),
-		logger:              logex.GetLogger().With(zap.String("who", "controller")),
-		q:                   q,
-		signatureState:      SignatureState{},
+		Ctx:                 context.Background(),
+		Logger:              logex.GetLogger().With(zap.String("who", "controller")),
+		Q:                   q,
+		SignatureState:      SignatureState{},
 		Identifier:          message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
-		currentInstanceLock: currentInstanceLock,
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: currentInstanceLock,
+		ForkLock:            &sync.Mutex{},
 	}
-	ctrl.signatureState.setHeight(0)
+	ctrl.SignatureState.setHeight(0)
 
 	tests := []struct {
 		name            string
@@ -229,13 +229,13 @@ func TestConsumeMessages(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			ctrl.ctx = ctx
+			ctrl.Ctx = ctx
 			ctrl.setCurrentInstance(test.currentInstance)
-			ctrl.signatureState = SignatureState{}
-			ctrl.signatureState.setHeight(test.lastHeight)
+			ctrl.SignatureState = SignatureState{}
+			ctrl.SignatureState.setHeight(test.lastHeight)
 
 			for _, msg := range test.msgs {
-				ctrl.q.Add(msg)
+				ctrl.Q.Add(msg)
 			}
 
 			go func() {
@@ -253,7 +253,7 @@ func TestConsumeMessages(t *testing.T) {
 			processed := 0
 			ctrl.startQueueConsumer(func(msg *message.SSVMessage) error {
 				// when done, cancel ctx
-				ctrl.logger.Debug("process msg")
+				ctrl.Logger.Debug("process msg")
 
 				expectedMsg := test.expected[processed]
 				require.Equal(t, expectedMsg.MsgType, msg.MsgType)
@@ -273,10 +273,10 @@ func TestConsumeMessages(t *testing.T) {
 					require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
 				}
 				processed++
-				ctrl.logger.Debug("--------- processed -----", zap.Int("processed", processed), zap.Int("total", len(test.expected)), zap.String("name", test.name))
+				ctrl.Logger.Debug("--------- processed -----", zap.Int("processed", processed), zap.Int("total", len(test.expected)), zap.String("name", test.name))
 
 				if processed == len(test.expected) {
-					ctrl.logger.Debug("--------- done by procesed -----", zap.String("name", test.name))
+					ctrl.Logger.Debug("--------- done by procesed -----", zap.String("name", test.name))
 					cancel()
 					q.Clean(func(s msgqueue.Index) bool {
 						return true

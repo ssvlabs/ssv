@@ -29,11 +29,11 @@ func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier: []byte("Identifier_11"),
 		// instances: make([]*Instance, 0),
-		currentInstanceLock: currentInstanceLock,
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: currentInstanceLock,
+		ForkLock:            &sync.Mutex{},
 	}
 
-	ret.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+	ret.Fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
 	return ret
 }
 
@@ -163,17 +163,17 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.state = test.initState
+			i.State = test.initState
 			currentInstanceLock := &sync.RWMutex{}
-			i.currentInstanceLock = currentInstanceLock
-			i.forkLock = &sync.Mutex{}
+			i.CurrentInstanceLock = currentInstanceLock
+			i.ForkLock = &sync.Mutex{}
 			if test.currentInstance != nil {
 				i.setCurrentInstance(test.currentInstance)
 			}
 			if test.storage != nil {
-				i.instanceStorage = test.storage
-				i.changeRoundStorage = test.storage
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), test.storage, nil)
+				i.InstanceStorage = test.storage
+				i.ChangeRoundStorage = test.storage
+				i.DecidedFactory = factory.NewDecidedFactory(zap.L(), i.GetNodeMode(), test.storage, nil)
 			} else {
 				options := basedb.Options{
 					Type:   "badger-memory",
@@ -184,15 +184,15 @@ func TestCanStartNewInstance(t *testing.T) {
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
 				store := qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
-				i.instanceStorage = store
-				i.changeRoundStorage = store
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), store, nil)
+				i.InstanceStorage = store
+				i.ChangeRoundStorage = store
+				i.DecidedFactory = factory.NewDecidedFactory(zap.L(), i.GetNodeMode(), store, nil)
 			}
 
-			i.decidedStrategy = i.decidedFactory.GetStrategy()
+			i.DecidedStrategy = i.DecidedFactory.GetStrategy()
 
 			i.ValidatorShare = test.share
-			i.instanceConfig = qbft.DefaultConsensusParams()
+			i.InstanceConfig = qbft.DefaultConsensusParams()
 			// i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
 			require.NoError(t, err)

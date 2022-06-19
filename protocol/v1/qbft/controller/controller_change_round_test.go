@@ -35,8 +35,8 @@ func TestReadModeChangeRound(t *testing.T) {
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 
 	ctrl := Controller{
-		ctx:    context.Background(),
-		logger: logger,
+		Ctx:    context.Background(),
+		Logger: logger,
 		ValidatorShare: &beacon.Share{
 			NodeID: 1,
 			//PublicKey:    secretKeys[0].GetPublicKey(),
@@ -50,9 +50,9 @@ func TestReadModeChangeRound(t *testing.T) {
 			OwnerAddress: "",
 			Operators:    nil,
 		},
-		changeRoundStorage: changeRoundStorage,
+		ChangeRoundStorage: changeRoundStorage,
 		Identifier:         message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
-		fork:               forksfactory.NewFork(forksprotocol.V0ForkVersion),
+		Fork:               forksfactory.NewFork(forksprotocol.V0ForkVersion),
 		readMode:           true,
 	}
 
@@ -212,7 +212,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			last, err := ctrl.changeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier)
+			last, err := ctrl.ChangeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier)
 			require.NoError(t, err)
 			require.NotNil(t, last)
 			require.Equal(t, test.expectedHeight, last.Message.Height)

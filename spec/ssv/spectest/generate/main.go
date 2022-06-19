@@ -22,7 +22,7 @@ func main() {
 
 func writeJson(data []byte) {
 	basedir, _ := os.Getwd()
-	path := filepath.Join(basedir, "docs", "spec", "ssv", "spectest", "generate")
+	path := filepath.Join(basedir, "spec", "ssv", "spectest", "generate")
 	fileName := "tests.json"
 	fullPath := path + "/" + fileName
 

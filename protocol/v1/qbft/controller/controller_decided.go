@@ -12,7 +12,7 @@ import (
 
 // ValidateDecidedMsg - the main decided msg pipeline
 func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
-	return c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+	return c.Fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
 }
 
 // ProcessDecidedMessage is responsible for processing an incoming decided message.
@@ -27,16 +27,16 @@ by calling Decide(λi,− , Qcommit) do
 */
 func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
-		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
+		c.Logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
-	logger := c.logger.With(zap.String("who", "processDecided"),
+	logger := c.Logger.With(zap.String("who", "processDecided"),
 		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("height", uint64(msg.Message.Height)),
 		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
 
-	if valid, err := c.decidedStrategy.ValidateHeight(msg); err != nil {
+	if valid, err := c.DecidedStrategy.ValidateHeight(msg); err != nil {
 		return errors.Wrap(err, "failed to check msg height")
 	} else if !valid {
 		logger.Debug("decided is too old, do nothing")
@@ -44,13 +44,13 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 
 	// if we already have this in storage, pass
-	shouldUpdate, knownMsg, err := c.decidedStrategy.IsMsgKnown(msg)
+	shouldUpdate, knownMsg, err := c.DecidedStrategy.IsMsgKnown(msg)
 	if err != nil {
 		logger.Error("can't check if decided msg is known", zap.Error(err))
 		return nil
 	}
 	if shouldUpdate {
-		if err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+		if err := c.DecidedStrategy.UpdateDecided(msg); err != nil {
 			logger.Error("can't update decided message", zap.Error(err))
 			return nil
 		}
@@ -66,7 +66,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
 	if c.readMode { // in order to prevent sync
-		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
+		if err := c.DecidedStrategy.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not update decided message")
 		}
 		logger.Debug("decided was updated for controller with read only mode")
@@ -86,14 +86,14 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	if shouldSync {
 		logger.Info("should sync, update decided")
-		if err := c.decidedStrategy.SaveDecided(msg); err != nil {
+		if err := c.DecidedStrategy.SaveDecided(msg); err != nil {
 			logger.Error("failed to save decided when should sync", zap.Error(err))
 		}
 		logger.Info("stopping current instance and syncing..")
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
 			currentInstance.Stop()
 		}
-		lastKnown, err := c.decidedStrategy.GetLastDecided(c.Identifier) // knownMsg can be nil in fullSync mode so need to fetch last known.
+		lastKnown, err := c.DecidedStrategy.GetLastDecided(c.Identifier) // knownMsg can be nil in fullSync mode so need to fetch last known.
 		if err != nil {
 			logger.Error("failed to get last known decided", zap.Error(err))
 		}
@@ -120,7 +120,7 @@ func (c *Controller) forceDecideCurrentInstance(msg *message.SignedMessage) bool
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
-	highestKnown, err := c.decidedStrategy.GetLastDecided(c.GetIdentifier())
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool 
 // 		- AND msg is not for current instance
 func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, error) {
 	// if IBFT sync failed to init, trigger it again
-	if atomic.LoadUint32(&c.state) < Ready {
+	if atomic.LoadUint32(&c.State) < Ready {
 		return true, nil
 	}
 	if c.decidedForCurrentInstance(msg) {
@@ -157,7 +157,7 @@ func (c *Controller) decidedRequiresSync(msg *message.SignedMessage) (bool, erro
 		return false, nil
 	}
 
-	highest, err := c.decidedStrategy.GetLastDecided(msg.Message.Identifier)
+	highest, err := c.DecidedStrategy.GetLastDecided(msg.Message.Identifier)
 	if highest == nil {
 		return msg.Message.Height > 0, nil
 	}

@@ -258,16 +258,16 @@ func TestDecidedRequiresSync(t *testing.T) {
 			currentInstanceLock := &sync.RWMutex{}
 			ctrl := Controller{
 				currentInstance:     test.currentInstance,
-				instanceStorage:     storage,
-				changeRoundStorage:  storage,
-				state:               test.initState,
-				currentInstanceLock: currentInstanceLock,
-				forkLock:            &sync.Mutex{},
+				InstanceStorage:     storage,
+				ChangeRoundStorage:  storage,
+				State:               test.initState,
+				CurrentInstanceLock: currentInstanceLock,
+				ForkLock:            &sync.Mutex{},
 			}
 
-			ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
-			ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
-			ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+			ctrl.Fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+			ctrl.DecidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.GetNodeMode(), storage, nil)
+			ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
 
 			res, err := ctrl.decidedRequiresSync(test.msg)
 			require.EqualValues(t, test.expectedRes, res)
@@ -359,8 +359,8 @@ func TestDecideIsCurrentInstance(t *testing.T) {
 			currentInstanceLock := &sync.RWMutex{}
 			ibft := Controller{
 				currentInstance:     test.currentInstance,
-				currentInstanceLock: currentInstanceLock,
-				forkLock:            &sync.Mutex{},
+				CurrentInstanceLock: currentInstanceLock,
+				ForkLock:            &sync.Mutex{},
 			}
 			require.EqualValues(t, test.expectedRes, ibft.decidedForCurrentInstance(test.msg))
 		})
@@ -379,7 +379,7 @@ func TestForceDecided(t *testing.T) {
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 	// test before sync
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.Height)
@@ -412,7 +412,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -450,7 +450,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	// test before sync
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -458,7 +458,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, message.Height(10), highest.Message.Height)
@@ -502,7 +502,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.Height)
@@ -625,17 +625,17 @@ func TestController_checkDecidedMessageSigners(t *testing.T) {
 			Identifier: id,
 			Height:     height,
 		}),
-		instanceStorage:     storage,
-		changeRoundStorage:  storage,
-		currentInstanceLock: currentInstanceLock,
-		forkLock:            &sync.Mutex{},
+		InstanceStorage:     storage,
+		ChangeRoundStorage:  storage,
+		CurrentInstanceLock: currentInstanceLock,
+		ForkLock:            &sync.Mutex{},
 	}
 
-	ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
-	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
-	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+	ctrl.Fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+	ctrl.DecidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.GetNodeMode(), storage, nil)
+	ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
 
-	require.NoError(t, ctrl.decidedStrategy.SaveDecided(incompleteDecided))
+	require.NoError(t, ctrl.DecidedStrategy.SaveDecided(incompleteDecided))
 
 	// check message with similar number of signers
 	require.True(t, ctrl.checkDecidedMessageSigners(incompleteDecided, incompleteDecided))
@@ -678,7 +678,7 @@ func populatedIbft(
 	}
 	ret := New(opts)
 
-	ret.(*Controller).state = Ready // as if they are already synced
+	ret.(*Controller).State = Ready // as if they are already synced
 	return ret
 }
 

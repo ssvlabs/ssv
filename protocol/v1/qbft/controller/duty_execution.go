@@ -13,53 +13,53 @@ import (
 
 // ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
 func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
-	if c.signatureState.getState() != StateRunning {
-		c.logger.Warn("try to process signature message but timer state is not running. can't process message.", zap.String("state", c.signatureState.getState().toString()))
+	if c.SignatureState.getState() != StateRunning {
+		c.Logger.Warn("try to process signature message but timer state is not running. can't process message.", zap.String("state", c.SignatureState.getState().toString()))
 		return nil
 	}
 
 	//	validate message
 	if len(msg.GetSigners()) == 0 {
-		c.logger.Warn("missing signers", zap.Any("msg", msg))
+		c.Logger.Warn("missing signers", zap.Any("msg", msg))
 		return nil
 	}
 	//if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
 	if len(msg.Message.DutySignature) == 0 { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("missing duty signature", zap.Any("msg", msg))
+		c.Logger.Warn("missing duty signature", zap.Any("msg", msg))
 		return nil
 	}
-	logger := c.logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
+	logger := c.Logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
 
 	//	check if already exist, if so, ignore
-	if _, found := c.signatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
-		c.logger.Debug("sig already known, skip")
+	if _, found := c.SignatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
+		c.Logger.Debug("sig already known, skip")
 		return nil
 	}
 
 	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
 
-	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("received invalid signature", zap.Error(err))
+	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.SignatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
+		c.Logger.Warn("received invalid signature", zap.Error(err))
 		return nil
 	}
 
 	logger.Info("signature verified")
 
-	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
-	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
-		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
-		c.signatureState.stopTimer()
+	c.SignatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
+	if len(c.SignatureState.signatures) >= c.SignatureState.sigCount {
+		c.Logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.SignatureState.signatures)))
+		c.SignatureState.stopTimer()
 
 		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
-		height := c.signatureState.getHeight()
-		c.q.Clean(
+		height := c.SignatureState.getHeight()
+		c.Q.Clean(
 			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, height),
 			msgqueue.SignedMsgCleaner(c.Identifier, height),
 			msgqueue.DefaultMsgCleaner(c.Identifier, message.SSVConsensusMsgType, message.SSVDecidedMsgType),
 		)
 
 		err := c.broadcastSignature()
-		c.signatureState.clear()
+		c.SignatureState.clear()
 		return err
 	}
 	return nil
@@ -68,10 +68,10 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 // broadcastSignature reconstruct sigs and broadcast to network
 func (c *Controller) broadcastSignature() error {
 	// Reconstruct signatures
-	if err := c.reconstructAndBroadcastSignature(c.signatureState.signatures, c.signatureState.root, c.signatureState.valueStruct, c.signatureState.duty); err != nil {
+	if err := c.reconstructAndBroadcastSignature(c.SignatureState.signatures, c.SignatureState.root, c.SignatureState.valueStruct, c.SignatureState.duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
-	c.logger.Info("Successfully submitted role!")
+	c.Logger.Info("Successfully submitted role!")
 	return nil
 }
 
@@ -86,13 +86,13 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
-	if err := c.network.Broadcast(ssvMsg); err != nil {
+	if err := c.Network.Broadcast(ssvMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
 
 	//	start timer, clear new map and set var's
-	c.signatureState.start(c.logger, height, signaturesCount, root, valueStruct, duty)
+	c.SignatureState.start(c.Logger, height, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 

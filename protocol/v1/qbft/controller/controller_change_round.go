@@ -11,18 +11,18 @@ func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
 	if err := c.ValidateChangeRoundMsg(msg); err != nil {
 		return err
 	}
-	lastMsg, err := c.changeRoundStorage.GetLastChangeRoundMsg(c.Identifier)
+	lastMsg, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier)
 	if err != nil {
 		return errors.Wrap(err, "failed to get last change round msg")
 	}
 
 	if lastMsg == nil {
 		// no last changeRound msg exist, save the first one
-		c.logger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
-		return c.changeRoundStorage.SaveLastChangeRoundMsg(msg)
+		c.Logger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
+		return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
 	}
 
-	logger := c.logger.With(
+	logger := c.Logger.With(
 		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
 		zap.Int64("NewHeight", int64(msg.Message.Height)),
 		zap.Int64("lastRound", int64(lastMsg.Message.Round)),
@@ -42,12 +42,12 @@ func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
 
 	// new msg is higher than last one, save.
 	logger.Debug("last change round updated")
-	return c.changeRoundStorage.SaveLastChangeRoundMsg(msg)
+	return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
 }
 
 // ValidateChangeRoundMsg - validation for read mode change round msg
 // validating -
 // basic validation, signature, changeRound data
 func (c *Controller) ValidateChangeRoundMsg(msg *message.SignedMessage) error {
-	return c.fork.ValidateChangeRoundMsg(c.ValidatorShare, c.Identifier).Run(msg)
+	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, c.Identifier).Run(msg)
 }

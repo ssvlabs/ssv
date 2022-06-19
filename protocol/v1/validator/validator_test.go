@@ -6,11 +6,19 @@ import (
 	"encoding/json"
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbft2 "github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/ssv"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"go.uber.org/zap"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,7 +71,7 @@ func TestConvertDutyRunner(t *testing.T) {
 	}
 	db, err := storage.GetStorageFactory(cfg)
 	require.NoError(t, err)
-	storage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V0ForkVersion)
+	ibftStorage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V0ForkVersion)
 
 	share := &beaconprotocol.Share{
 		NodeID:    1,
@@ -101,21 +109,11 @@ func TestConvertDutyRunner(t *testing.T) {
 		readMode:    false,
 		saveHistory: false,
 	}
-	ibfts := setupIbfts(&Options{
-		Context:                    v.ctx,
-		Logger:                     logger,
-		IbftStorage:                storage,
-		Network:                    network,
-		P2pNetwork:                 p2pNet,
-		Beacon:                     beacon,
-		Share:                      share,
-		ForkVersion:                forksprotocol.V0ForkVersion,
-		Signer:                     beacon,
-		SyncRateLimit:              0,
-		SignatureCollectionTimeout: 5,
-		ReadMode:                   false,
-		FullNode:                   false,
-	}, logger)
+
+	attestCtrl := newQbftController(t, ctx, logger, message.RoleTypeAttester, ibftStorage, network, p2pNet, beacon, share, forksprotocol.V0ForkVersion, beacon)
+	ibfts := make(map[message.RoleType]controller.IController)
+	ibfts[message.RoleTypeAttester] = attestCtrl
+	v.ibfts = ibfts
 
 	var dutyPk [48]byte
 	copy(dutyPk[:], keysSet.PK.Serialize())
@@ -138,15 +136,55 @@ func TestConvertDutyRunner(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 
-	var runnerCommittee []*types.Operator
+	// ------------- OUTPUT
+	var mappedCommittee []*types.Operator
 	for k, v := range share.Committee {
-		runnerCommittee = append(runnerCommittee, &types.Operator{
+		mappedCommittee = append(mappedCommittee, &types.Operator{
 			OperatorID: types.OperatorID(k),
 			PubKey:     v.Pk,
 		})
 	}
 
-	currentInstance := v.ibfts[message.RoleTypeAttester] // TODO need to find a way to get the instance
+	qbftCtrl := v.ibfts[message.RoleTypeAttester]
+	currentInstance := qbftCtrl.GetCurrentInstance()
+	mappedShare := &types.Share{
+		OperatorID:      types.OperatorID(v.Share.NodeID),
+		ValidatorPubKey: v.Share.PublicKey.Serialize(),
+		SharePubKey:     v.Share.Committee[v.Share.NodeID].Pk,
+		Committee:       mappedCommittee,
+		Quorum:          3,
+		PartialQuorum:   2,
+		DomainType:      []byte("cHJpbXVzX3Rlc3RuZXQ="),
+		Graffiti:        nil,
+	}
+	decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
+	require.NoError(t, err)
+	decidedValue := []byte("")
+	if decided != nil {
+		cd, err := decided.Message.GetCommitData()
+		require.NoError(t, err)
+		decidedValue = cd.Data
+	}
+
+	mappedInstance := new(qbft.Instance)
+	if currentInstance != nil {
+		mappedInstance.State = &qbft.State{
+			Share:                           mappedShare,
+			ID:                              qbftCtrl.GetIdentifier(),
+			Round:                           qbft.Round(currentInstance.State().GetRound()),
+			Height:                          qbft.Height(currentInstance.State().GetHeight()),
+			LastPreparedRound:               qbft.Round(currentInstance.State().GetPreparedRound()),
+			LastPreparedValue:               currentInstance.State().GetPreparedValue(),
+			ProposalAcceptedForCurrentRound: nil,
+			Decided:                         decided != nil && decided.Message.Height == currentInstance.State().GetHeight(), // TODO might need to add this flag to qbftCtrl
+			DecidedValue:                    decidedValue,                                                                    // TODO allow a way to get it
+			ProposeContainer:                currentInstance,
+			PrepareContainer:                nil,
+			CommitContainer:                 nil,
+			RoundChangeContainer:            nil,
+		}
+		//mappedInstance.StartValue =
+	}
 
 	runner := ssv.Runner{
 		BeaconRoleType: 1, // TODO need to cast type to runner type
@@ -155,14 +193,14 @@ func TestConvertDutyRunner(t *testing.T) {
 			OperatorID:      types.OperatorID(share.NodeID),
 			ValidatorPubKey: share.PublicKey.Serialize(),
 			SharePubKey:     share.Committee[share.NodeID].Pk,
-			Committee:       runnerCommittee,
+			Committee:       mappedCommittee,
 			Quorum:          3,
 			PartialQuorum:   2,
 			DomainType:      []byte("cHJpbXVzX3Rlc3RuZXQ="),
 			Graffiti:        nil,
 		},
 		State: &ssv.State{
-			RunningInstance:                 currentInstance,
+			RunningInstance:                 mappedInstance,
 			DecidedValue:                    nil,
 			SignedAttestation:               nil,
 			SignedProposal:                  nil,
@@ -179,28 +217,14 @@ func TestConvertDutyRunner(t *testing.T) {
 		CurrentDuty:    nil,
 		QBFTController: nil,
 	}
-	mappedState := qbft.State{
-		Share:                           nil,
-		ID:                              nil,
-		Round:                           0,
-		Height:                          0,
-		LastPreparedRound:               0,
-		LastPreparedValue:               nil,
-		ProposalAcceptedForCurrentRound: nil,
-		Decided:                         false,
-		DecidedValue:                    nil,
-		ProposeContainer:                nil,
-		PrepareContainer:                nil,
-		CommitContainer:                 nil,
-		RoundChangeContainer:            nil,
-	}
-	root, err := mappedState.GetRoot()
+
+	root, err := runner.GetRoot()
 	require.NoError(t, err)
 	require.Equal(t, "0351bb303531bc5858d312928c9577e9ca0104f3d8986a34fce30f2519908b1e", root) // TODO need to change based on the test
 }
 
 func jsonToMsgs(t *testing.T, id message.Identifier) []*message.SSVMessage {
-	data := []byte("[\n         {\n            \"MsgType\":3,\n            \"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n            \"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6InFXTU1pNUo1dndta1BZWWRHaXltQjQ3TzBxN3A0ekNYdk1NL2lORFd0eEVKYm1IMW1pOEJ6dXV4N0dUbUF2WjVCNldVVXNjeVF2cXRybEtlNUFJeUZ5V1FRQ2k4ZlZWS01UZDNjWGw2RWNaa2FQNWpZYmRwSGdNcUl2L1R5aDNrIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlsxXX0sIlNpZ25hdHVyZSI6InVZUW1YVE55OVI2UCtsYWwzMW1CdFlkQ3lwcCtYL2M3UmVxVk1mMTQxK3VVYUY2VzVtWlJtQ3VoOXJKT2VJbW9GNTc3VzkxTVpFUUU4dEN0ZldsaXZTbFZwbldaRC9ZUEU5eVpYT3B5ZG1ab1pXNm9Ba2NlY2VZbWJIYVNGQlFTIiwiU2lnbmVycyI6WzFdfQ==\"\n         },\n         {\n            \"MsgType\":3,\n            \"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n            \"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6Img3WW8yUUpDZnA2TURvRkErQjVMMDNOMWsreFRnM0JENko2TkZUaHVSOU1ucXlDUEJMQjl6WUtUMTAzZEZTRU9DYWFMVG42aEEzUXNmMTZCSEErbkhvWGpreVNON2NaU0pEekE2bUxOVnRocUE0NVFFS2ovbHJpWDZNSExzQU5DIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlsyXX0sIlNpZ25hdHVyZSI6InJCVDdabUIzSk5CUHhMa2F4Wkl4eDFxOXIvbnp1ZTlJZHcvMkZSR2g3YmQ3ZUY4YVkyU3hXdGFGOTVrU3VqNTBBdTNlZkZWMjVtZ0NKZUI5MThYTFdwRzZGVUFZVFRtOEhsQUV3RTIzVjBqVWpOd3JRenNCVGY4elNZUFV6aGhwIiwiU2lnbmVycyI6WzJdfQ==\"\n         },\n         {\n            \"MsgType\":3,\n            \"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n            \"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6InBBUzRuVWozeG4rVjNWZlFsV3VKdVJ6aVNvdmZld3hqRTdManA0Nlg2bjVkT1M1TkhLRnRWT0I1ZTZlZzZ3Rk5DUmF4RnRveTB2d3hkcmJGNkZmTmR3VzVjWDJ4c24vL2FmMmhVdVVKMFRhQmV5ZGY4OUwxM056Y1RabWxxYitkIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlszXX0sIlNpZ25hdHVyZSI6Imp1MWxBUUo0QU5tVUhPUFppOSswd2V6K21LUFNQMmNEVUphL3VIdi8zZDFHSnhuM0h5aWhhbEI1VjA0YjlnM0FCRTcyTDBSRWtUNGFKd2RhYTNhVGR0aStuUE1wNm5CdklnUm94OVlyL0hPU2ZCekdueEVKc1ZFanFhQWJUZ2JEIiwiU2lnbmVycyI6WzNdfQ==\"\n         },\n         {\n            \"MsgType\":3,\n            \"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n            \"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6ImpQSUQySVFINFNwZGEyODk1TWZQM1lNU0dCNHA1bXV4MkxYTkI0Zi9Pai9PR0VsMkl1V2p6dWdFNmtYWVNjYUpGUDJRREthL0JMaytqdFRveEoyNTQ0ekJibnRxeHF4bVlPTmhiREEyNFIvWmZiUEh0cWRUNjN0enVzSEkwWDdyIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOls0XX0sIlNpZ25hdHVyZSI6ImlzZS9NYmlBLzBHcXhobnkvVWIzUm9Ybmh1WEE0eGsxRElBcFNRelpoVzkwSWxSUkR2YkRFeWY4L1diaXExRFJCZW5oSCtzOC9hUEpiQ0lTMmNHVElreW1vbmRvYUhjR3RrcjhPaUNjUFJROHJGcVJQNUFtb0U3SnJZbmt3ams1IiwiU2lnbmVycyI6WzRdfQ==\"\n         }\n      ]")
+	data := []byte("[\n{\n\"MsgType\":3,\n\"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n\"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6InFXTU1pNUo1dndta1BZWWRHaXltQjQ3TzBxN3A0ekNYdk1NL2lORFd0eEVKYm1IMW1pOEJ6dXV4N0dUbUF2WjVCNldVVXNjeVF2cXRybEtlNUFJeUZ5V1FRQ2k4ZlZWS01UZDNjWGw2RWNaa2FQNWpZYmRwSGdNcUl2L1R5aDNrIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlsxXX0sIlNpZ25hdHVyZSI6InVZUW1YVE55OVI2UCtsYWwzMW1CdFlkQ3lwcCtYL2M3UmVxVk1mMTQxK3VVYUY2VzVtWlJtQ3VoOXJKT2VJbW9GNTc3VzkxTVpFUUU4dEN0ZldsaXZTbFZwbldaRC9ZUEU5eVpYT3B5ZG1ab1pXNm9Ba2NlY2VZbWJIYVNGQlFTIiwiU2lnbmVycyI6WzFdfQ==\"\n},\n{\n\"MsgType\":3,\n\"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n\"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6Img3WW8yUUpDZnA2TURvRkErQjVMMDNOMWsreFRnM0JENko2TkZUaHVSOU1ucXlDUEJMQjl6WUtUMTAzZEZTRU9DYWFMVG42aEEzUXNmMTZCSEErbkhvWGpreVNON2NaU0pEekE2bUxOVnRocUE0NVFFS2ovbHJpWDZNSExzQU5DIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlsyXX0sIlNpZ25hdHVyZSI6InJCVDdabUIzSk5CUHhMa2F4Wkl4eDFxOXIvbnp1ZTlJZHcvMkZSR2g3YmQ3ZUY4YVkyU3hXdGFGOTVrU3VqNTBBdTNlZkZWMjVtZ0NKZUI5MThYTFdwRzZGVUFZVFRtOEhsQUV3RTIzVjBqVWpOd3JRenNCVGY4elNZUFV6aGhwIiwiU2lnbmVycyI6WzJdfQ==\"\n},\n{\n\"MsgType\":3,\n\"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n\"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6InBBUzRuVWozeG4rVjNWZlFsV3VKdVJ6aVNvdmZld3hqRTdManA0Nlg2bjVkT1M1TkhLRnRWT0I1ZTZlZzZ3Rk5DUmF4RnRveTB2d3hkcmJGNkZmTmR3VzVjWDJ4c24vL2FmMmhVdVVKMFRhQmV5ZGY4OUwxM056Y1RabWxxYitkIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOlszXX0sIlNpZ25hdHVyZSI6Imp1MWxBUUo0QU5tVUhPUFppOSswd2V6K21LUFNQMmNEVUphL3VIdi8zZDFHSnhuM0h5aWhhbEI1VjA0YjlnM0FCRTcyTDBSRWtUNGFKd2RhYTNhVGR0aStuUE1wNm5CdklnUm94OVlyL0hPU2ZCekdueEVKc1ZFanFhQWJUZ2JEIiwiU2lnbmVycyI6WzNdfQ==\"\n},\n{\n\"MsgType\":3,\n\"MsgID\":\"lI+0RYLOJTNv2xcSLqxk/loa/DkXTOktYBO+ysEWdm3Fp3jIgN1H3n3/9qD4a6QsAQAAAA==\",\n\"Data\":\"eyJNZXNzYWdlIjp7IlR5cGUiOjAsIkhlaWdodCI6MCwiUGFydGlhbFNpZ25hdHVyZSI6ImpQSUQySVFINFNwZGEyODk1TWZQM1lNU0dCNHA1bXV4MkxYTkI0Zi9Pai9PR0VsMkl1V2p6dWdFNmtYWVNjYUpGUDJRREthL0JMaytqdFRveEoyNTQ0ekJibnRxeHF4bVlPTmhiREEyNFIvWmZiUEh0cWRUNjN0enVzSEkwWDdyIiwiU2lnbmluZ1Jvb3QiOiJnVVVjV0xCNXhhK0U2K1M1S1FEVDZjV2pSbWVNdHR3OFMzN3FMSnl6Vmw4PSIsIlNpZ25lcnMiOls0XX0sIlNpZ25hdHVyZSI6ImlzZS9NYmlBLzBHcXhobnkvVWIzUm9Ybmh1WEE0eGsxRElBcFNRelpoVzkwSWxSUkR2YkRFeWY4L1diaXExRFJCZW5oSCtzOC9hUEpiQ0lTMmNHVElreW1vbmRvYUhjR3RrcjhPaUNjUFJROHJGcVJQNUFtb0U3SnJZbmt3ams1IiwiU2lnbmVycyI6WzRdfQ==\"\n}\n]")
 	var msgs []*message.TestSSVMessage
 	require.NoError(t, json.Unmarshal(data, &msgs))
 
@@ -214,4 +238,45 @@ func jsonToMsgs(t *testing.T, id message.Identifier) []*message.SSVMessage {
 		res = append(res, sm)
 	}
 	return res
+}
+
+func newQbftController(t *testing.T, ctx context.Context, logger *zap.Logger, roleType message.RoleType, ibftStorage qbftstorage.QBFTStore, network beaconprotocol.Network, net protocolp2p.MockNetwork, beacon *testBeacon, share *beaconprotocol.Share, version forksprotocol.ForkVersion, b *testBeacon) *controller.Controller {
+	logger = logger.With(zap.String("role", roleType.String()), zap.Bool("read mode", false))
+	identifier := message.NewIdentifier(share.PublicKey.Serialize(), roleType)
+	fork := forksfactory.NewFork(version)
+
+	q, err := msgqueue.New(
+		logger.With(zap.String("who", "msg_q")),
+		msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+	)
+	require.NoError(t, err)
+
+	ctrl := &controller.Controller{
+		Ctx:                ctx,
+		InstanceStorage:    ibftStorage,
+		ChangeRoundStorage: ibftStorage,
+		Logger:             logger,
+		Network:            net,
+		InstanceConfig:     qbft2.DefaultConsensusParams(),
+		ValidatorShare:     share,
+		Identifier:         identifier,
+		Fork:               fork,
+		Beacon:             beacon,
+		Signer:             beacon,
+		SignatureState:     controller.SignatureState{SignatureCollectionTimeout: time.Second * 5},
+
+		SyncRateLimit: time.Second * 5,
+
+		Q: q,
+
+		CurrentInstanceLock: &sync.RWMutex{},
+		ForkLock:            &sync.Mutex{},
+	}
+
+	ctrl.DecidedFactory = factory.NewDecidedFactory(logger, ctrl.GetNodeMode(), ibftStorage, net)
+	ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
+
+	// set flags
+	ctrl.State = controller.Ready
+	return ctrl
 }

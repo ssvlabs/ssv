@@ -58,5 +58,5 @@ var AllTests = []*tests2.SpecTest{
 	synccommittee.SevenOperators(),
 
 	synccommitteecontribution.HappyFlow(),
-	synccommitteecontribution.SevenOperators(),
+	//synccommitteecontribution.SevenOperators(),
 }
