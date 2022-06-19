@@ -1,0 +1,22 @@
+- CanStartNewDuty
+    - first start new duty
+    - second start after prev decided + collected sigs
+    - collected 4th sig
+    - second start after prev decided but didn't collect sigs
+    - second start after prev decided but didn't collect sigs + passed enough slots
+    - start when prev didn't decide
+    - not same duty type
+    - not same validator pk
+    - new duty slot < prev decided duty
+- start new instance
+    - nil/ zero length value
+    - duty execution state reset
+- DecideRunningInstance
+    - unknown duty type
+    - all duty execution feilds set when signing
+- DutyRunner get root test
+- AddPartialSig
+    - zero signers
+    - > 1 signers
+- ReconstructAttestationSig
+- DutyExecutionState GetRoot test

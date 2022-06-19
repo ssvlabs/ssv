@@ -178,3 +178,9 @@ func (msg *SSVMessage) UnmarshalJSON(data []byte) error {
 	}
 	return nil
 }
+
+type TestSSVMessage struct {
+	MsgType MsgType
+	ID      Identifier
+	Data    []byte
+}
