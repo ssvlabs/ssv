@@ -81,7 +81,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	db, l, done := newDBAndLoggerForTest()
 	defer done()
-	exporterStorage, ibftStorage := newStorageForTest(db, l)
+	_, ibftStorage := newStorageForTest(db, l)
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := validator.GenerateNodes(4)
@@ -112,9 +112,6 @@ func TestHandleDecidedQuery(t *testing.T) {
 	for _, d := range decided250Seq {
 		require.NoError(t, ibftStorage.SaveDecided(d))
 	}
-	require.NoError(t, exporterStorage.SaveValidatorInformation(&storage.ValidatorInformation{
-		PublicKey: pk.SerializeToHexStr(),
-	}))
 
 	t.Run("valid range", func(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)

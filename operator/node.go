@@ -53,17 +53,16 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork       beaconprotocol.Network
-	context          context.Context
-	validatorsCtrl   validator.Controller
-	logger           *zap.Logger
-	beacon           beaconprotocol.Beacon
-	net              network.P2PNetwork
-	storage          storage.Storage
-	validatorStorage validator.ICollection
-	qbftStorage      qbftstorageprotocol.QBFTStore
-	eth1Client       eth1.Client
-	dutyCtrl         duties.DutyController
+	ethNetwork     beaconprotocol.Network
+	context        context.Context
+	validatorsCtrl validator.Controller
+	logger         *zap.Logger
+	beacon         beaconprotocol.Beacon
+	net            network.P2PNetwork
+	storage        storage.Storage
+	qbftStorage    qbftstorageprotocol.QBFTStore
+	eth1Client     eth1.Client
+	dutyCtrl       duties.DutyController
 	//fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
@@ -76,24 +75,16 @@ type operatorNode struct {
 func New(opts Options) Node {
 	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, message.RoleTypeAttester.String(), opts.ForkVersion)
 
-	validatorStorage := validator.NewCollection(
-		validator.CollectionOptions{
-			DB:     opts.DB,
-			Logger: opts.Logger,
-		},
-	)
-
 	node := &operatorNode{
-		context:          opts.Context,
-		logger:           opts.Logger.With(zap.String("component", "operatorNode")),
-		validatorsCtrl:   opts.ValidatorController,
-		ethNetwork:       opts.ETHNetwork,
-		beacon:           opts.Beacon,
-		net:              opts.Network,
-		eth1Client:       opts.Eth1Client,
-		storage:          storage.NewNodeStorage(opts.DB, opts.Logger),
-		qbftStorage:      qbftStorage,
-		validatorStorage: validatorStorage,
+		context:        opts.Context,
+		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
+		validatorsCtrl: opts.ValidatorController,
+		ethNetwork:     opts.ETHNetwork,
+		beacon:         opts.Beacon,
+		net:            opts.Network,
+		eth1Client:     opts.Eth1Client,
+		storage:        storage.NewNodeStorage(opts.DB, opts.Logger),
+		qbftStorage:    qbftStorage,
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,

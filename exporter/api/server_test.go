@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -104,9 +103,7 @@ func TestHandleStream(t *testing.T) {
 
 		msg3 := newTestMessage()
 		msg3.Type = TypeValidator
-		msg3.Data = []storage.ValidatorInformation{
-			{PublicKey: "pubkey3"},
-		}
+		msg3.Data = map[string]string{"PublicKey": "pubkey3"}
 		ws.out.Send(msg3)
 	}()
 
@@ -122,9 +119,9 @@ func newTestMessage() Message {
 	return Message{
 		Type:   TypeValidator,
 		Filter: MessageFilter{From: 0},
-		Data: []storage.ValidatorInformation{
-			{PublicKey: "pubkey1"},
-			{PublicKey: "pubkey2"},
+		Data: []map[string]string{
+			{"PublicKey": "pubkey1"},
+			{"PublicKey": "pubkey3"},
 		},
 	}
 }

@@ -3,11 +3,9 @@ package storage
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"math/big"
-	"sync"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"math/big"
 
 	"github.com/bloxapp/ssv/eth1"
 	registry "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
@@ -26,7 +24,6 @@ type Storage interface {
 	eth1.SyncOffsetStorage
 	registry.RegistryStore
 	registrystorage.OperatorsCollection
-	ValidatorsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error
@@ -35,8 +32,6 @@ type Storage interface {
 type storage struct {
 	db     basedb.IDb
 	logger *zap.Logger
-
-	validatorsLock sync.RWMutex
 
 	operatorStore registrystorage.OperatorsCollection
 }
@@ -188,13 +183,4 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 		return err
 	}
 	return nil
-}
-
-// nextIndex returns the next index for operator
-func (s *storage) nextIndex(prefix []byte) (int64, error) {
-	n, err := s.db.CountByCollection(append(storagePrefix, prefix...))
-	if err != nil {
-		return 0, err
-	}
-	return n, err
 }
