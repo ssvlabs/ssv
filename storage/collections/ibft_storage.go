@@ -3,14 +3,16 @@ package collections
 import (
 	"encoding/binary"
 	"encoding/json"
+	"log"
+	"strings"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/storage/basedb"
+
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
-	"strings"
 )
 
 // Iibft is an interface for persisting chain data

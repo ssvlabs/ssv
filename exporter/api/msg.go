@@ -1,10 +1,5 @@
 package api
 
-import (
-	"github.com/bloxapp/ssv/exporter/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-)
-
 // Message represents an exporter message
 type Message struct {
 	// Type is the type of message
@@ -52,13 +47,3 @@ const (
 	// RoleProposer is an enum for proposer role
 	RoleProposer DutyRole = "PROPOSER"
 )
-
-// ValidatorsMessage represents message for validators response
-type ValidatorsMessage struct {
-	Data []storage.ValidatorInformation `json:"data,omitempty"`
-}
-
-// OperatorsMessage represents message for operators response
-type OperatorsMessage struct {
-	Data []registrystorage.OperatorData `json:"data,omitempty"`
-}

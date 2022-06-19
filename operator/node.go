@@ -2,17 +2,24 @@ package operator
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter/api"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Node represents the behavior of SSV node
@@ -39,6 +46,9 @@ type Options struct {
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
 
 	ForkVersion forksprotocol.ForkVersion
+
+	WS        api.WebSocketServer
+	WsAPIPort int
 }
 
 // operatorNode implements Node interface
@@ -49,16 +59,22 @@ type operatorNode struct {
 	logger         *zap.Logger
 	beacon         beaconprotocol.Beacon
 	net            network.P2PNetwork
-	storage        Storage
+	storage        storage.Storage
+	qbftStorage    qbftstorageprotocol.QBFTStore
 	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
 	//fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
+
+	ws        api.WebSocketServer
+	wsAPIPort int
 }
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, message.RoleTypeAttester.String(), opts.ForkVersion)
+
 	node := &operatorNode{
 		context:        opts.Context,
 		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
@@ -67,7 +83,8 @@ func New(opts Options) Node {
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
-		storage:        NewNodeStorage(opts.DB, opts.Logger),
+		storage:        storage.NewNodeStorage(opts.DB, opts.Logger),
+		qbftStorage:    qbftStorage,
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
@@ -82,6 +99,9 @@ func New(opts Options) Node {
 		}),
 
 		forkVersion: opts.ForkVersion,
+
+		ws:        opts.WS,
+		wsAPIPort: opts.WsAPIPort,
 	}
 
 	if err := node.init(opts); err != nil {
@@ -103,6 +123,15 @@ func (n *operatorNode) init(opts Options) error {
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+
+	go func() {
+		err := n.startWSServer()
+		if err != nil {
+			// TODO: think if we need to panic
+			return
+		}
+	}()
+
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
@@ -167,4 +196,35 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 		agents = append(agents, agent)
 	}
 	return agents
+}
+
+// handleQueryRequests waits for incoming messages and
+func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
+	if nm.Err != nil {
+		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
+	}
+	n.logger.Debug("got incoming export request",
+		zap.String("type", string(nm.Msg.Type)))
+	switch nm.Msg.Type {
+	case api.TypeDecided:
+		api.HandleDecidedQuery(n.logger, n.qbftStorage, nm)
+	case api.TypeError:
+		api.HandleErrorQuery(n.logger, nm)
+	default:
+		api.HandleUnknownQuery(n.logger, nm)
+	}
+}
+
+func (n *operatorNode) startWSServer() error {
+	if n.ws != nil {
+		n.logger.Info("starting WS server")
+
+		n.ws.UseQueryHandler(n.handleQueryRequests)
+
+		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
