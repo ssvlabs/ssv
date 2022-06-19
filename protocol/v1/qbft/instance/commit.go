@@ -2,14 +2,16 @@ package instance
 
 import (
 	"encoding/hex"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbft "github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message

@@ -73,11 +73,11 @@ var StartNodeCmd = &cobra.Command{
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 		log.Printf("starting %s", commons.GetBuildData())
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			log.Fatal(err)
+			log.Fatalf("could not read config %s", err)
 		}
 		if globalArgs.ShareConfigPath != "" {
 			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-				log.Fatal(err)
+				log.Fatalf("could not read share config %s", err)
 			}
 		}
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)

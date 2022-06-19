@@ -2,6 +2,10 @@ package fullnode
 
 import (
 	"context"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -9,8 +13,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/sync/history"
 	"github.com/bloxapp/ssv/protocol/v1/sync/lastdecided"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 type fullNode struct {
