@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -133,15 +132,13 @@ func (n *operatorNode) init(opts Options) error {
 func (n *operatorNode) Start() error {
 	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
-	if n.ws != nil {
-		n.logger.Info("starting WS server")
-
-		n.ws.UseQueryHandler(n.handleQueryRequests)
-
-		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
-			return err
+	go func() {
+		err := n.startWSServer()
+		if err != nil {
+			// TODO: think if we need to panic
+			return
 		}
-	}
+	}()
 
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
@@ -224,4 +221,18 @@ func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
 	default:
 		api.HandleUnknownQuery(n.logger, nm)
 	}
+}
+
+func (n *operatorNode) startWSServer() error {
+	if n.ws != nil {
+		n.logger.Info("starting WS server")
+
+		n.ws.UseQueryHandler(n.handleQueryRequests)
+
+		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
