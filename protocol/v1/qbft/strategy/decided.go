@@ -52,7 +52,7 @@ func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, sign
 		return false, nil
 	}
 	// msg doesn't has more signers
-	if msg.Message.Height == local.Message.Height && !msg.HasMoreSigners(local) {
+	if local != nil && msg.Message.Height == local.Message.Height && !msg.HasMoreSigners(local) {
 		return false, nil
 	}
 	logger = logger.With(zap.Int64("height", int64(msg.Message.Height)), zap.String("identifier", msg.Message.Identifier.String()))
