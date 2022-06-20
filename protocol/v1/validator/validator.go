@@ -43,6 +43,7 @@ type Options struct {
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
 	FullNode                   bool
+	NewDecidedHandler          controller.NewDecidedHandler
 }
 
 // Validator represents the validator
@@ -153,21 +154,22 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controlle
 func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
 	opts := controller.Options{
-		Context:        opt.Context,
-		Role:           role,
-		Identifier:     identifier,
-		Logger:         logger,
-		Storage:        opt.IbftStorage,
-		Network:        opt.P2pNetwork,
-		InstanceConfig: qbft.DefaultConsensusParams(),
-		ValidatorShare: opt.Share,
-		Version:        opt.ForkVersion,
-		Beacon:         opt.Beacon,
-		Signer:         opt.Signer,
-		SyncRateLimit:  opt.SyncRateLimit,
-		SigTimeout:     opt.SignatureCollectionTimeout,
-		ReadMode:       opt.ReadMode,
-		FullNode:       opt.FullNode,
+		Context:           opt.Context,
+		Role:              role,
+		Identifier:        identifier,
+		Logger:            logger,
+		Storage:           opt.IbftStorage,
+		Network:           opt.P2pNetwork,
+		InstanceConfig:    qbft.DefaultConsensusParams(),
+		ValidatorShare:    opt.Share,
+		Version:           opt.ForkVersion,
+		Beacon:            opt.Beacon,
+		Signer:            opt.Signer,
+		SyncRateLimit:     opt.SyncRateLimit,
+		SigTimeout:        opt.SignatureCollectionTimeout,
+		ReadMode:          opt.ReadMode,
+		FullNode:          opt.FullNode,
+		NewDecidedHandler: opt.NewDecidedHandler,
 	}
 	return controller.New(opts)
 }

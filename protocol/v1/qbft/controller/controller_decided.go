@@ -11,15 +11,16 @@ import (
 // onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
 // in read mode, we don't broadcast the message in the network
 func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
+	// encode the message first to avoid sharing msg with 2 goroutines
+	data, err := msg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode updated msg")
+	}
 	if c.newDecidedHandler != nil {
 		go c.newDecidedHandler(msg)
 	}
 	if c.readMode {
 		return nil
-	}
-	data, err := msg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode updated msg")
 	}
 	if err := c.network.Broadcast(message.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,

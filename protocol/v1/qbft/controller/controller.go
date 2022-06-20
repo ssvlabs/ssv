@@ -26,6 +26,10 @@ import (
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
 var ErrAlreadyRunning = errors.New("already running")
 
+// NewDecidedHandler handles newly saved decided messages.
+// it will be called in a new goroutine to avoid concurrency issues
+type NewDecidedHandler func(msg *message.SignedMessage)
+
 // Options is a set of options for the controller
 type Options struct {
 	Context           context.Context
@@ -43,7 +47,7 @@ type Options struct {
 	SigTimeout        time.Duration
 	ReadMode          bool
 	FullNode          bool
-	NewDecidedHandler func(msg *message.SignedMessage)
+	NewDecidedHandler NewDecidedHandler
 }
 
 // set of states for the controller
@@ -92,7 +96,7 @@ type Controller struct {
 
 	decidedFactory    *factory.Factory
 	decidedStrategy   strategy.Decided
-	newDecidedHandler func(msg *message.SignedMessage)
+	newDecidedHandler NewDecidedHandler
 }
 
 // New is the constructor of Controller

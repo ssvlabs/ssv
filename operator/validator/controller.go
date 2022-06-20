@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
 
@@ -60,6 +61,7 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
+	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"4" env-description:"Number of goroutines to use for message workers"`
@@ -172,6 +174,7 @@ func NewController(options ControllerOptions) Controller {
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,
+		NewDecidedHandler:          options.NewDecidedHandler,
 	}
 	ctrl := controller{
 		collection:                 collection,
