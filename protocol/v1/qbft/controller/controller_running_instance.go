@@ -135,7 +135,9 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 					return errors.Wrap(err, "could not broadcast decided message")
 				}
 			}
-			logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
+			logger.Info("decided current instance",
+				zap.Bool("updated", updated),
+				zap.String("identifier", agg.Message.Identifier.String()),
 				zap.Uint64("msgHeight", uint64(agg.Message.Height)))
 			return nil
 		}

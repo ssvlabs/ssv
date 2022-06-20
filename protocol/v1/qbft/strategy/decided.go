@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -50,14 +51,13 @@ func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, sign
 	if local != nil && !msg.Message.Higher(local.Message) {
 		return false, nil
 	}
-	// msg has fewer signers
-	if !msg.HasMoreSigners(local) {
+	// msg doesn't has more signers
+	if msg.Message.Height == local.Message.Height && !msg.HasMoreSigners(local) {
 		return false, nil
 	}
 	logger = logger.With(zap.Int64("height", int64(msg.Message.Height)), zap.String("identifier", msg.Message.Identifier.String()))
 	if err := store.SaveLastDecided(msg); err != nil {
-		logger.Warn("could not save last decided", zap.Error(err))
-		return false, err
+		return false, errors.Wrap(err, "could not save last decided")
 	}
 	logger.Debug("saved last decided")
 	return true, nil

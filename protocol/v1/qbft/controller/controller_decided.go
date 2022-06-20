@@ -56,12 +56,14 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	// if local msg is not higher, force decided or stop instance + sync for newer messages
 	if localMsg == nil || !localMsg.Message.Higher(msg.Message) {
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
-			// if current instance > force decided and exit
-			if currentInstance.State() != nil && currentInstance.State().GetHeight() == msg.Message.Height {
+			// check if decided for current instance
+			currentState := currentInstance.State()
+			if currentState != nil && currentState.GetHeight() == msg.Message.Height {
+				logger.Debug("current instance decided")
 				currentInstance.ForceDecide(msg)
 				return nil
 			}
-			logger.Info("stopping current instance and syncing..")
+			logger.Debug("stopping current instance")
 			currentInstance.Stop()
 		}
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
@@ -69,6 +71,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 			if c.newDecidedHandler != nil {
 				go c.newDecidedHandler(msg)
 			}
+			logger.Debug("syncing")
 			return c.syncDecided(localMsg, msg)
 		}
 	} else {
