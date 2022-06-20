@@ -53,7 +53,7 @@ func TestReadModeChangeRound(t *testing.T) {
 		ChangeRoundStorage: changeRoundStorage,
 		Identifier:         message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
 		Fork:               forksfactory.NewFork(forksprotocol.V0ForkVersion),
-		readMode:           true,
+		ReadMode:           true,
 	}
 
 	tests := []struct {

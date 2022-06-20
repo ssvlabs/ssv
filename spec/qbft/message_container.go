@@ -36,8 +36,8 @@ func (c *MsgContainer) MessagesForRound(round Round) []*SignedMessage {
 	return make([]*SignedMessage, 0)
 }
 
-// UniqueSignersSetForRound returns the longest set of unique signers and msgs for a specific round
-func (c *MsgContainer) UniqueSignersSetForRound(round Round) ([]types.OperatorID, []*SignedMessage) {
+// UniqueSignersSetForRoundAndValue returns the longest set of unique signers and msgs for a specific round and value
+func (c *MsgContainer) UniqueSignersSetForRoundAndValue(round Round, value []byte) ([]types.OperatorID, []*SignedMessage) {
 	signersRet := make([]types.OperatorID, 0)
 	msgsRet := make([]*SignedMessage, 0)
 	if c.Msgs[round] == nil {
@@ -46,12 +46,22 @@ func (c *MsgContainer) UniqueSignersSetForRound(round Round) ([]types.OperatorID
 
 	for i := 0; i < len(c.Msgs[round]); i++ {
 		m := c.Msgs[round][i]
+
+		if !bytes.Equal(m.Message.Data, value) {
+			continue
+		}
+
 		currentSigners := make([]types.OperatorID, 0)
 		currentMsgs := make([]*SignedMessage, 0)
 		currentMsgs = append(currentMsgs, m)
 		currentSigners = append(currentSigners, m.GetSigners()...)
 		for j := i + 1; j < len(c.Msgs[round]); j++ {
 			m2 := c.Msgs[round][j]
+
+			if !bytes.Equal(m2.Message.Data, value) {
+				continue
+			}
+
 			if !m2.CommonSigners(currentSigners) {
 				currentMsgs = append(currentMsgs, m2)
 				currentSigners = append(currentSigners, m2.GetSigners()...)

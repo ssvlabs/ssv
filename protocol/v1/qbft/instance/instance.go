@@ -3,16 +3,9 @@ package instance
 import (
 	"context"
 	"encoding/hex"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	qbft2 "github.com/bloxapp/ssv/spec/qbft"
 	"sync"
 	"time"
-
-	"go.uber.org/atomic"
-
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -23,6 +16,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+
+	"github.com/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 // Options defines option attributes for the Instance
@@ -56,6 +55,7 @@ type Instance struct {
 	signer         beaconprotocol.Signer
 
 	// messages
+	containersMap       map[qbft2.MessageType]msgcont.MessageContainer
 	PrePrepareMessages  msgcont.MessageContainer
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
@@ -125,6 +125,13 @@ func NewInstance(opts *Options) Instancer {
 		stopped: *atomic.NewBool(false),
 	}
 
+	ret.containersMap = map[qbft2.MessageType]msgcont.MessageContainer{
+		qbft2.ProposalMsgType:    ret.PrePrepareMessages,
+		qbft2.PrepareMsgType:     ret.PrepareMessages,
+		qbft2.CommitMsgType:      ret.CommitMessages,
+		qbft2.RoundChangeMsgType: ret.ChangeRoundMessages,
+	}
+
 	ret.setFork(opts.Fork)
 
 	return ret
@@ -142,6 +149,11 @@ func (i *Instance) Init() {
 // State returns instance state
 func (i *Instance) State() *qbft.State {
 	return i.state
+}
+
+// Containers returns map of containers
+func (i *Instance) Containers() map[qbft2.MessageType]msgcont.MessageContainer {
+	return i.containersMap
 }
 
 // Start implements the Algorithm 1 IBFTController pseudocode for process pi: constants, state variables, and ancillary procedures

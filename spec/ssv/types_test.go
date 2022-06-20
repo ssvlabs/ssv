@@ -4,8 +4,6 @@ import (
 	"encoding/hex"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-
-	//"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -14,19 +12,19 @@ import (
 
 func TestValidatorID_MessageIDBelongs(t *testing.T) {
 	t.Run("msg id belongs", func(t *testing.T) {
-		msgID := []byte{1, 2, 3, 4, 1, 0, 0, 0}
+		msgID := types.MessageID{1, 2, 3, 4, 1, 0, 0, 0}
 		valID := types.ValidatorPK{1, 2, 3, 4}
 		require.True(t, valID.MessageIDBelongs(msgID))
 	})
 
 	t.Run("msg id doesn't belong", func(t *testing.T) {
-		msgID := []byte{1, 2, 3, 4, 1, 0, 0, 0}
+		msgID := types.MessageID{1, 2, 3, 4, 1, 0, 0, 0}
 		valID := types.ValidatorPK{1, 2, 3, 3}
 		require.False(t, valID.MessageIDBelongs(msgID))
 	})
 
 	t.Run("msg id doesn't belong", func(t *testing.T) {
-		msgID := []byte{1, 2, 3, 4, 1, 0, 0, 0}
+		msgID := types.MessageID{1, 2, 3, 4, 1, 0, 0, 0}
 		valID := types.ValidatorPK{1, 2, 3, 4, 4}
 		require.False(t, valID.MessageIDBelongs(msgID))
 	})

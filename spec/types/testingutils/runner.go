@@ -31,13 +31,14 @@ var SyncCommitteeContributionRunner = func(keySet *TestKeySet) *ssv.Runner {
 }
 
 var baseRunner = func(role types.BeaconRole, valCheck qbft.ProposedValueCheck, keySet *TestKeySet) *ssv.Runner {
-	share := testShare(keySet)
+	share := TestingShare(keySet)
+	identifier := types.NewMsgID(TestingValidatorPubKey[:], role)
 
 	return ssv.NewDutyRunner(
 		role,
 		ssv.NowTestNetwork,
 		share,
-		NewTestingQBFTController(types.NewMsgID(TestingValidatorPubKey[:], role), share, valCheck),
+		NewTestingQBFTController(identifier[:], share, valCheck),
 		NewTestingStorage(),
 		valCheck,
 	)

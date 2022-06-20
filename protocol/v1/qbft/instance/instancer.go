@@ -3,7 +3,9 @@ package instance
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
+	qbft2 "github.com/bloxapp/ssv/spec/qbft"
 
 	"go.uber.org/zap"
 )
@@ -31,6 +33,7 @@ type Instancer interface {
 	Start(inputValue []byte) error
 	Stop()
 	State() *qbft.State
+	Containers() map[qbft2.MessageType]msgcont.MessageContainer
 	ForceDecide(msg *message.SignedMessage)
 	GetStageChan() chan qbft.RoundState
 	CommittedAggregatedMsg() (*message.SignedMessage, error)

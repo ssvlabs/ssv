@@ -65,7 +65,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 
 	qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 
-	if c.readMode { // in order to prevent sync
+	if c.ReadMode { // in order to prevent sync
 		if err := c.DecidedStrategy.SaveDecided(msg); err != nil {
 			return errors.Wrap(err, "could not update decided message")
 		}
@@ -90,7 +90,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 			logger.Error("failed to save decided when should sync", zap.Error(err))
 		}
 		logger.Info("stopping current instance and syncing..")
-		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+		if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
 			currentInstance.Stop()
 		}
 		lastKnown, err := c.DecidedStrategy.GetLastDecided(c.Identifier) // knownMsg can be nil in fullSync mode so need to fetch last known.
@@ -110,8 +110,8 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 func (c *Controller) forceDecideCurrentInstance(msg *message.SignedMessage) bool {
 	if c.decidedForCurrentInstance(msg) {
 		// stop current instance
-		if c.getCurrentInstance() != nil {
-			c.getCurrentInstance().ForceDecide(msg)
+		if c.GetCurrentInstance() != nil {
+			c.GetCurrentInstance().ForceDecide(msg)
 		}
 		return true
 	}
@@ -135,7 +135,7 @@ func (c *Controller) checkDecidedMessageSigners(knownMsg *message.SignedMessage,
 
 // decidedForCurrentInstance returns true if msg has same seq number is current instance
 func (c *Controller) decidedForCurrentInstance(msg *message.SignedMessage) bool {
-	instance := c.getCurrentInstance()
+	instance := c.GetCurrentInstance()
 	return instance != nil &&
 		instance.State() != nil &&
 		instance.State().GetHeight() == msg.Message.Height

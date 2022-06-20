@@ -6,24 +6,26 @@ import (
 	"github.com/pkg/errors"
 )
 
-func uponPrepare(state *State, config IConfig, signedPrepare *SignedMessage, prepareMsgContainer, commitMsgContainer *MsgContainer) error {
+func (i *Instance) uponPrepare(
+	signedPrepare *SignedMessage,
+	prepareMsgContainer,
+	commitMsgContainer *MsgContainer) error {
 	// TODO - if we receive a prepare before a proposal and return an error we will never process the prepare msg, we still need to add it to the container
-	if state.ProposalAcceptedForCurrentRound == nil {
+	if i.State.ProposalAcceptedForCurrentRound == nil {
 		return errors.New("no proposal accepted for prepare")
 	}
 
-	acceptedProposalData, err := state.ProposalAcceptedForCurrentRound.Message.GetProposalData()
+	acceptedProposalData, err := i.State.ProposalAcceptedForCurrentRound.Message.GetProposalData()
 	if err != nil {
 		return errors.Wrap(err, "could not get accepted proposal data")
 	}
 	if err := validSignedPrepareForHeightRoundAndValue(
-		state,
-		config,
+		i.config,
 		signedPrepare,
-		state.Height,
-		state.Round,
+		i.State.Height,
+		i.State.Round,
 		acceptedProposalData.Data,
-		state.Share.Committee,
+		i.State.Share.Committee,
 	); err != nil {
 		return errors.Wrap(err, "invalid prepare msg")
 	}
@@ -36,55 +38,48 @@ func uponPrepare(state *State, config IConfig, signedPrepare *SignedMessage, pre
 		return nil // uponPrepare was already called
 	}
 
-	if !state.Share.HasQuorum(len(prepareMsgContainer.MessagesForRound(state.Round))) {
+	if !i.State.Share.HasQuorum(len(prepareMsgContainer.MessagesForRound(i.State.Round))) {
 		return nil // no quorum yet
 	}
 
-	if didSendCommitForHeightAndRound(state, commitMsgContainer) {
+	if didSendCommitForHeightAndRound(i.State, commitMsgContainer) {
 		return nil // already moved to commit stage
 	}
 
 	proposedValue := acceptedProposalData.Data
 
-	state.LastPreparedValue = proposedValue
-	state.LastPreparedRound = state.Round
+	i.State.LastPreparedValue = proposedValue
+	i.State.LastPreparedRound = i.State.Round
 
-	commitMsg, err := createCommit(state, config, proposedValue)
+	commitMsg, err := CreateCommit(i.State, i.config, proposedValue)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
-	if err := config.GetNetwork().Broadcast(commitMsg); err != nil {
+	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
 
 	return nil
 }
 
-func getRoundChangeJustification(state *State, config IConfig, prepareMsgContainer MsgContainer) *SignedMessage {
+func getRoundChangeJustification(state *State, config IConfig, prepareMsgContainer *MsgContainer) []*SignedMessage {
 	if state.LastPreparedValue == nil {
 		return nil
 	}
 
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
-	validPrepares := validPreparesForHeightRoundAndDigest(
-		state,
-		config,
-		prepareMsgs,
-		state.Height,
-		state.LastPreparedRound,
-		state.LastPreparedValue,
-		state.Share.Committee,
-	)
-	if state.Share.HasQuorum(len(prepareMsgs)) {
-		return validPrepares
+	ret := make([]*SignedMessage, 0)
+	for _, msg := range prepareMsgs {
+		if err := validSignedPrepareForHeightRoundAndValue(config, msg, state.Height, state.LastPreparedRound, state.LastPreparedValue, state.Share.Committee); err == nil {
+			ret = append(ret, msg)
+		}
 	}
-	return nil
+	return ret
 }
 
-// validPreparesForHeightRoundAndDigest returns an aggregated prepare msg for a specific Height and round
-func validPreparesForHeightRoundAndDigest(
-	state *State,
+// validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
+func validPreparesForHeightRoundAndValue(
 	config IConfig,
 	prepareMessages []*SignedMessage,
 	height Height,
@@ -93,7 +88,7 @@ func validPreparesForHeightRoundAndDigest(
 	operators []*types.Operator) *SignedMessage {
 	var aggregatedPrepareMsg *SignedMessage
 	for _, signedMsg := range prepareMessages {
-		if err := validSignedPrepareForHeightRoundAndValue(state, config, signedMsg, height, round, value, operators); err == nil {
+		if err := validSignedPrepareForHeightRoundAndValue(config, signedMsg, height, round, value, operators); err == nil {
 			if aggregatedPrepareMsg == nil {
 				aggregatedPrepareMsg = signedMsg
 			} else {
@@ -107,7 +102,6 @@ func validPreparesForHeightRoundAndDigest(
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndValue(
-	state *State,
 	config IConfig,
 	signedPrepare *SignedMessage,
 	height Height,
@@ -146,6 +140,7 @@ func validSignedPrepareForHeightRoundAndValue(
 	return nil
 }
 
+// CreatePrepare
 /**
 Prepare(
                     signPrepare(
@@ -157,7 +152,7 @@ Prepare(
                         )
                 );
 */
-func createPrepare(state *State, config IConfig, newRound Round, value []byte) (*SignedMessage, error) {
+func CreatePrepare(state *State, config IConfig, newRound Round, value []byte) (*SignedMessage, error) {
 	prepareData := &PrepareData{
 		Data: value,
 	}

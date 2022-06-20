@@ -23,7 +23,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	if ready, err := c.initialized(); !ready {
 		return err
 	}
-	currentInstance := c.getCurrentInstance()
+	currentInstance := c.GetCurrentInstance()
 	if currentInstance != nil {
 		return errors.Errorf("current instance (%d) is still running", currentInstance.State().GetHeight())
 	}

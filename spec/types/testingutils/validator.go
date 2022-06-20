@@ -10,7 +10,7 @@ var BaseValidator = func(keySet *TestKeySet) *ssv.Validator {
 		NewTestingNetwork(),
 		NewTestingBeaconNode(),
 		NewTestingStorage(),
-		testShare(keySet),
+		TestingShare(keySet),
 		NewTestingKeyManager(),
 	)
 	ret.DutyRunners[types.BNRoleAttester] = AttesterRunner(keySet)

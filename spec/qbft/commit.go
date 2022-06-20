@@ -7,19 +7,19 @@ import (
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
-func UponCommit(state *State, config IConfig, signedCommit *SignedMessage, commitMsgContainer *MsgContainer) (bool, []byte, *SignedMessage, error) {
-	if state.ProposalAcceptedForCurrentRound == nil {
+func (i *Instance) UponCommit(signedCommit *SignedMessage, commitMsgContainer *MsgContainer) (bool, []byte, *SignedMessage, error) {
+	if i.State.ProposalAcceptedForCurrentRound == nil {
 		return false, nil, nil, errors.New("did not receive proposal for this round")
 	}
 
 	if err := validateCommit(
-		state,
-		config,
+		i.State,
+		i.config,
 		signedCommit,
-		state.Height,
-		state.Round,
-		state.ProposalAcceptedForCurrentRound,
-		state.Share.Committee,
+		i.State.Height,
+		i.State.Round,
+		i.State.ProposalAcceptedForCurrentRound,
+		i.State.Share.Committee,
 	); err != nil {
 		return false, nil, nil, errors.Wrap(err, "commit msg invalid")
 	}
@@ -33,15 +33,16 @@ func UponCommit(state *State, config IConfig, signedCommit *SignedMessage, commi
 	}
 
 	// calculate commit quorum and act upon it
-	msgCommitData, err := signedCommit.Message.GetCommitData()
-	if err != nil {
-		return false, nil, nil, errors.Wrap(err, "could not get msg commit data")
-	}
-	quorum, commitMsgs, err := commitQuorumForValue(state, commitMsgContainer, msgCommitData.Data)
+	quorum, commitMsgs, err := commitQuorumForCurrentRoundValue(i.State, commitMsgContainer, signedCommit.Message.Data)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
 	}
 	if quorum {
+		msgCommitData, err := signedCommit.Message.GetCommitData()
+		if err != nil {
+			return false, nil, nil, errors.Wrap(err, "could not get msg commit data")
+		}
+
 		agg, err := aggregateCommitMsgs(commitMsgs)
 		if err != nil {
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
@@ -51,8 +52,9 @@ func UponCommit(state *State, config IConfig, signedCommit *SignedMessage, commi
 	return false, nil, nil, nil
 }
 
-func commitQuorumForValue(state *State, commitMsgContainer *MsgContainer, value []byte) (bool, []*SignedMessage, error) {
-	signers, msgs := commitMsgContainer.UniqueSignersSetForRound(state.Round)
+// returns true if there is a quorum for the current round for this provided value
+func commitQuorumForCurrentRoundValue(state *State, commitMsgContainer *MsgContainer, value []byte) (bool, []*SignedMessage, error) {
+	signers, msgs := commitMsgContainer.UniqueSignersSetForRoundAndValue(state.Round, value)
 	return state.Share.HasQuorum(len(signers)), msgs, nil
 }
 
@@ -92,6 +94,7 @@ func didSendCommitForHeightAndRound(state *State, commitMsgContainer *MsgContain
 	return false
 }
 
+// CreateCommit
 /**
 Commit(
                     signCommit(
@@ -104,7 +107,7 @@ Commit(
                         )
                     );
 */
-func createCommit(state *State, config IConfig, value []byte) (*SignedMessage, error) {
+func CreateCommit(state *State, config IConfig, value []byte) (*SignedMessage, error) {
 	commitData := &CommitData{
 		Data: value,
 	}
@@ -145,7 +148,7 @@ func validateCommit(
 	if signedCommit.Message.Height != height {
 		return errors.New("commit Height is wrong")
 	}
-	if signedCommit.Message.Round != round {
+	if signedCommit.Message.Round != round { // TODO - should we validate the round? aren't all round commit messages should be processed as they might decide the instance?
 		return errors.New("commit round is wrong")
 	}
 

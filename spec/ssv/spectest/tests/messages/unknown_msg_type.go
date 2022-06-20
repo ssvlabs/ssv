@@ -1,8 +1,8 @@
 package messages
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )

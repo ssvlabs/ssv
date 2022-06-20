@@ -1,8 +1,8 @@
 package messages
 
-import "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+import "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 
-// ContributionProofMetaData tests a PartialSignatureMessage for contribution proof metadata nil
-func ContributionProofMetaData() *tests.SpecTest {
+// Encoding tests SignedPartialSignatureMessage encoding
+func Encoding() *tests.SpecTest {
 	panic("implement")
 }

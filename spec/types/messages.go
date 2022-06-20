@@ -30,7 +30,7 @@ func (vid ValidatorPK) MessageIDBelongs(msgID MessageID) bool {
 }
 
 // MessageID is used to identify and route messages to the right validator and Runner
-type MessageID []byte
+type MessageID [52]byte
 
 func (msg MessageID) GetPubKey() []byte {
 	return msg[pubKeyStartPos : pubKeyStartPos+pubKeySize]
@@ -44,11 +44,16 @@ func (msg MessageID) GetRoleType() BeaconRole {
 func NewMsgID(pk []byte, role BeaconRole) MessageID {
 	roleByts := make([]byte, 4)
 	binary.LittleEndian.PutUint32(roleByts, uint32(role))
-	return append(pk, roleByts...)
+
+	ret := MessageID{}
+	copy(ret[pubKeyStartPos:pubKeyStartPos+pubKeySize], pk)
+	copy(ret[roleTypeStartPos:roleTypeStartPos+roleTypeSize], roleByts)
+
+	return ret
 }
 
 func (msgID MessageID) String() string {
-	return hex.EncodeToString(msgID)
+	return hex.EncodeToString(msgID[:])
 }
 
 type MsgType uint64
@@ -60,6 +65,8 @@ const (
 	SSVDecidedMsgType
 	// SSVPartialSignatureMsgType are all partial signatures msgs over beacon chain specific signatures
 	SSVPartialSignatureMsgType
+	// DKGMsgType represent all DKG related messages
+	DKGMsgType
 )
 
 type Root interface {

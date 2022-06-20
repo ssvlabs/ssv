@@ -31,6 +31,17 @@ func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContaine
 	}
 }
 
+// AllMessaged returns all messages
+func (c *messagesContainer) AllMessaged(iterator func(k message.Round, v *message.SignedMessage)) []*message.SignedMessage {
+	ret := make([]*message.SignedMessage, 0)
+	for round, roundMsgs := range c.messagesByRound {
+		for _, msg := range roundMsgs {
+			iterator(round, msg)
+		}
+	}
+	return ret
+}
+
 // ReadOnlyMessagesByRound returns messagesByRound by the given round
 func (c *messagesContainer) ReadOnlyMessagesByRound(round message.Round) []*message.SignedMessage {
 	c.lock.RLock()

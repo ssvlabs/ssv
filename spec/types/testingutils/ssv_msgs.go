@@ -9,11 +9,27 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-var AttesterMsgID = types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleAttester)
-var ProposerMsgID = types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleProposer)
-var AggregatorMsgID = types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleAggregator)
-var SyncCommitteeMsgID = types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleSyncCommittee)
-var SyncCommitteeContributionMsgID = types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleSyncCommitteeContribution)
+var AttesterMsgID = func() []byte {
+	ret := types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleAttester)
+	return ret[:]
+}()
+
+var ProposerMsgID = func() []byte {
+	ret := types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleProposer)
+	return ret[:]
+}()
+var AggregatorMsgID = func() []byte {
+	ret := types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleAggregator)
+	return ret[:]
+}()
+var SyncCommitteeMsgID = func() []byte {
+	ret := types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleSyncCommittee)
+	return ret[:]
+}()
+var SyncCommitteeContributionMsgID = func() []byte {
+	ret := types.NewMsgID(TestingValidatorPubKey[:], types.BNRoleSyncCommitteeContribution)
+	return ret[:]
+}()
 
 var TestAttesterConsensusData = &types.ConsensusData{
 	Duty:            TestingAttesterDuty,
@@ -432,7 +448,7 @@ var postConsensusSyncCommitteeContributionMsg = func(
 
 	msgs := ssv.PartialSignatureMessages{}
 	for index, c := range TestingSyncCommitteeContributions {
-		signedProof, _, _ := signer.SignContributionProof(TestingDutySlot, uint64(index), keySet.SK.GetPublicKey().Serialize())
+		signedProof, _, _ := signer.SignContributionProof(TestingDutySlot, uint64(index), keySet.ValidatorSK.GetPublicKey().Serialize())
 		signedProofbls := spec.BLSSignature{}
 		copy(signedProofbls[:], signedProof)
 

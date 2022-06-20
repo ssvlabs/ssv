@@ -1,8 +1,8 @@
 package proposer
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -77,6 +77,6 @@ func HappyFlow() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestProposerConsensusData.Duty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "2fe29edc47727c1e734bf98cd5b60153ebdd4b0bc1e5d5150d46da0edb675868",
+		PostDutyRunnerStateRoot: "1f02115b7be1c89f0138d5b93756bb211f08b1594419edb353477c0ab679221c",
 	}
 }

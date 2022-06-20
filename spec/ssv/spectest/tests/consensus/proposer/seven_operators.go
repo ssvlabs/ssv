@@ -1,8 +1,8 @@
 package proposer
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -111,6 +111,6 @@ func SevenOperators() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestProposerConsensusData.Duty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "4db90aa332bcab21c7f75d07120f26cd67ab7188a1ceeecfb33d497e0c17d18d",
+		PostDutyRunnerStateRoot: "d9e680a7304a5040e546041c0af28b6817951a2b18f39d59e236e6511efefd0f",
 	}
 }

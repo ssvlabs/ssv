@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/spec/ssv/spectest"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+	"github.com/bloxapp/ssv-spec/ssv/spectest"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -22,7 +22,7 @@ func main() {
 
 func writeJson(data []byte) {
 	basedir, _ := os.Getwd()
-	path := filepath.Join(basedir, "spec", "ssv", "spectest", "generate")
+	path := filepath.Join(basedir, "ssv", "spectest", "generate")
 	fileName := "tests.json"
 	fullPath := path + "/" + fileName
 

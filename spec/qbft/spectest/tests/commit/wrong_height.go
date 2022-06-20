@@ -1,14 +1,15 @@
 package commit
 
 import (
-	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv/spec/types"
-	"github.com/bloxapp/ssv/spec/types/testingutils"
+"
+"github.com/bloxapp/ssv/spec/qbft"
+"github.com/bloxapp/ssv/spec/types"
+"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongHeight tests a commit msg received with the wrong height
-func WrongHeight() *tests.SpecTest {
+func WrongHeight() *tests.MsgProcessingSpecTest {
 	pre := testingutils.BaseInstance()
 	msgs := []*qbft.SignedMessage{
 		testingutils.SignQBFTMsg(testingutils.Testing4SharesSet().Shares[1], types.OperatorID(1), &qbft.Message{
@@ -47,11 +48,11 @@ func WrongHeight() *tests.SpecTest {
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		}),
 	}
-	return &tests.SpecTest{
+	return &tests.MsgProcessingSpecTest{
 		Name:          "wrong commit height",
 		Pre:           pre,
-		PostRoot:      "5ba2e1ecb944c452a17d32c0ec16efb96ddcda6ed85ecd7150ca4b8b1eb9d9e5",
-		Messages:      msgs,
+		PostRoot:      "a272dbf34be030245fcc44b3210f3137e0cc47e745d0130584de7ff17a47123f",
+		InputMessages: msgs,
 		ExpectedError: "commit msg invalid: commit Height is wrong",
 	}
 }

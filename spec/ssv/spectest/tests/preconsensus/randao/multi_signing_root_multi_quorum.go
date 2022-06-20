@@ -1,8 +1,8 @@
 package randao
 
-import "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+import "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 
-// MultiSigningRootQuorum tests a processing multiple signing root with 1 quorum in one of them
-func MultiSigningRootQuorum() *tests.SpecTest {
+// MultiSigningRootMultiQuorum tests processing multiple signing root with multi quorum
+func MultiSigningRootMultiQuorum() *tests.SpecTest {
 	panic("implement")
 }

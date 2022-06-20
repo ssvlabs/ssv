@@ -1,8 +1,8 @@
 package randao
 
-import "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+import "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 
-// WrongSigningRoot tests a wrong randao signing root
-func WrongSigningRoot() *tests.SpecTest {
+// MultiSigningRoot tests a processing multiple signing root with no quorum in neither
+func MultiSigningRoot() *tests.SpecTest {
 	panic("implement")
 }

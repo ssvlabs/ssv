@@ -1,8 +1,8 @@
 package messages
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -23,6 +23,6 @@ func NoDutyRunner() *tests.SpecTest {
 		Runner:                  dr,
 		Messages:                msgs,
 		PostDutyRunnerStateRoot: "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
-		ExpectedError:           "Message invalid: could not find duty runner for msg ID",
+		ExpectedError:           "Messages invalid: could not find duty runner for msg ID",
 	}
 }

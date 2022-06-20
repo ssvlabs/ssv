@@ -1,8 +1,8 @@
 package synccommittee
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -73,6 +73,6 @@ func HappyFlow() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestingSyncCommitteeDuty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "8b9176df5ca869c5a7762fe99dd96d30d04580721279dd0d9ca55ad4cdccda23",
+		PostDutyRunnerStateRoot: "453b88b4df1fe24d5adaba650bde1a2bd8a10bcc97956085cebd4f1aee684f30",
 	}
 }

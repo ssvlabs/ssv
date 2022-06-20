@@ -7,7 +7,7 @@ import (
 )
 
 // TenOperators tests a simple full happy flow until decided
-func TenOperators() *SpecTest {
+func TenOperators() *MsgProcessingSpecTest {
 	pre := testingutils.TenOperatorsInstance()
 	msgs := []*qbft.SignedMessage{
 		testingutils.SignQBFTMsg(testingutils.Testing10SharesSet().Shares[1], types.OperatorID(1), &qbft.Message{
@@ -118,10 +118,26 @@ func TenOperators() *SpecTest {
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		}),
 	}
-	return &SpecTest{
-		Name:     "happy flow ten operators",
-		Pre:      pre,
-		PostRoot: "fe6c78d2ab568ce26aa3762e4d25fbb155bdf4279cf9f567d143a3469c2d9d9e",
-		Messages: msgs,
+	return &MsgProcessingSpecTest{
+		Name:          "happy flow ten operators",
+		Pre:           pre,
+		PostRoot:      "6a61afbda62663ca50e75e1d183a92f6e227da8736abbef7c325e7daad828456",
+		InputMessages: msgs,
+		OutputMessages: []*qbft.SignedMessage{
+			testingutils.SignQBFTMsg(testingutils.Testing10SharesSet().Shares[1], types.OperatorID(1), &qbft.Message{
+				MsgType:    qbft.PrepareMsgType,
+				Height:     qbft.FirstHeight,
+				Round:      qbft.FirstRound,
+				Identifier: []byte{1, 2, 3, 4},
+				Data:       testingutils.PrepareDataBytes([]byte{1, 2, 3, 4}),
+			}),
+			testingutils.SignQBFTMsg(testingutils.Testing10SharesSet().Shares[1], types.OperatorID(1), &qbft.Message{
+				MsgType:    qbft.CommitMsgType,
+				Height:     qbft.FirstHeight,
+				Round:      qbft.FirstRound,
+				Identifier: []byte{1, 2, 3, 4},
+				Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
+			}),
+		},
 	}
 }

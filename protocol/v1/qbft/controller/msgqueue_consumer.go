@@ -70,7 +70,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 
 // processNoRunningInstance pop msg's only if no current instance running
 func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier string, lastHeight message.Height) bool {
-	instance := c.getCurrentInstance()
+	instance := c.GetCurrentInstance()
 	if instance != nil {
 		return false // only pop when no instance running
 	}
@@ -102,8 +102,8 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier
 
 // processByState if an instance is running -> get the state and get the relevant messages
 func (c *Controller) processByState(handler MessageHandler, identifier string) bool {
-	currentInstance := c.getCurrentInstance()
-	if c.getCurrentInstance() == nil {
+	currentInstance := c.GetCurrentInstance()
+	if c.GetCurrentInstance() == nil {
 		return false
 	}
 

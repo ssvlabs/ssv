@@ -5,9 +5,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-func uponProposal(state *State, config IConfig, signedProposal *SignedMessage, proposeMsgContainer *MsgContainer) error {
-	valCheck := config.GetValueCheck()
-	if err := isValidProposal(state, config, signedProposal, valCheck, state.Share.Committee); err != nil {
+func (i *Instance) uponProposal(signedProposal *SignedMessage, proposeMsgContainer *MsgContainer) error {
+	valCheck := i.config.GetValueCheck()
+	if err := isValidProposal(i.State, i.config, signedProposal, valCheck, i.State.Share.Committee); err != nil {
 		return errors.Wrap(err, "proposal invalid")
 	}
 
@@ -22,23 +22,24 @@ func uponProposal(state *State, config IConfig, signedProposal *SignedMessage, p
 	newRound := signedProposal.Message.Round
 
 	// set state to new round and proposal accepted
-	state.ProposalAcceptedForCurrentRound = signedProposal
-	if signedProposal.Message.Round > state.Round {
-		config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
+	i.State.ProposalAcceptedForCurrentRound = signedProposal
+	// TODO - why is this here? we shouldn't timout on just a simple proposal
+	if signedProposal.Message.Round > i.State.Round {
+		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
 	}
-	state.Round = newRound
+	i.State.Round = newRound
 
 	proposalData, err := signedProposal.Message.GetProposalData()
 	if err != nil {
 		return errors.Wrap(err, "could not get proposal data")
 	}
 
-	prepare, err := createPrepare(state, config, newRound, proposalData.Data)
+	prepare, err := CreatePrepare(i.State, i.config, newRound, proposalData.Data)
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
-	if err := config.GetNetwork().Broadcast(prepare); err != nil {
+	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
 
@@ -85,7 +86,6 @@ func isValidProposal(
 		signedProposal.Message.Round,
 		proposalData.Data,
 		valCheck,
-		signedProposal.Signers[0], // already verified sig so we know there is 1 signer
 	); err != nil {
 		return errors.Wrap(err, "proposal not justified")
 	}
@@ -97,7 +97,7 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-// isProposalJustification returns nil if the signed proposal msg is justified
+// isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
 	state *State,
 	config IConfig,
@@ -107,61 +107,73 @@ func isProposalJustification(
 	round Round,
 	value []byte,
 	valCheck ProposedValueCheck,
-	roundLeader types.OperatorID,
 ) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}
 
 	if round == FirstRound {
-		if proposer(state, round) != roundLeader {
-			return errors.New("round leader is wrong")
-		}
 		return nil
 	} else {
-		if !state.Share.HasQuorum(len(roundChangeMsgs)) {
-			return errors.New("change round has not quorum")
-		}
-
+		// check all round changes are valid for height and round
 		for _, rc := range roundChangeMsgs {
 			if err := validRoundChange(state, config, rc, height, round); err != nil {
 				return errors.Wrap(err, "change round msg not valid")
 			}
 		}
 
-		previouslyPreparedF := func() bool {
-			for _, rc := range roundChangeMsgs { // TODO - might be redundant as it's checked in validRoundChange
-				if rc.Message.GetRoundChangeData().GetPreparedRound() != NoRound &&
-					rc.Message.GetRoundChangeData().GetPreparedValue() != nil {
-					return true
-				}
-			}
-			return false
+		// check there is a quorum
+		if !state.Share.HasQuorum(len(roundChangeMsgs)) {
+			return errors.New("change round has not quorum")
 		}
 
-		if !previouslyPreparedF() {
-			if proposer(state, round) != roundLeader {
-				return errors.New("round leader is wrong")
+		// previouslyPreparedF returns true if any on the round change messages have a prepared round and value
+		previouslyPrepared, err := func(rcMsgs []*SignedMessage) (bool, error) {
+			for _, rc := range rcMsgs {
+				rcData, err := rc.Message.GetRoundChangeData()
+				if err != nil {
+					return false, errors.Wrap(err, "could not get round change data")
+				}
+				if rcData.Prepared() {
+					return true, nil
+				}
 			}
+			return false, nil
+		}(roundChangeMsgs)
+		if err != nil {
+			return errors.Wrap(err, "could not calculate if previously prepared")
+		}
+
+		if !previouslyPrepared {
 			return nil
 		} else {
+
+			// check prepare quorum
 			if !state.Share.HasQuorum(len(prepareMsgs)) {
 				return errors.New("change round has not quorum")
 			}
 
-			rcm := highestPrepared(roundChangeMsgs)
+			// get a round change data for which there is a justification for the highest previously prepared round
+			rcm, err := highestPrepared(roundChangeMsgs)
+			if err != nil {
+				return errors.Wrap(err, "could not get highest prepared")
+			}
 			if rcm == nil {
 				return errors.New("no highest prepared")
 			}
+			rcmData, err := rcm.Message.GetRoundChangeData()
+			if err != nil {
+				return errors.Wrap(err, "could not get round change data")
+			}
 
+			// validate each prepare message against the highest previously prepared value and round
 			for _, pm := range prepareMsgs {
 				if err := validSignedPrepareForHeightRoundAndValue(
-					state,
 					config,
 					pm,
 					height,
-					rcm.Message.GetRoundChangeData().GetPreparedRound(),
-					rcm.Message.GetRoundChangeData().GetPreparedValue(),
+					rcmData.PreparedRound,
+					rcmData.PreparedValue,
 					state.Share.Committee,
 				); err != nil {
 					return errors.New("signed prepare not valid")
@@ -177,6 +189,7 @@ func proposer(state *State, round Round) types.OperatorID {
 	return 1
 }
 
+// CreateProposal
 /**
   	Proposal(
                         signProposal(
@@ -189,7 +202,7 @@ func proposer(state *State, round Round) types.OperatorID {
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func createProposal(state *State, config IConfig, value []byte, roundChanges, prepares []*SignedMessage) (*SignedMessage, error) {
+func CreateProposal(state *State, config IConfig, value []byte, roundChanges, prepares []*SignedMessage) (*SignedMessage, error) {
 	proposalData := &ProposalData{
 		Data:                     value,
 		RoundChangeJustification: roundChanges,

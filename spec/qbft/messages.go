@@ -88,14 +88,55 @@ func (d *CommitData) Validate() error {
 	return nil
 }
 
-type RoundChangeData interface {
-	types.Validate
-	GetPreparedValue() []byte
-	GetPreparedRound() Round
-	// GetNextProposalData returns NOT nil byte array if the signer is the next round's proposal.
-	GetNextProposalData() []byte
-	// GetRoundChangeJustification returns signed prepare messages for the last prepared state
-	GetRoundChangeJustification() []*SignedMessage
+type RoundChangeData struct {
+	PreparedValue            []byte
+	PreparedRound            Round
+	NextProposalData         []byte
+	RoundChangeJustification []*SignedMessage
+}
+
+func (d *RoundChangeData) Prepared() bool {
+	if d.PreparedRound != NoRound || len(d.PreparedValue) != 0 {
+		return true
+	}
+	return false
+}
+
+// Encode returns a msg encoded bytes or error
+func (d *RoundChangeData) Encode() ([]byte, error) {
+	return json.Marshal(d)
+}
+
+// Decode returns error if decoding failed
+func (d *RoundChangeData) Decode(data []byte) error {
+	return json.Unmarshal(data, &d)
+}
+
+// Validate returns error if msg validation doesn't pass.
+// Msg validation checks the msg, it's variables for validity.
+func (d *RoundChangeData) Validate() error {
+	if len(d.PreparedValue) != 0 {
+		if d.PreparedRound == NoRound {
+			return errors.New("round change prepared round invalid")
+		}
+		if len(d.RoundChangeJustification) == 0 {
+			return errors.New("round change justification invalid")
+		}
+	}
+
+	if d.PreparedRound != NoRound {
+		if len(d.PreparedValue) == 0 {
+			return errors.New("round change prepared value invalid")
+		}
+		if len(d.RoundChangeJustification) == 0 {
+			return errors.New("round change justification invalid")
+		}
+	}
+
+	if len(d.NextProposalData) == 0 {
+		return errors.New("round change next value invalid")
+	}
+	return nil
 }
 
 type Message struct {
@@ -134,8 +175,12 @@ func (msg *Message) GetCommitData() (*CommitData, error) {
 }
 
 // GetRoundChangeData returns round change specific data
-func (msg *Message) GetRoundChangeData() RoundChangeData {
-	panic("implement")
+func (msg *Message) GetRoundChangeData() (*RoundChangeData, error) {
+	ret := &RoundChangeData{}
+	if err := ret.Decode(msg.Data); err != nil {
+		return nil, errors.Wrap(err, "could not decode round change data from message")
+	}
+	return ret, nil
 }
 
 // Encode returns a msg encoded bytes or error
@@ -156,11 +201,6 @@ func (msg *Message) GetRoot() ([]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret[:], nil
-}
-
-// DeepCopy returns a new instance of Message, deep copied
-func (msg *Message) DeepCopy() *Message {
-	panic("implement")
 }
 
 // Validate returns error if msg validation doesn't pass.

@@ -1,15 +1,16 @@
 package messages
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
-// NoData tests a nil SSVMessage data
-func NoData() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+// NoMsgs tests a signed msg with no msgs
+func NoMsgs() *tests.SpecTest {
+	ks := testingutils.Testing4SharesSet()
+	dr := testingutils.AttesterRunner(ks)
 
 	msg := testingutils.SSVMsgAttester(nil, testingutils.PostConsensusAttestationMsgWithNoMsgSigners(ks.Shares[1], 1, qbft.FirstHeight))
 	msg.Data = []byte{}

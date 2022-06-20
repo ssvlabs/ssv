@@ -1,8 +1,8 @@
 package attester
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -73,6 +73,6 @@ func HappyFlow() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestAttesterConsensusData.Duty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "54964594f8a1879021acb6ed53af723582429c3025f5ab0c46d7760483e2a06d",
+		PostDutyRunnerStateRoot: "5dfb3ba03010b92fcd7404dc1f8e7d43e0ebfcdbe63e46fec25c358d500eb26f",
 	}
 }

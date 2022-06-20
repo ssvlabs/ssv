@@ -1,8 +1,8 @@
 package synccommittee
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -105,6 +105,6 @@ func SevenOperators() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestingSyncCommitteeDuty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "c8a4a388c51c3b49ca0a4ebf629ee03124052968ad954a7ebbe4df55c865404c",
+		PostDutyRunnerStateRoot: "cef693e98bd4aba1d7044acf0cce61626cbe7ae842e9319505f43e5fcddba39d",
 	}
 }

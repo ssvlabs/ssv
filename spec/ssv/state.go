@@ -13,23 +13,26 @@ import (
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	RunningInstance *qbft.Instance
-
-	DecidedValue *types.ConsensusData
-
-	SignedAttestation   *spec.Attestation
-	SignedProposal      *altair.SignedBeaconBlock
-	SignedAggregate     *spec.SignedAggregateAndProof
-	SignedSyncCommittee *altair.SyncCommitteeMessage
-	SignedContributions map[string]*altair.SignedContributionAndProof // maps contribution root to signed contribution
-
+	// pre consensus signatures
 	SelectionProofPartialSig        *PartialSigContainer
 	RandaoPartialSig                *PartialSigContainer
 	ContributionProofs              *PartialSigContainer
 	ContributionSubCommitteeIndexes map[string]uint64 // maps contribution sig root to subcommittee index
 	PostConsensusPartialSig         *PartialSigContainer
 
-	Finished bool
+	// consensus
+	RunningInstance *qbft.Instance
+	DecidedValue    *types.ConsensusData
+
+	// post consensus signed objects
+	SignedAttestation   *spec.Attestation
+	SignedProposal      *altair.SignedBeaconBlock
+	SignedAggregate     *spec.SignedAggregateAndProof
+	SignedSyncCommittee *altair.SyncCommitteeMessage
+	SignedContributions map[string]*altair.SignedContributionAndProof // maps contribution root to signed contribution
+
+	// flags
+	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
 func NewDutyExecutionState(quorum uint64) *State {

@@ -10,14 +10,14 @@ import (
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
 	c.Logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
-	if c.readMode {
+	if c.ReadMode {
 		if signedMessage.Message.MsgType != message.RoundChangeMsgType {
 			return nil // other types not supported in read mode
 		}
 	}
 	switch signedMessage.Message.MsgType {
 	case message.RoundChangeMsgType: // supporting read-mode
-		if c.readMode {
+		if c.ReadMode {
 			return c.ProcessChangeRound(signedMessage)
 		}
 		fallthrough // not in read mode, need to process regular way
@@ -29,10 +29,10 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		}
 		fallthrough // not processed, need to process as regular consensus commit msg
 	case message.ProposalMsgType, message.PrepareMsgType:
-		if c.getCurrentInstance() == nil {
+		if c.GetCurrentInstance() == nil {
 			return errors.New("current instance is nil")
 		}
-		decided, err := c.getCurrentInstance().ProcessMsg(signedMessage)
+		decided, err := c.GetCurrentInstance().ProcessMsg(signedMessage)
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
@@ -56,8 +56,8 @@ func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message
 // and "fullSync" mode, regular process for late commit (saving all range of high msg's)
 // if height is the same as last decided msg height, update the last decided with the updated one.
 func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (bool, error) {
-	if c.getCurrentInstance() != nil {
-		if signedMessage.Message.Height >= c.getCurrentInstance().State().GetHeight() {
+	if c.GetCurrentInstance() != nil {
+		if signedMessage.Message.Height >= c.GetCurrentInstance().State().GetHeight() {
 			// process as regular consensus commit msg
 			return false, nil
 		}

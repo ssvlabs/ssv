@@ -1,15 +1,16 @@
 package commit
 
 import (
-	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv/spec/types"
-	"github.com/bloxapp/ssv/spec/types/testingutils"
-	"github.com/herumi/bls-eth-go-binary/bls"
+"
+"github.com/bloxapp/ssv/spec/qbft"
+"github.com/bloxapp/ssv/spec/types"
+"github.com/bloxapp/ssv/spec/types/testingutils"
+"github.com/herumi/bls-eth-go-binary/bls"
 )
 
 // MultiSignerWithOverlap tests a multi signer commit msg which does overlap previous valid commit signers
-func MultiSignerWithOverlap() *tests.SpecTest {
+func MultiSignerWithOverlap() *tests.MsgProcessingSpecTest {
 	pre := testingutils.BaseInstance()
 	msgs := []*qbft.SignedMessage{
 		testingutils.SignQBFTMsg(testingutils.Testing4SharesSet().Shares[1], types.OperatorID(1), &qbft.Message{
@@ -62,10 +63,10 @@ func MultiSignerWithOverlap() *tests.SpecTest {
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		}),
 	}
-	return &tests.SpecTest{
-		Name:     "multi signer, with overlap",
-		Pre:      pre,
-		PostRoot: "2366a12bc106a5849dde5717d7186799f321de638d059f2beb828d399c9c6ebb",
-		Messages: msgs,
+	return &tests.MsgProcessingSpecTest{
+		Name:          "multi signer, with overlap",
+		Pre:           pre,
+		PostRoot:      "e88d50d70124c38a25c6ed2ff13bf204b728df7160161e57534a7b9cc610e8cb",
+		InputMessages: msgs,
 	}
 }

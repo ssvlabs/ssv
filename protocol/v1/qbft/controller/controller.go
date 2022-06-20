@@ -84,7 +84,7 @@ type Controller struct {
 	SyncRateLimit time.Duration
 
 	// flags
-	readMode bool
+	ReadMode bool
 	fullNode bool
 
 	Q msgqueue.MsgQueue
@@ -122,7 +122,7 @@ func New(opts Options) IController {
 
 		SyncRateLimit: opts.SyncRateLimit,
 
-		readMode: opts.ReadMode,
+		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
 		Q: q,
@@ -140,7 +140,7 @@ func New(opts Options) IController {
 	return ctrl
 }
 
-func (c *Controller) getCurrentInstance() instance.Instancer {
+func (c *Controller) GetCurrentInstance() instance.Instancer {
 	c.CurrentInstanceLock.RLock()
 	defer c.CurrentInstanceLock.RUnlock()
 
@@ -161,7 +161,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	atomic.StoreUint32(&c.State, Forking)
 	defer atomic.StoreUint32(&c.State, Ready)
 
-	if i := c.getCurrentInstance(); i != nil {
+	if i := c.GetCurrentInstance(); i != nil {
 		i.Stop()
 		c.setCurrentInstance(nil)
 	}
@@ -294,11 +294,11 @@ func (c *Controller) GetIdentifier() []byte {
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
-	if c.readMode {
+	if c.ReadMode {
 		return c.messageHandler(msg)
 	}
 	var fields []zap.Field
-	cInstance := c.getCurrentInstance()
+	cInstance := c.GetCurrentInstance()
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {

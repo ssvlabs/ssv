@@ -3,7 +3,6 @@ package qbft
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/spec/types"
-	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -31,7 +30,7 @@ var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *Message) *Signed
 	}
 }
 var TestingSK = func() *bls.SecretKey {
-	threshold.Init()
+	types.InitBLS()
 	ret := &bls.SecretKey{}
 	ret.SetByCSPRNG()
 	return ret

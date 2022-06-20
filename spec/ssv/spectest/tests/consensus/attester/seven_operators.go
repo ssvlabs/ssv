@@ -1,8 +1,8 @@
 package attester
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -103,6 +103,6 @@ func SevenOperators() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestAttesterConsensusData.Duty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "5691f44255eaf9881e6c095fef4918720fbd5e8fa7339bce729f06ffa543ddc5",
+		PostDutyRunnerStateRoot: "442e2fb3908505dff1fe055e7f7e3b6a26de1d59968b8c86d510f9b24fb9287e",
 	}
 }

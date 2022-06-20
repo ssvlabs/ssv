@@ -2,7 +2,9 @@ package testingutils
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/spec/dkg"
 	"github.com/bloxapp/ssv/spec/qbft"
+	"github.com/bloxapp/ssv/spec/types"
 )
 
 type testingStorage struct {
@@ -21,13 +23,7 @@ func (s *testingStorage) SaveHighestDecided(signedMsg *qbft.SignedMessage) error
 	return nil
 }
 
-//// GetHighestDecided returns the saved Decided value (highest) for a validator PK and role
-//func (s *testingStorage) GetHighestDecided(validatorPK []byte, role beacon.RoleType) (*consensusData, error) {
-//	if s.storage[hex.EncodeToString(validatorPK)] == nil {
-//		return nil, errors.New("can't find validator PK")
-//	}
-//	if value, found := s.storage[hex.EncodeToString(validatorPK)][role]; found {
-//		return value, nil
-//	}
-//	return s.storage[hex.EncodeToString(signedMsg.Message.Identifier)], errors.New("can't find role")
-//}
+// GetDKGOperator returns true and operator object if found by operator ID
+func (s *testingStorage) GetDKGOperator(operatorID types.OperatorID) (bool, *dkg.Operator, error) {
+	panic("implemnent")
+}

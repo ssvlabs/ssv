@@ -1,8 +1,8 @@
 package aggregator
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
-	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
@@ -77,6 +77,6 @@ func HappyFlow() *tests.SpecTest {
 		Runner:                  dr,
 		Duty:                    testingutils.TestAggregatorConsensusData.Duty,
 		Messages:                msgs,
-		PostDutyRunnerStateRoot: "efd2fdd2b72d93b11c136c91f6a98a6181aec3278f39303bf1c4448b41b9a23d",
+		PostDutyRunnerStateRoot: "12816c1083d40f46b0b93ff13c85c530540166c7df25f6c8b580bca73686d05f",
 	}
 }

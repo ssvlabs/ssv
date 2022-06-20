@@ -1,8 +1,8 @@
 package postconsensus
 
-import "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+import "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 
-// MultiSigningRoot tests a processing multiple signing root with no quorum in neither
-func MultiSigningRoot() *tests.SpecTest {
+// PostQuorumMsg tests processing a post consensus msg after a quorum has been reached by past msgs
+func PostQuorumMsg() *tests.SpecTest {
 	panic("implement")
 }

@@ -36,4 +36,7 @@ type IController interface {
 
 	// OnFork called when fork occur.
 	OnFork(forkVersion forksprotocol.ForkVersion) error
+
+	// GetCurrentInstance returns current instance if exist. if not, returns nil
+	GetCurrentInstance() instance.Instancer
 }

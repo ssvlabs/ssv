@@ -1,42 +1,47 @@
 package testingutils
 
 import (
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"encoding/hex"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 )
 
 type testingKeyManager struct {
-	keys   map[string]*bls.SecretKey
-	domain types.DomainType
+	keys           map[string]*bls.SecretKey
+	ecdsaKeys      map[string]*ecdsa.PrivateKey
+	encryptionKeys map[string]*rsa.PrivateKey
+	domain         types.DomainType
 }
 
-func NewTestingKeyManager() types.KeyManager {
+func NewTestingKeyManager() *testingKeyManager {
 	ret := &testingKeyManager{
 		keys:   map[string]*bls.SecretKey{},
 		domain: types.PrimusTestnet,
 	}
 
-	ret.AddShare(Testing4SharesSet().SK)
+	ret.AddShare(Testing4SharesSet().ValidatorSK)
 	for _, s := range Testing4SharesSet().Shares {
 		ret.AddShare(s)
 	}
 
-	ret.AddShare(Testing7SharesSet().SK)
+	ret.AddShare(Testing7SharesSet().ValidatorSK)
 	for _, s := range Testing7SharesSet().Shares {
 		ret.AddShare(s)
 	}
 
-	ret.AddShare(Testing10SharesSet().SK)
+	ret.AddShare(Testing10SharesSet().ValidatorSK)
 	for _, s := range Testing10SharesSet().Shares {
 		ret.AddShare(s)
 	}
 
-	ret.AddShare(Testing13SharesSet().SK)
+	ret.AddShare(Testing13SharesSet().ValidatorSK)
 	for _, s := range Testing13SharesSet().Shares {
 		ret.AddShare(s)
 	}
@@ -177,6 +182,21 @@ func (km *testingKeyManager) SignContribution(contribution *altair.ContributionA
 		}, TestingContributionRoots[contribution.Contribution.SubcommitteeIndex], nil
 	}
 	return nil, nil, errors.New("pk not found")
+}
+
+// Decrypt given a rsa pubkey and a PKCS1v15 cipher text byte array, returns the decrypted data
+func (km *testingKeyManager) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement")
+}
+
+// Encrypt given a rsa pubkey and data returns an PKCS1v15 e
+func (km *testingKeyManager) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement")
+}
+
+// SignDKGOutput signs output according to the SIP https://docs.google.com/document/d/1TRVUHjFyxINWW2H9FYLNL2pQoLy6gmvaI62KL_4cREQ/edit
+func (km *testingKeyManager) SignDKGOutput(output types.Root, address common.Address) (types.Signature, error) {
+	panic("implemet")
 }
 
 func (km *testingKeyManager) AddShare(shareKey *bls.SecretKey) error {
