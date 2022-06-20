@@ -62,8 +62,8 @@ type ControllerOptions struct {
 	ForkVersion                forksprotocol.ForkVersion
 
 	// worker flags
-	WorkersCount    int
-	QueueBufferSize int
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"4" env-description:"Number of goroutines to use for message workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"256" env-description:"Buffer size for message workers"`
 }
 
 // Controller represent the validators controller,
@@ -367,7 +367,7 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 func (c *controller) StartNetworkHandlers() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
-	c.messageWorker.SetHandler(c.handleWorkerMessages)
+	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.

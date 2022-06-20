@@ -25,7 +25,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.SetHandler(func(msg *message.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg *message.SSVMessage) error {
 		wg.Done()
 		return nil
 	})
