@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/patrickmn/go-cache"
 	"log"
 	"net/http"
 	"time"
@@ -208,9 +210,7 @@ var StartNodeCmd = &cobra.Command{
 			ws := api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = func(msg *message.SignedMessage) {
-				ws.BroadcastFeed().Send(api.NewDecidedAPIMsg(msg))
-			}
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = newDecidedHandler(Logger, ws)
 		}
 
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
@@ -235,6 +235,25 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func newDecidedHandler(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
+	logger = logger.With(zap.String("who", "NewDecidedHandler"))
+	c := cache.New(time.Minute*2, time.Minute*3)
+	feed := ws.BroadcastFeed()
+	return func(msg *message.SignedMessage) {
+		identifier := msg.Message.Identifier.String()
+		key := fmt.Sprintf("%s:%d:%d", msg.Message.Identifier.String(), msg.Message.Height, len(msg.Signers))
+		_, ok := c.Get(key)
+		if ok {
+			return
+		}
+		c.SetDefault(key, true)
+		logger.Debug("broadcast decided stream",
+			zap.String("identifier", identifier),
+			zap.Uint64("height", uint64(msg.Message.Height)))
+		feed.Send(api.NewDecidedAPIMsg(msg))
+	}
 }
 
 func init() {

@@ -66,8 +66,13 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		}
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 		if localMsg == nil || msg.Message.Higher(localMsg.Message) {
+			if c.newDecidedHandler != nil {
+				go c.newDecidedHandler(msg)
+			}
 			return c.syncDecided(localMsg, msg)
 		}
+	} else {
+		logger.Debug("known decided msg")
 	}
 
 	return err

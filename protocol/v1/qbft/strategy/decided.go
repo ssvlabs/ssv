@@ -54,12 +54,11 @@ func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, sign
 	if !msg.HasMoreSigners(local) {
 		return false, nil
 	}
+	logger = logger.With(zap.Int64("height", int64(msg.Message.Height)), zap.String("identifier", msg.Message.Identifier.String()))
 	if err := store.SaveLastDecided(msg); err != nil {
-		logger.Debug("could not save decided",
-			zap.String("identifier", msg.Message.Identifier.String()),
-			zap.Int64("height", int64(msg.Message.Height)),
-			zap.Error(err))
+		logger.Warn("could not save last decided", zap.Error(err))
 		return false, err
 	}
+	logger.Debug("saved last decided")
 	return true, nil
 }
