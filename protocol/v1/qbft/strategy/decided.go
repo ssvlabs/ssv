@@ -46,11 +46,12 @@ func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, sign
 	if err != nil {
 		return false, err
 	}
+	// msg has lower or equal height
 	if local != nil && !msg.Message.Higher(local.Message) {
-		logger.Debug("skipping decided with lower or equal height",
-			zap.String("identifier", msg.Message.Identifier.String()),
-			zap.Int64("height", int64(msg.Message.Height)),
-			zap.Int64("localHeight", int64(local.Message.Height)))
+		return false, nil
+	}
+	// msg has fewer signers
+	if !msg.HasMoreSigners(local) {
 		return false, nil
 	}
 	if err := store.SaveLastDecided(msg); err != nil {
