@@ -286,7 +286,11 @@ func (i *Instance) bumpToRound(round message.Round) {
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
 func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 	// in order to prevent race condition between timer timeout and decided state. once decided we need to prevent any other new state
-	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) && stage != qbft.RoundStateStopped {
+	currentStage := i.State().Stage.Load()
+	if currentStage == int32(qbft.RoundStateStopped) {
+		return
+	}
+	if currentStage == int32(qbft.RoundStateDecided) && stage != qbft.RoundStateStopped {
 		return
 	}
 
