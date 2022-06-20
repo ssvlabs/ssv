@@ -223,7 +223,9 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
 		if err == peerstore.ErrNotFound {
-			// if user agent wasn't found, retry libp2p identify
+			// if user agent wasn't found, retry libp2p identify after 100ms
+			// TODO: find the root cause of this issue
+			time.Sleep(time.Millisecond * 100)
 			if err := h.preHandshake(conn); err != nil {
 				return nil, err
 			}
