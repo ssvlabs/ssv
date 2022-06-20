@@ -181,10 +181,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 
-		// validatorController worker flags
-		cfg.SSVOptions.ValidatorOptions.WorkersCount = 1      // TODO need as yaml flag?
-		cfg.SSVOptions.ValidatorOptions.QueueBufferSize = 100 // TODO need as yaml flag?
-
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 
 		// create new eth1 client
