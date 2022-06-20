@@ -367,7 +367,7 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 func (c *controller) StartNetworkHandlers() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
-	c.messageWorker.SetHandler(c.handleWorkerMessages)
+	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.
