@@ -11,8 +11,10 @@ import (
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
 	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
 	if c.readMode {
-		if signedMessage.Message.MsgType != message.RoundChangeMsgType {
-			return nil // other types not supported in read mode
+		switch signedMessage.Message.MsgType {
+		case message.RoundChangeMsgType, message.CommitMsgType:
+		default: // other types not supported in read mode
+			return nil
 		}
 	}
 	switch signedMessage.Message.MsgType {
@@ -64,7 +66,6 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	}
 
 	logger := c.logger.With(zap.String("who", "ProcessLateCommitMsg"),
-		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
 		zap.Any("signers", signedMessage.GetSigners()))
@@ -76,7 +77,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		if err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
-		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
+		logger.Debug("decided message was updated after late commit processing", zap.Any("updated_signers", updated.GetSigners()))
 
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 
@@ -84,7 +85,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			if err := c.onNewDecidedMessage(updated); err != nil {
 				logger.Error("could not broadcast decided message", zap.Error(err))
 			} else {
-				logger.Debug("updated decided was broadcasted")
+				logger.Debug("updated decided was broadcast-ed")
 			}
 		}
 	}
