@@ -28,21 +28,22 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // Options is a set of options for the controller
 type Options struct {
-	Context        context.Context
-	Role           message.RoleType
-	Identifier     message.Identifier
-	Logger         *zap.Logger
-	Storage        qbftstorage.QBFTStore
-	Network        p2pprotocol.Network
-	InstanceConfig *qbft.InstanceConfig
-	ValidatorShare *beaconprotocol.Share
-	Version        forksprotocol.ForkVersion
-	Beacon         beaconprotocol.Beacon
-	Signer         beaconprotocol.Signer
-	SyncRateLimit  time.Duration
-	SigTimeout     time.Duration
-	ReadMode       bool
-	FullNode       bool
+	Context           context.Context
+	Role              message.RoleType
+	Identifier        message.Identifier
+	Logger            *zap.Logger
+	Storage           qbftstorage.QBFTStore
+	Network           p2pprotocol.Network
+	InstanceConfig    *qbft.InstanceConfig
+	ValidatorShare    *beaconprotocol.Share
+	Version           forksprotocol.ForkVersion
+	Beacon            beaconprotocol.Beacon
+	Signer            beaconprotocol.Signer
+	SyncRateLimit     time.Duration
+	SigTimeout        time.Duration
+	ReadMode          bool
+	FullNode          bool
+	NewDecidedHandler func(msg *message.SignedMessage)
 }
 
 // set of states for the controller
@@ -89,8 +90,9 @@ type Controller struct {
 
 	q msgqueue.MsgQueue
 
-	decidedFactory  *factory.Factory
-	decidedStrategy strategy.Decided
+	decidedFactory    *factory.Factory
+	decidedStrategy   strategy.Decided
+	newDecidedHandler func(msg *message.SignedMessage)
 }
 
 // New is the constructor of Controller
@@ -119,6 +121,8 @@ func New(opts Options) IController {
 
 		currentInstanceLock: &sync.RWMutex{},
 		forkLock:            &sync.Mutex{},
+
+		newDecidedHandler: opts.NewDecidedHandler,
 	}
 
 	if !opts.ReadMode {

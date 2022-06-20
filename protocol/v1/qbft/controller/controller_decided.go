@@ -1,11 +1,35 @@
 package controller
 
 import (
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
+
+// onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
+// in read mode, we don't broadcast the message in the network
+func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
+	if c.newDecidedHandler != nil {
+		go c.newDecidedHandler(msg)
+	}
+	if c.readMode {
+		return nil
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode updated msg")
+	}
+	if err := c.network.Broadcast(message.SSVMessage{
+		MsgType: message.SSVDecidedMsgType,
+		ID:      c.Identifier,
+		Data:    data,
+	}); err != nil {
+		return errors.Wrap(err, "could not broadcast decided message")
+	}
+	return nil
+}
 
 // ValidateDecidedMsg - the main decided msg pipeline
 func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {

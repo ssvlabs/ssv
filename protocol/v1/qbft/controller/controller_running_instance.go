@@ -126,17 +126,14 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if _, err = c.decidedStrategy.UpdateDecided(agg); err != nil {
+			updated, err := c.decidedStrategy.UpdateDecided(agg)
+			if err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
-
-			ssvMsg, err := c.getCurrentInstance().GetCommittedAggSSVMessage()
-			if err != nil {
-				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
-			}
-			logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
-			if err = c.network.Broadcast(ssvMsg); err != nil {
-				return errors.Wrap(err, "could not broadcast decided message")
+			if updated {
+				if err = c.onNewDecidedMessage(agg); err != nil {
+					return errors.Wrap(err, "could not broadcast decided message")
+				}
 			}
 			logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
 				zap.Uint64("msgHeight", uint64(agg.Message.Height)))

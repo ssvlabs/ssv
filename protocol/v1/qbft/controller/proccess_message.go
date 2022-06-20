@@ -72,26 +72,20 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
 	} else if updated != nil {
-		if _, err := c.decidedStrategy.UpdateDecided(updated); err != nil {
+		ok, err := c.decidedStrategy.UpdateDecided(updated)
+		if err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
 		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
 
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 
-		data, err := updated.Encode()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to encode updated msg")
-		}
-		ssvMsg := message.SSVMessage{
-			MsgType: message.SSVDecidedMsgType,
-			ID:      c.Identifier,
-			Data:    data,
-		}
-		if err := c.network.Broadcast(ssvMsg); err != nil {
-			logger.Error("could not broadcast decided message", zap.Error(err))
-		} else {
-			logger.Debug("updated decided was broadcasted")
+		if ok {
+			if err := c.onNewDecidedMessage(updated); err != nil {
+				logger.Error("could not broadcast decided message", zap.Error(err))
+			} else {
+				logger.Debug("updated decided was broadcasted")
+			}
 		}
 	}
 	return true, nil
