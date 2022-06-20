@@ -59,6 +59,7 @@ type p2pNetwork struct {
 	activeValidators     map[string]int32
 
 	backoffConnector *libp2pdisc.BackoffConnector
+	subnets          []byte
 }
 
 // New creates a new p2p network
@@ -121,6 +122,14 @@ func (n *p2pNetwork) Start() error {
 		n.reportTopics()
 	})
 
+	if err := n.registerInitialTopics(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (n *p2pNetwork) registerInitialTopics() error {
 	decidedTopic := n.fork.DecidedTopic()
 	if len(decidedTopic) == 0 {
 		return nil
@@ -136,6 +145,7 @@ func (n *p2pNetwork) Start() error {
 	if err != nil {
 		return errors.Wrap(err, "could not register to decided topic")
 	}
+	_ = n.subscribeToSubnets()
 
 	return nil
 }
