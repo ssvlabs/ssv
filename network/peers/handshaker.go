@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -221,7 +222,20 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	pid := conn.RemotePeer()
 	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
-		return nil, err
+		if err == peerstore.ErrNotFound {
+			// if user agent wasn't found, retry libp2p identify after 100ms
+			// TODO: find the root cause of this issue
+			time.Sleep(time.Millisecond * 100)
+			if err := h.preHandshake(conn); err != nil {
+				return nil, err
+			}
+			uaRaw, err = h.ids.Host.Peerstore().Get(pid, userAgentKey)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	ua, ok := uaRaw.(string)
 	if !ok {
