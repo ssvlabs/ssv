@@ -111,6 +111,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 // it will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = ctrl.fork.GetTopicFullName(name)
+	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
 	tc, err := ctrl.joinTopic(name)
 	if err == nil && tc != nil {
 		tc.incSubCount()
