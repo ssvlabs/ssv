@@ -3,6 +3,8 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"net/http"
 	"time"
@@ -18,7 +20,6 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/exporter/api"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
@@ -203,13 +204,17 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
+		if cfg.WsAPIPort != 0 {
+			ws := api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
+			cfg.SSVOptions.WS = ws
+			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = func(msg *message.SignedMessage) {
+				ws.BroadcastFeed().Send(api.NewDecidedAPIMsg(msg))
+			}
+		}
+
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-
-		if cfg.WsAPIPort != 0 {
-			cfg.SSVOptions.WS = api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
-			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-		}
 
 		operatorNode = operator.New(cfg.SSVOptions)
 
