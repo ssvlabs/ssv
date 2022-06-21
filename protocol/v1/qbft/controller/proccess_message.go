@@ -109,7 +109,7 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.Signe
 		return nil, nil
 	}
 	decidedMsg := decidedMessages[0]
-	if msg.Message.Height == decidedMsg.Message.Height { // make sure the same height. if not, pass
+	if msg.Message.Height != decidedMsg.Message.Height { // make sure the same height. if not, pass
 		return nil, nil
 	}
 	if len(decidedMsg.GetSigners()) == c.ValidatorShare.CommitteeSize() {
