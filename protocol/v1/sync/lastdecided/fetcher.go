@@ -59,7 +59,6 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 				time.Sleep(lastDecidedInterval * 2)
 				continue
 			}
-			l.logger.Debug("could not get highest decided from remote peers", zap.Error(err))
 		}
 		if len(remoteMsgs) == 0 {
 			time.Sleep(lastDecidedInterval)
@@ -69,6 +68,9 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 		if highest == nil {
 			continue
 		}
+	}
+	if err != nil && highest == nil {
+		return nil, "", 0, errors.Wrap(err, "could not get highest decided from remote peers")
 	}
 
 	var localHeight message.Height
