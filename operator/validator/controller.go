@@ -247,7 +247,7 @@ func (c *controller) handleRouterMessages() {
 				}
 			} else if c.forkVersion != forksprotocol.V0ForkVersion {
 				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
-					return // not supporting other types
+					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
