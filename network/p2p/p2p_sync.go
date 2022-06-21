@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"encoding/hex"
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -164,14 +165,14 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) ([]peer.ID, error) {
-	var peers []peer.ID
+func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
 	for _, topic := range topics {
-		ps, err := n.topicsCtrl.Peers(topic)
+		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {
-			return nil, errors.Wrapf(err, "could not read peers for topic %s", topic)
+			continue
 		}
 		for _, p := range ps {
 			if _, ok := seen[p]; !ok && filter(p) {
@@ -179,6 +180,9 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 				seen[p] = struct{}{}
 			}
 		}
+	}
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
 		n.logger.Debug("could not find peers", zap.Any("topics", topics))
