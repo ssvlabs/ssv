@@ -9,7 +9,10 @@ import (
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
-	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
+	logger := c.logger.With(zap.String("type", signedMessage.Message.MsgType.String()),
+		zap.Int64("height", int64(signedMessage.Message.Height)),
+		zap.Int64("round", int64(signedMessage.Message.Round)),
+		zap.Any("sender", signedMessage.GetSigners()))
 	if c.readMode {
 		switch signedMessage.Message.MsgType {
 		case message.RoundChangeMsgType, message.CommitMsgType:
@@ -17,6 +20,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 			return nil
 		}
 	}
+	logger.Debug("process consensus message")
 	switch signedMessage.Message.MsgType {
 	case message.RoundChangeMsgType: // supporting read-mode
 		if c.readMode {
@@ -38,7 +42,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
-		c.logger.Debug("current instance processed message", zap.Bool("decided", decided))
+		logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	default:
 		return errors.Errorf("message type is not suported")
 	}
