@@ -316,6 +316,11 @@ func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 	return false
 }
 
+// HasMoreSigners checks if the message has more signers than the other
+func (signedMsg *SignedMessage) HasMoreSigners(other *SignedMessage) bool {
+	return len(signedMsg.GetSigners()) > len(other.GetSigners())
+}
+
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
 func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
 	for _, sig := range sigs {
@@ -367,11 +372,6 @@ func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	copy(ret.Message.Identifier, signedMsg.Message.Identifier)
 	copy(ret.Message.Data, signedMsg.Message.Data)
 	return ret
-}
-
-// HasMoreSigners checks if the message has more signers than the other
-func (signedMsg *SignedMessage) HasMoreSigners(other *SignedMessage) bool {
-	return len(signedMsg.GetSigners()) > len(other.GetSigners())
 }
 
 func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
