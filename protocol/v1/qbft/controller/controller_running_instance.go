@@ -172,8 +172,18 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if ctxErr := c.ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		if c.getCurrentInstance() == nil {
+		currentInstance := c.getCurrentInstance()
+		if currentInstance == nil {
 			return errors.New("current instance is nil")
+		}
+		logger := c.logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
+		if stage := currentInstance.State(); stage != nil && stage.GetHeight() > msg.Message.Height {
+			logger.Debug("change round message is old, ignoring",
+				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
+			return nil
+		} else if stage.GetHeight() < msg.Message.Height {
+			logger.Debug("got change round message of an newer decided",
+				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
 		}
 		err := c.getCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
