@@ -27,8 +27,8 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 	return &fullNode{
 		logger:         logger.With(zap.String("who", "FullNodeStrategy")),
 		store:          store,
-		decidedFetcher: lastdecided.NewLastDecidedFetcher(logger.With(zap.String("who", "LastDecidedFetcher")), syncer),
-		historySyncer:  history.NewSyncer(logger.With(zap.String("who", "HistorySyncer")), syncer),
+		decidedFetcher: lastdecided.NewLastDecidedFetcher(logger, syncer),
+		historySyncer:  history.NewSyncer(logger, syncer),
 	}
 }
 

@@ -32,7 +32,7 @@ type lastDecidedFetcher struct {
 // NewLastDecidedFetcher creates a new instance of fetcher
 func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetcher {
 	return &lastDecidedFetcher{
-		logger: logger,
+		logger: logger.With(zap.String("who", "LastDecidedFetcher")),
 		syncer: syncer,
 	}
 }

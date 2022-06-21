@@ -361,5 +361,5 @@ func (c *Controller) getNodeMode() strategy.Mode {
 	if c.fullNode {
 		return strategy.ModeFullNode
 	}
-	return strategy.ModeRegularNode
+	return strategy.ModeLightNode
 }

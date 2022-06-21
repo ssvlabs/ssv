@@ -16,14 +16,14 @@ import (
 type Mode int32
 
 const (
-	// ModeRegularNode is the regular mode, default for v1
-	ModeRegularNode Mode = iota
-	// ModeFullNode is a fullnode mode, default for v0
+	// ModeLightNode is the light mode, default for v1
+	ModeLightNode Mode = iota
+	// ModeFullNode is a full node mode, default for v0
 	ModeFullNode
 )
 
-// Decided helps to decouple regular from full-node mode where the node is saving decided history.
-// in regular mode, the node only cares about last decided messages.
+// Decided helps to decouple light from full-node mode where the node is saving decided history.
+// in light mode, the node doesn't save history, only last/highest decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
 	Sync(ctx context.Context, identifier message.Identifier, from, to *message.SignedMessage, pip pipelines.SignedMessagePipeline) error
