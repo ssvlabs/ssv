@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/utils/tasks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"go.uber.org/zap"
 	"time"
 )
@@ -28,12 +29,15 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 		_logger := logger.With(zap.String("peer", id.String()))
 		err := handshaker.Handshake(conn)
 		if err != nil {
-			// the handshake might have been triggered by the other node,
-			// therefore the handshake might be pending
-			if err == ErrIndexingInProcess || err == errHandshakeInProcess {
+			switch err {
+			case ErrIndexingInProcess, errHandshakeInProcess:
+				// ignored errors
 				return nil
+			case errPeerWasFiltered, errUnknownUserAgent, peerstore.ErrNotFound:
+				// ignored but we still close connection
+			default:
+				_logger.Warn("could not handshake with peer", zap.Error(err))
 			}
-			_logger.Warn("could not handshake with peer", zap.Error(err))
 			err := net.ClosePeer(id)
 			if err != nil {
 				_logger.Warn("could not close connection", zap.Error(err))
