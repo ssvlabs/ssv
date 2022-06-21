@@ -40,8 +40,8 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, from
 	if err != nil {
 		return errors.Wrap(err, "could not get last decided from peers")
 	}
-	logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
-		zap.Any("highest", highest), zap.Any("to", to))
+	//logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
+	//	zap.Any("highest", highest), zap.Any("to", to))
 	if highest == nil {
 		logger.Debug("could not find highest decided from peers")
 		if to == nil {
@@ -84,17 +84,10 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, from
 		logger.Warn("could not sync all messages in range",
 			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
 			zap.Int64("to", int64(highest.Message.Height)))
-	} else if message.Height(counter-1) > highest.Message.Height-localHeight {
-		logger.Warn("got too many messages during sync",
-			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
-			zap.Int64("to", int64(highest.Message.Height)))
-	} else {
-		logger.Debug("managed to sync all messages in range",
-			zap.Int64("from", int64(localHeight)),
-			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
 	_, err = strategy.SaveLastDecided(f.logger, f.store, highest)
+
 	return err
 }
 
