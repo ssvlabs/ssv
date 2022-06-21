@@ -43,7 +43,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, from
 	//logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
 	//	zap.Any("highest", highest), zap.Any("to", to))
 	if highest == nil {
-		logger.Debug("could not find highest decided from peers")
+		//logger.Debug("could not find highest decided from peers")
 		if to == nil {
 			return nil
 		}
@@ -54,56 +54,79 @@ func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, from
 		return nil
 	}
 
-	counter := 0
+	counterProcessed := int64(0)
 	handleDecided := func(msg *message.SignedMessage) error {
 		if err := pip.Run(msg); err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
-		if updated, err := f.UpdateDecided(msg); err != nil {
-			return errors.Wrap(err, "could not save decided msg to storage")
-		} else if updated {
-			counter++
+		_, err := f.updateDecidedHistory(msg)
+		if err != nil {
+			return errors.Wrap(err, "could not save decided history")
 		}
+		counterProcessed++
 		return nil
 	}
-	// a special case where no need to sync, we already have highest so just need to handle it
+
+	// a special case where no need to sync
 	if localHeight+1 == highest.Message.Height {
 		if err := handleDecided(highest); err != nil {
-			return errors.Wrap(err, "could not handle highest decided")
+			return err
 		}
-	} else if len(sender) == 0 {
-		return errors.New("could not find peers to sync from")
-	} else {
+		_, err = f.UpdateDecided(highest)
+		return err
+	}
+
+	if len(sender) > 0 {
 		err = f.historySyncer.SyncRange(ctx, identifier, handleDecided, localHeight, highest.Message.Height, sender)
 		if err != nil {
 			return errors.Wrap(err, "could not complete sync")
 		}
 	}
-
-	if message.Height(counter) < highest.Message.Height-localHeight {
-		logger.Warn("could not sync all messages in range",
-			zap.Int("actual", counter), zap.Int64("from", int64(localHeight)),
+	if message.Height(counterProcessed) < highest.Message.Height-localHeight {
+		logger.Warn("not all messages were saved in range",
+			zap.Int64("processed", counterProcessed),
+			zap.Int64("from", int64(localHeight)),
 			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
-	_, err = strategy.SaveLastDecided(f.logger, f.store, highest)
+	_, err = f.UpdateDecided(highest)
 
 	return err
 }
 
-func (f *fullNode) UpdateDecided(msg *message.SignedMessage) (bool, error) {
-	localMsgs, err := f.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+func (f *fullNode) UpdateDecided(msg *message.SignedMessage) (*message.SignedMessage, error) {
+	_, err := f.updateDecidedHistory(msg)
 	if err != nil {
-		return false, errors.Wrap(err, "could not read decided")
+		f.logger.Debug("could not update decided history", zap.Error(err))
+	}
+	updated, err := strategy.UpdateLastDecided(f.logger, f.store, msg)
+	if err != nil {
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (f *fullNode) updateDecidedHistory(msg *message.SignedMessage) (*message.SignedMessage, error) {
+	localMsgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not read decided")
 	}
 	if len(localMsgs) == 0 || localMsgs[0] == nil {
-		return f.SaveDecided(msg)
+		// no previous decided
+		return msg, f.store.SaveDecided(msg)
 	}
 	localMsg := localMsgs[0]
-	if msg.HasMoreSigners(localMsg) {
-		return f.SaveDecided(msg)
+	if localMsg.Message.Height == msg.Message.Height {
+		updated, ok := strategy.UpdateSigners(localMsg, msg)
+		if !ok {
+			return nil, nil
+		}
+		msg = updated
 	}
-	return false, nil
+	if err := f.store.SaveDecided(msg); err != nil {
+		return nil, errors.Wrap(err, "could not save decided history")
+	}
+	return msg, nil
 }
 
 func (f *fullNode) GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error) {
@@ -115,12 +138,4 @@ func (f *fullNode) GetDecided(identifier message.Identifier, heightRange ...mess
 
 func (f *fullNode) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
 	return f.store.GetLastDecided(identifier)
-}
-
-// SaveDecided in for fullnode saves both decided and last decided
-func (f *fullNode) SaveDecided(signedMsgs ...*message.SignedMessage) (bool, error) {
-	if err := f.store.SaveDecided(signedMsgs...); err != nil {
-		return false, errors.Wrap(err, "could not save decided msg to storage")
-	}
-	return strategy.SaveLastDecided(f.logger, f.store, signedMsgs...)
 }

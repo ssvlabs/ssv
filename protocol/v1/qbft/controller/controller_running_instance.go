@@ -130,15 +130,16 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
-			if updated {
-				if err = c.onNewDecidedMessage(agg); err != nil {
-					return errors.Wrap(err, "could not broadcast decided message")
+			logger.Info("decided current instance",
+				zap.String("identifier", agg.Message.Identifier.String()),
+				zap.Any("signers", agg.GetSigners()),
+				zap.Uint64("height", uint64(agg.Message.Height)),
+				zap.Any("updated", updated))
+			if updated != nil {
+				if err = c.onNewDecidedMessage(updated); err != nil {
+					return err
 				}
 			}
-			logger.Info("decided current instance",
-				zap.Bool("updated", updated),
-				zap.String("identifier", agg.Message.Identifier.String()),
-				zap.Uint64("msgHeight", uint64(agg.Message.Height)))
 			return nil
 		}
 

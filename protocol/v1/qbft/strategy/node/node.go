@@ -38,14 +38,14 @@ func (f *regularNode) Sync(ctx context.Context, identifier message.Identifier, f
 		to = highest
 	}
 	if to != nil {
-		_, err := f.SaveDecided(to)
+		_, err := f.UpdateDecided(to)
 		return errors.Wrap(err, "could not save decided")
 	}
 	return nil
 }
 
-func (f *regularNode) UpdateDecided(msg *message.SignedMessage) (bool, error) {
-	return f.SaveDecided(msg)
+func (f *regularNode) UpdateDecided(msg *message.SignedMessage) (*message.SignedMessage, error) {
+	return strategy.UpdateLastDecided(f.logger, f.store, msg)
 }
 
 // GetDecided in regular node will try to look for last decided and returns it if in the given range
@@ -69,8 +69,4 @@ func (f *regularNode) GetDecided(identifier message.Identifier, heightRange ...m
 
 func (f *regularNode) GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error) {
 	return f.store.GetLastDecided(identifier)
-}
-
-func (f *regularNode) SaveDecided(signedMsgs ...*message.SignedMessage) (bool, error) {
-	return strategy.SaveLastDecided(f.logger, f.store, signedMsgs...)
 }

@@ -1,11 +1,11 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
@@ -74,18 +74,16 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
 		zap.Any("signers", signedMessage.GetSigners()))
 
-	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
+	if agg, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
-	} else if updated != nil {
-		ok, err := c.decidedStrategy.UpdateDecided(updated)
+	} else if agg != nil {
+		updated, err := c.decidedStrategy.UpdateDecided(agg)
 		if err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
-		logger.Debug("decided message was updated after late commit processing", zap.Any("updated_signers", updated.GetSigners()))
-
-		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
-
-		if ok {
+		if updated != nil {
+			logger.Debug("decided message was updated after late commit processing", zap.Any("updated_signers", updated.GetSigners()))
+			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 			if err := c.onNewDecidedMessage(updated); err != nil {
 				logger.Error("could not broadcast decided message", zap.Error(err))
 			} else {
