@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -254,17 +253,18 @@ func AppendSigners(signers []OperatorID, appended ...OperatorID) []OperatorID {
 }
 
 func appendSigner(signers []OperatorID, signer OperatorID) []OperatorID {
-	var index int
+	index := -1
 	for i := 0; i < len(signers); i++ {
 		if signers[i] == signer { // known
 			return signers
 		}
-		if signers[i] > signer {
+		// check if we didn't find an index yet
+		// TODO: break loop if we can guarantee that signers are sorted
+		if index < 0 && signers[i] > signer {
 			index = i
-			break
 		}
 	}
-	if index == 0 {
+	if index <= 0 {
 		return append([]OperatorID{signer}, signers...)
 	}
 	return append(signers[:index], append([]OperatorID{signer}, signers[index:]...)...)
