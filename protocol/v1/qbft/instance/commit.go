@@ -6,49 +6,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/utils/logex"
 )
-
-// ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func ProcessLateCommitMsg(msg *message.SignedMessage, qbftStore qbftstorage.QBFTStore, share *beacon.Share) (*message.SignedMessage, error) {
-	logger := logex.GetLogger(zap.String("who", "ProcessLateCommitMsg"),
-		zap.Uint64("seq", uint64(msg.Message.Height)), zap.String("identifier", string(msg.Message.Identifier)),
-		zap.Any("signers", msg.GetSigners()))
-	// find stored decided
-	decidedMessages, err := qbftStore.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not read decided for late commit")
-	}
-	if len(decidedMessages) == 0 {
-		// decided message does not exist
-		logger.Debug("could not find decided")
-		return nil, nil
-	}
-	decidedMsg := decidedMessages[0]
-	if len(decidedMsg.GetSigners()) == share.CommitteeSize() {
-		// msg was signed by the entire committee
-		logger.Debug("msg was signed by the entire committee")
-		return nil, nil
-	}
-	// aggregate message with stored decided
-	if err := decidedMsg.Aggregate(msg); err != nil {
-		if err == message.ErrDuplicateMsgSigner {
-			logger.Debug("duplicated signer")
-			return nil, nil
-		}
-		return nil, errors.Wrap(err, "could not aggregate commit message")
-	}
-	if err := qbftStore.SaveDecided(decidedMsg); err != nil {
-		return nil, errors.Wrap(err, "could not save aggregated decided message")
-	}
-	qbft.ReportDecided(share.PublicKey.SerializeToHexStr(), msg)
-	return decidedMsg, nil
-}
 
 // CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
