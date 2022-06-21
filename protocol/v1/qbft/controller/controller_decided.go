@@ -55,6 +55,10 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	}
 	// if local msg is not higher, force decided or stop instance + sync for newer messages
 	if localMsg == nil || !localMsg.Message.Higher(msg.Message) {
+		updated, err := c.decidedStrategy.UpdateDecided(msg)
+		if err != nil {
+			return err
+		}
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
 			// check if decided for current instance
 			currentState := currentInstance.State()
@@ -63,8 +67,10 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 				currentInstance.ForceDecide(msg)
 				return nil
 			}
-			logger.Debug("stopping current instance")
-			currentInstance.Stop()
+			if updated != nil {
+				logger.Debug("stopping current instance")
+				currentInstance.Stop()
+			}
 		}
 		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
 		if localMsg == nil || msg.Message.Higher(localMsg.Message) {
