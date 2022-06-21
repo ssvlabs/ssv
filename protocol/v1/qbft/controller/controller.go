@@ -82,6 +82,7 @@ type Controller struct {
 	State uint32
 
 	SyncRateLimit time.Duration
+	MinPeers      int
 
 	// flags
 	ReadMode bool
@@ -165,7 +166,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 		i.Stop()
 		c.setCurrentInstance(nil)
 	}
-	c.processAllDecided(c.messageHandler)
+	c.processAllDecided(c.MessageHandler)
 	cleared := c.Q.Clean(msgqueue.AllIndicesCleaner)
 	c.Logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
 
@@ -191,7 +192,7 @@ func (c *Controller) Init() error {
 	// checks if notStarted. if so, preform init handlers and set state to new state
 	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
 		c.Logger.Info("start qbft ctrl handler init")
-		go c.startQueueConsumer(c.messageHandler)
+		go c.StartQueueConsumer(c.MessageHandler)
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
@@ -295,7 +296,7 @@ func (c *Controller) GetIdentifier() []byte {
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if c.ReadMode {
-		return c.messageHandler(msg)
+		return c.MessageHandler(msg)
 	}
 	var fields []zap.Field
 	cInstance := c.GetCurrentInstance()
@@ -314,8 +315,8 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	return nil
 }
 
-// messageHandler process message from queue,
-func (c *Controller) messageHandler(msg *message.SSVMessage) error {
+// MessageHandler process message from queue,
+func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 	switch msg.GetType() {
 	case message.SSVConsensusMsgType:
 		signedMsg := &message.SignedMessage{}

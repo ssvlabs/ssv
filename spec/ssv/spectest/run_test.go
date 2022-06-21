@@ -3,8 +3,8 @@ package spectest
 import (
 	"encoding/hex"
 	"encoding/json"
-	tests2 "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
+	tests2 "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 	"github.com/stretchr/testify/require"

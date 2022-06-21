@@ -251,7 +251,7 @@ func TestConsumeMessages(t *testing.T) {
 			}()
 
 			processed := 0
-			ctrl.startQueueConsumer(func(msg *message.SSVMessage) error {
+			ctrl.StartQueueConsumer(func(msg *message.SSVMessage) error {
 				// when done, cancel ctx
 				ctrl.Logger.Debug("process msg")
 
