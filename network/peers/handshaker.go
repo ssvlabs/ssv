@@ -177,12 +177,9 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(conn)
-		if err == peerstore.ErrNotFound {
+		if err != nil {
 			return err
 		}
-	}
-	if err != nil {
-		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
 	}
 	if ni == nil {
 		return errors.New("empty identity")
