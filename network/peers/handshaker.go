@@ -171,6 +171,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(conn)
+		// TODO: find the root cause of this issue, for now ignoring it
+		if err == peerstore.ErrNotFound {
+			return nil
+		}
 	}
 	if err != nil {
 		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
@@ -224,7 +228,6 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	if err != nil {
 		if err == peerstore.ErrNotFound {
 			// if user agent wasn't found, retry libp2p identify after 100ms
-			// TODO: find the root cause of this issue
 			time.Sleep(time.Millisecond * 100)
 			if err := h.preHandshake(conn); err != nil {
 				return nil, err

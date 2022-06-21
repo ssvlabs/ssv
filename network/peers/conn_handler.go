@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/utils/tasks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peerstore"
 	"go.uber.org/zap"
 	"time"
 )
@@ -32,10 +31,6 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 			// the handshake might have been triggered by the other node,
 			// therefore the handshake might be pending
 			if err == ErrIndexingInProcess || err == errHandshakeInProcess {
-				return nil
-			}
-			// TODO: removed once handled in handshaker
-			if err == peerstore.ErrNotFound {
 				return nil
 			}
 			_logger.Warn("could not handshake with peer", zap.Error(err))
