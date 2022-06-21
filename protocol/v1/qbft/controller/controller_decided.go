@@ -59,6 +59,9 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		if err != nil {
 			return err
 		}
+		if updated != nil && c.readMode && c.newDecidedHandler != nil {
+			go c.newDecidedHandler(updated)
+		}
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
 			// check if decided for current instance
 			currentState := currentInstance.State()
