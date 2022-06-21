@@ -237,9 +237,10 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
+// newDecidedHandler handles incoming newly decided messages, it holds a cache wil TTL of 1m to avoid flooding
 func newDecidedHandler(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
 	logger = logger.With(zap.String("who", "NewDecidedHandler"))
-	c := cache.New(time.Minute*2, time.Minute*3)
+	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg *message.SignedMessage) {
 		identifier := msg.Message.Identifier.String()

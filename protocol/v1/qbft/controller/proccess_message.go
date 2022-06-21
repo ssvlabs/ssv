@@ -86,8 +86,6 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 			if err := c.onNewDecidedMessage(updated); err != nil {
 				logger.Error("could not broadcast decided message", zap.Error(err))
-			} else {
-				logger.Debug("updated decided was broadcast-ed")
 			}
 		}
 	}
