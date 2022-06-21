@@ -68,3 +68,11 @@ func TestDecidedV0Root(t *testing.T) {
 
 	cm.GetRoot("v0") // TODO need to add the v0 real root to compare
 }
+
+func TestAppendSigners(t *testing.T) {
+	require.ElementsMatch(t, []OperatorID{2, 3, 4}, AppendSigners([]OperatorID{2, 4}, 3))
+	require.ElementsMatch(t, []OperatorID{1, 2, 4, 5}, AppendSigners([]OperatorID{2, 4, 5}, 1, 5))
+	require.ElementsMatch(t, []OperatorID{1, 2}, AppendSigners([]OperatorID{2}, 1, 2))
+	require.ElementsMatch(t, []OperatorID{2, 3}, AppendSigners([]OperatorID{}, 3, 2))
+	require.ElementsMatch(t, []OperatorID{2}, AppendSigners([]OperatorID{}, 2))
+}

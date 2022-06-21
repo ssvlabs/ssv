@@ -245,6 +245,31 @@ func (msg *ConsensusMessage) Higher(other *ConsensusMessage) bool {
 	return msg.Height > other.Height
 }
 
+// AppendSigners is a utility that appends the given signers to a distinct, ordered list
+func AppendSigners(signers []OperatorID, appended ...OperatorID) []OperatorID {
+	for _, signer := range appended {
+		signers = appendSigner(signers, signer)
+	}
+	return signers
+}
+
+func appendSigner(signers []OperatorID, signer OperatorID) []OperatorID {
+	var index int
+	for i := 0; i < len(signers); i++ {
+		if signers[i] == signer { // known
+			return signers
+		}
+		if signers[i] > signer {
+			index = i
+			break
+		}
+	}
+	if index == 0 {
+		return append([]OperatorID{signer}, signers...)
+	}
+	return append(signers[:index], append([]OperatorID{signer}, signers[index:]...)...)
+}
+
 // SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
 	Signature Signature
@@ -303,7 +328,7 @@ func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
 			return errors.Wrap(err, "could not aggregate signatures")
 		}
 		signedMsg.Signature = aggregated
-		signedMsg.Signers = append(signedMsg.Signers, sig.GetSigners()...)
+		signedMsg.Signers = AppendSigners(signedMsg.Signers, sig.GetSigners()...)
 	}
 	return nil
 }
