@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -42,7 +41,12 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, n
 		logger.Warn("failed to get decided messages", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}
 	} else {
-		res.Data = msgs
+		data, err := DecidedAPIData(msgs...)
+		if err != nil {
+			res.Data = []string{}
+		} else {
+			res.Data = data
+		}
 	}
 
 	nm.Msg = res
