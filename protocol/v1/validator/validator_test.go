@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"sync"
 	"testing"
@@ -82,10 +83,9 @@ func TestConvertDutyRunner(t *testing.T) {
 	}
 	db, err := storage.GetStorageFactory(cfg)
 	require.NoError(t, err)
-	ibftStorage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V0ForkVersion)
+	ibftStorage := qbftStorage.New(db, logger, convertToSpecRole(message.RoleTypeAttester).String(), forksprotocol.V0ForkVersion)
 
 	require.NoError(t, beacon.AddShare(keysSet.Shares[1]))
-	//share := jsonToShare(t, shareInput)
 	share := &beaconprotocol.Share{
 		NodeID:    1,
 		PublicKey: keysSet.ValidatorPK,
@@ -233,6 +233,20 @@ func TestConvertDutyRunner(t *testing.T) {
 	root, err := resState.GetRoot()
 	require.NoError(t, err)
 	require.Equal(t, rootOutput, root) // TODO need to change based on the test
+}
+
+func convertToSpecRole(role message.RoleType) types.BeaconRole {
+	switch role {
+	case message.RoleTypeAttester:
+		return types.BNRoleAttester
+	case message.RoleTypeAggregator:
+		return types.BNRoleAggregator
+	case message.RoleTypeProposer:
+		return types.BNRoleProposer
+	default:
+		panic(fmt.Sprintf("unknown role type! (%s)", role.String()))
+	}
+	return 0
 }
 
 func jsonToMsgs(t *testing.T, input []byte, identifier message.Identifier) []*message.SSVMessage {
