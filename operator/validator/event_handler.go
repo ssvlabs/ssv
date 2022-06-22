@@ -149,7 +149,7 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 	if !found {
 		return &ErrorNotFound{
-			Err: errors.Wrap(err, "could not find validator share"),
+			Err: errors.New("could not find validator share"),
 		}
 	}
 
