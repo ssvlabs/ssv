@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"math/rand"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -71,6 +72,14 @@ func (n *p2pNetwork) initCfg() {
 	}
 	if len(n.cfg.UserAgent) == 0 {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
+	}
+	if len(n.cfg.Subnets) > 0 {
+		subnets, err := parseSubnets(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		if err != nil {
+			// TODO: handle
+			return
+		}
+		n.subnets = subnets
 	}
 }
 
@@ -176,6 +185,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		if n.cfg.DiscoveryTrace {
 			discV5Opts.Logger = n.logger
+		}
+		if len(n.subnets) > 0 {
+			discV5Opts.Subnets = n.subnets
 		}
 		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {

@@ -32,7 +32,7 @@ type syncer struct {
 // NewSyncer creates a new instance of history syncer
 func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
 	return &syncer{
-		logger: logger,
+		logger: logger.With(zap.String("who", "HistorySyncer")),
 		syncer: netSyncer,
 	}
 }

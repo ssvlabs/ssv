@@ -43,7 +43,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 		}
 		val := validator.NewValidator(&validator.Options{
 			Context:     ctx,
-			Logger:      logger.With(zap.String("who", fmt.Sprintf("node-%d", i))),
+			Logger:      logger.With(zap.String("w", fmt.Sprintf("node-%d", i))),
 			IbftStorage: stores[i],
 			P2pNetwork:  net.Nodes[i],
 			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),

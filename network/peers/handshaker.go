@@ -25,6 +25,12 @@ const (
 // errHandshakeInProcess is thrown when and handshake process for that peer is already running
 var errHandshakeInProcess = errors.New("handshake already in process")
 
+// errPeerWasFiltered is thrown when a peer is filtered during handshake
+var errPeerWasFiltered = errors.New("peer was filtered during handshake")
+
+// errUnknownUserAgent is thrown when a peer has an unknown user agent
+var errUnknownUserAgent = errors.New("user agent is unknown")
+
 // ErrAtPeersLimit is thrown when we reached peers limit
 var ErrAtPeersLimit = errors.New("peers limit was reached")
 
@@ -171,19 +177,16 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(conn)
-		// TODO: find the root cause of this issue, for now ignoring it
-		if err == peerstore.ErrNotFound {
-			return nil
+		if err != nil {
+			return err
 		}
-	}
-	if err != nil {
-		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
 	}
 	if ni == nil {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
-		return errors.Errorf("peer [%s] was filtered during handshake", pid.String())
+		//h.logger.Debug("filtering peer", zap.String("id", pid.String()), zap.Any("info", ni))
+		return errPeerWasFiltered
 	}
 	// adding to index
 	added, err := h.infoStore.Add(pid, ni)
@@ -246,7 +249,8 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	}
 	parts := strings.Split(ua, ":")
 	if len(parts) < 2 { // too old or unknown
-		return nil, errors.Errorf("user agent is unknown: %s", ua)
+		h.logger.Debug("user agent is unknown", zap.String("ua", ua))
+		return nil, errUnknownUserAgent
 	}
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.infoStore.Self().NetworkID)

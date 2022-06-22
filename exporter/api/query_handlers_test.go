@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -117,7 +118,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
-		msgs, ok := nm.Msg.Data.([]*message.SignedMessage)
+		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
 		require.True(t, ok)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})
@@ -126,9 +127,9 @@ func TestHandleDecidedQuery(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
-		msgs, ok := nm.Msg.Data.([]*message.SignedMessage)
+		data, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
-		require.Equal(t, 0, len(msgs)) // seq 0 - 250
+		require.Equal(t, 0, len(data))
 	})
 
 	t.Run("non-exist validator", func(t *testing.T) {

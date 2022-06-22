@@ -1,20 +1,26 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
-	c.logger.Debug("process consensus message", zap.String("type", signedMessage.Message.MsgType.String()), zap.Int64("height", int64(signedMessage.Message.Height)), zap.Int64("round", int64(signedMessage.Message.Round)), zap.Any("sender", signedMessage.GetSigners()))
+	logger := c.logger.With(zap.String("type", signedMessage.Message.MsgType.String()),
+		zap.Int64("height", int64(signedMessage.Message.Height)),
+		zap.Int64("round", int64(signedMessage.Message.Round)),
+		zap.Any("sender", signedMessage.GetSigners()))
 	if c.readMode {
-		if signedMessage.Message.MsgType != message.RoundChangeMsgType {
-			return nil // other types not supported in read mode
+		switch signedMessage.Message.MsgType {
+		case message.RoundChangeMsgType, message.CommitMsgType:
+		default: // other types not supported in read mode
+			return nil
 		}
 	}
+	logger.Debug("process consensus message")
 	switch signedMessage.Message.MsgType {
 	case message.RoundChangeMsgType: // supporting read-mode
 		if c.readMode {
@@ -36,7 +42,7 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 		if err != nil {
 			return errors.Wrap(err, "failed to process message")
 		}
-		c.logger.Debug("current instance processed message", zap.Bool("decided", decided))
+		logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	default:
 		return errors.Errorf("message type is not suported")
 	}
@@ -64,36 +70,24 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 	}
 
 	logger := c.logger.With(zap.String("who", "ProcessLateCommitMsg"),
-		//zap.Bool("is_full_sync", c.isFullNode()),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", signedMessage.Message.Identifier.String()),
 		zap.Any("signers", signedMessage.GetSigners()))
 
-	if updated, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
+	if agg, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
 		return false, errors.Wrap(err, "failed to process late commit message")
-	} else if updated != nil {
-		if err := c.decidedStrategy.UpdateDecided(updated); err != nil {
+	} else if agg != nil {
+		updated, err := c.decidedStrategy.UpdateDecided(agg)
+		if err != nil {
 			return false, errors.Wrap(err, "could not save aggregated decided message")
 		}
-		logger.Debug("decided message was updated", zap.Any("updated signers", updated.GetSigners()))
-
-		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
-
-		data, err := updated.Encode()
-		if err != nil {
-			return false, errors.Wrap(err, "failed to encode updated msg")
+		if updated != nil {
+			logger.Debug("decided message was updated after late commit processing", zap.Any("updated_signers", updated.GetSigners()))
+			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
+			if err := c.onNewDecidedMessage(updated); err != nil {
+				logger.Error("could not broadcast decided message", zap.Error(err))
+			}
 		}
-		ssvMsg := message.SSVMessage{
-			MsgType: message.SSVDecidedMsgType,
-			ID:      c.Identifier,
-			Data:    data,
-		}
-		if err := c.network.Broadcast(ssvMsg); err != nil {
-			logger.Warn("could not broadcast decided message", zap.Error(err))
-		} else {
-			logger.Debug("updated decided was broadcasted")
-		}
-		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
 	}
 	return true, nil
 }
@@ -111,7 +105,7 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.Signe
 		return nil, nil
 	}
 	decidedMsg := decidedMessages[0]
-	if msg.Message.Height == decidedMsg.Message.Height { // make sure the same height. if not, pass
+	if msg.Message.Height != decidedMsg.Message.Height { // make sure the same height. if not, pass
 		return nil, nil
 	}
 	if len(decidedMsg.GetSigners()) == c.ValidatorShare.CommitteeSize() {

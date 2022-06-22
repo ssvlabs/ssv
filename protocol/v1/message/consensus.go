@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -240,6 +239,29 @@ func (msg *ConsensusMessage) Sign(sk *bls.SecretKey, forkVersion string) (*bls.S
 	return sk.SignByte(root), nil
 }
 
+// Higher checks if the message is higher than the other
+func (msg *ConsensusMessage) Higher(other *ConsensusMessage) bool {
+	return msg.Height > other.Height
+}
+
+// AppendSigners is a utility that helps to ensure distinct values
+// TODO: sorting?
+func AppendSigners(signers []OperatorID, appended ...OperatorID) []OperatorID {
+	for _, signer := range appended {
+		signers = appendSigner(signers, signer)
+	}
+	return signers
+}
+
+func appendSigner(signers []OperatorID, signer OperatorID) []OperatorID {
+	for _, s := range signers {
+		if s == signer { // known
+			return signers
+		}
+	}
+	return append(signers, signer)
+}
+
 // SignedMessage contains a message and the corresponding signature + signers list
 type SignedMessage struct {
 	Signature Signature
@@ -286,6 +308,11 @@ func (signedMsg *SignedMessage) MutualSigners(sig MsgSignature) bool {
 	return false
 }
 
+// HasMoreSigners checks if the message has more signers than the other
+func (signedMsg *SignedMessage) HasMoreSigners(other *SignedMessage) bool {
+	return len(signedMsg.GetSigners()) > len(other.GetSigners())
+}
+
 // Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
 func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
 	for _, sig := range sigs {
@@ -298,7 +325,7 @@ func (signedMsg *SignedMessage) Aggregate(sigs ...MsgSignature) error {
 			return errors.Wrap(err, "could not aggregate signatures")
 		}
 		signedMsg.Signature = aggregated
-		signedMsg.Signers = append(signedMsg.Signers, sig.GetSigners()...)
+		signedMsg.Signers = AppendSigners(signedMsg.Signers, sig.GetSigners()...)
 	}
 	return nil
 }
