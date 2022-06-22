@@ -89,12 +89,12 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 	signedMsgLoop:
 		for _, signedMsg := range sm.Data {
 			height := signedMsg.Message.Height
+			if visited[height] {
+				continue signedMsgLoop
+			}
 			if err := handler(signedMsg); err != nil {
 				s.logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(height)))
 				continue
-			}
-			if visited[height] {
-				continue signedMsgLoop
 			}
 			visited[height] = true
 		}
