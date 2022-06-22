@@ -2,7 +2,10 @@ package api
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft/conversion"
+	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 // Message represents an exporter message
@@ -16,17 +19,24 @@ type Message struct {
 }
 
 // NewDecidedAPIMsg creates a new message from the given message
-func NewDecidedAPIMsg(msg *message.SignedMessage) Message {
+// TODO: avoid converting to v0 once explorer is upgraded
+func NewDecidedAPIMsg(msg *message.SignedMessage) (Message, error) {
+	pkv := msg.Message.Identifier.GetValidatorPK()
+	identifierV0 := format.IdentifierFormat(pkv, msg.Message.Identifier.GetRoleType().String())
+	v0Msg, err := conversion.ToSignedMessageV0(msg, []byte(identifierV0))
+	if err != nil {
+		return Message{}, err
+	}
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
-			PublicKey: hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()),
+			PublicKey: hex.EncodeToString(pkv),
 			From:      uint64(msg.Message.Height),
 			To:        uint64(msg.Message.Height),
 			Role:      DutyRole(msg.Message.Identifier.GetRoleType().String()),
 		},
-		Data: []*message.SignedMessage{msg},
-	}
+		Data: []*proto.SignedMessage{v0Msg},
+	}, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses
