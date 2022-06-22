@@ -278,7 +278,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 func ForkVersionFilter(forkVersion func() forksprotocol.ForkVersion) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
 		version := forkVersion()
-		if version != ni.ForkVersion {
+		if version == forksprotocol.V0ForkVersion || ni.ForkVersion == forksprotocol.V0ForkVersion {
 			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), version)
 		}
 		return true, nil
