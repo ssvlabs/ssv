@@ -36,7 +36,7 @@ func NewDecidedAPIMsg(msgs ...*message.SignedMessage) Message {
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
 			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)].Message.Height),
+			To:        uint64(msgs[len(msgs)-1].Message.Height),
 			Role:      DutyRole(role.String()),
 		},
 		Data: data,
