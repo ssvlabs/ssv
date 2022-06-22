@@ -85,6 +85,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
+        - name: BOOTNODES
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node
         - name: ENR_KEY
           valueFrom:
             secretKeyRef:

@@ -85,6 +85,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
+        - name: BOOTNODES
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node
         - name: ENR_KEY
           valueFrom:
             secretKeyRef:
@@ -125,8 +130,6 @@ spec:
           value: "15011"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: BOOTNODES
-          value: "enr:-LK4QDAmZK-611qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D11rXBlM7OJ11tWRRtryqvCW04geHC_ab11QmWT11QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO11KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         - name: DISCOVERY_TRACE
           value: 'true'
         - name: PUBSUB_TRACE
