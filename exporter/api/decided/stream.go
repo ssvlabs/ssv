@@ -27,10 +27,6 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 		logger.Debug("broadcast decided stream",
 			zap.String("identifier", identifier),
 			zap.Uint64("height", uint64(msg.Message.Height)))
-		apiMsg, err := api.NewDecidedAPIMsg(msg)
-		if err != nil {
-			logger.Warn("could not create new decided api message", zap.Error(err))
-		}
-		feed.Send(apiMsg)
+		feed.Send(api.NewDecidedAPIMsg(msg))
 	}
 }
