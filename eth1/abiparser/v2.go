@@ -75,6 +75,24 @@ func (e *DecryptError) Error() string {
 	return e.Err.Error()
 }
 
+// BlsPublicKeyDeserializeError is returned when bls public key deserialization fails
+type BlsPublicKeyDeserializeError struct {
+	Err error
+}
+
+func (e *BlsPublicKeyDeserializeError) Error() string {
+	return e.Err.Error()
+}
+
+// BlsSecretKeySetHexStrError is returned when setting bls secret key hex str fails
+type BlsSecretKeySetHexStrError struct {
+	Err error
+}
+
+func (e *BlsSecretKeySetHexStrError) Error() string {
+	return e.Err.Error()
+}
+
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (v2 *AbiV2) ParseOperatorAddedEvent(
 	logger *zap.Logger,
