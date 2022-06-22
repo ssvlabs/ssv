@@ -130,8 +130,6 @@ spec:
           value: "15010"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: BOOTNODES
-          value: "enr:-LK4QDAmZK-610qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D10rXBlM7OJ10tWRRtryqvCW04geHC_ab10QmWT10QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO10KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         - name: DISCOVERY_TRACE
           value: 'true'
         - name: PUBSUB_TRACE
