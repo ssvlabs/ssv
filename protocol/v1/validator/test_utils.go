@@ -330,25 +330,25 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 
 	ret.p2pNetwork = p2pNet
 
-	ret.share = share
+	ret.Share = share
 
 	return ret
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
+func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*proto.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
-	sks := make(map[uint64]*bls.SecretKey)
+	nodes := make(map[message.OperatorID]*proto.Node)
+	sks := make(map[message.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[uint64(i)] = &proto.Node{
+		nodes[message.OperatorID(i)] = &proto.Node{
 			IbftId: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[uint64(i)] = sk
+		sks[message.OperatorID(i)] = sk
 	}
 	return sks, nodes
 }

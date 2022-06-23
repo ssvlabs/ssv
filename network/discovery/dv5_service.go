@@ -89,6 +89,18 @@ func (dvs *DiscV5Service) Self() *enode.LocalNode {
 	return dvs.dv5Listener.LocalNode()
 }
 
+// UpdateForkVersion updates the fork version used to filter nodes, and also the entry in ENR
+// TODO: uncomment publishENR
+func (dvs *DiscV5Service) UpdateForkVersion(forkv forksprotocol.ForkVersion) error {
+	dvs.forkv = forkv
+	err := records.SetForkVersionEntry(dvs.dv5Listener.LocalNode(), forkv.String())
+	if err != nil {
+		return err
+	}
+	//go dvs.publishENR()
+	return nil
+}
+
 // Node tries to find the enode.Node of the given peer
 func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 	pki, err := info.ID.ExtractPublicKey()

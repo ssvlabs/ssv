@@ -43,12 +43,14 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 					zap.Error(err),
 				)
 				var decryptErr *abiparser.DecryptError
-				if errors.As(err, &decryptErr) {
+				var blsDeserializeErr *abiparser.BlsPublicKeyDeserializeError
+				var blsSecretKeySetHexErr *abiparser.BlsSecretKeySetHexStrError
+				if errors.As(err, &decryptErr) || errors.As(err, &blsDeserializeErr) || errors.As(err, &blsSecretKeySetHexErr) {
 					logger.Warn("could not handle ValidatorAdded event")
 				} else {
 					logger.Error("could not handle ValidatorAdded event")
+					return err
 				}
-				return err
 			}
 		case abiparser.ValidatorRemoved:
 			ev := e.Data.(abiparser.ValidatorRemovedEvent)
@@ -149,7 +151,7 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 	if !found {
 		return &ErrorNotFound{
-			Err: errors.Wrap(err, "could not find validator share"),
+			Err: errors.New("could not find validator share"),
 		}
 	}
 

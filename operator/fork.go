@@ -33,12 +33,14 @@ func (n *operatorNode) setFork(slot uint64) {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 
-	// set validator controller fork
-	vCtrlHandler, ok := n.validatorsCtrl.(forksprotocol.ForkHandler)
-	if !ok {
-		logger.Panic("network instance is not a fork handler")
-	}
-	if err := vCtrlHandler.OnFork(currentVersion); err != nil {
-		logger.Panic("could not fork network", zap.Error(err))
+	if n.forkVersion == forksprotocol.V1ForkVersion { // only called on v1 fork
+		// set validator controller fork
+		vCtrlHandler, ok := n.validatorsCtrl.(forksprotocol.ForkHandler)
+		if !ok {
+			logger.Panic("network instance is not a fork handler")
+		}
+		if err := vCtrlHandler.OnFork(currentVersion); err != nil {
+			logger.Panic("could not fork network", zap.Error(err))
+		}
 	}
 }

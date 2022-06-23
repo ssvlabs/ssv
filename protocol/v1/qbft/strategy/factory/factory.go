@@ -5,7 +5,7 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/fullnode"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/node"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/lightnode"
 	"go.uber.org/zap"
 )
 
@@ -30,8 +30,8 @@ func NewDecidedFactory(logger *zap.Logger, mode strategy.Mode, decidedStore qbft
 // GetStrategy returns the decided strategy
 func (f *Factory) GetStrategy() strategy.Decided {
 	switch f.mode {
-	case strategy.ModeRegularNode:
-		return node.NewRegularNodeStrategy(f.logger, f.decidedStore, f.network)
+	case strategy.ModeLightNode:
+		return lightnode.NewLightNodeStrategy(f.logger, f.decidedStore, f.network)
 	case strategy.ModeFullNode:
 		return fullnode.NewFullNodeStrategy(f.logger, f.decidedStore, f.network)
 	default:

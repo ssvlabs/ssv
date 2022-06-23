@@ -34,7 +34,7 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 			db, err := storage.GetStorageFactory(basedb.Options{
 				Type:   "badger-memory",
 				Path:   "",
-				Logger: logger,
+				Logger: zap.L(),
 			})
 			if err != nil {
 				logger.Panic("could not setup storage", zap.Error(err))

@@ -2,10 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"sync"
+
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-	"sync"
 )
 
 // Broadcaster is an interface broadcasting stream message across all available connections

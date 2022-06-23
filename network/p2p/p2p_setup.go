@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 	"math/rand"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -71,6 +72,14 @@ func (n *p2pNetwork) initCfg() {
 	}
 	if len(n.cfg.UserAgent) == 0 {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
+	}
+	if len(n.cfg.Subnets) > 0 {
+		subnets, err := parseSubnets(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		if err != nil {
+			// TODO: handle
+			return
+		}
+		n.subnets = subnets
 	}
 }
 
@@ -144,7 +153,9 @@ func (n *p2pNetwork) setupPeerServices() error {
 	filters := make([]peers.HandshakeFilter, 0)
 	// v0 was before we checked forks, therefore asking if we are above v0
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, peers.ForkVersionFilter(n.cfg.ForkVersion), peers.NetworkIDFilter(n.cfg.NetworkID))
+		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
+			return n.cfg.ForkVersion
+		}), peers.NetworkIDFilter(n.cfg.NetworkID))
 	}
 	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
@@ -174,6 +185,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 		}
 		if n.cfg.DiscoveryTrace {
 			discV5Opts.Logger = n.logger
+		}
+		if len(n.subnets) > 0 {
+			discV5Opts.Subnets = n.subnets
 		}
 		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
@@ -221,7 +235,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
 			n.fork, time.Minute*2)
 		n.msgResolver = midHandler
-		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
+		cfg.MsgIDHandler = midHandler
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}

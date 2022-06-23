@@ -135,7 +135,7 @@ func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) 
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()
 	for _, s := range signers {
-		signed.Signers = append(signed.Signers, message.OperatorID(s))
+		signed.Signers = message.AppendSigners(signed.Signers, message.OperatorID(s))
 	}
 	if msg := sm.GetMessage(); msg != nil {
 		signed.Message = new(message.ConsensusMessage)
@@ -190,7 +190,7 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 
 	var signers []message.OperatorID
 	for _, signer := range ret.GetSignerIds() {
-		signers = append(signers, message.OperatorID(signer))
+		signers = message.AppendSigners(signers, message.OperatorID(signer))
 	}
 
 	consensusMsg := &message.ConsensusMessage{}

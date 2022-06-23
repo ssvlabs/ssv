@@ -211,7 +211,7 @@ func (q *queue) PopIndices(n int, i *IndexIterator) []*message.SSVMessage {
 		if idx == (Index{}) {
 			continue
 		}
-		results := q.Pop(n-len(msgs), genIndex())
+		results := q.Pop(n-len(msgs), idx)
 		if len(results) > 0 {
 			msgs = append(msgs, results...)
 		}

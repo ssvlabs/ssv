@@ -3,6 +3,8 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/exporter/api/decided"
 	"log"
 	"net/http"
 	"time"
@@ -24,6 +26,7 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -51,6 +54,10 @@ type config struct {
 	ClearNetworkKey            bool   `yaml:"ClearNetworkKey" env:"CLEAR_NETWORK_KEY" env-description:"flag that turns on/off network key revocation"`
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
+	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-description:"Target epoch for fork v2"`
+
+	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
+	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 }
 
 var cfg config
@@ -67,11 +74,11 @@ var StartNodeCmd = &cobra.Command{
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 		log.Printf("starting %s", commons.GetBuildData())
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			log.Fatal(err)
+			log.Fatalf("could not read config %s", err)
 		}
 		if globalArgs.ShareConfigPath != "" {
 			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-				log.Fatal(err)
+				log.Fatalf("could not read share config %s", err)
 			}
 		}
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
@@ -106,6 +113,10 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.ForkV1Epoch > 0 {
 			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
 		}
+		if cfg.ForkV2Epoch > 0 {
+			Logger.Debug("setting v2 epoch", zap.Uint64("epoch", cfg.ForkV2Epoch))
+			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV2Epoch), forksprotocol.V2ForkVersion)
+		}
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))
 		// TODO Not refactored yet Start (refactor in exporter as well):
@@ -119,7 +130,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		nodeStorage := operator.NewNodeStorage(db, Logger)
+		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
 		if err := nodeStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
@@ -193,8 +204,16 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
+		if cfg.WsAPIPort != 0 {
+			ws := api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
+			cfg.SSVOptions.WS = ws
+			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
+		}
+
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -48,9 +49,11 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	}
 	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
-	// for decided message, send on decided channel as well
-	if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-		topics = append(topics, decidedTopic)
+	// for decided message, send on decided channel first
+	if msg.MsgType == message.SSVDecidedMsgType {
+		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
+			topics = append([]string{decidedTopic}, topics...)
+		}
 	}
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
@@ -188,6 +191,26 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		// TODO: handle..
 		return nil
 	}
+	n.logger.Debug("incoming pubsub message", zap.String("topic", topic), zap.Any("msg", msg))
 	n.msgRouter.Route(*ssvMsg)
+	return nil
+}
+
+// subscribeToSubnets subscribes to all the node's subnets
+func (n *p2pNetwork) subscribeToSubnets() error {
+	if len(n.subnets) == 0 {
+		return nil
+	}
+	n.logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
+	for i, val := range n.subnets {
+		if val > 0 {
+			subnet := fmt.Sprintf("%d", i)
+			if err := n.topicsCtrl.Subscribe(subnet); err != nil {
+				n.logger.Warn("could not subscribe to subnet",
+					zap.String("subnet", subnet), zap.Error(err))
+				// TODO: handle error
+			}
+		}
+	}
 	return nil
 }

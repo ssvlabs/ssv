@@ -63,6 +63,11 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			c.logger.Debug("process default is done")
 			continue
 		}
+
+		// clean all old messages. (when stuck on change round stage, msgs not deleted)
+		c.q.Clean(func(index msgqueue.Index) bool {
+			return index.H <= (lastHeight - 2) // remove all msg's that are 2 heights old
+		})
 	}
 	c.logger.Warn("queue consumer is closed")
 	return nil

@@ -7,6 +7,7 @@ import (
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	forkV1 "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -36,6 +37,18 @@ func (v1 *ForkV1) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessag
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
 		signedmsg.AuthorizeMsg(share, v1.VersionName()),
 		signedmsg.ValidateQuorum(share.ThresholdSize()),
+	)
+}
+
+// ValidateChangeRoundMsg impl
+func (v1 *ForkV1) ValidateChangeRoundMsg(share *beacon.Share, identifier message.Identifier) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
+		signedmsg.ValidateLambdas(identifier),
+		signedmsg.AuthorizeMsg(share, v1.VersionName()),
+		signedmsg.ValidateQuorum(share.ThresholdSize()),
+		changeround.Validate(share, v1.VersionName()),
 	)
 }
 

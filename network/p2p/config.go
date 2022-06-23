@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,7 +33,11 @@ type Config struct {
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
 	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"250" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
-	// 	PubSubScoring is a flag to turn on/off pubsub scoring
+
+	// Subnets is a static list of subnets that this node will register.
+	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
+	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join" env-default:"0x00000000000000000000000000000000"`
+	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
@@ -149,4 +154,24 @@ func userAgent(fromCfg string) string {
 		return fromCfg
 	}
 	return uc.GetBuildData()
+}
+
+// parseSubnets parses a given subnet string
+func parseSubnets(subnetsStr string) ([]byte, error) {
+	var res []byte
+	for i := 0; i < len(subnetsStr); i++ {
+		val, err := strconv.ParseUint(string(subnetsStr[i]), 16, 8)
+		if err != nil {
+			return nil, err
+		}
+		mask := fmt.Sprintf("%04b", val)
+		for j := 0; j < len(mask); j++ {
+			val, err := strconv.ParseUint(string(mask[j]), 2, 8)
+			if err != nil {
+				return nil, err
+			}
+			res = append(res, uint8(val))
+		}
+	}
+	return res, nil
 }

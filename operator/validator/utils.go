@@ -48,7 +48,9 @@ func ShareFromValidatorEvent(
 
 	validatorShare.PublicKey = &bls.PublicKey{}
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to deserialize share public key")
+		return nil, nil, &abiparser.BlsPublicKeyDeserializeError{
+			Err: errors.Wrap(err, "failed to deserialize share public key"),
+		}
 	}
 
 	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress.String()
@@ -81,7 +83,9 @@ func ShareFromValidatorEvent(
 			}
 			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {
-				return nil, nil, errors.Wrap(err, "failed to set decrypted share private key")
+				return nil, nil, &abiparser.BlsSecretKeySetHexStrError{
+					Err: errors.Wrap(err, "failed to set decrypted share private key"),
+				}
 			}
 		}
 	}
