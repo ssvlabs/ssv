@@ -1,11 +1,10 @@
 package prepare
 
 import (
+	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types"
-"github.com/bloxapp/ssv/spec/types/testingutils"
+	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongRound tests prepare msg received with the wrong round

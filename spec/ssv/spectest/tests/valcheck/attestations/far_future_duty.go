@@ -1,20 +1,20 @@
 package attestations
 
 import (
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/spec/qbft"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // FarFutureDuty tests a far future duty data
 func FarFutureDuty() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+	ks := testingutils.Testing4SharesSet()
+	dr := testingutils.AttesterRunner(ks)
 
 	consensusData := &types.ConsensusData{
-		Duty: &beacon.Duty{
-			Type:                    beacon.RoleTypeAttester,
+		Duty: &types.Duty{
+			Type:                    types.BNRoleAttester,
 			PubKey:                  testingutils.TestingValidatorPubKey,
 			Slot:                    1000,
 			ValidatorIndex:          1,

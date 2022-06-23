@@ -1,11 +1,10 @@
 package commit
 
 import (
+	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types"
-"github.com/bloxapp/ssv/spec/types/testingutils"
+	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongData2 tests a single commit received with a different commit data than the prepared data

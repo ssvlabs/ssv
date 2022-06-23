@@ -1,9 +1,10 @@
 package types
 
 import (
+	"testing"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type testSigningRoot struct {
@@ -51,10 +52,12 @@ func TestComputeSigningRoot(t *testing.T) {
 }
 
 func TestComputeSignatureDomain(t *testing.T) {
-	require.EqualValues(t, []byte{1, 2, 3, 4, 1, 2, 3, 4}, ComputeSignatureDomain([]byte{1, 2, 3, 4}, []byte{1, 2, 3, 4}))
+	require.EqualValues(t, []byte{1, 2, 3, 4, 1, 2, 3, 4}, ComputeSignatureDomain([]byte{1, 2, 3, 4}, SignatureType{1, 2, 3, 4}))
 }
 
 func TestSignature_Verify(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
 	msgRoot := &testSigningRoot{root: []byte{1, 2, 3, 4}}
 	domain := PrimusTestnet
 	sigType := QBFTSignatureType

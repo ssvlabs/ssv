@@ -1,11 +1,10 @@
 package roundchange
 
 import (
+	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types"
-"github.com/bloxapp/ssv/spec/types/testingutils"
+	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // F1Speedup tests catching up to higher rounds via f+1 speedup, other peers are all at the same round

@@ -1,12 +1,12 @@
 package spectest
 
 import (
-	tests2 "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/aggregator"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/attester"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/proposer"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/synccommittee"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/synccommitteecontribution"
+	tests2 "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests/consensus/aggregator"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests/consensus/attester"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests/consensus/proposer"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests/consensus/synccommittee"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests/consensus/synccommitteecontribution"
 )
 
 var AllTests = []*tests2.SpecTest{

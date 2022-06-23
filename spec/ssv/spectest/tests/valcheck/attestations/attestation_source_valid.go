@@ -2,15 +2,17 @@ package attestations
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
+
 	"github.com/bloxapp/ssv/spec/qbft"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // AttestationSourceValid tests attestation source epoch < target epoch
 func AttestationSourceValid() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+	ks := testingutils.Testing4SharesSet()
+	dr := testingutils.AttesterRunner(ks)
 
 	consensusData := &types.ConsensusData{
 		Duty: testingutils.TestingAttesterDuty,

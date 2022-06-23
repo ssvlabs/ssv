@@ -1,20 +1,21 @@
 package processmsg
 
 import (
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv/beacon"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // InvalidConsensusMsg tests an invalid valcheck SSVMessage data
 func InvalidConsensusMsg() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+	ks := testingutils.Testing4SharesSet() // TODO(nkryuchkov): how many shares in set do we need?
+	dr := testingutils.AttesterRunner(ks)
 
 	msgs := []*types.SSVMessage{
 		{
 			MsgType: types.SSVConsensusMsgType,
-			MsgID:   types.NewMsgID(testingutils.TestingValidatorPubKey[:], beacon.RoleTypeAttester),
+			MsgID:   types.NewMsgID(testingutils.TestingValidatorPubKey[:], types.BNRoleAttester),
 			Data:    []byte{1, 2, 3, 4},
 		},
 	}

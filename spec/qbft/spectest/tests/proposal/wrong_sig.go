@@ -1,11 +1,10 @@
 package proposal
 
 import (
+	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types"
-"github.com/bloxapp/ssv/spec/types/testingutils"
+	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongSignature tests a single proposal received with a wrong signature

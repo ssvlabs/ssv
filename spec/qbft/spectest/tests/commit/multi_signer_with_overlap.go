@@ -1,12 +1,12 @@
 package commit
 
 import (
+	"github.com/herumi/bls-eth-go-binary/bls"
+
+	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types"
-"github.com/bloxapp/ssv/spec/types/testingutils"
-"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // MultiSignerWithOverlap tests a multi signer commit msg which does overlap previous valid commit signers

@@ -1,13 +1,15 @@
 package spectest
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft/spectest/tests"/commit"
-"github.com/bloxapp/ssv/spec/qbft/spectest/tests"/messages"
-"github.com/bloxapp/ssv/spec/qbft/spectest/tests"/roundchange"
-"testing"
+
+	"github.com/bloxapp/ssv/spec/qbft/spectest/tests/commit"
+	"github.com/bloxapp/ssv/spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv/spec/qbft/spectest/tests/roundchange"
 )
+
 type SpecTest interface {
 	TestName() string
 	Run(t *testing.T)

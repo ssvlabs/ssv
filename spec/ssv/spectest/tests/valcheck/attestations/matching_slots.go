@@ -1,20 +1,20 @@
 package attestations
 
 import (
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv/beacon"
 	"github.com/bloxapp/ssv/spec/qbft"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // DutySlotNotMatchingAttestationSlot tests that a duty slot = attestation slot
 func DutySlotNotMatchingAttestationSlot() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+	ks := testingutils.Testing4SharesSet() // TODO(nkryuchkov): what key set do we need?
+	dr := testingutils.AttesterRunner(ks)
 
 	consensusData := &types.ConsensusData{
-		Duty: &beacon.Duty{
-			Type:                    beacon.RoleTypeAttester,
+		Duty: &types.Duty{
+			Type:                    types.BNRoleAttester,
 			PubKey:                  testingutils.TestingValidatorPubKey,
 			Slot:                    13,
 			ValidatorIndex:          1,

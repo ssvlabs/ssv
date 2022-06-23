@@ -1,14 +1,15 @@
 package processmsg
 
 import (
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongBeaconType tests an SSVMessage with the wrong beacon type
 func WrongBeaconType() *tests.SpecTest {
-	dr := testingutils.AttesterRunner()
+	ks := testingutils.Testing4SharesSet()
+	dr := testingutils.AttesterRunner(ks)
 	msgs := []*types.SSVMessage{
 		{
 			MsgType: 100,

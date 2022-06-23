@@ -2,17 +2,18 @@ package spectest
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/spec/qbft"
 	tests2 "github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-"
-"github.com/bloxapp/ssv/spec/qbft"
-"github.com/bloxapp/ssv/spec/types/testingutils"
-"github.com/stretchr/testify/require"
-"io/ioutil"
-"os"
-"path/filepath"
-"reflect"
-"strings"
-"testing"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 func TestAll(t *testing.T) {

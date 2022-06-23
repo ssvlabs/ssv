@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv-spec/ssv/spectest"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/bloxapp/ssv/spec/ssv/spectest"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 )
 
 func main() {

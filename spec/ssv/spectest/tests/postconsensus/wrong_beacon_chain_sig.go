@@ -1,15 +1,16 @@
 package postconsensus
 
 import (
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/qbft"
+	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 // WrongBeaconChainSig tests an invalid PostConsensusMessage PartialSignature
 func WrongBeaconChainSig() *tests.SpecTest {
-	dr := testingutils.DecidedRunner()
+	ks := testingutils.Testing4SharesSet()
+	dr := testingutils.DecidedRunner(ks)
 
 	msgs := []*types.SSVMessage{
 		testingutils.SSVMsgAttester(nil, testingutils.PostConsensusAttestationMsgWithWrongSig(ks.Shares[1], 1, qbft.FirstHeight)),

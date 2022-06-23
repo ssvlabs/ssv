@@ -1,10 +1,12 @@
 package qbft_test
 
 import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/types"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestSignedMessage_MatchedSigners(t *testing.T) {
@@ -176,7 +178,7 @@ func TestPrepareData_Validate(t *testing.T) {
 		m := &qbft.PrepareData{
 			Data: []byte{},
 		}
-		require.EqualError(t, m.Validate(), "ProposalData data is invalid")
+		require.EqualError(t, m.Validate(), "PrepareData data is invalid")
 	})
 	t.Run("invalid data", func(t *testing.T) {
 		m := &qbft.PrepareData{}

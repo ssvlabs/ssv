@@ -1,12 +1,14 @@
 package qbft_test
 
 import (
+	"testing"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/spec/qbft"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestUponCommit(t *testing.T) {
@@ -26,7 +28,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		_, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		_, _, _, err := i.UponCommit(msg, i.State.CommitContainer)
+		//_, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 	})
 
@@ -47,7 +51,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err := i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.False(t, decided)
 
@@ -58,7 +64,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err = i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.False(t, decided)
 
@@ -69,7 +77,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err = i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.True(t, decided)
 	})
@@ -91,7 +101,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err := i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.False(t, decided)
 
@@ -102,7 +114,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err = i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.True(t, decided)
 	})
@@ -124,7 +138,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err := i.UponCommit(msg, i.State.CommitContainer)
+		// decided, _, _, err := qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.False(t, decided)
 
@@ -135,7 +151,9 @@ func TestUponCommit(t *testing.T) {
 			Identifier: []byte{1, 2, 3, 4},
 			Data:       testingutils.CommitDataBytes([]byte{1, 2, 3, 4}),
 		})
-		decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
+		// TODO(nkryuchkov): i?
+		decided, _, _, err = i.UponCommit(msg, i.State.CommitContainer)
+		//decided, _, _, err = qbft.UponCommit(i.State, testingutils.TestingConfig(testingutils.Testing4SharesSet()), msg, i.State.CommitContainer)
 		require.NoError(t, err)
 		require.True(t, decided)
 	})

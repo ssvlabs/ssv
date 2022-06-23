@@ -1,10 +1,11 @@
 package spectest
 
 import (
-	"github.com/bloxapp/ssv/spec/qbft/spectest/tests"
-/roundchange"
-"testing"
+	"testing"
+
+	"github.com/bloxapp/ssv/spec/qbft/spectest/tests/roundchange"
 )
+
 type SpecTest interface {
 	TestName() string
 	Run(t *testing.T)
