@@ -1,16 +1,18 @@
 package controller
 
 import (
+	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 // onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
 // in read mode, we don't broadcast the message in the network
 func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
+	qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), msg)
 	// encode the message first to avoid sharing msg with 2 goroutines
 	data, err := msg.Encode()
 	if err != nil {
@@ -38,6 +40,11 @@ func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
 }
 
 // processDecidedMessage is responsible for processing an incoming decided message.
+// we will process decided messages according to the following rules:
+// 1. invalid > exit
+// 2. old decided > exit
+// 3. new message > force decide or stop instance and sync
+// 4. last decided, try to update signers
 func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
 		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
@@ -53,37 +60,38 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		logger.Warn("could not read local decided message", zap.Error(err))
 		return err
 	}
-	// if local msg is not higher, force decided or stop instance + sync for newer messages
-	if localMsg == nil || !localMsg.Message.Higher(msg.Message) {
+	// old message
+	if localMsg != nil && localMsg.Message.Higher(msg.Message) {
+		logger.Debug("known decided msg")
+		return nil
+	}
+	// new message, force decide or stop instance and sync
+	if localMsg == nil || msg.Message.Higher(localMsg.Message) {
+		if c.forceDecided(msg) {
+			logger.Debug("current instance decided")
+			return nil
+		}
 		updated, err := c.decidedStrategy.UpdateDecided(msg)
 		if err != nil {
 			return err
 		}
-		if updated != nil && c.readMode && c.newDecidedHandler != nil {
-			go c.newDecidedHandler(updated)
+		if updated != nil {
+			qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), updated)
+			if c.newDecidedHandler != nil {
+				go c.newDecidedHandler(msg)
+			}
 		}
 		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
-			// check if decided for current instance
-			currentState := currentInstance.State()
-			if currentState != nil && currentState.GetHeight() == msg.Message.Height {
-				logger.Debug("current instance decided")
-				currentInstance.ForceDecide(msg)
-				return nil
-			}
-			if updated != nil {
-				logger.Debug("stopping current instance")
-				currentInstance.Stop()
-			}
+			logger.Debug("stopping current instance")
+			currentInstance.Stop()
 		}
-		qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), msg)
-		if localMsg == nil || msg.Message.Higher(localMsg.Message) {
-			logger.Debug("syncing")
-			return c.syncDecided(localMsg, msg)
-		}
-	} else {
-		logger.Debug("known decided msg")
+		logger.Debug("syncing")
+		return c.syncDecided(localMsg, msg)
 	}
-
+	// last decided, try to update it (merge new signers)
+	if _, err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+		logger.Warn("could not update decided")
+	}
 	return err
 }
 
@@ -94,4 +102,17 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 		return nil, err
 	}
 	return highestKnown, nil
+}
+
+// highestKnownDecided returns the highest known decided instance
+func (c *Controller) forceDecided(msg *message.SignedMessage) bool {
+	if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+		// check if decided for current instance
+		currentState := currentInstance.State()
+		if currentState != nil && currentState.GetHeight() == msg.Message.Height {
+			currentInstance.ForceDecide(msg)
+			return true
+		}
+	}
+	return false
 }
