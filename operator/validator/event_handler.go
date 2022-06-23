@@ -49,8 +49,8 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 					logger.Warn("could not handle ValidatorAdded event")
 				} else {
 					logger.Error("could not handle ValidatorAdded event")
+					return err
 				}
-				return err
 			}
 		case abiparser.ValidatorRemoved:
 			ev := e.Data.(abiparser.ValidatorRemovedEvent)
