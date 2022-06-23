@@ -213,7 +213,7 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(err, "could not start instance after fork")
 	}
 
-	<-time.After(time.Second * 2)
+	<-time.After(time.Second * 5)
 
 	return nil
 }
