@@ -181,7 +181,8 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 			}
 		}
 	}
-	if err != nil {
+	// if we seen some peers, ignore the error
+	if err != nil && len(seen) == 0 {
 		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
