@@ -51,7 +51,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 	} else if local.Message.Higher(highest.Message) {
 		return nil, nil
 	} else if highest.Message.Height == local.Message.Height {
-		msg, ok := UpdateSigners(local, highest)
+		msg, ok := CheckSigners(local, highest)
 		if !ok {
 			return nil, nil
 		}
@@ -66,19 +66,13 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 	return highest, nil
 }
 
-// UpdateSigners will try to update signers list of the decided message, returns an indication if the msg was updated.
-func UpdateSigners(local, msg *message.SignedMessage) (*message.SignedMessage, bool) {
+// CheckSigners will return the decided message with more signers if both are with the same height
+func CheckSigners(local, msg *message.SignedMessage) (*message.SignedMessage, bool) {
 	if local == nil {
 		return msg, true
 	}
-	if msg.Message.Height == local.Message.Height {
-		origSize := len(local.Signers)
-		updatedSigners := message.AppendSigners(local.Signers, msg.Signers...)
-		if origSize != len(updatedSigners) {
-			msg = local
-			msg.Signers = updatedSigners
-			return msg, true
-		}
+	if msg.Message.Height == local.Message.Height && len(local.Signers) < len(msg.Signers) {
+		return msg, true
 	}
-	return msg, false
+	return local, false
 }
