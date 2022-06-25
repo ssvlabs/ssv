@@ -191,7 +191,23 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		// TODO: handle..
 		return nil
 	}
-	n.logger.Debug("incoming pubsub message", zap.String("topic", topic), zap.Any("msg", msg))
+	if ssvMsg == nil {
+		n.logger.Debug("nil message", zap.String("topic", topic))
+		return nil
+	}
+	logger := n.logger.With(zap.String("identifier", ssvMsg.ID.String()))
+	if ssvMsg.MsgType == message.SSVDecidedMsgType {
+		from, err := peer.IDFromBytes(msg.Message.From)
+		if err == nil {
+			logger = logger.With(zap.String("from", from.String()))
+		}
+		var sm message.SignedMessage
+		err = sm.Decode(ssvMsg.Data)
+		if err == nil {
+			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)))
+		}
+	}
+	logger.Debug("incoming pubsub message", zap.String("topic", topic), zap.Any("ssvMsg", ssvMsg))
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
