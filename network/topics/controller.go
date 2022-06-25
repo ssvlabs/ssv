@@ -294,7 +294,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 			opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 		}
 		opts = append(opts, pubsub.WithValidatorConcurrency(256))
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name))
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name), opts...)
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
 			return errors.Wrap(err, "could not register topic validator")
