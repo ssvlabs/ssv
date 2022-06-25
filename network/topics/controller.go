@@ -293,7 +293,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		if ctrl.fork.GetTopicBaseName(name) == ctrl.fork.DecidedTopic() {
 			opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 		}
-		opts = append(opts, pubsub.WithValidatorConcurrency(256))
+		opts = append(opts, pubsub.WithValidatorConcurrency(32))
 		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name), opts...)
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
