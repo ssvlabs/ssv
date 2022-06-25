@@ -289,8 +289,12 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
 		_ = ctrl.ps.UnregisterTopicValidator(name)
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name),
-			pubsub.WithValidatorConcurrency(256)) // TODO: find the best value for concurrency
+		var opts []pubsub.ValidatorOpt
+		if ctrl.fork.GetTopicBaseName(name) == ctrl.fork.DecidedTopic() {
+			opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
+		}
+		opts = append(opts, pubsub.WithValidatorConcurrency(256))
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name))
 		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
 			return errors.Wrap(err, "could not register topic validator")
