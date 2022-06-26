@@ -15,10 +15,10 @@ var (
 
 	// gsMaxIHaveLength is max number fo ihave messages to send
 	// lower the maximum (default is 5000) to avoid ihave floods
-	gsMaxIHaveLength = 1500
+	gsMaxIHaveLength = 500
 
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
-	gsMcacheLen = 20
+	gsMcacheLen = 15
 	// gsMcacheGossip number of windows to gossip about
 	gsMcacheGossip = 3
 
