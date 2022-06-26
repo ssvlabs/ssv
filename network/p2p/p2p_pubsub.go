@@ -204,9 +204,10 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	}
 	logger := n.logger.With(zap.String("identifier", ssvMsg.ID.String()))
 	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
-		from, err := peer.IDFromBytes(msg.Message.From)
+		logger = logger.With(zap.String("receivedFrom", msg.ReceivedFrom.String()))
+		from, err := peer.IDFromBytes(msg.Message.GetFrom())
 		if err == nil {
-			logger = logger.With(zap.String("from", from.String()))
+			logger = logger.With(zap.String("msgFrom", from.String()))
 		}
 		var sm message.SignedMessage
 		err = sm.Decode(ssvMsg.Data)
