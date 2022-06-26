@@ -7,18 +7,18 @@ import (
 
 var (
 	// gsD topic stable mesh target count
-	gsD = 8
+	gsD = 6
 	// gsDlo topic stable mesh low watermark
-	gsDlo = 5
+	gsDlo = 4
 	// gsDhi topic stable mesh high watermark
-	gsDhi = 12
+	gsDhi = 10
 
 	// gsMaxIHaveLength is max number fo ihave messages to send
 	// lower the maximum (default is 5000) to avoid ihave floods
-	gsMaxIHaveLength = 500
+	gsMaxIHaveLength = 1000
 
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
-	gsMcacheLen = 15
+	gsMcacheLen = 60
 	// gsMcacheGossip number of windows to gossip about
 	gsMcacheGossip = 3
 

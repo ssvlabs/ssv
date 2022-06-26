@@ -22,6 +22,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	minPeersBuffer = 10
+)
+
 // Config holds the configuration options for p2p network
 type Config struct {
 	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
@@ -33,11 +37,11 @@ type Config struct {
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"250" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"100" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
 
-	// Subnets is a static list of subnets that this node will register.
+	// Subnets is a static bit list of subnets that this node will register upon start.
 	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
-	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join" env-default:"0x00000000000000000000000000000000"`
+	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start" env-default:"0x00000000000000000000000000000000"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
@@ -69,13 +73,10 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	}
 	sk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(c.NetworkPrivateKey))
 
-	connManager := connmgr.NewConnManager(10, c.MaxPeers, time.Minute*5, connmgr.DecayerConfig((&connmgr.DecayerCfg{}).WithDefaults()))
-
 	opts := []libp2p.Option{
 		libp2p.Identity(sk),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
 		libp2p.UserAgent(c.UserAgent),
-		libp2p.ConnectionManager(connManager),
 	}
 
 	opts, err := c.configureAddrs(opts)
@@ -84,6 +85,10 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
+
+	maxPeers := c.MaxPeers + minPeersBuffer
+	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*5, connmgr.DecayerConfig((&connmgr.DecayerCfg{}).WithDefaults()))
+	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)
 
