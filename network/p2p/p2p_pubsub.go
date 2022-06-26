@@ -58,7 +58,9 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	}
 	sm := message.SignedMessage{}
 	if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
-		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)), zap.String("consensusMsgType", sm.Message.MsgType.String()))
+		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+			zap.String("consensusMsgType", sm.Message.MsgType.String()),
+			zap.Any("signers", sm.GetSigners()))
 	}
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
@@ -201,18 +203,21 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		return nil
 	}
 	logger := n.logger.With(zap.String("identifier", ssvMsg.ID.String()))
-	if ssvMsg.MsgType == message.SSVDecidedMsgType {
+	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
 		from, err := peer.IDFromBytes(msg.Message.From)
 		if err == nil {
 			logger = logger.With(zap.String("from", from.String()))
 		}
 		var sm message.SignedMessage
 		err = sm.Decode(ssvMsg.Data)
-		if err == nil {
-			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)))
+		if err == nil && sm.Message != nil {
+			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+				zap.String("consensusMsgType", sm.Message.MsgType.String()),
+				zap.Any("signers", sm.GetSigners()))
 		}
 	}
-	logger.Debug("incoming pubsub message", zap.String("topic", topic), zap.Any("ssvMsg", ssvMsg))
+	logger.Debug("incoming pubsub message", zap.String("topic", topic),
+		zap.String("msgType", ssvMsg.MsgType.String()))
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
