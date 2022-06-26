@@ -24,7 +24,7 @@ var (
 	// validationQueueSize is the size that we assign to the validation queue
 	validationQueueSize = 128
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 128
+	outboundQueueSize = 32
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 )

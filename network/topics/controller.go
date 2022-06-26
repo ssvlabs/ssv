@@ -263,13 +263,12 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			if ctx.Err() != nil {
 				logger.Debug("stop listening to topic: context is done")
 				return nil
-			} else if err.Error() == "subscription cancelled" {
-				logger.Debug("stop listening to topic: subscription cancelled")
+			} else if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+				logger.Debug("stop listening to topic", zap.Error(err))
 				return nil
 			}
 			logger.Warn("could not read message from subscription", zap.Error(err))
-			// TODO: handle instead of return?
-			return err
+			continue
 		}
 		if msg == nil || msg.Data == nil {
 			logger.Warn("got empty message from subscription")
@@ -295,7 +294,6 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		}
 		opts = append(opts, pubsub.WithValidatorConcurrency(32))
 		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name), opts...)
-		// TODO: check pubsub.WithValidatorInline() and pubsub.WithValidatorTimeout()
 		if err != nil {
 			return errors.Wrap(err, "could not register topic validator")
 		}
