@@ -184,27 +184,37 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
+	logger := n.logger.With(zap.String("topic", topic))
 	if n.msgRouter == nil {
 		n.logger.Warn("msg router is not configured")
 		return nil
 	}
 	if msg == nil {
-		n.logger.Warn("got nil message", zap.String("topic", topic))
+		logger.Warn("got nil message")
 		return nil
 	}
 	ssvMsg, err := n.fork.DecodeNetworkMsg(msg.GetData())
 	if err != nil {
-		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
+		logger.Warn("could not decode message", zap.Error(err))
 		// TODO: handle..
 		return nil
 	}
 	if ssvMsg == nil {
-		n.logger.Debug("nil message", zap.String("topic", topic))
+		logger.Debug("nil message")
 		return nil
 	}
-	logger := n.logger.With(zap.String("identifier", ssvMsg.ID.String()))
+	logger = withIncomingMsgFields(logger, msg, ssvMsg)
+	logger.Debug("incoming pubsub message", zap.String("topic", topic),
+		zap.String("msgType", ssvMsg.MsgType.String()))
+	n.msgRouter.Route(*ssvMsg)
+	return nil
+}
+
+// withIncomingMsgFields adds fields to the given logger
+func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *message.SSVMessage) *zap.Logger {
+	logger = logger.With(zap.String("identifier", ssvMsg.ID.String()))
 	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
-		logger = logger.With(zap.String("receivedFrom", msg.ReceivedFrom.String()))
+		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
 		from, err := peer.IDFromBytes(msg.Message.GetFrom())
 		if err == nil {
 			logger = logger.With(zap.String("msgFrom", from.String()))
@@ -217,10 +227,7 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 				zap.Any("signers", sm.GetSigners()))
 		}
 	}
-	logger.Debug("incoming pubsub message", zap.String("topic", topic),
-		zap.String("msgType", ssvMsg.MsgType.String()))
-	n.msgRouter.Route(*ssvMsg)
-	return nil
+	return logger
 }
 
 // subscribeToSubnets subscribes to all the node's subnets
