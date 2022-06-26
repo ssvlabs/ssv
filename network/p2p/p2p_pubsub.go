@@ -50,18 +50,23 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
 	// for decided message, send on decided channel first
+	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
 	if msg.MsgType == message.SSVDecidedMsgType {
 		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
 			topics = append([]string{decidedTopic}, topics...)
 		}
 	}
+	sm := message.SignedMessage{}
+	if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
+		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)), zap.String("consensusMsgType", sm.Message.MsgType.String()))
+	}
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
+		logger.Debug("trying to broadcast message", zap.String("topic", topic), zap.Any("msg", msg))
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			//return errors.Wrap(err, "could not broadcast msg")
-			return err
+			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
 	return nil

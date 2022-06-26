@@ -131,7 +131,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
-	ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
+	//ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
 
 	err = tc.Publish(ctx, data)
 	if err == nil {
