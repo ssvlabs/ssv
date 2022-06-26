@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"strconv"
 	"strings"
 	"time"
@@ -68,10 +69,13 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	}
 	sk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(c.NetworkPrivateKey))
 
+	connManager := connmgr.NewConnManager(10, c.MaxPeers, time.Minute*5, connmgr.DecayerConfig((&connmgr.DecayerCfg{}).WithDefaults()))
+
 	opts := []libp2p.Option{
 		libp2p.Identity(sk),
 		libp2p.Transport(libp2ptcp.NewTCPTransport),
 		libp2p.UserAgent(c.UserAgent),
+		libp2p.ConnectionManager(connManager),
 	}
 
 	opts, err := c.configureAddrs(opts)
