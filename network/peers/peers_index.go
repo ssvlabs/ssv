@@ -263,13 +263,11 @@ func (pi *peersIndex) add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error)
 		pi.setState(id, StateUnknown)
 		return false, errors.Wrap(err, "could not marshal node info record")
 	}
-	tx := newTransactional(pid, pi.network.Peerstore())
-	tx.Put(formatInfoKey(nodeInfoKey), raw)
 	// commit changes or rollback
-	if err := tx.Commit(); err != nil {
+	if err := pi.network.Peerstore().Put(pid, formatInfoKey(nodeInfoKey), raw); err != nil {
 		pi.setState(id, StateUnknown)
 		pi.logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", id))
-		return false, tx.Rollback()
+		return false, err
 	}
 	pi.setState(id, StateReady)
 	return true, nil
@@ -277,9 +275,8 @@ func (pi *peersIndex) add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error)
 
 // add saves the given identity
 func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
-	tx := newTransactional(pid, pi.network.Peerstore())
 	// build identity object
-	raw, err := tx.Get(formatInfoKey(nodeInfoKey))
+	raw, err := pi.network.Peerstore().Get(pid, formatInfoKey(nodeInfoKey))
 	if err != nil {
 		return nil, err
 	}
