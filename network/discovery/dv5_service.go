@@ -126,7 +126,10 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // Bootstrap start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
-	dvs.discover(dvs.ctx, handler, defaultDiscoveryInterval,
+	dvs.discover(dvs.ctx, func(e PeerEvent) {
+		metricFoundNodes.Inc()
+		handler(e)
+	}, defaultDiscoveryInterval,
 		dvs.limitNodeFilter, dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
