@@ -81,7 +81,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) error {
 		return errors.New("test")
 	})
-	require.EqualError(t, err, "failed to handle all events from sync")
+	require.EqualError(t, err, "could not handle some of the events during history sync")
 }
 
 func TestDetermineSyncOffset(t *testing.T) {

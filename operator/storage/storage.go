@@ -57,6 +57,10 @@ func (s *storage) SaveOperatorData(operatorData *registrystorage.OperatorData) e
 	return s.operatorStore.SaveOperatorData(operatorData)
 }
 
+func (s *storage) DeleteOperatorData(index uint64) error {
+	return s.operatorStore.DeleteOperatorData(index)
+}
+
 func (s *storage) ListOperators(from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	return s.operatorStore.ListOperators(from, to)
 }

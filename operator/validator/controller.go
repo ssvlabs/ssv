@@ -301,7 +301,18 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 		select {
 		case e := <-cn:
 			if err := handler(*e); err != nil {
-				c.logger.Warn("could not process ongoing eth1 event", zap.Error(err))
+				var malformedEventErr *abiparser.MalformedEventError
+				logger := c.logger.With(
+					zap.String("event", e.Name),
+					zap.Uint64("block", e.Log.BlockNumber),
+					zap.String("txHash", e.Log.TxHash.Hex()),
+					zap.Error(err),
+				)
+				if errors.As(err, &malformedEventErr) {
+					logger.Warn("could not handle ongoing sync event, the event is malformed")
+				} else {
+					logger.Error("could not handle ongoing sync event")
+				}
 			}
 		case err := <-sub.Err():
 			c.logger.Warn("event feed subscription error", zap.Error(err))

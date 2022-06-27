@@ -3,15 +3,17 @@ package eth1
 import (
 	"encoding/hex"
 	"encoding/json"
+	"strings"
+	"testing"
+
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/utils/logex"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
-	"testing"
 )
 
 func TestParseOperatorAddedEvent(t *testing.T) {
@@ -63,10 +65,10 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 		legacyLogOperatorAdded, legacyContractAbi := unmarshalLog(t, OldRawOperatorAdded, Legacy)
 		abiParser := NewParser(logger, Legacy)
 		parsed, err := abiParser.ParseOperatorAddedEvent(legacyLogOperatorAdded.Data, nil, legacyContractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, legacyContractAbi)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, parsed)
 		require.Equal(t, "asdas", parsed.Name)
 		require.Equal(t, "0x67Ce5c69260bd819B4e0AD13f4b873074D479811", parsed.OwnerAddress.Hex())
@@ -76,10 +78,10 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V1)
 		abiParser := NewParser(logger, V1)
 		parsed, err := abiParser.ParseOperatorAddedEvent(LogOperatorAdded.Data, LogOperatorAdded.Topics, contractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, parsed)
 		require.Equal(t, "TestOperator888", parsed.Name)
 		require.Equal(t, "LS0895649UdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBOHRXRG0xbTNtYW5Ra0xweVpLMzcKMGNHRGoydlBTWStRWVFBd3BWOXZpWThKVlgzT2J0VjNLL24xNy9peGZ2VEx5aGZKckgzYStpS1NIcDl5WEU4cQp6N2RhOTlaVzU4RzAyeDF0ZnpuV1REMmFpbklpMDAwdjQ5RjFTdzlYOUttQUg5VzNGdjBaREpadzZKVFd3R0ZiCmZiTmM2cGVvTG5ucnllWlVXb09ZQms0TVg2Um9QV2ZXNUJEaURaeHFqVjdvbFV3ZnFBMW5OeU96RXFCMEtkSW8KbExSZFA4ODZBNFJrZGpjUDc5aWdrM0RjVVdCMDhpZlM4SFlvS012ZUZrek0yR2dmOG5LRnFmSnFYNzlybFR4cApSTnlheUZOYXhZWEY4enBBMHlYRGFHQ0I1TitzZ1N2Yjg1WDAydWVCa1NadFFUMUMyTGMxWlZkbERFZVpGNFNlCkh3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
@@ -91,9 +93,9 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAddedV2, V2)
 		abiParser := NewParser(logger, V2)
 		parsed, err := abiParser.ParseOperatorAddedEvent(LogOperatorAdded.Data, LogOperatorAdded.Topics, contractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, contractAbi)
 		require.NotNil(t, parsed)
 		require.Equal(t, "asddas", parsed.Name)
@@ -150,10 +152,10 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 		vLogValidatorAdded, contractAbi := unmarshalLog(t, legacyRawValidatorAdded, Legacy)
 		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), Legacy)
 		parsed, err := abiParser.ParseValidatorAddedEvent(vLogValidatorAdded.Data, contractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, parsed)
 		require.Equal(t, "91db3a13ab428a6c9c20e7104488cb6961abeab60e56cf4ba199eed3b5f6e7ced670ecb066c9704dc2fa93133792381c", hex.EncodeToString(parsed.PublicKey))
 	})
@@ -162,10 +164,10 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V1)
 		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), V1)
 		parsed, err := abiParser.ParseValidatorAddedEvent(vLogValidatorAdded.Data, contractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, parsed)
 		require.Equal(t, "8687eb8b88ff9c39e659c47b7bb76665fabfc4fc02c4246caca49700242fa9260a145969ede608b10c711ef2d57d0da1", hex.EncodeToString(parsed.PublicKey))
 		require.Equal(t, "0x4e409dB090a71D14d32AdBFbC0A22B1B06dde7dE", parsed.OwnerAddress.Hex())
@@ -183,10 +185,10 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAddedV2, V2)
 		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), V2)
 		parsed, err := abiParser.ParseValidatorAddedEvent(vLogValidatorAdded.Data, contractAbi)
-		var unpackErr *abiparser.UnpackError
+		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
-		require.False(t, errors.As(err, &unpackErr))
+		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, parsed)
 		require.Equal(t, "a49871a0b87d674435ac1bb62bb78a27a29bc0901ad7a3b77e564c02644f55da0e72c18e888ca78f8290a8b9c0825dd2", hex.EncodeToString(parsed.PublicKey))
 		require.Equal(t, "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e", parsed.OwnerAddress.Hex())
