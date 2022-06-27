@@ -37,7 +37,7 @@ func (v1 *ForkV1) DecidedTopic() string {
 func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := validatorSubnet(pkHex)
-	return []string{pkHex, topicOf(subnet)}
+	return []string{topicOf(subnet)}
 }
 
 // topicOf returns the topic for the given subnet
