@@ -46,7 +46,7 @@ func TestTopicManager(t *testing.T) {
 		defer cancel()
 		f := forksv1.New()
 		peers := newPeers(ctx, t, nPeers, true, true, f)
-		baseTest(ctx, t, peers, pks, f, 2, 2)
+		baseTest(ctx, t, peers, pks, f, 1, 2)
 	})
 }
 
