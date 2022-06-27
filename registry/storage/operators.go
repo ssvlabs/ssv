@@ -34,6 +34,7 @@ type OperatorsCollection interface {
 	GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error)
 	GetOperatorData(index uint64) (*OperatorData, bool, error)
 	SaveOperatorData(operatorData *OperatorData) error
+	DeleteOperatorData(index uint64) error
 	ListOperators(from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 }
@@ -155,6 +156,13 @@ func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
 		return errors.Wrap(err, "could not marshal operator information")
 	}
 	return s.db.Set(s.prefix, buildOperatorKey(operatorData.Index), raw)
+}
+
+func (s *operatorsStorage) DeleteOperatorData(index uint64) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(s.prefix, buildOperatorKey(index))
 }
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"

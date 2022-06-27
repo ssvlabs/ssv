@@ -1,9 +1,10 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"math/big"
 	"sync"
+
+	"github.com/bloxapp/ssv/eth1/abiparser"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -69,9 +70,20 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 			if handler != nil {
 				err := handler(*event)
-				var decryptErr *abiparser.DecryptError
-				if err != nil && !errors.As(err, &decryptErr) {
-					errs = append(errs, err)
+				if err != nil {
+					var malformedEventErr *abiparser.MalformedEventError
+					loggerWith := logger.With(
+						zap.String("event", event.Name),
+						zap.Uint64("block", event.Log.BlockNumber),
+						zap.String("txHash", event.Log.TxHash.Hex()),
+						zap.Error(err),
+					)
+					if errors.As(err, &malformedEventErr) {
+						loggerWith.Warn("could not handle history sync event, the event is malformed")
+					} else {
+						loggerWith.Error("could not handle history sync event")
+						errs = append(errs, err)
+					}
 				}
 			}
 		}
