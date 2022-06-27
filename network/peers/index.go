@@ -28,6 +28,19 @@ type NodeScore struct {
 // NodeState is the state of the node w.r.t to the Index
 type NodeState int32
 
+func (ns NodeState) String() string {
+	switch ns {
+	case StatePruned:
+		return "pruned"
+	case StateIndexing:
+		return "indexing"
+	case StateReady:
+		return "ready"
+	default:
+		return "unknown"
+	}
+}
+
 var (
 	// StatePruned is the state for pruned nodes
 	StatePruned NodeState = -1

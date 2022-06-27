@@ -130,6 +130,8 @@ spec:
           value: "15001"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: NETWORK_ID
+          value: "ssv-testnet-stage"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-1

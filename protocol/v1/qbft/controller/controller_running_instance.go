@@ -100,6 +100,9 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 	idn := c.Identifier.String()
 	c.q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
+			if k.Cmt == message.CommitMsgType && k.H == height {
+				return false
+			}
 			return true
 		}
 		return false

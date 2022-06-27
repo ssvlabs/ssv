@@ -12,7 +12,7 @@ import (
 const (
 	defaultAppSpecificWeight  = 1.0
 	defaultIPColocationWeight = -32.0
-	defaultOneEpochDuration   = 12 * 64 * time.Second
+	defaultOneEpochDuration   = 6 * 64 * time.Second
 
 	decayToZero = 0.01
 )

@@ -81,12 +81,12 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		ssvMsg, err := handler.fork.DecodeNetworkMsg(pmsg.GetData())
-		if err != nil {
-			logger.Warn("invalid encoding", zap.Error(err))
-			return MsgIDBadEncodedMessage
-		}
-		mid := handler.fork.MsgID()(ssvMsg.Data)
+		//ssvMsg, err := handler.fork.DecodeNetworkMsg(pmsg.GetData())
+		//if err != nil {
+		//	logger.Warn("invalid encoding", zap.Error(err))
+		//	return MsgIDBadEncodedMessage
+		//}
+		mid := handler.fork.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
 			logger.Warn("could not create msg_id")
 			return MsgIDError

@@ -116,7 +116,7 @@ func (f *fullNode) updateDecidedHistory(msg *message.SignedMessage) (*message.Si
 	}
 	localMsg := localMsgs[0]
 	if localMsg.Message.Height == msg.Message.Height {
-		updated, ok := strategy.UpdateSigners(localMsg, msg)
+		updated, ok := strategy.CheckSigners(localMsg, msg)
 		if !ok {
 			return nil, nil
 		}

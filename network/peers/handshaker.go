@@ -148,8 +148,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 
 	// first, check that we didn't reach peers limit
 	if h.connIdx.Limit(conn.Stat().Direction) {
-		h.logger.Debug("reached peers limit")
-		return nil
+		return errors.New("reached peers limit")
 	}
 	// check if the peer is known
 	ni, err := h.infoStore.NodeInfo(pid)
@@ -268,7 +267,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 	for _, filter := range h.filters {
 		ok, err := filter(nodeInfo)
 		if err != nil {
-			h.logger.Warn("could not filter identity", zap.Error(err), zap.Any("identity", nodeInfo))
+			//h.logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
 			return false
 		}
 		if !ok {

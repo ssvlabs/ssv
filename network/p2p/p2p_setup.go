@@ -16,11 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"math/rand"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	logging "github.com/ipfs/go-log"
 )
 
 const (
@@ -131,7 +134,6 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 
 func (n *p2pNetwork) setupPeerServices() error {
 	libPrivKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(n.cfg.NetworkPrivateKey))
-	//self := peers.NewIdentity(n.host.ID().String(), n.cfg.OperatorID, string(n.cfg.ForkVersion), make(map[string]string))
 
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
@@ -214,6 +216,11 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
+	if n.cfg.PubSubTrace {
+		if err := logging.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
+			return errors.Wrap(err, "could not set pubsub logger level")
+		}
+	}
 	cfg := &topics.PububConfig{
 		Logger:   n.logger,
 		Host:     n.host,
