@@ -187,6 +187,9 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 		n = len(msgContainers)
 	}
 	q.items[idx] = msgContainers[n:]
+	if len(q.items[idx]) == 0 {
+		delete(q.items, idx)
+	}
 	msgContainers = msgContainers[:n]
 	for _, mc := range msgContainers {
 		if mc.msg != nil {
