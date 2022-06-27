@@ -97,7 +97,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	psOpts := []pubsub.Option{
 		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
 		pubsub.WithValidateQueueSize(validationQueueSize),
-		pubsub.WithFloodPublish(true),
+		//pubsub.WithFloodPublish(true),
 		pubsub.WithValidateThrottle(2048),
 		//pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),

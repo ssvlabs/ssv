@@ -16,11 +16,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"math/rand"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	logging "github.com/ipfs/go-log"
 )
 
 const (
@@ -214,6 +217,11 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
+	//if n.cfg.PubSubTrace {
+	if err := logging.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
+		return errors.Wrap(err, "could not set pubsub logger level")
+	}
+	//}
 	cfg := &topics.PububConfig{
 		Logger:   n.logger,
 		Host:     n.host,

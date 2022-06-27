@@ -12,7 +12,7 @@ const (
 	UnknownSubnet = "unknown"
 	decidedTopic  = "decided"
 
-	topicPrefix = "ssv.v1"
+	topicPrefix = "ssv.v1.1"
 )
 
 // SubnetsCount returns the subnet count for v1
