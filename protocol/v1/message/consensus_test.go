@@ -70,9 +70,9 @@ func TestDecidedV0Root(t *testing.T) {
 }
 
 func TestAppendSigners(t *testing.T) {
-	require.ElementsMatch(t, []OperatorID{2, 4, 3}, AppendSigners([]OperatorID{2, 4}, 3))
-	require.ElementsMatch(t, []OperatorID{2, 4, 5, 1}, AppendSigners([]OperatorID{2, 4, 5}, 1, 5))
-	require.ElementsMatch(t, []OperatorID{1, 2}, AppendSigners([]OperatorID{2}, 1, 2))
-	require.ElementsMatch(t, []OperatorID{3, 2}, AppendSigners([]OperatorID{}, 3, 2))
-	require.ElementsMatch(t, []OperatorID{2}, AppendSigners([]OperatorID{}, 2))
+	require.Exactly(t, []OperatorID{2, 3, 4}, AppendSigners([]OperatorID{2, 4}, 3))
+	require.Exactly(t, []OperatorID{1, 2, 4, 5}, AppendSigners([]OperatorID{2, 4, 5}, 1, 5))
+	require.Exactly(t, []OperatorID{1, 2}, AppendSigners([]OperatorID{2}, 1, 2))
+	require.Exactly(t, []OperatorID{2, 3}, AppendSigners([]OperatorID{}, 3, 2))
+	require.Exactly(t, []OperatorID{2}, AppendSigners([]OperatorID{}, 2))
 }
