@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"sort"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -250,6 +251,9 @@ func AppendSigners(signers []OperatorID, appended ...OperatorID) []OperatorID {
 	for _, signer := range appended {
 		signers = appendSigner(signers, signer)
 	}
+	sort.Slice(signers, func(i, j int) bool {
+		return signers[i] < signers[j]
+	})
 	return signers
 }
 
