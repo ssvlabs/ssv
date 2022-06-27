@@ -103,7 +103,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		}
 		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
 		if !h.applyFilters(&ni) {
-			h.logger.Debug("filtering peer", zap.Any("info", ni))
+			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
 		if added, err := h.infoStore.Add(pid, &ni); err != nil {

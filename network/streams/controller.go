@@ -55,9 +55,7 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	}
 	stream := NewStream(s)
 	defer func() {
-		if err := stream.Close(); err != nil {
-			n.logger.Warn("could not close stream", zap.Error(err))
-		}
+		_ = stream.Close()
 	}()
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
 	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
