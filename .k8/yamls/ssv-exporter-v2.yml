@@ -130,26 +130,11 @@ spec:
                 name: config-secrets
                 key: config_path
           - name: BOOTNODES
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: boot_node
-          - name: ENR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: enr_key
+            value: ""
           - name: REGISTRY_CONTRACT_ADDR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: smart_contract_addr_key
+            value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
           - name: ABI_VERSION
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: abi_version
-                optional: true
+            value: "2"
           - name: LOG_LEVEL
             value: "debug"
           - name: DISCOVERY_TYPE_KEY
