@@ -18,6 +18,7 @@ import (
 
 func TestAll(t *testing.T) {
 	for _, test := range AllTests {
+		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
 			test.Run(t)
 		})
@@ -40,6 +41,8 @@ func TestJson(t *testing.T) {
 
 	tests := make(map[string]SpecTest)
 	for name, test := range untypedTests {
+		name, test := name, test
+
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
 		switch testType {

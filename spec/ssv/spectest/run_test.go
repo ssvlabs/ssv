@@ -11,13 +11,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/spec/qbft"
-	tests2 "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
+	spectests "github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
 	"github.com/bloxapp/ssv/spec/types/testingutils"
 )
 
 func TestAll(t *testing.T) {
 	for _, test := range AllTests {
+		test := test
 		t.Run(test.Name, func(t *testing.T) {
 			runTest(t, test)
 		})
@@ -28,7 +29,7 @@ func TestJson(t *testing.T) {
 	basedir, _ := os.Getwd()
 	path := filepath.Join(basedir, "generate")
 	fileName := "tests.json"
-	tests := map[string]*tests2.SpecTest{}
+	tests := map[string]*spectests.SpecTest{}
 	byteValue, err := ioutil.ReadFile(path + "/" + fileName)
 	require.NoError(t, err)
 
@@ -37,7 +38,7 @@ func TestJson(t *testing.T) {
 	}
 
 	for _, test := range tests {
-
+		test := test
 		// a little trick we do to instantiate all the internal controller params
 		byts, err := test.Runner.QBFTController.Encode()
 		require.NoError(t, err)
@@ -75,7 +76,7 @@ func TestJson(t *testing.T) {
 	}
 }
 
-func runTest(t *testing.T, test *tests2.SpecTest) {
+func runTest(t *testing.T, test *spectests.SpecTest) {
 	v := testingutils.BaseValidator(keySetForShare(test.Runner.Share))
 	v.DutyRunners[test.Runner.BeaconRoleType] = test.Runner
 
