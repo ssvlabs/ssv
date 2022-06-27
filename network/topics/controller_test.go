@@ -32,8 +32,6 @@ func TestTopicManager(t *testing.T) {
 		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
-	//shares := createShares(nValidators)
-	//
 	t.Run("v0 features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -77,9 +75,6 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				<-time.After(100 * time.Millisecond)
 				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
 			}(p.tm, pk)
-			//go subTopic(p, pk, nil)
-			//<-time.After(time.Millisecond)
-			//go subTopic(p, pk, nil)
 		}
 	}
 
@@ -123,7 +118,9 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
 		for j, p := range peers {
+			wg.Add(1)
 			go func(p *P, pk string, pi int) {
+				defer wg.Done()
 				msg, err := dummyMsg(pk, 1)
 				if pi%2 == 0 { // ensuring that 2 messages will be created across peers
 					msg, err = dummyMsg(pk, 2)
@@ -132,11 +129,11 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				raw, err := msg.MarshalJSON()
 				require.NoError(t, err)
 				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*5))
+				<-time.After(time.Second * 2)
 			}(p, pks[i], j)
 		}
 	}
-	// TODO: remove timeout
-	<-time.After(time.Second * 2)
+	wg.Wait()
 
 	// let the messages propagate
 	wg.Add(1)
