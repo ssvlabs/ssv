@@ -169,8 +169,6 @@ spec:
             value: "true"
           - name: NETWORK_ID
             value: "ssv-testnet-stage"
-          - name: FORKV2_EPOCH
-            value: '1'
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-v2
