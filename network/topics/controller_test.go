@@ -128,8 +128,8 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				require.NoError(t, err)
 				raw, err := msg.MarshalJSON()
 				require.NoError(t, err)
-				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*5))
-				<-time.After(time.Second * 2)
+				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*10))
+				<-time.After(time.Second * 5)
 			}(p, pks[i], j)
 		}
 	}
