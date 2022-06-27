@@ -41,7 +41,7 @@ type Config struct {
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
-	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start" env-default:"0x00000000000000000000000000000000"`
+	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
