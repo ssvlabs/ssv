@@ -16,7 +16,7 @@ func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
 	forkv, err := records.GetForkVersionEntry(node.Record())
 	if err != nil {
-		dvs.logger.Warn("could not fork version from node record", zap.Error(err))
+		dvs.logger.Warn("could not read fork version from node record", zap.Error(err))
 		return false
 	}
 	return dvs.forkv == forkv

@@ -130,7 +130,7 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 		metricFoundNodes.Inc()
 		handler(e)
 	}, defaultDiscoveryInterval,
-		dvs.limitNodeFilter, dvs.forkVersionFilter) //, dvs.badNodeFilter)
+		dvs.limitNodeFilter)//, dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
