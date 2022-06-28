@@ -188,7 +188,6 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 func (c *Controller) syncDecided(from, to *message.SignedMessage) error {
-	c.logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
 	c.forkLock.Lock()
 	fork, decidedStrategy := c.fork, c.decidedStrategy
 	c.forkLock.Unlock()

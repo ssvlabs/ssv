@@ -85,7 +85,6 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 			logger.Debug("stopping current instance")
 			currentInstance.Stop()
 		}
-		logger.Debug("syncing")
 		return c.syncDecided(localMsg, msg)
 	}
 	// last decided, try to update it (merge new signers)
