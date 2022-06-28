@@ -300,6 +300,9 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	for {
 		select {
 		case e := <-cn:
+			if e.Log.Removed {
+				continue
+			}
 			if err := handler(*e); err != nil {
 				var malformedEventErr *abiparser.MalformedEventError
 				logger := c.logger.With(

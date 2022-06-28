@@ -1,12 +1,14 @@
 package abiparser
 
 import (
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"math/big"
 	"strings"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // Oess struct stands for operator encrypted secret share
@@ -40,11 +42,10 @@ type AdapterLegacy struct {
 // ParseOperatorAddedEvent parses OperatorAddedEventLegacy to OperatorAddedEvent
 func (a AdapterLegacy) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
-	topics []common.Hash,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorAddedEvent, error) {
-	event, err := a.legacyAbi.ParseOperatorAddedEvent(logger, data, contractAbi)
+	event, err := a.legacyAbi.ParseOperatorAddedEvent(logger, log, contractAbi)
 	if event == nil {
 		return nil, err
 	}
@@ -60,10 +61,10 @@ func (a AdapterLegacy) ParseOperatorAddedEvent(
 // ParseValidatorAddedEvent parses ValidatorAddedEventLegacy to ValidatorAddedEvent
 func (a AdapterLegacy) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*ValidatorAddedEvent, error) {
-	event, err := a.legacyAbi.ParseValidatorAddedEvent(logger, data, contractAbi)
+	event, err := a.legacyAbi.ParseValidatorAddedEvent(logger, log, contractAbi)
 	if event == nil {
 		return nil, err
 	}
@@ -89,22 +90,22 @@ func (a AdapterLegacy) ParseValidatorAddedEvent(
 }
 
 // ParseValidatorRemovedEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+func (a AdapterLegacy) ParseValidatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	return nil, nil
 }
 
 // ParseOperatorRemovedEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseOperatorRemovedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
+func (a AdapterLegacy) ParseOperatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountLiquidatedEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
+func (a AdapterLegacy) ParseAccountLiquidatedEvent(log types.Log) (*AccountLiquidatedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountEnabledEvent event is not supported in legacy format
-func (a AdapterLegacy) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
+func (a AdapterLegacy) ParseAccountEnabledEvent(log types.Log) (*AccountEnabledEvent, error) {
 	return nil, nil
 }
 
@@ -115,11 +116,11 @@ type AbiLegacy struct {
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (a *AbiLegacy) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorAddedEventLegacy, error) {
 	var operatorAddedEvent OperatorAddedEventLegacy
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", OperatorAdded),
@@ -140,11 +141,11 @@ func (a *AbiLegacy) ParseOperatorAddedEvent(
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (a *AbiLegacy) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*ValidatorAddedEventLegacy, error) {
 	var validatorAddedEvent ValidatorAddedEventLegacy
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorAdded),

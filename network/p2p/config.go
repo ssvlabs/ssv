@@ -28,7 +28,8 @@ const (
 
 // Config holds the configuration options for p2p network
 type Config struct {
-	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:""`
+	// prod enr
+	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
 
 	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
 	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
@@ -87,7 +88,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
 
 	maxPeers := c.MaxPeers + minPeersBuffer
-	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*5, connmgr.DecayerConfig((&connmgr.DecayerCfg{}).WithDefaults()))
+	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*15)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)

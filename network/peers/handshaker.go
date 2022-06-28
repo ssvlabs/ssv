@@ -103,7 +103,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		}
 		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
 		if !h.applyFilters(&ni) {
-			h.logger.Debug("filtering peer", zap.Any("info", ni))
+			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
 		if added, err := h.infoStore.Add(pid, &ni); err != nil {
@@ -145,7 +145,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errHandshakeInProcess
 	}
 	defer h.pending.Delete(pid.String())
-
 	// first, check that we didn't reach peers limit
 	if h.connIdx.Limit(conn.Stat().Direction) {
 		return errors.New("reached peers limit")
@@ -184,7 +183,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
-		//h.logger.Debug("filtering peer", zap.String("id", pid.String()), zap.Any("info", ni))
 		return errPeerWasFiltered
 	}
 	// adding to index
