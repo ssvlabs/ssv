@@ -41,7 +41,7 @@ func (sf *subFilter) CanSubscribe(topic string) bool {
 	if sf.fork.GetTopicBaseName(topic) != topic {
 		return true
 	}
-	sf.logger.Debug("filtering irrelevant topic", zap.String("topic", topic))
+	//sf.logger.Debug("filtering irrelevant topic", zap.String("topic", topic))
 	return false
 }
 
