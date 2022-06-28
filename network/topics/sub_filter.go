@@ -37,12 +37,8 @@ func (sf *subFilter) CanSubscribe(topic string) bool {
 	//if sf.Whitelisted(topic) {
 	//	return true
 	//}
-	// checks that we care about this topic
-	if sf.fork.GetTopicBaseName(topic) != topic {
-		return true
-	}
-	//sf.logger.Debug("filtering irrelevant topic", zap.String("topic", topic))
-	return false
+	// checks that we know this topic
+	return sf.fork.GetTopicBaseName(topic) != topic
 }
 
 // FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.
