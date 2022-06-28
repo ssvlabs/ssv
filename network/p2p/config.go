@@ -88,7 +88,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
 
 	maxPeers := c.MaxPeers + minPeersBuffer
-	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*5, connmgr.DecayerConfig((&connmgr.DecayerCfg{}).WithDefaults()))
+	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*15)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)

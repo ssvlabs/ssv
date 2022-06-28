@@ -53,6 +53,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 	} else if highest.Message.Height == local.Message.Height {
 		msg, ok := CheckSigners(local, highest)
 		if !ok {
+			// a place to check if can agg two differ decided (for future implementation)
 			return nil, nil
 		}
 		highest = msg

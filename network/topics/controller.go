@@ -172,7 +172,7 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
-	ctrl.subFilter.Deregister(name)
+	//ctrl.subFilter.Deregister(name)
 	return nil
 }
 
@@ -204,7 +204,7 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
 		tc = newTopicContainer()
 		ctrl.setTopicContainerUnsafe(name, tc)
 		// initial setup for the topic, should happen only once
-		ctrl.subFilter.Register(name)
+		//ctrl.subFilter.Register(name)
 		if err := ctrl.setupTopicValidator(name); err != nil {
 			// TODO: close topic?
 			//return err
