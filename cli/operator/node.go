@@ -53,7 +53,7 @@ type config struct {
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
-	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-description:"Target epoch for fork v2"`
+	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-default:"102595" env-description:"Target epoch for fork v2"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
