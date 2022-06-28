@@ -1,10 +1,12 @@
 package abiparser
 
 import (
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
 // ValidatorAddedEventV1 struct represents event received by the smart contract
@@ -31,11 +33,10 @@ type AdapterV1 struct {
 // ParseOperatorAddedEvent parses OperatorAddedEventV1 to OperatorAddedEvent
 func (a AdapterV1) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
-	topics []common.Hash,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorAddedEvent, error) {
-	event, err := a.abiV1.ParseOperatorAddedEvent(logger, data, topics, contractAbi)
+	event, err := a.abiV1.ParseOperatorAddedEvent(logger, log, contractAbi)
 	if event == nil {
 		return nil, err
 	}
@@ -50,10 +51,10 @@ func (a AdapterV1) ParseOperatorAddedEvent(
 // ParseValidatorAddedEvent parses ValidatorAddedEventV1 to ValidatorAddedEvent
 func (a AdapterV1) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*ValidatorAddedEvent, error) {
-	event, err := a.abiV1.ParseValidatorAddedEvent(logger, data, contractAbi)
+	event, err := a.abiV1.ParseValidatorAddedEvent(logger, log, contractAbi)
 	if event == nil {
 		return nil, err
 	}
@@ -69,22 +70,22 @@ func (a AdapterV1) ParseValidatorAddedEvent(
 }
 
 // ParseValidatorRemovedEvent event is not supported in v1 format
-func (a AdapterV1) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+func (a AdapterV1) ParseValidatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	return nil, nil
 }
 
 // ParseOperatorRemovedEvent event is not supported in v1 format
-func (a AdapterV1) ParseOperatorRemovedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
+func (a AdapterV1) ParseOperatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountLiquidatedEvent event is not supported in v1 format
-func (a AdapterV1) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
+func (a AdapterV1) ParseAccountLiquidatedEvent(log types.Log) (*AccountLiquidatedEvent, error) {
 	return nil, nil
 }
 
 // ParseAccountEnabledEvent event is not supported in v1 format
-func (a AdapterV1) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
+func (a AdapterV1) ParseAccountEnabledEvent(log types.Log) (*AccountEnabledEvent, error) {
 	return nil, nil
 }
 
@@ -95,12 +96,11 @@ type AbiV1 struct {
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (v1 *AbiV1) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
-	topics []common.Hash,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorAddedEventV1, error) {
 	var operatorAddedEvent OperatorAddedEventV1
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", OperatorAdded),
@@ -116,24 +116,24 @@ func (v1 *AbiV1) ParseOperatorAddedEvent(
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
 
-	if len(topics) < 2 {
+	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
 			Err: errors.Errorf("%s event missing topics. no owner address provided", OperatorAdded),
 		}
 	}
 
-	operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	operatorAddedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 	return &operatorAddedEvent, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (v1 *AbiV1) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*ValidatorAddedEventV1, error) {
 	var validatorAddedEvent ValidatorAddedEventV1
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorAdded),

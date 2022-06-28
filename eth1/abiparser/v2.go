@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -76,12 +77,11 @@ type AbiV2 struct {
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
 func (v2 *AbiV2) ParseOperatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
-	topics []common.Hash,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorAddedEvent, error) {
 	var operatorAddedEvent OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", OperatorAdded),
@@ -97,47 +97,42 @@ func (v2 *AbiV2) ParseOperatorAddedEvent(
 	}
 	operatorAddedEvent.PublicKey = []byte(pubKey)
 
-	if len(topics) < 2 {
+	if len(log.Topics) < 3 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics. no owner address provided", OperatorAdded),
+			Err: errors.Errorf("%s event missing topics", OperatorAdded),
 		}
 	}
-	operatorAddedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	operatorAddedEvent.Id = log.Topics[1].Big()
+	operatorAddedEvent.OwnerAddress = common.HexToAddress(log.Topics[2].Hex())
 	return &operatorAddedEvent, nil
 }
 
 // ParseOperatorRemovedEvent parses OperatorRemovedEvent
 func (v2 *AbiV2) ParseOperatorRemovedEvent(
 	logger *zap.Logger,
-	data []byte,
-	topics []common.Hash,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (*OperatorRemovedEvent, error) {
 	var operatorRemovedEvent OperatorRemovedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorRemovedEvent, OperatorRemoved, data)
-	if err != nil {
-		return nil, &MalformedEventError{
-			Err: errors.Wrapf(err, "could not unpack %s event", OperatorRemoved),
-		}
-	}
 
-	if len(topics) < 2 {
+	if len(log.Topics) < 3 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics. no owner address provided", OperatorRemoved),
+			Err: errors.Errorf("%s event missing topics", OperatorRemoved),
 		}
 	}
-	operatorRemovedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	operatorRemovedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	operatorRemovedEvent.OperatorId = log.Topics[2].Big()
 	return &operatorRemovedEvent, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (v2 *AbiV2) ParseValidatorAddedEvent(
 	logger *zap.Logger,
-	data []byte,
+	log types.Log,
 	contractAbi abi.ABI,
 ) (event *ValidatorAddedEvent, error error) {
 	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, data)
+	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorAdded),
@@ -160,45 +155,58 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(
 			validatorAddedEvent.EncryptedKeys[i] = []byte(encryptedSharePrivateKey)
 		}
 	}
+	if len(log.Topics) < 2 {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event missing topics", ValidatorAdded),
+		}
+	}
+	validatorAddedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 
 	return &validatorAddedEvent, nil
 }
 
 // ParseValidatorRemovedEvent parses ValidatorRemovedEvent
-func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	var validatorRemovedEvent ValidatorRemovedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, data)
+	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
 			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorRemoved),
 		}
 	}
 
+	if len(log.Topics) < 2 {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event missing topics", ValidatorRemoved),
+		}
+	}
+	validatorRemovedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+
 	return &validatorRemovedEvent, nil
 }
 
 // ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
-func (v2 *AbiV2) ParseAccountLiquidatedEvent(topics []common.Hash) (*AccountLiquidatedEvent, error) {
+func (v2 *AbiV2) ParseAccountLiquidatedEvent(log types.Log) (*AccountLiquidatedEvent, error) {
 	var accountLiquidatedEvent AccountLiquidatedEvent
 
-	if len(topics) < 2 {
+	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics. no owner address provided", AccountLiquidated),
+			Err: errors.Errorf("%s event missing topics", AccountLiquidated),
 		}
 	}
-	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 	return &accountLiquidatedEvent, nil
 }
 
 // ParseAccountEnabledEvent parses AccountEnabledEvent
-func (v2 *AbiV2) ParseAccountEnabledEvent(topics []common.Hash) (*AccountEnabledEvent, error) {
+func (v2 *AbiV2) ParseAccountEnabledEvent(log types.Log) (*AccountEnabledEvent, error) {
 	var accountEnabledEvent AccountEnabledEvent
 
-	if len(topics) < 2 {
+	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics. no owner address provided", AccountEnabled),
+			Err: errors.Errorf("%s event missing topics", AccountEnabled),
 		}
 	}
-	accountEnabledEvent.OwnerAddress = common.HexToAddress(topics[1].Hex())
+	accountEnabledEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 	return &accountEnabledEvent, nil
 }
