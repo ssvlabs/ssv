@@ -12,15 +12,15 @@ func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
 }
 
-// forkVersionFilter checks if the node has the same fork version
-func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
-	forkv, err := records.GetForkVersionEntry(node.Record())
-	if err != nil {
-		dvs.logger.Warn("could not read fork version from node record", zap.Error(err))
-		return false
-	}
-	return dvs.forkv == forkv
-}
+//// forkVersionFilter checks if the node has the same fork version
+//func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
+//	forkv, err := records.GetForkVersionEntry(node.Record())
+//	if err != nil {
+//		dvs.logger.Warn("could not read fork version from node record", zap.Error(err))
+//		return false
+//	}
+//	return dvs.forkv == forkv
+//}
 
 // badNodeFilter checks if the node was pruned or have a bad score
 func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {

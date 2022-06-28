@@ -86,7 +86,8 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
 		if err := s.Close(); err != nil {
-			logger.Warn("could not close stream", zap.Error(err))
+			// TODO (amir): investigate
+			//logger.Warn("could not close stream", zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
