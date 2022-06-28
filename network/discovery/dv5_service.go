@@ -51,8 +51,9 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	fork  forks.Fork
-	forkv forksprotocol.ForkVersion
+	fork    forks.Fork
+	forkv   forksprotocol.ForkVersion
+	subnets []byte
 }
 
 func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
@@ -65,6 +66,7 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 		conns:        discOpts.ConnIndex,
 		forkv:        discOpts.ForkVersion,
 		fork:         forksfactory.NewFork(discOpts.ForkVersion),
+		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
 	dvs.logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
@@ -134,11 +136,17 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // Bootstrap start looking for new nodes
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
+	sharedSubnetsFilter := dvs.sharedSubnetsFilter(1)
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
+		if !dvs.limitNodeFilter(e.Node) {
+			if !sharedSubnetsFilter(e.Node) {
+				metricRejectedNodes.Inc()
+				return
+			}
+		}
 		metricFoundNodes.Inc()
 		handler(e)
-	}, defaultDiscoveryInterval,
-		dvs.limitNodeFilter) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
@@ -229,12 +237,15 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), subnets, nil)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), subnets, nil)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
-	dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
-	go dvs.publishENR()
+	if updated != nil {
+		dvs.subnets = updated
+		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		go dvs.publishENR()
+	}
 	return nil
 }
 
@@ -243,12 +254,15 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), nil, subnets)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), nil, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
-	dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
-	go dvs.publishENR()
+	if updated != nil {
+		dvs.subnets = updated
+		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		go dvs.publishENR()
+	}
 	return nil
 }
 

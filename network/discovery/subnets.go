@@ -5,10 +5,26 @@ import (
 	"strconv"
 )
 
-const (
-	// SubnetsCount is the count of subnets in the network
-	SubnetsCount = 128
-)
+// subnetFilter checks if the node has an interest in the given subnet
+func sharedSubnets(a, b []byte, maxLen int) []int {
+	var shared []int
+	if maxLen == 0 {
+		maxLen = len(a)
+	}
+	for subnet, aval := range a {
+		if aval == 0 {
+			continue
+		}
+		if b[subnet] == 0 {
+			continue
+		}
+		shared = append(shared, subnet)
+		if len(shared) == maxLen {
+			break
+		}
+	}
+	return shared
+}
 
 var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
 

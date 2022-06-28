@@ -7,6 +7,10 @@ import (
 )
 
 var (
+	metricRejectedNodes = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:rejected",
+		Help: "Counts nodes that were found with discovery but rejected",
+	})
 	metricFoundNodes = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:found",
 		Help: "Counts nodes that were found with discovery",
@@ -15,6 +19,9 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricFoundNodes); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricRejectedNodes); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

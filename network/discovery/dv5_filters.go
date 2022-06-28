@@ -47,3 +47,22 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 		return false
 	}
 }
+
+// subnetFilter checks if the node has an interest in the given subnet
+func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool {
+	return func(node *enode.Node) bool {
+		if len(dvs.subnets) == 0 {
+			dvs.logger.Debug("subnets were not configured yet")
+			return true
+		}
+		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
+		if err != nil {
+			dvs.logger.Debug("could not read subnets entry")
+			return false
+		}
+		shared := sharedSubnets(dvs.subnets, nodeSubnets, n)
+		dvs.logger.Debug("shared subnets", zap.Ints("shared", shared))
+
+		return len(shared) >= n
+	}
+}

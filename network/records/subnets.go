@@ -1,6 +1,7 @@
 package records
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -10,13 +11,16 @@ import (
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) error {
+func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil {
-		return errors.Wrap(err, "could not read subnets entry from enr")
+		return nil, errors.Wrap(err, "could not read subnets entry")
 	}
+	orig := make([]byte, len(subnets))
 	if len(subnets) == 0 { // not exist, creating slice
 		subnets = make([]byte, count)
+	} else {
+		copy(orig, subnets)
 	}
 	for _, i := range added {
 		subnets[i] = 1
@@ -24,7 +28,13 @@ func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int)
 	for _, i := range removed {
 		subnets[i] = 0
 	}
-	return SetSubnetsEntry(node, subnets)
+	if bytes.Equal(orig, subnets) {
+		return nil, nil
+	}
+	if err := SetSubnetsEntry(node, subnets); err != nil {
+		return nil, errors.Wrap(err, "could not update subnets entry")
+	}
+	return subnets, nil
 }
 
 // SetSubnetsEntry adds subnets entry to our enode.LocalNode
