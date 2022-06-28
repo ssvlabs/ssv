@@ -33,12 +33,17 @@ func (dvs *DiscV5Service) badNodeFilter(node *enode.Node) bool {
 }
 
 // subnetFilter checks if the node has an interest in the given subnet
-func (dvs *DiscV5Service) subnetFilter(subnet uint64) func(node *enode.Node) bool {
+func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
-		subnets, err := records.GetSubnetsEntry(node.Record())
+		fromEntry, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
 			return false
 		}
-		return subnets[subnet] > 0
+		for _, subnet := range subnets {
+			if fromEntry[subnet] > 0 {
+				return true
+			}
+		}
+		return false
 	}
 }

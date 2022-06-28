@@ -10,7 +10,7 @@ import (
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []int64, removed []int64) error {
+func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) error {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil {
 		return errors.Wrap(err, "could not read subnets entry from enr")
