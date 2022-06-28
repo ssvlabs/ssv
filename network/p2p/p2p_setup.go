@@ -30,15 +30,15 @@ const (
 	// defaultReqTimeout is the default timeout used for stream requests
 	defaultReqTimeout = 10 * time.Second
 	// backoffLow is when we start the backoff exponent interval
-	backoffLow = 15 * time.Second
+	backoffLow = 10 * time.Second
 	// backoffLow is when we stop the backoff exponent interval
-	backoffHigh = 15 * time.Minute
+	backoffHigh = 30 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
 	backoffConnectorCacheSize = 1024
 	// connectTimeout is the timeout used for connections
-	connectTimeout = 15 * time.Second
+	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
 )

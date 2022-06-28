@@ -165,7 +165,11 @@ func (n *p2pNetwork) startDiscovery() {
 			if !n.idx.CanConnect(e.AddrInfo.ID) {
 				return
 			}
-			discoveredPeers <- e.AddrInfo
+			select {
+			case discoveredPeers <- e.AddrInfo:
+			default:
+				n.logger.Warn("connector queue is full, skipping new peer", zap.String("peerID", e.AddrInfo.ID.String()))
+			}
 		})
 	}, 3)
 	if err != nil {
