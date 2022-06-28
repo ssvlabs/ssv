@@ -8,6 +8,6 @@ func (v0 *ForkV0) MsgID() forks.MsgIDFunc {
 }
 
 // Subnets returns the subnets count for this fork
-func (v0 *ForkV0) Subnets() int64 {
+func (v0 *ForkV0) Subnets() int {
 	return 0
 }
