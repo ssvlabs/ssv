@@ -218,5 +218,5 @@ func (n *p2pNetwork) UpdateSubnets() {
 	if err != nil {
 		n.logger.Warn("could not register subnets", zap.Error(err))
 	}
-	n.logger.Debug("updated subnets")
+	n.logger.Debug("updated subnets", zap.Any("subnets", n.subnets))
 }

@@ -233,6 +233,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
+	dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
 	go dvs.publishENR()
 	return nil
 }
@@ -246,6 +247,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
+	dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
 	go dvs.publishENR()
 	return nil
 }
@@ -263,8 +265,14 @@ func (dvs *DiscV5Service) publishENR() {
 	dvs.discover(ctx, func(e PeerEvent) {
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
-			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
+			if err.Error() == "RPC timeout" {
+				// ignore
+				return
+			}
+			dvs.logger.Warn("could not ping node", zap.String("targetNodeENR", e.Node.String()), zap.Error(err))
+			return
 		}
+		dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
