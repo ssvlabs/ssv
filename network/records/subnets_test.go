@@ -60,6 +60,11 @@ func TestSubnetsParsing(t *testing.T) {
 			false,
 		},
 		{
+			"wrong size",
+			"57b080fffd743d9878dc41a184ab1600",
+			false,
+		},
+		{
 			"invalid",
 			"xxx",
 			true,

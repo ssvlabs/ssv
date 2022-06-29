@@ -85,7 +85,7 @@ func (s Subnets) String() string {
 func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
 	var data []byte
-	for i := 0; i < len(subnetsStr); i += 2 {
+	for i := 0; i+1 < len(subnetsStr); i += 2 {
 		maskData1, err := getCharMask(string(subnetsStr[i]))
 		if err != nil {
 			return nil, err
