@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -134,6 +133,7 @@ func (n *operatorNode) Start() error {
 
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
+	go n.net.UpdateSubnets()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
 	n.dutyCtrl.Start()

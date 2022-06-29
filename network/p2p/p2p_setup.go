@@ -77,7 +77,8 @@ func (n *p2pNetwork) initCfg() {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
 	}
 	if len(n.cfg.Subnets) > 0 {
-		subnets, err := parseSubnets(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		s := make(records.Subnets, 0)
+		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
 			// TODO: handle
 			return
@@ -139,6 +140,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
 		NodeVersion: commons2.GetNodeVersion(),
+		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
@@ -157,9 +159,12 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
 		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
 			return n.cfg.ForkVersion
-		}), peers.NetworkIDFilter(n.cfg.NetworkID))
+		}))
 	}
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, filters...)
+	filters = append(filters, peers.NetworkIDFilter(n.cfg.NetworkID))
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, func() records.Subnets {
+		return n.subnets
+	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
