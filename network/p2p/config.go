@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"strconv"
 	"strings"
 	"time"
 
@@ -164,24 +163,4 @@ func userAgent(fromCfg string) string {
 		return fromCfg
 	}
 	return uc.GetBuildData()
-}
-
-// parseSubnets parses a given subnet string
-func parseSubnets(subnetsStr string) ([]byte, error) {
-	var res []byte
-	for i := 0; i < len(subnetsStr); i++ {
-		val, err := strconv.ParseUint(string(subnetsStr[i]), 16, 8)
-		if err != nil {
-			return nil, err
-		}
-		mask := fmt.Sprintf("%04b", val)
-		for j := 0; j < len(mask); j++ {
-			val, err := strconv.ParseUint(string(mask[j]), 2, 8)
-			if err != nil {
-				return nil, err
-			}
-			res = append(res, uint8(val))
-		}
-	}
-	return res, nil
 }

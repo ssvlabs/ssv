@@ -146,6 +146,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	defer h.pending.Delete(pid.String())
 	// first, check that we didn't reach peers limit
+	// TODO: resolve
 	if h.connIdx.Limit(conn.Stat().Direction) {
 		return errors.New("reached peers limit")
 	}
