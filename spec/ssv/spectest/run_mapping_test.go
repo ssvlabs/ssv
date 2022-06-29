@@ -29,6 +29,7 @@ import (
 	"github.com/bloxapp/ssv/spec/ssv"
 	"github.com/bloxapp/ssv/spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv/spec/types"
+	"github.com/bloxapp/ssv/spec/types/testingutils"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -77,6 +78,8 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	pi, _ := protocolp2p.GenPeerID()
 	beacon := validator.NewTestBeacon(t)
 
+	keysSet := testingutils.Testing4SharesSet()
+
 	beaconNetwork := core.NetworkFromString(string(test.Runner.BeaconNetwork))
 	if beaconNetwork == "" {
 		beaconNetwork = core.PraterNetwork
@@ -93,6 +96,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	require.Equalf(t, message.RoleTypeAttester, beaconRoleType, "only attester role is supported now")
 
 	ibftStorage := qbftStorage.New(db, logger, beaconRoleType.String(), forkVersion)
+	require.NoError(t, beacon.AddShare(keysSet.Shares[1]))
 
 	v := validator.NewValidator(&validator.Options{
 		Context:                    ctx,
@@ -119,6 +123,8 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	for _, msg := range test.Messages {
 		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg)))
 	}
+
+	time.Sleep(time.Second * 3) // 3s round
 
 	currentInstance := qbftCtrl.GetCurrentInstance()
 	decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
