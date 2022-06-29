@@ -529,7 +529,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	// stop instance
 	if v != nil {
 		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: stop validator instance", zap.String("pubKey", pk))
-		if err := v.Close(); err == nil {
+		if err := v.Close(); err != nil {
 			return errors.Wrap(err, "could not close validator")
 		}
 		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: validator instance is closed", zap.String("pubKey", pk))
