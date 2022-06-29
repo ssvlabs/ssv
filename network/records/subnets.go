@@ -75,8 +75,8 @@ type Subnets []byte
 
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
-	for i, subnet := range s {
-		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+	for subnet, val := range s {
+		subnetsVec.SetBitAt(uint64(subnet), val > uint8(0))
 	}
 	return hex.EncodeToString(subnetsVec.Bytes())
 }
@@ -84,19 +84,35 @@ func (s Subnets) String() string {
 // FromString parses a given subnet string
 func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
-	for i := 0; i < len(subnetsStr); i++ {
-		val, err := strconv.ParseUint(string(subnetsStr[i]), 16, 8)
+	var data []byte
+	for i := 0; i < len(subnetsStr); i += 2 {
+		maskData1, err := getCharMask(string(subnetsStr[i]))
 		if err != nil {
 			return nil, err
 		}
-		mask := fmt.Sprintf("%04b", val)
-		for j := 0; j < len(mask); j++ {
-			val, err := strconv.ParseUint(string(mask[j]), 2, 8)
-			if err != nil {
-				return nil, err
-			}
-			s = append(s, uint8(val))
+		maskData2, err := getCharMask(string(subnetsStr[i+1]))
+		if err != nil {
+			return nil, err
 		}
+		data = append(data, maskData2...)
+		data = append(data, maskData1...)
 	}
-	return s, nil
+	return data, nil
+}
+
+func getCharMask(str string) ([]byte, error) {
+	val, err := strconv.ParseUint(str, 16, 8)
+	if err != nil {
+		return nil, err
+	}
+	mask := fmt.Sprintf("%04b", val)
+	var maskData []byte
+	for j := 0; j < len(mask); j++ {
+		val, err := strconv.ParseUint(string(mask[len(mask)-1-j]), 2, 8)
+		if err != nil {
+			return nil, err
+		}
+		maskData = append(maskData, uint8(val))
+	}
+	return maskData, nil
 }
