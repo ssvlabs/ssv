@@ -106,6 +106,9 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 	if maxLen == 0 {
 		maxLen = len(a)
 	}
+	if len(a) == 0 || len(b) == 0 {
+		return shared
+	}
 	for subnet, aval := range a {
 		if aval == 0 {
 			continue
