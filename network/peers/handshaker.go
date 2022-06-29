@@ -63,19 +63,23 @@ type handshaker struct {
 	ids *identify.IDService
 
 	pending *sync.Map
+
+	subnetsProvider func() records.Subnets
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore, connIdx ConnectionIndex, ids *identify.IDService, filters ...HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore,
+	connIdx ConnectionIndex, ids *identify.IDService, subnetsProvider func() records.Subnets, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
-		ctx:       ctx,
-		logger:    logger,
-		streams:   streams,
-		infoStore: idx,
-		connIdx:   connIdx,
-		ids:       ids,
-		filters:   filters,
-		pending:   &sync.Map{},
+		ctx:             ctx,
+		logger:          logger,
+		streams:         streams,
+		infoStore:       idx,
+		connIdx:         connIdx,
+		ids:             ids,
+		filters:         filters,
+		pending:         &sync.Map{},
+		subnetsProvider: subnetsProvider,
 	}
 	return h
 }
@@ -106,15 +110,24 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
-		if added, err := h.infoStore.Add(pid, &ni); err != nil {
+		if _, err := h.infoStore.Add(pid, &ni); err != nil {
 			h.logger.Warn("could not add node info", zap.Error(err))
 			return
-		} else if !added {
-			h.logger.Warn("node info was not added", zap.String("id", pid.String()))
 		}
+		// if we reached limit, check that the peer has at least 5 shared subnets
+		// TODO: dynamic/configurable value TBD
+		if h.connIdx.Limit(stream.Conn().Stat().Direction) {
+			ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(&ni)
+			if !ok {
+				h.logger.Warn("reached peers limit", zap.Error(err))
+				return
+			}
+		}/* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+			return errors.New("ignoring peer w/o shared subnets")
+		}*/
 		self, err := h.infoStore.SelfSealed()
 		if err != nil {
-			h.logger.Error("could not seal self node info", zap.Error(err))
+			h.logger.Warn("could not seal self node info", zap.Error(err))
 			return
 		}
 		if err := res(self); err != nil {
@@ -145,11 +158,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errHandshakeInProcess
 	}
 	defer h.pending.Delete(pid.String())
-	// first, check that we didn't reach peers limit
-	// TODO: resolve
-	if h.connIdx.Limit(conn.Stat().Direction) {
-		return errors.New("reached peers limit")
-	}
 	// check if the peer is known
 	ni, err := h.infoStore.NodeInfo(pid)
 	if err != nil && err != ErrNotFound {
@@ -163,11 +171,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 			return errors.Errorf("pruned peer [%s]", pid.String())
 		case StateUnknown:
 			// continue the flow
-		default: // ready
+		default: // ready, exit
 			return nil
 		}
 	}
-
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
@@ -186,16 +193,25 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if !h.applyFilters(ni) {
 		return errPeerWasFiltered
 	}
+	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 	// adding to index
-	added, err := h.infoStore.Add(pid, ni)
-	if added {
-		//h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()), zap.Any("info", ni))
-		return nil
-	}
+	_, err = h.infoStore.Add(pid, ni)
 	if err != nil {
-		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()), zap.Any("info", ni))
+		logger.Warn("could not add peer to index", zap.Error(err))
+		return err
 	}
-	return err
+	// if we reached limit, check that the peer has at least 5 shared subnets
+	// TODO: dynamic/configurable value TBD
+	if h.connIdx.Limit(conn.Stat().Direction) {
+		ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(ni)
+		if !ok {
+			return errors.New("reached peers limit")
+		}
+	}/* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+		return errors.New("ignoring peer w/o shared subnets")
+	}*/
+
+	return nil
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
@@ -292,6 +308,28 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
 		if networkID != ni.NetworkID {
 			return false, errors.Errorf("networkID '%s' instead of '%s'", ni.NetworkID, networkID)
+		}
+		return true, nil
+	}
+}
+
+// SharedSubnetsFilter determines whether we will connect to the given node by the amount of shared subnets
+func SharedSubnetsFilter(subnetsProvider func() records.Subnets, n int) HandshakeFilter {
+	return func(ni *records.NodeInfo) (bool, error) {
+		subnets := subnetsProvider()
+		if len(subnets) == 0 {
+			return true, nil
+		}
+		if len(ni.Metadata.Subnets) == 0 {
+			return true, nil
+		}
+		nodeSubnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		if err != nil {
+			return false, err
+		}
+		shared := records.SharedSubnets(subnets, nodeSubnets, n)
+		if len(shared) < n {
+			return false, nil
 		}
 		return true, nil
 	}
