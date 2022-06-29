@@ -130,7 +130,7 @@ spec:
                 name: config-secrets
                 key: config_path
           - name: BOOTNODES
-            value: "enr:-Li4QBOo_qZlxlx3wFXAOXyar-pxOYbwxC50cT7g9E_0u3FcNEH6SghQ-pAD7VPSQV2W1IxxR4vuYjz1apd4Pw0VJcuGAYGmACy9h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBUuJc2VjcDI1NmsxoQLZLhTEN00wHRJt96rcq2XOaCDEmmbceAkkxZShoIM_3IN0Y3CCE4iDdWRwgg-g"
+            value: "enr:-Li4QJgE1sWsyLijpHz0y37InB7X_kMDnln4l_Off-XLLJQzRTHK7EFH85GKph90EAgHz_HmwVM4cnfWiko3FaqaoL-GAYGufVaoh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQIHCX5FlqTKlbjNEsiTXWKVCp4uAF8WnphuuHH8RCmBs4N0Y3CCE4iDdWRwgg-g"
           - name: REGISTRY_CONTRACT_ADDR_KEY
             value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
           - name: ABI_VERSION
