@@ -138,7 +138,7 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		// if we reached peers limit, make sure to accept peers with more than 10% shared subnets
-		if dvs.limitNodeFilter(e.Node) {
+		if !dvs.limitNodeFilter(e.Node) {
 			//desired := dvs.fork.Subnets() / 10
 			desired := 5
 			if !dvs.sharedSubnetsFilter(desired)(e.Node) {
