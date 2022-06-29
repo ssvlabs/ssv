@@ -215,13 +215,15 @@ func (n *p2pNetwork) UpdateSubnets() {
 	}
 	n.activeValidatorsLock.Unlock()
 
-	err := n.disc.RegisterSubnets(subnetsToAdd...)
-	if err != nil {
-		n.logger.Warn("could not register subnets", zap.Error(err))
-	}
-	n.logger.Debug("updated subnets", zap.Any("subnets", n.subnets))
-
 	self := n.idx.Self()
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
+	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", n.subnets))
+
+	err := n.disc.RegisterSubnets(subnetsToAdd...)
+	if err != nil {
+		n.logger.Warn("could not register subnets", zap.Error(err))
+		return
+	}
+	n.logger.Debug("updated subnets (discovery)", zap.Any("subnets", n.subnets))
 }
