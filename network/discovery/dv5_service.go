@@ -277,6 +277,7 @@ func (dvs *DiscV5Service) publishENR() {
 	}
 	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
 	dvs.discover(ctx, func(e PeerEvent) {
+		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			if err.Error() == "RPC timeout" {
@@ -286,7 +287,8 @@ func (dvs *DiscV5Service) publishENR() {
 			dvs.logger.Warn("could not ping node", zap.String("targetNodeENR", e.Node.String()), zap.Error(err))
 			return
 		}
-		dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
+		metricPublishEnrPongs.Inc()
+		//dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
