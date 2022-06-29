@@ -192,7 +192,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 	if len(n.subnets) > 0 {
 		copy(last, n.subnets)
 	}
-	n.subnets = make([]byte, n.fork.Subnets())
+	newSubnets := make([]byte, n.fork.Subnets())
 	for pkHex, state := range n.activeValidators {
 		if state == validatorStateInactive {
 			continue
@@ -201,19 +201,23 @@ func (n *p2pNetwork) UpdateSubnets() {
 		if _, ok := visited[subnet]; ok {
 			continue
 		}
-		n.subnets[subnet] = byte(1)
-	}
-	if bytes.Equal(n.subnets, last) { // no change
-		n.logger.Debug("no changes in subnets")
-		return
+		newSubnets[subnet] = byte(1)
 	}
 	subnetsToAdd := make([]int, 0)
-	for i, b := range n.subnets {
-		if b == byte(1) {
-			subnetsToAdd = append(subnetsToAdd, i)
+	if !bytes.Equal(newSubnets, last) { // have changes
+		n.subnets = newSubnets
+		for i, b := range newSubnets {
+			if b == byte(1) {
+				subnetsToAdd = append(subnetsToAdd, i)
+			}
 		}
 	}
 	n.activeValidatorsLock.Unlock()
+
+	if len(subnetsToAdd) == 0 {
+		n.logger.Debug("no changes in subnets")
+		return
+	}
 
 	self := n.idx.Self()
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
