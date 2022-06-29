@@ -140,6 +140,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
 		NodeVersion: commons2.GetNodeVersion(),
+		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers

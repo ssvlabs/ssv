@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
@@ -219,4 +220,8 @@ func (n *p2pNetwork) UpdateSubnets() {
 		n.logger.Warn("could not register subnets", zap.Error(err))
 	}
 	n.logger.Debug("updated subnets", zap.Any("subnets", n.subnets))
+
+	self := n.idx.Self()
+	self.Metadata.Subnets = records.Subnets(n.subnets).String()
+	n.idx.UpdateSelfRecord(self)
 }

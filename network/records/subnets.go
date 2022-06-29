@@ -100,6 +100,27 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	return data, nil
 }
 
+// SharedSubnets returns the shared subnets
+func SharedSubnets(a, b []byte, maxLen int) []int {
+	var shared []int
+	if maxLen == 0 {
+		maxLen = len(a)
+	}
+	for subnet, aval := range a {
+		if aval == 0 {
+			continue
+		}
+		if b[subnet] == 0 {
+			continue
+		}
+		shared = append(shared, subnet)
+		if len(shared) == maxLen {
+			break
+		}
+	}
+	return shared
+}
+
 func getCharMask(str string) ([]byte, error) {
 	val, err := strconv.ParseUint(str, 16, 8)
 	if err != nil {
