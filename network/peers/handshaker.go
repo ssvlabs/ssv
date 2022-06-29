@@ -122,7 +122,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 				h.logger.Warn("reached peers limit", zap.Error(err))
 				return
 			}
-		}/* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+		} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
 			return errors.New("ignoring peer w/o shared subnets")
 		}*/
 		self, err := h.infoStore.SelfSealed()
@@ -207,7 +207,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		if !ok {
 			return errors.New("reached peers limit")
 		}
-	}/* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+	} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
 		return errors.New("ignoring peer w/o shared subnets")
 	}*/
 
