@@ -118,6 +118,16 @@ func (c *controller) handleValidatorRemovedEvent(
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
 		return errors.Wrap(err, "could not remove validator share")
 	}
+	c.logger.Debug("handleValidatorRemovedEvent: ValidatorRemoved share was deleted  successfully", zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
+	_, found, err = c.collection.GetValidatorShare(validatorRemovedEvent.PublicKey)
+	if err != nil {
+		return errors.Wrap(err, "could not check if validator share exist")
+	}
+	if found {
+		c.logger.Debug("handleValidatorRemovedEvent: ValidatorRemoved share is found after remove, we have a problem", zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
+	} else {
+		c.logger.Debug("handleValidatorRemovedEvent: ValidatorRemoved share is not found after remove as expected", zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
+	}
 
 	if ongoingSync {
 		// determine if validator share belongs to operator
@@ -127,6 +137,7 @@ func (c *controller) handleValidatorRemovedEvent(
 				return err
 			}
 		}
+		c.logger.Debug("handleValidatorRemovedEvent: onShareRemove is done", zap.String("pubKey", validatorShare.PublicKey.SerializeToHexStr()))
 	}
 
 	return nil

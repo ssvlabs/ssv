@@ -517,18 +517,31 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 // TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	// remove from validatorsMap
+	c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from validatorsMap", zap.String("pk", pk))
 	v := c.validatorsMap.RemoveValidator(pk)
+	_, found := c.validatorsMap.GetValidator(pk)
+	if found {
+		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: share is found after remove, we have a problem", zap.String("pubKey", pk))
+	} else {
+		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: share is not found after remove as expected", zap.String("pubKey", pk))
+	}
 
 	// stop instance
 	if v != nil {
+		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: stop validator instance", zap.String("pubKey", pk))
 		if err := v.Close(); err == nil {
 			return errors.Wrap(err, "could not close validator")
 		}
+		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: validator instance is closed", zap.String("pubKey", pk))
 	}
 	// remove the share secret from key-manager
 	if removeSecret {
+		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from key manager", zap.String("pubKey", pk))
 		if err := c.keyManager.RemoveShare(pk); err != nil {
 			return errors.Wrap(err, "could not remove share secret from key manager")
+		}
+		if err := c.keyManager.RemoveShare(pk); err != nil {
+			c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from key manager", zap.String("pubKey", pk), zap.Error(err))
 		}
 	}
 
