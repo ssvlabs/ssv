@@ -74,7 +74,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
 
-	forkVersion := forksprotocol.V0ForkVersion
+	forkVersion := forksprotocol.V1ForkVersion
 	pi, _ := protocolp2p.GenPeerID()
 	beacon := validator.NewTestBeacon(t)
 
@@ -93,10 +93,44 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	require.NoError(t, err)
 
 	beaconRoleType := convertFromSpecRole(test.Runner.BeaconRoleType)
-	require.Equalf(t, message.RoleTypeAttester, beaconRoleType, "only attester role is supported now")
+	//require.Equalf(t, message.RoleTypeAttester, beaconRoleType, "only attester role is supported now")
 
 	ibftStorage := qbftStorage.New(db, logger, beaconRoleType.String(), forkVersion)
 	require.NoError(t, beacon.AddShare(keysSet.Shares[1]))
+	require.NoError(t, beacon.AddShare(keysSet.Shares[2]))
+	require.NoError(t, beacon.AddShare(keysSet.Shares[3]))
+	require.NoError(t, beacon.AddShare(keysSet.Shares[4]))
+
+	// TODO: add an option: array of duty roles, setup ibfts depending on that.
+	const attesterRoleType = message.RoleTypeAttester
+
+	for i := 0; i < 4; i++ {
+		fmt.Printf("keysSet.Shares[%d].GetPublicKey().Serialize(): %v\n", i+1, hex.EncodeToString(keysSet.Shares[types.OperatorID(i+1)].GetPublicKey().Serialize()))
+		fmt.Printf("test.Runner.Share.Committee[%d].GetPublicKey(): %v\n", i, hex.EncodeToString(test.Runner.Share.Committee[i].GetPublicKey()))
+	}
+
+	share := &beaconprotocol.Share{
+		NodeID:    1,
+		PublicKey: keysSet.ValidatorPK,
+		Committee: map[message.OperatorID]*beaconprotocol.Node{
+			1: {
+				IbftID: 1,
+				Pk:     keysSet.Shares[1].GetPublicKey().Serialize(),
+			},
+			2: {
+				IbftID: 2,
+				Pk:     keysSet.Shares[2].GetPublicKey().Serialize(),
+			},
+			3: {
+				IbftID: 3,
+				Pk:     keysSet.Shares[3].GetPublicKey().Serialize(),
+			},
+			4: {
+				IbftID: 4,
+				Pk:     keysSet.Shares[4].GetPublicKey().Serialize(),
+			},
+		},
+	}
 
 	v := validator.NewValidator(&validator.Options{
 		Context:                    ctx,
@@ -105,23 +139,24 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		Network:                    beaconprotocol.NewNetwork(beaconNetwork),
 		P2pNetwork:                 protocolp2p.NewMockNetwork(logger, pi, 10),
 		Beacon:                     beacon,
-		Share:                      convertShare(t, test.Runner.Share),
+		Share:                      share,
 		ForkVersion:                forkVersion,
 		Signer:                     beacon,
 		SyncRateLimit:              time.Second * 5,
 		SignatureCollectionTimeout: time.Second * 5,
 		ReadMode:                   false,
 		FullNode:                   false,
+		DutyRoles:                  []message.RoleType{attesterRoleType},
 	})
 
-	qbftCtrl := v.(*validator.Validator).Ibfts()[message.RoleTypeAttester].(*controller.Controller)
+	qbftCtrl := v.(*validator.Validator).Ibfts()[attesterRoleType].(*controller.Controller)
 	qbftCtrl.State = controller.Ready
 	go qbftCtrl.StartQueueConsumer(qbftCtrl.MessageHandler)
 	require.NoError(t, qbftCtrl.Init())
 	go v.ExecuteDuty(12, convertDuty(test.Duty))
 
 	for _, msg := range test.Messages {
-		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg)))
+		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg, attesterRoleType)))
 	}
 
 	time.Sleep(time.Second * 3) // 3s round
@@ -226,10 +261,33 @@ func convertFromSpecRole(role types.BeaconRole) message.RoleType {
 	return 0
 }
 
-func convertSSVMessage(t *testing.T, msg *types.SSVMessage) *message.SSVMessage {
+func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleType) *message.SSVMessage {
 	data := msg.Data
 
-	if msg.MsgType == types.SSVPartialSignatureMsgType {
+	var msgType message.MsgType
+	switch msg.GetType() {
+	case types.SSVConsensusMsgType:
+		msgType = message.SSVConsensusMsgType
+
+		//var sm message.SignedMessage
+		//require.NoError(t, json.Unmarshal(data, &sm))
+		//
+		//var pd message.ProposalData
+		//require.NoError(t, json.Unmarshal(sm.Message.Data, &pd))
+		//
+		//var cd types.ConsensusData
+		//require.NoError(t, json.Unmarshal(pd.Data, &cd))
+		//
+		//ad, err := cd.AttestationData.MarshalSSZ()
+		//require.NoError(t, err)
+		//
+		//data = ad
+
+	case types.SSVDecidedMsgType:
+		msgType = message.SSVDecidedMsgType
+	case types.SSVPartialSignatureMsgType:
+		msgType = message.SSVPostConsensusMsgType
+
 		sps := new(ssv.SignedPartialSignatureMessage)
 		require.NoError(t, sps.Decode(msg.Data))
 		spsm := sps.Messages[0]
@@ -247,22 +305,12 @@ func convertSSVMessage(t *testing.T, msg *types.SSVMessage) *message.SSVMessage 
 		encoded, err := spcm.Encode()
 		require.NoError(t, err)
 		data = encoded
-	}
-
-	var msgType message.MsgType
-	switch msg.GetType() {
-	case types.SSVConsensusMsgType:
-		msgType = message.SSVConsensusMsgType
-	case types.SSVDecidedMsgType:
-		msgType = message.SSVDecidedMsgType
-	case types.SSVPartialSignatureMsgType:
-		msgType = message.SSVPostConsensusMsgType
 	case types.DKGMsgType:
 		panic("type not supported yet")
 	}
 	return &message.SSVMessage{
 		MsgType: msgType,
-		ID:      message.NewIdentifier(msg.MsgID[:], message.RoleTypeAttester),
+		ID:      message.NewIdentifier(msg.MsgID.GetPubKey()[:], role),
 		Data:    data,
 	}
 }
