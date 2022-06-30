@@ -78,8 +78,8 @@ func TestSyncEth1HandlerError(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) error {
-		return errors.New("test")
+	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) ([]zap.Field, error) {
+		return nil, errors.New("test")
 	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
 }

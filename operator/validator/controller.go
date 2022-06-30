@@ -300,23 +300,8 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	for {
 		select {
 		case e := <-cn:
-			if e.Log.Removed {
-				continue
-			}
-			if err := handler(*e); err != nil {
-				var malformedEventErr *abiparser.MalformedEventError
-				logger := c.logger.With(
-					zap.String("event", e.Name),
-					zap.Uint64("block", e.Log.BlockNumber),
-					zap.String("txHash", e.Log.TxHash.Hex()),
-					zap.Error(err),
-				)
-				if errors.As(err, &malformedEventErr) {
-					logger.Warn("could not handle ongoing sync event, the event is malformed")
-				} else {
-					logger.Error("could not handle ongoing sync event")
-				}
-			}
+			logFields, err := handler(*e)
+			_ = eth1.HandleEventResult(c.logger, *e, logFields, err, true)
 		case err := <-sub.Err():
 			c.logger.Warn("event feed subscription error", zap.Error(err))
 		}
@@ -325,7 +310,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
+	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -502,7 +487,6 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 		if err := c.keyManager.AddShare(shareSecret); err != nil {
 			return nil, isOperatorShare, errors.Wrap(err, "could not add share secret to key manager")
 		}
-		logger.Info("share was added successfully to key manager")
 	}
 
 	// save validator data
@@ -517,31 +501,18 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 // TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	// remove from validatorsMap
-	c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from validatorsMap", zap.String("pk", pk))
 	v := c.validatorsMap.RemoveValidator(pk)
-	_, found := c.validatorsMap.GetValidator(pk)
-	if found {
-		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: share is found after remove, we have a problem", zap.String("pubKey", pk))
-	} else {
-		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: share is not found after remove as expected", zap.String("pubKey", pk))
-	}
 
 	// stop instance
 	if v != nil {
-		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: stop validator instance", zap.String("pubKey", pk))
 		if err := v.Close(); err != nil {
 			return errors.Wrap(err, "could not close validator")
 		}
-		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: validator instance is closed", zap.String("pubKey", pk))
 	}
 	// remove the share secret from key-manager
 	if removeSecret {
-		c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from key manager", zap.String("pubKey", pk))
 		if err := c.keyManager.RemoveShare(pk); err != nil {
 			return errors.Wrap(err, "could not remove share secret from key manager")
-		}
-		if err := c.keyManager.RemoveShare(pk); err != nil {
-			c.logger.Debug("handleValidatorRemovedEvent - onShareRemove: remove share from key manager", zap.String("pubKey", pk), zap.Error(err))
 		}
 	}
 
@@ -579,7 +550,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
+		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
 		if err != nil {
 			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue
