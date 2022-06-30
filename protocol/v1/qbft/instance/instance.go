@@ -3,9 +3,13 @@ package instance
 import (
 	"context"
 	"encoding/hex"
-	qbft2 "github.com/bloxapp/ssv/spec/qbft"
 	"sync"
 	"time"
+
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -18,10 +22,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-
-	"github.com/pkg/errors"
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
 )
 
 // Options defines option attributes for the Instance
@@ -55,7 +55,7 @@ type Instance struct {
 	signer         beaconprotocol.Signer
 
 	// messages
-	containersMap       map[qbft2.MessageType]msgcont.MessageContainer
+	containersMap       map[qbftspec.MessageType]msgcont.MessageContainer
 	PrePrepareMessages  msgcont.MessageContainer
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
@@ -125,11 +125,11 @@ func NewInstance(opts *Options) Instancer {
 		stopped: *atomic.NewBool(false),
 	}
 
-	ret.containersMap = map[qbft2.MessageType]msgcont.MessageContainer{
-		qbft2.ProposalMsgType:    ret.PrePrepareMessages,
-		qbft2.PrepareMsgType:     ret.PrepareMessages,
-		qbft2.CommitMsgType:      ret.CommitMessages,
-		qbft2.RoundChangeMsgType: ret.ChangeRoundMessages,
+	ret.containersMap = map[qbftspec.MessageType]msgcont.MessageContainer{
+		qbftspec.ProposalMsgType:    ret.PrePrepareMessages,
+		qbftspec.PrepareMsgType:     ret.PrepareMessages,
+		qbftspec.CommitMsgType:      ret.CommitMessages,
+		qbftspec.RoundChangeMsgType: ret.ChangeRoundMessages,
 	}
 
 	ret.setFork(opts.Fork)
@@ -152,7 +152,7 @@ func (i *Instance) State() *qbft.State {
 }
 
 // Containers returns map of containers
-func (i *Instance) Containers() map[qbft2.MessageType]msgcont.MessageContainer {
+func (i *Instance) Containers() map[qbftspec.MessageType]msgcont.MessageContainer {
 	return i.containersMap
 }
 

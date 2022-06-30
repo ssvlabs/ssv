@@ -47,3 +47,5 @@ vendor/
 
 bin/
 /data/
+
+spectest/tests.json
