@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -268,21 +269,6 @@ func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleTyp
 	switch msg.GetType() {
 	case types.SSVConsensusMsgType:
 		msgType = message.SSVConsensusMsgType
-
-		//var sm message.SignedMessage
-		//require.NoError(t, json.Unmarshal(data, &sm))
-		//
-		//var pd message.ProposalData
-		//require.NoError(t, json.Unmarshal(sm.Message.Data, &pd))
-		//
-		//var cd types.ConsensusData
-		//require.NoError(t, json.Unmarshal(pd.Data, &cd))
-		//
-		//ad, err := cd.AttestationData.MarshalSSZ()
-		//require.NoError(t, err)
-		//
-		//data = ad
-
 	case types.SSVDecidedMsgType:
 		msgType = message.SSVDecidedMsgType
 	case types.SSVPartialSignatureMsgType:
@@ -293,14 +279,21 @@ func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleTyp
 		spsm := sps.Messages[0]
 		spcm := &message.SignedPostConsensusMessage{
 			Message: &message.PostConsensusMessage{
-				Height:          0, // TODO need to get height fom ssv.SignedPartialSignatureMessage
-				DutySignature:   spsm.PartialSignature,
+				Height:        0, // TODO need to get height fom ssv.SignedPartialSignatureMessage
+				DutySignature: spsm.PartialSignature,
+				//DutySignature:   sps.Signature,
 				DutySigningRoot: spsm.SigningRoot,
 				Signers:         convertSingers(spsm.Signers),
+				//Signers: convertSingers(sps.Signers),
 			},
-			Signature: message.Signature(sps.Signature),
-			Signers:   convertSingers(sps.Signers),
+			//Signature: message.Signature(sps.Signature),
+			Signature: message.Signature(spsm.PartialSignature),
+			//Signers: convertSingers(sps.Signers),
+			Signers: convertSingers(spsm.Signers),
 		}
+
+		log.Printf("spsm: %+v", spsm)
+		log.Printf("sps: %+v", sps)
 
 		encoded, err := spcm.Encode()
 		require.NoError(t, err)
