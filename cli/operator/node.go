@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	"github.com/bloxapp/ssv/network/records"
 	"log"
 	"net/http"
 	"time"
@@ -148,6 +150,11 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
 		}
 
+		if len(cfg.P2pNetworkConfig.Subnets) == 0 {
+			subnets := getNodeSubnets(Logger, db, ssvForkVersion, operatorPubKey)
+			cfg.P2pNetworkConfig.Subnets = subnets.String()
+		}
+
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
@@ -246,4 +253,34 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enab
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}
+}
+
+// getNodeSubnets reads all shares and calculates the subnets for this node
+// note that we'll trigger another update once finished processing registry events
+func getNodeSubnets(logger *zap.Logger, db basedb.IDb, ssvForkVersion forksprotocol.ForkVersion, operatorPubKey string) records.Subnets {
+	f := forksfactory.NewFork(ssvForkVersion)
+	sharesStorage := validator.NewCollection(validator.CollectionOptions{
+		DB:     db,
+		Logger: logger,
+	})
+	subnetsMap := make(map[int]bool)
+	shares, err := sharesStorage.GetEnabledOperatorValidatorShares(operatorPubKey)
+	if err != nil {
+		logger.Warn("could not read validators to bootstrap subnets")
+		return nil
+	}
+	for _, share := range shares {
+		subnet := f.ValidatorSubnet(share.PublicKey.SerializeToHexStr())
+		if subnet < 0 {
+			continue
+		}
+		if !subnetsMap[subnet] {
+			subnetsMap[subnet] = true
+		}
+	}
+	subnets := make([]byte, f.Subnets())
+	for subnet := range subnetsMap {
+		subnets[subnet] = 1
+	}
+	return subnets
 }

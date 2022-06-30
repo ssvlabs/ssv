@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/exporter"
 	"strings"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -145,6 +146,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 		return errors.Wrap(err, "could not save operator data")
 	}
 
+	exporter.ReportOperatorIndex(c.logger, &od)
 	return nil
 }
 

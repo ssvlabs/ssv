@@ -5,6 +5,9 @@ import (
 	scrypto "github.com/bloxapp/ssv/utils/crypto"
 )
 
+// subnetsCount returns the subnet count for v1
+var subnetsCount uint64 = 128
+
 // MsgID returns msg_id for the given message
 func (v1 *ForkV1) MsgID() forks.MsgIDFunc {
 	return func(msg []byte) string {
@@ -18,6 +21,6 @@ func (v1 *ForkV1) MsgID() forks.MsgIDFunc {
 }
 
 // Subnets returns the subnets count for this fork
-func (v1 *ForkV1) Subnets() int64 {
-	return int64(SubnetsCount)
+func (v1 *ForkV1) Subnets() int {
+	return int(subnetsCount)
 }

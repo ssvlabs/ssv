@@ -101,6 +101,7 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	n.logger.Debug("peer identity",
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
+		zap.String("nodeVersion", nodeVersion),
 		zap.String("oid", oid),
 		zap.String("nodeType", nodeType),
 		zap.String("nodeState", nodeState.String()))

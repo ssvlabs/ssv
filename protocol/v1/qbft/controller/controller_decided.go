@@ -88,8 +88,13 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		return c.syncDecided(localMsg, msg)
 	}
 	// last decided, try to update it (merge new signers)
-	if _, err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+	if updated, err := c.decidedStrategy.UpdateDecided(msg); err != nil {
 		logger.Warn("could not update decided")
+	} else if updated != nil {
+		qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), updated)
+		if c.newDecidedHandler != nil {
+			go c.newDecidedHandler(msg)
+		}
 	}
 	return err
 }

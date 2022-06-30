@@ -33,11 +33,15 @@ type pubSubMapping interface {
 	GetTopicFullName(baseName string) string
 	// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
 	GetTopicBaseName(topicName string) string
+	// ValidatorSubnet returns the subnet for the given validator
+	ValidatorSubnet(validatorPKHex string) int
 }
 
 type pubSubConfig interface {
 	// MsgID is the msgID function to use for pubsub
 	MsgID() MsgIDFunc
+	// Subnets returns the subnets count for this fork
+	Subnets() int
 }
 
 type libp2pConfig interface {

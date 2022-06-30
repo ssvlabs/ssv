@@ -64,7 +64,7 @@ func (pi *peersIndex) IsBad(id peer.ID) bool {
 	threshold := -10000.0
 	scores, err := pi.GetScore(id, "")
 	if err != nil {
-		logger.Warn("could not read score", zap.Error(err))
+		//logger.Debug("could not read score", zap.Error(err))
 		return false
 	}
 	for _, score := range scores {

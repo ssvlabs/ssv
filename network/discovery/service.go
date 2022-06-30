@@ -47,8 +47,8 @@ type Options struct {
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(subnets ...int64) error
-	DeregisterSubnets(subnets ...int64) error
+	RegisterSubnets(subnets ...int) error
+	DeregisterSubnets(subnets ...int) error
 	Bootstrap(handler HandleNewPeer) error
 	UpdateForkVersion(forkv forksprotocol.ForkVersion) error
 }
