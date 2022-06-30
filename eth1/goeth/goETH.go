@@ -221,6 +221,9 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 			ec.logger.Warn("failed to read logs from subscription", zap.Error(err))
 			return err
 		case vLog := <-logs:
+			if vLog.Removed {
+				continue
+			}
 			ec.logger.Debug("received contract event from stream")
 			eventName, err := ec.handleEvent(vLog, contractAbi)
 			if err != nil {
@@ -320,7 +323,7 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	for _, vLog := range logs {
 		eventName, err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			loggerWith := logger.With(
+			loggerWith := ec.logger.With(
 				zap.String("event", eventName),
 				zap.Uint64("block", vLog.BlockNumber),
 				zap.String("txHash", vLog.TxHash.Hex()),
