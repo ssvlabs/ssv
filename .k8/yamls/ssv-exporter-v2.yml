@@ -134,7 +134,7 @@ spec:
           - name: REGISTRY_CONTRACT_ADDR_KEY
             value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
           - name: ABI_VERSION
-            value: "2"
+            value: "1"
           - name: LOG_LEVEL
             value: "debug"
           - name: DISCOVERY_TYPE_KEY
