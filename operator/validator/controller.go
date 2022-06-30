@@ -319,18 +319,6 @@ func (c *controller) StartValidators() {
 		return
 	}
 	c.setupValidators(shares)
-	//// inject handler for finding relevant operators
-	//p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
-	//	_, ok := c.operatorsIDs.Load(oid)
-	//	return ok
-	//})
-	// print current relevant operators (ids)
-	ids := []string{}
-	c.operatorsIDs.Range(func(key, value interface{}) bool {
-		ids = append(ids, key.(string))
-		return true
-	})
-	c.logger.Debug("relevant operators", zap.Int("len", len(ids)), zap.Strings("op_ids", ids))
 }
 
 // setupValidators setup and starts validators from the given shares

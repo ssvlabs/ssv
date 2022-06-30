@@ -5,16 +5,11 @@ import (
 	"strconv"
 )
 
-const (
-	// SubnetsCount is the count of subnets in the network
-	SubnetsCount = 128
-)
-
 var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
 
 // nsToSubnet converts the given topic to subnet
 // TODO: return other value than zero upon failure?
-func nsToSubnet(ns string) int64 {
+func nsToSubnet(ns string) int {
 	r, done := regPool.Get()
 	defer done()
 	found := r.FindStringSubmatch(ns)
@@ -25,7 +20,7 @@ func nsToSubnet(ns string) int64 {
 	if err != nil {
 		return -1
 	}
-	return int64(val)
+	return int(val)
 }
 
 // isSubnet checks if the given string is a subnet string

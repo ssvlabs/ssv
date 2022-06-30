@@ -171,6 +171,8 @@ spec:
             value: "ssv-testnet-stage"
           - name: FORKV2_EPOCH
             value: '1'
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter

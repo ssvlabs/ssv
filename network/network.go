@@ -27,4 +27,6 @@ type P2PNetwork interface {
 	Setup() error
 	// Start starts the network
 	Start() error
+	// UpdateSubnets will update the registered subnets according to active validators
+	UpdateSubnets()
 }
