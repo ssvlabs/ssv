@@ -48,4 +48,4 @@ vendor/
 bin/
 /data/
 
-spectest/tests.json
+spectest/**/tests.json
