@@ -135,6 +135,8 @@ spec:
             value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
           - name: ABI_VERSION
             value: "1"
+          - name: NETWORK_ID
+            value: "ssv-testnet-v2-prod"
           - name: LOG_LEVEL
             value: "debug"
           - name: DISCOVERY_TYPE_KEY
