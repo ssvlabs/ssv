@@ -89,14 +89,14 @@ spec:
           value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
         - name: ABI_VERSION
           value: "1"
+        - name: BOOTNODES
+          value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
         - name: LOG_LEVEL
           value: "debug"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
         - name: NETWORK
           value: "prater"
-        - name: BOOTNODES
-          value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
