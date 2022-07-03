@@ -237,9 +237,9 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 	if len(topic) == 0 {
 		return n.cfg.MaxPeers
 	}
-	baseName := n.fork.GetTopicBaseName(topic)
-	if baseName == n.fork.DecidedTopic() {
-		return n.cfg.MaxPeers / 2
-	}
-	return n.cfg.MaxPeers / 8
+	//baseName := n.fork.GetTopicBaseName(topic)
+	//if baseName == n.fork.DecidedTopic() {
+	//	return n.cfg.MaxPeers / 4
+	//}
+	return n.cfg.TopicMaxPeers
 }
