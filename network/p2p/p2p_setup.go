@@ -143,11 +143,10 @@ func (n *p2pNetwork) setupPeerServices() error {
 		NodeVersion: commons2.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
-		return n.cfg.MaxPeers
-	}, func() crypto.PrivKey {
+	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
-	}, 10*time.Minute)
+	}
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))

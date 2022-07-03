@@ -20,12 +20,14 @@ const (
 // empty string means that we want to check the total max peers (for all topics).
 type MaxPeersProvider func(topic string) int
 
+// NetworkKeyProvider is a function that provides the network private key
+type NetworkKeyProvider func() crypto.PrivKey
+
 // peersIndex implements Index interface.
-// It uses libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) to store node info of peers.
 type peersIndex struct {
 	logger *zap.Logger
 
-	netKeyProvider func() crypto.PrivKey
+	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
 	states   *nodeStates
@@ -38,11 +40,12 @@ type peersIndex struct {
 	// selfSealed helps to cache the node info record instead of signing multiple times
 	selfSealed []byte
 
-	maxPeers func() int
+	maxPeers MaxPeersProvider
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers func() int, netKeyProvider func() crypto.PrivKey, pruneTTL time.Duration) Index {
+func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
+	netKeyProvider NetworkKeyProvider, pruneTTL time.Duration) Index {
 	return &peersIndex{
 		logger:         logger,
 		network:        network,
@@ -99,7 +102,7 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 }
 
 func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
-	maxPeers := pi.maxPeers()
+	maxPeers := pi.maxPeers("")
 	if dir == libp2pnetwork.DirInbound {
 		// accepting more connection than the limit for inbound connections
 		maxPeers *= 4 / 3

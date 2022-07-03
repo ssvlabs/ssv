@@ -231,3 +231,15 @@ func (n *p2pNetwork) UpdateSubnets() {
 	}
 	n.logger.Debug("updated subnets (discovery)", zap.Any("subnets", n.subnets))
 }
+
+// getMaxPeers returns max peers of the given topic.
+func (n *p2pNetwork) getMaxPeers(topic string) int {
+	if len(topic) == 0 {
+		return n.cfg.MaxPeers
+	}
+	baseName := n.fork.GetTopicBaseName(topic)
+	if baseName == n.fork.DecidedTopic() {
+		return n.cfg.MaxPeers / 2
+	}
+	return n.cfg.MaxPeers / 8
+}

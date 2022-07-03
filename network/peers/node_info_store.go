@@ -9,7 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// nodeInfoStore stores records.NodeInfo
+// nodeInfoStore stores records.NodeInfo.
+// libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) is used for the persistence of node info.
 type nodeInfoStore struct {
 	logger  *zap.Logger
 	network libp2pnetwork.Network
