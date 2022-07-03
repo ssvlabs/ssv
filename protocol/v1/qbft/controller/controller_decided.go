@@ -21,10 +21,10 @@ func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
 	if c.newDecidedHandler != nil {
 		go c.newDecidedHandler(msg)
 	}
-	if c.readMode {
+	if c.ReadMode {
 		return nil
 	}
-	if err := c.network.Broadcast(message.SSVMessage{
+	if err := c.Network.Broadcast(message.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,
 		ID:      c.Identifier,
 		Data:    data,

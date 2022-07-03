@@ -129,7 +129,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			updated, err := c.decidedStrategy.UpdateDecided(agg)
+			updated, err := c.DecidedStrategy.UpdateDecided(agg)
 			if err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
@@ -180,7 +180,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if currentInstance == nil {
 			return errors.New("current instance is nil")
 		}
-		logger := c.logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
+		logger := c.Logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
 		if stage := currentInstance.State(); stage != nil && stage.GetHeight() > msg.Message.Height {
 			logger.Debug("change round message is old, ignoring",
 				zap.Uint64("currentHeight", uint64(stage.GetHeight())))

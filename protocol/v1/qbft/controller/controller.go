@@ -124,8 +124,8 @@ func New(opts Options) IController {
 		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
-		currentInstanceLock: &sync.RWMutex{},
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: &sync.RWMutex{},
+		ForkLock:            &sync.Mutex{},
 
 		newDecidedHandler: opts.NewDecidedHandler,
 	}
@@ -139,7 +139,7 @@ func New(opts Options) IController {
 			// TODO: we should probably stop here, TBD
 			logger.Warn("could not setup msg queue properly", zap.Error(err))
 		}
-		ctrl.q = q
+		ctrl.Q = q
 	}
 
 	ctrl.DecidedFactory = factory.NewDecidedFactory(logger, ctrl.GetNodeMode(), opts.Storage, opts.Network)
