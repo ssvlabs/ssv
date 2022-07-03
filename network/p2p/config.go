@@ -81,7 +81,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 
 	opts, err := c.configureAddrs(opts)
 	if err != nil {
-		return opts, errors.Wrap(err, "failed to setup addresses")
+		return opts, errors.Wrap(err, "could not setup addresses")
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))

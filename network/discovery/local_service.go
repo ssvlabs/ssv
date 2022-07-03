@@ -42,12 +42,12 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) 
 
 	svc, err := mdnsDiscover.NewMdnsService(ctx, host, localDiscoveryInterval, LocalDiscoveryServiceTag)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create new mDNS service")
+		return nil, errors.Wrap(err, "could not create new mDNS service")
 	}
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create DHT")
+		return nil, errors.Wrap(err, "could not create DHT")
 	}
 
 	return &localDiscovery{

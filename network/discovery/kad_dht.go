@@ -20,7 +20,7 @@ const (
 func NewKadDHT(ctx context.Context, host host.Host, mode dht.ModeOpt) (routing.Routing, discovery.Discovery, error) {
 	kdht, err := dht.New(ctx, host, dht.ProtocolPrefix(DHTDiscoveryProtocol), dht.Mode(mode))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to create DHT")
+		return nil, nil, errors.Wrap(err, "could not create DHT")
 	}
 	return kdht, libp2pdisc.NewRoutingDiscovery(kdht), nil
 }

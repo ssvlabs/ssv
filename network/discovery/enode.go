@@ -57,11 +57,11 @@ func addAddresses(localNode *enode.LocalNode, hostAddr, hostDNS string) error {
 func ToPeer(node *enode.Node) (*peer.AddrInfo, error) {
 	m, err := ToMultiAddr(node)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create multiaddr")
+		return nil, errors.Wrap(err, "could not create multiaddr")
 	}
 	pi, err := peer.AddrInfoFromP2pAddr(m)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to create peer info")
+		return nil, errors.Wrap(err, "could not create peer info")
 	}
 	return pi, nil
 }

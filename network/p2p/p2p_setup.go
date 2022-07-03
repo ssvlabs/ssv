@@ -96,7 +96,7 @@ func (n *p2pNetwork) SetupHost() error {
 	}
 	host, err := libp2p.New(n.ctx, opts...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create p2p host")
+		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
 
@@ -152,7 +152,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
 	if err != nil {
-		return errors.Wrap(err, "failed to create ID service")
+		return errors.Wrap(err, "could not create ID service")
 	}
 
 	filters := make([]connections.HandshakeFilter, 0)
