@@ -112,7 +112,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
-		if _, err := h.infoStore.Add(pid, &ni); err != nil {
+		if _, err := h.infoStore.AddNodeInfo(pid, &ni); err != nil {
 			h.logger.Warn("could not add node info", zap.Error(err))
 			return
 		}
@@ -161,7 +161,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	defer h.pending.Delete(pid.String())
 	// check if the peer is known
-	ni, err := h.infoStore.NodeInfo(pid)
+	ni, err := h.infoStore.GetNodeInfo(pid)
 	if err != nil && err != peers.ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
@@ -197,7 +197,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 	// adding to index
-	_, err = h.infoStore.Add(pid, ni)
+	_, err = h.infoStore.AddNodeInfo(pid, ni)
 	if err != nil {
 		logger.Warn("could not add peer to index", zap.Error(err))
 		return err

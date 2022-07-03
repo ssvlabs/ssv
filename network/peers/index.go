@@ -57,10 +57,10 @@ type NodeInfoStore interface {
 	Self() *records.NodeInfo
 	// UpdateSelfRecord updating current self with new one
 	UpdateSelfRecord(newInfo *records.NodeInfo)
-	// Add indexes the given peer info
-	Add(id peer.ID, node *records.NodeInfo) (bool, error)
-	// NodeInfo returns the info of the given node
-	NodeInfo(id peer.ID) (*records.NodeInfo, error)
+	// AddNodeInfo indexes the given peer info
+	AddNodeInfo(id peer.ID, node *records.NodeInfo) (bool, error)
+	// GetNodeInfo returns the info of the given node
+	GetNodeInfo(id peer.ID) (*records.NodeInfo, error)
 }
 
 // NodeStates is an interface for managing NodeState across network peers

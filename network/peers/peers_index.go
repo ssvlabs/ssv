@@ -132,8 +132,8 @@ func (pi *peersIndex) SelfSealed() ([]byte, error) {
 	return pi.selfSealed, nil
 }
 
-// Add adds a new peer identity
-func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+// AddNodeInfo adds a new peer identity
+func (pi *peersIndex) AddNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
 	switch pi.states.State(id) {
 	case StateReady:
 		return true, nil
@@ -149,7 +149,7 @@ func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) 
 }
 
 // NodeInfo returns the identity of the given peer
-func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
+func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
 	switch pi.states.State(id) {
 	case StateIndexing:
 		return nil, ErrIndexingInProcess
