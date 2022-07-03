@@ -300,20 +300,8 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 	for {
 		select {
 		case e := <-cn:
-			if err := handler(*e); err != nil {
-				var malformedEventErr *abiparser.MalformedEventError
-				logger := c.logger.With(
-					zap.String("event", e.Name),
-					zap.Uint64("block", e.Log.BlockNumber),
-					zap.String("txHash", e.Log.TxHash.Hex()),
-					zap.Error(err),
-				)
-				if errors.As(err, &malformedEventErr) {
-					logger.Warn("could not handle ongoing sync event, the event is malformed")
-				} else {
-					logger.Error("could not handle ongoing sync event")
-				}
-			}
+			logFields, err := handler(*e)
+			_ = eth1.HandleEventResult(c.logger, *e, logFields, err, true)
 		case err := <-sub.Err():
 			c.logger.Warn("event feed subscription error", zap.Error(err))
 		}
@@ -322,7 +310,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
+	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -487,7 +475,6 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 		if err := c.keyManager.AddShare(shareSecret); err != nil {
 			return nil, isOperatorShare, errors.Wrap(err, "could not add share secret to key manager")
 		}
-		logger.Info("share was added successfully to key manager")
 	}
 
 	// save validator data
@@ -506,7 +493,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 	// stop instance
 	if v != nil {
-		if err := v.Close(); err == nil {
+		if err := v.Close(); err != nil {
 			return errors.Wrap(err, "could not close validator")
 		}
 	}
@@ -551,7 +538,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetEnabledOperatorValidatorShares(c.operatorPubKey)
+		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
 		if err != nil {
 			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue

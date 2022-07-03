@@ -125,11 +125,11 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: config_path
-          - name: ENR_KEY
+          - name: BOOTNODES
             valueFrom:
               secretKeyRef:
                 name: config-secrets
-                key: enr_key
+                key: boot_node
           - name: REGISTRY_CONTRACT_ADDR_KEY
             valueFrom:
               secretKeyRef:
@@ -163,12 +163,10 @@ spec:
             value: "13007"
           - name: WS_API_PORT
             value: "14007"
-          - name: BOOTNODES
-            value: "enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
           - name: FULLNODE
             value: "true"
           - name: NETWORK_ID
-            value: "ssv-testnet-stage"
+            value: "ssv-testnet-v2-stage"
           - name: FORKV2_EPOCH
             value: '1'
           - name: SUBNETS
