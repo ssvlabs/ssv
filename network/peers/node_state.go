@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// NodeState is the state of the node w.r.t to the Index
+// NodeState is the state of the node
 type NodeState int32
 
 func (ns NodeState) String() string {

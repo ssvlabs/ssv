@@ -77,7 +77,7 @@ type NodeStates interface {
 
 // SubnetsIndex stores information on subnets
 type SubnetsIndex interface {
-	SaveSubnets(id peer.ID, s records.Subnets) bool
+	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
 	GetSubnetPeers(s int) []peer.ID
 }
 

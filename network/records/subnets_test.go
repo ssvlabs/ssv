@@ -98,3 +98,13 @@ func TestSharedSubnets(t *testing.T) {
 	shared := SharedSubnets(s1, s2, 0)
 	require.Equal(t, expectedShared, shared)
 }
+
+func TestActiveSubnets(t *testing.T) {
+	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	require.NoError(t, err)
+	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	require.NoError(t, err)
+
+	require.Len(t, s1.GetActive(), 128)
+	require.Len(t, s2.GetActive(), 62)
+}

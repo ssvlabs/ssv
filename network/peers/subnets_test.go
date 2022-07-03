@@ -29,9 +29,9 @@ func TestSubnetsIndex(t *testing.T) {
 
 	subnetsIdx := newSubnetsIndex(128)
 
-	subnetsIdx.SaveSubnets(pids[0], sAll)
-	subnetsIdx.SaveSubnets(pids[1], sNone)
-	subnetsIdx.SaveSubnets(pids[2], sPartial)
+	subnetsIdx.UpdatePeerSubnets(pids[0], sAll)
+	subnetsIdx.UpdatePeerSubnets(pids[1], sNone)
+	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial)
 
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 2)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 1)

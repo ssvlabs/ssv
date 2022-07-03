@@ -23,7 +23,7 @@ func newSubnetsIndex(count int) SubnetsIndex {
 	}
 }
 
-func (si *subnetsIndex) SaveSubnets(id peer.ID, s records.Subnets) bool {
+func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
 	si.lock.Lock()
 	defer si.lock.Unlock()
 
@@ -54,11 +54,11 @@ func (si *subnetsIndex) SaveSubnets(id peer.ID, s records.Subnets) bool {
 	return true
 }
 
-func (si *subnetsIndex) GetSubnetPeers(s int) []peer.ID {
+func (si *subnetsIndex) GetSubnetPeers(subnet int) []peer.ID {
 	si.lock.RLock()
 	defer si.lock.RUnlock()
 
-	peers := si.subnets[s]
+	peers := si.subnets[subnet]
 	if len(peers) == 0 {
 		return nil
 	}
