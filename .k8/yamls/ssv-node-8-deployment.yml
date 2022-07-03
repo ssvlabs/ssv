@@ -85,22 +85,10 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
-        - name: ENR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: enr_key
         - name: REGISTRY_CONTRACT_ADDR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: smart_contract_addr_key
+          value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
         - name: ABI_VERSION
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: abi_version
-              optional: true
+          value: "1"
         - name: LOG_LEVEL
           value: "debug"
         - name: DISCOVERY_TYPE_KEY
@@ -108,7 +96,7 @@ spec:
         - name: NETWORK
           value: "prater"
         - name: BOOTNODES
-          value: "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
+          value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
