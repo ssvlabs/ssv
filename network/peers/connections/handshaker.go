@@ -53,36 +53,44 @@ type handshaker struct {
 
 	filters []HandshakeFilter
 
-	streams streams.StreamController
-
+	streams     streams.StreamController
 	nodeInfoIdx peers.NodeInfoIndex
-
-	states peers.NodeStates
-
-	connIdx peers.ConnectionIndex
-	// for backwards compatibility
-	ids *identify.IDService
+	states      peers.NodeStates
+	connIdx     peers.ConnectionIndex
+	subnetsIdx  peers.SubnetsIndex
+	ids         *identify.IDService
 
 	pending *sync.Map
 
 	subnetsProvider SubnetsProvider
 }
 
+// HandshakerCfg is the configuration for creating an handshaker instance
+type HandshakerCfg struct {
+	Logger          *zap.Logger
+	Streams         streams.StreamController
+	NodeInfoIdx     peers.NodeInfoIndex
+	States          peers.NodeStates
+	ConnIdx         peers.ConnectionIndex
+	SubnetsIdx      peers.SubnetsIndex
+	IDService       *identify.IDService
+	SubnetsProvider SubnetsProvider
+}
+
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, nodeInfoIdx peers.NodeInfoIndex,
-	states peers.NodeStates, connIdx peers.ConnectionIndex, ids *identify.IDService, subnetsProvider SubnetsProvider,
-	filters ...HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
-		logger:          logger,
-		streams:         streams,
-		nodeInfoIdx:     nodeInfoIdx,
-		connIdx:         connIdx,
-		ids:             ids,
+		logger:          cfg.Logger.With(zap.String("where", "Handshaker")),
+		streams:         cfg.Streams,
+		nodeInfoIdx:     cfg.NodeInfoIdx,
+		connIdx:         cfg.ConnIdx,
+		subnetsIdx:      cfg.SubnetsIdx,
+		ids:             cfg.IDService,
 		filters:         filters,
 		pending:         &sync.Map{},
-		states:          states,
-		subnetsProvider: subnetsProvider,
+		states:          cfg.States,
+		subnetsProvider: cfg.SubnetsProvider,
 	}
 	return h
 }
@@ -202,6 +210,13 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if err != nil {
 		logger.Warn("could not add peer to index", zap.Error(err))
 		return err
+	}
+	subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+	if err == nil && len(subnets) > 0 {
+		updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
+		h.logger.Debug("handshaked peer subnets", zap.String("id", pid.String()),
+			zap.String("subnets", subnets.String()),
+			zap.Bool("updated", updated))
 	}
 	// if we reached limit, check that the peer has at least 5 shared subnets
 	// TODO: dynamic/configurable value TBD

@@ -162,8 +162,17 @@ func (n *p2pNetwork) setupPeerServices() error {
 		}))
 	}
 	filters = append(filters, connections.NetworkIDFilter(n.cfg.NetworkID))
-	handshaker := connections.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, n.idx, ids, func() records.Subnets {
-		return n.subnets
+	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
+		Logger:      n.logger,
+		Streams:     n.streamCtrl,
+		NodeInfoIdx: n.idx,
+		States:      n.idx,
+		ConnIdx:     n.idx,
+		SubnetsIdx:  n.idx,
+		IDService:   ids,
+		SubnetsProvider: func() records.Subnets {
+			return n.subnets
+		},
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
@@ -205,6 +214,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		Host:        n.host,
 		DiscV5Opts:  discV5Opts,
 		ConnIndex:   n.idx,
+		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
 		ForkVersion: n.cfg.ForkVersion,

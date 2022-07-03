@@ -75,6 +75,12 @@ type NodeStates interface {
 	GC()
 }
 
+// SubnetsStats holds a snapshot of subnets stats
+type SubnetsStats struct {
+	PeersCount []int
+	// TODO: add more fields, e.g. Connected []int, Pruned []int
+}
+
 // SubnetsIndex stores information on subnets.
 // it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
@@ -84,6 +90,8 @@ type SubnetsIndex interface {
 	GetSubnetPeers(s int) []peer.ID
 	// GetPeerSubnets returns subnets of the given peer
 	GetPeerSubnets(id peer.ID) records.Subnets
+	// GetSubnetsStats collects and returns subnets stats
+	GetSubnetsStats() *SubnetsStats
 }
 
 // Index is a facade interface of this package

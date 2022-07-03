@@ -60,6 +60,12 @@ func (n *p2pNetwork) reportAllPeers() {
 	MetricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
+func (n *p2pNetwork) reportSubnetsStats() {
+	stats := n.idx.GetSubnetsStats()
+	n.logger.Debug("network subnets",
+		zap.Any("stats", stats))
+}
+
 func (n *p2pNetwork) reportTopics() {
 	topics := n.topicsCtrl.Topics()
 	nTopics := len(topics)

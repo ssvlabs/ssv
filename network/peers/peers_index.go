@@ -236,6 +236,10 @@ func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 	return pi.subnets.GetPeerSubnets(id)
 }
 
+func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
+	return pi.subnets.GetSubnetsStats()
+}
+
 // Close closes peer index
 func (pi *peersIndex) Close() error {
 	_ = pi.states.Close()

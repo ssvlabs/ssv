@@ -124,6 +124,10 @@ func (n *p2pNetwork) Start() error {
 		n.reportTopics()
 	})
 
+	async.Interval(n.ctx, reportingInterval/15, func() {
+		n.reportSubnetsStats()
+	})
+
 	if err := n.registerInitialTopics(); err != nil {
 		return err
 	}
