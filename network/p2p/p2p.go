@@ -1,12 +1,14 @@
 package p2pv1
 
 import (
+	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
@@ -179,4 +181,53 @@ func (n *p2pNetwork) startDiscovery() {
 
 func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
+}
+
+// UpdateSubnets will update the registered subnets according to active validators
+// NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
+func (n *p2pNetwork) UpdateSubnets() {
+	visited := make(map[int]bool)
+	n.activeValidatorsLock.Lock()
+	last := make([]byte, len(n.subnets))
+	if len(n.subnets) > 0 {
+		copy(last, n.subnets)
+	}
+	newSubnets := make([]byte, n.fork.Subnets())
+	for pkHex, state := range n.activeValidators {
+		if state == validatorStateInactive {
+			continue
+		}
+		subnet := n.fork.ValidatorSubnet(pkHex)
+		if _, ok := visited[subnet]; ok {
+			continue
+		}
+		newSubnets[subnet] = byte(1)
+	}
+	subnetsToAdd := make([]int, 0)
+	if !bytes.Equal(newSubnets, last) { // have changes
+		n.subnets = newSubnets
+		for i, b := range newSubnets {
+			if b == byte(1) {
+				subnetsToAdd = append(subnetsToAdd, i)
+			}
+		}
+	}
+	n.activeValidatorsLock.Unlock()
+
+	if len(subnetsToAdd) == 0 {
+		n.logger.Debug("no changes in subnets")
+		return
+	}
+
+	self := n.idx.Self()
+	self.Metadata.Subnets = records.Subnets(n.subnets).String()
+	n.idx.UpdateSelfRecord(self)
+	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", n.subnets))
+
+	err := n.disc.RegisterSubnets(subnetsToAdd...)
+	if err != nil {
+		n.logger.Warn("could not register subnets", zap.Error(err))
+		return
+	}
+	n.logger.Debug("updated subnets (discovery)", zap.Any("subnets", n.subnets))
 }

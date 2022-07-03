@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
@@ -12,15 +13,16 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
+	"sync/atomic"
 	"time"
 )
 
 var (
 	defaultDiscoveryInterval = time.Second
-	//publishENRTimeout        = time.Minute
+	publishENRTimeout        = time.Minute
 
-	publishStateReady = int32(0)
-	//publishStatePending = int32(1)
+	publishStateReady   = int32(0)
+	publishStatePending = int32(1)
 )
 
 // NodeProvider is an interface for managing ENRs
@@ -48,7 +50,10 @@ type DiscV5Service struct {
 
 	publishState int32
 	conn         *net.UDPConn
-	forkv        forksprotocol.ForkVersion
+
+	fork    forks.Fork
+	forkv   forksprotocol.ForkVersion
+	subnets []byte
 }
 
 func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) {
@@ -60,6 +65,8 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		forkv:        discOpts.ForkVersion,
+		fork:         forksfactory.NewFork(discOpts.ForkVersion),
+		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
 	dvs.logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(discOpts); err != nil {
@@ -90,14 +97,17 @@ func (dvs *DiscV5Service) Self() *enode.LocalNode {
 }
 
 // UpdateForkVersion updates the fork version used to filter nodes, and also the entry in ENR
-// TODO: uncomment publishENR
 func (dvs *DiscV5Service) UpdateForkVersion(forkv forksprotocol.ForkVersion) error {
+	if dvs.forkv == forkv {
+		return nil
+	}
 	dvs.forkv = forkv
+	dvs.fork = forksfactory.NewFork(forkv)
 	err := records.SetForkVersionEntry(dvs.dv5Listener.LocalNode(), forkv.String())
 	if err != nil {
 		return err
 	}
-	//go dvs.publishENR()
+	go dvs.publishENR()
 	return nil
 }
 
@@ -127,10 +137,18 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // note that this function blocks
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
+		// if we reached peers limit, make sure to accept peers with more than 10% shared subnets
+		if !dvs.limitNodeFilter(e.Node) {
+			//desired := dvs.fork.Subnets() / 10
+			desired := 5
+			if !dvs.sharedSubnetsFilter(desired)(e.Node) {
+				metricRejectedNodes.Inc()
+				return
+			}
+		}
 		metricFoundNodes.Inc()
 		handler(e)
-	}, defaultDiscoveryInterval,
-		dvs.limitNodeFilter) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
@@ -217,47 +235,64 @@ func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, i
 }
 
 // RegisterSubnets adds the given subnets and publish the updated node record
-func (dvs *DiscV5Service) RegisterSubnets(subnets ...int64) error {
+func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, subnets, nil)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), subnets, nil)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
-	//go dvs.publishENR()
+	if updated != nil {
+		dvs.subnets = updated
+		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		go dvs.publishENR()
+	}
 	return nil
 }
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
-func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int64) error {
+func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
 	if len(subnets) == 0 {
 		return nil
 	}
-	err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), 128, nil, subnets)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), nil, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
-	//go dvs.publishENR()
+	if updated != nil {
+		dvs.subnets = updated
+		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		go dvs.publishENR()
+	}
 	return nil
 }
 
-//// publishENR publishes the new ENR across the network
-//func (dvs *DiscV5Service) publishENR() {
-//	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
-//	defer done()
-//	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
-//		// pending
-//		return
-//	}
-//	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
-//	dvs.discover(ctx, func(e PeerEvent) {
-//		err := dvs.dv5Listener.Ping(e.Node)
-//		if err != nil {
-//			dvs.logger.Warn("could not ping node", zap.String("ENR", e.Node.String()), zap.Error(err))
-//		}
-//	}, time.Millisecond*100, dvs.badNodeFilter)
-//}
+// publishENR publishes the new ENR across the network
+func (dvs *DiscV5Service) publishENR() {
+	ctx, done := context.WithTimeout(dvs.ctx, publishENRTimeout)
+	defer done()
+	if !atomic.CompareAndSwapInt32(&dvs.publishState, publishStateReady, publishStatePending) {
+		// pending
+		dvs.logger.Debug("pending publish ENR")
+		return
+	}
+	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
+	dvs.discover(ctx, func(e PeerEvent) {
+		metricPublishEnrPings.Inc()
+		err := dvs.dv5Listener.Ping(e.Node)
+		if err != nil {
+			if err.Error() == "RPC timeout" {
+				// ignore
+				return
+			}
+			dvs.logger.Warn("could not ping node", zap.String("targetNodeENR", e.Node.String()), zap.Error(err))
+			return
+		}
+		metricPublishEnrPongs.Inc()
+		//dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
+	}, time.Millisecond*100, dvs.badNodeFilter)
+}
 
 func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*enode.LocalNode, error) {
 	opts := discOpts.DiscV5Opts

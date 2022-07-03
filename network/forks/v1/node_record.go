@@ -14,7 +14,7 @@ func (f *ForkV1) DecorateNode(node *enode.LocalNode, args map[string]interface{}
 	var subnets []byte
 	raw, ok := args["subnets"]
 	if !ok {
-		subnets = make([]byte, SubnetsCount)
+		subnets = make([]byte, subnetsCount)
 	} else {
 		subnets = raw.([]byte)
 	}

@@ -25,9 +25,8 @@ func init() {
 	}
 }
 
-// TODO: (un-lint)
-//nolint
-func reportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorData) {
+// ReportOperatorIndex reporting of new or exist operators
+func ReportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorData) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256([]byte(op.PublicKey)))
 	metricOperatorIndex.WithLabelValues(pkHash, op.Name).Set(float64(op.Index))
 	logger.Debug("report operator", zap.String("pkHash", pkHash),

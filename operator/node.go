@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
@@ -134,8 +135,10 @@ func (n *operatorNode) Start() error {
 
 	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
+	go n.net.UpdateSubnets()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
+	go n.reportOperators()
 	n.dutyCtrl.Start()
 
 	return nil
@@ -227,4 +230,16 @@ func (n *operatorNode) startWSServer() error {
 	}
 
 	return nil
+}
+
+func (n *operatorNode) reportOperators() {
+	operators, err := n.storage.ListOperators(0, 1000) // TODO more than 1000?
+	if err != nil {
+		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		return
+	}
+	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	for i := range operators {
+		exporter.ReportOperatorIndex(n.logger, &operators[i])
+	}
 }

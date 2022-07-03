@@ -76,7 +76,10 @@ func NewValidator(opt *Options) IValidator {
 
 	ibfts := setupIbfts(opt, logger)
 
-	logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
+	if !opt.ReadMode {
+		logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
+	}
+
 	ctx, cancel := context.WithCancel(opt.Context)
 	return &Validator{
 		ctx:         ctx,

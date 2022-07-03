@@ -25,6 +25,11 @@ func (v0 *ForkV0) DecidedTopic() string {
 	return ""
 }
 
+// ValidatorSubnet implements forks.Fork, for v0 there are no subnets
+func (v0 *ForkV0) ValidatorSubnet(validatorPKHex string) int {
+	return -1
+}
+
 // ValidatorTopicID - genesis version 0
 func (v0 *ForkV0) ValidatorTopicID(pkByts []byte) []string {
 	return []string{hex.EncodeToString(pkByts)}

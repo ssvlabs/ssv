@@ -30,6 +30,7 @@ func NewLightNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore,
 
 func (ln *lightNode) Sync(ctx context.Context, identifier message.Identifier, from, to *message.SignedMessage, pip pipelines.SignedMessagePipeline) error {
 	if to == nil {
+		ln.logger.Debug("syncing decided", zap.String("identifier", identifier.String()))
 		highest, _, _, err := ln.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*message.SignedMessage, error) {
 			return from, nil
 		})

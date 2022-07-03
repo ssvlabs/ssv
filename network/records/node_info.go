@@ -22,8 +22,6 @@ type NodeInfo struct {
 	NetworkID string
 	// Metadata holds node's general information
 	Metadata *NodeMetadata
-
-	// TODO: add fields, e.g. subnets
 }
 
 // NewNodeInfo creates a new node info

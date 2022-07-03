@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
@@ -38,5 +39,47 @@ func Test_SubnetsEntry(t *testing.T) {
 		} else {
 			require.Equal(t, byte(0), subnetsFromEnr[i])
 		}
+	}
+}
+
+func TestSubnetsParsing(t *testing.T) {
+	subtests := []struct {
+		name        string
+		str         string
+		shouldError bool
+	}{
+		{
+			"all subnets",
+			"0xffffffffffffffffffffffffffffffff",
+			//"0x11111111111111111111111111111111",
+			false,
+		},
+		{
+			"partial subnets",
+			"0x57b080fffd743d9878dc41a184ab160a",
+			false,
+		},
+		{
+			"wrong size",
+			"57b080fffd743d9878dc41a184ab1600",
+			false,
+		},
+		{
+			"invalid",
+			"xxx",
+			true,
+		},
+	}
+
+	for _, subtest := range subtests {
+		t.Run(subtest.name, func(t *testing.T) {
+			s, err := Subnets{}.FromString(subtest.str)
+			if subtest.shouldError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, strings.Replace(subtest.str, "0x", "", 1), s.String())
+			}
+		})
 	}
 }
