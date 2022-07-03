@@ -162,7 +162,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		}))
 	}
 	filters = append(filters, peers.NetworkIDFilter(n.cfg.NetworkID))
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, func() records.Subnets {
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, n.idx, ids, func() records.Subnets {
 		return n.subnets
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())

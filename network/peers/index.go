@@ -7,7 +7,6 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"io"
-	"time"
 )
 
 var (
@@ -23,39 +22,6 @@ var (
 type NodeScore struct {
 	Name  string
 	Value float64
-}
-
-// NodeState is the state of the node w.r.t to the Index
-type NodeState int32
-
-func (ns NodeState) String() string {
-	switch ns {
-	case StatePruned:
-		return "pruned"
-	case StateIndexing:
-		return "indexing"
-	case StateReady:
-		return "ready"
-	default:
-		return "unknown"
-	}
-}
-
-var (
-	// StatePruned is the state for pruned nodes
-	StatePruned NodeState = -1
-	// StateUnknown is the state for unknown peers
-	StateUnknown NodeState = 0
-	// StateIndexing is the state for nodes that are currently being indexed / pending
-	StateIndexing NodeState = 1
-	// StateReady is the state for a connected, identified node
-	StateReady NodeState = 2
-)
-
-// nodeStateObj is a wrapper object for a state, has a time for TTL check
-type nodeStateObj struct {
-	state NodeState
-	time  time.Time
 }
 
 // ConnectionIndex is an interface for accessing peers connections
@@ -91,6 +57,10 @@ type NodeInfoStore interface {
 	Add(id peer.ID, node *records.NodeInfo) (bool, error)
 	// NodeInfo returns the info of the given node
 	NodeInfo(id peer.ID) (*records.NodeInfo, error)
+}
+
+// NodeStates is an interface for managing NodeState across network peers
+type NodeStates interface {
 	// State returns the state of the peer in the identity store
 	State(id peer.ID) NodeState
 	// EvictPruned removes the given operator or peer from pruned list
@@ -106,6 +76,7 @@ type NodeInfoStore interface {
 type Index interface {
 	ConnectionIndex
 	NodeInfoStore
+	NodeStates
 	ScoreIndex
 	io.Closer
 }

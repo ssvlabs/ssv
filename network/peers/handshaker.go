@@ -58,6 +58,8 @@ type handshaker struct {
 
 	infoStore NodeInfoStore
 
+	states NodeStates
+
 	connIdx ConnectionIndex
 	// for backwards compatibility
 	ids *identify.IDService
@@ -69,7 +71,8 @@ type handshaker struct {
 
 // NewHandshaker creates a new instance of handshaker
 func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore,
-	connIdx ConnectionIndex, ids *identify.IDService, subnetsProvider func() records.Subnets, filters ...HandshakeFilter) Handshaker {
+	states NodeStates, connIdx ConnectionIndex, ids *identify.IDService, subnetsProvider func() records.Subnets,
+	filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
 		logger:          logger,
@@ -164,7 +167,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errors.Wrap(err, "could not read identity")
 	}
 	if ni != nil {
-		switch h.infoStore.State(pid) {
+		switch h.states.State(pid) {
 		case StateIndexing:
 			return errHandshakeInProcess
 		case StatePruned:

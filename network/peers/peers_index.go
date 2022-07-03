@@ -23,8 +23,7 @@ type peersIndex struct {
 	netKeyProvider func() crypto.PrivKey
 	network        libp2pnetwork.Network
 
-	statesLock *sync.RWMutex
-	states     map[string]nodeStateObj
+	states *nodeStates
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
@@ -32,7 +31,6 @@ type peersIndex struct {
 	selfSealed []byte
 
 	maxPeers func() int
-	pruneTTL time.Duration
 }
 
 // NewPeersIndex creates a new Index
@@ -40,12 +38,10 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	return &peersIndex{
 		logger:         logger,
 		network:        network,
-		statesLock:     &sync.RWMutex{},
-		states:         make(map[string]nodeStateObj),
+		states:         newNodeStates(pruneTTL),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
-		pruneTTL:       pruneTTL,
 		netKeyProvider: netKeyProvider,
 	}
 }
@@ -56,7 +52,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad score
 func (pi *peersIndex) IsBad(id peer.ID) bool {
 	logger := pi.logger.With(zap.String("id", id.String()))
-	if pi.pruned(id.String()) {
+	if pi.states.pruned(id.String()) {
 		logger.Debug("bad peer (pruned)")
 		return true
 	}
@@ -131,7 +127,7 @@ func (pi *peersIndex) SelfSealed() ([]byte, error) {
 
 // Add adds a new peer identity
 func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	switch pi.state(id.String()) {
+	switch pi.states.State(id) {
 	case StateReady:
 		return true, nil
 	case StateIndexing:
@@ -147,7 +143,7 @@ func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) 
 
 // NodeInfo returns the identity of the given peer
 func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	switch pi.state(id.String()) {
+	switch pi.states.State(id) {
 	case StateIndexing:
 		return nil, ErrIndexingInProcess
 	case StatePruned:
@@ -166,7 +162,7 @@ func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
 }
 
 func (pi *peersIndex) State(id peer.ID) NodeState {
-	return pi.state(id.String())
+	return pi.states.State(id)
 }
 
 // Score adds score to the given peer
@@ -187,7 +183,7 @@ func (pi *peersIndex) Score(id peer.ID, scores ...NodeScore) error {
 // GetScore returns the desired score for the given peer
 func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
 	var scores []NodeScore
-	switch pi.state(id.String()) {
+	switch pi.states.State(id) {
 	case StateIndexing:
 		// TODO: handle
 		return scores, nil
@@ -217,36 +213,22 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 
 // Prune set prune state for the given peer
 func (pi *peersIndex) Prune(id peer.ID) error {
-	pi.setState(id.String(), StatePruned)
-	return nil
+	return pi.states.Prune(id)
 }
 
 // EvictPruned changes to ready state instead of pruned
 func (pi *peersIndex) EvictPruned(id peer.ID) {
-	pi.setState(id.String(), StateReady)
+	pi.states.EvictPruned(id)
 }
 
 // GC does garbage collection on current peers and states
 func (pi *peersIndex) GC() {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
-
-	now := time.Now()
-	for pid, s := range pi.states {
-		if s.state == StatePruned {
-			// check ttl
-			if !s.time.Add(pi.pruneTTL).After(now) {
-				delete(pi.states, pid)
-			}
-		}
-	}
+	pi.states.GC()
 }
 
 // Close closes peer index
 func (pi *peersIndex) Close() error {
-	pi.statesLock.Lock()
-	pi.states = make(map[string]nodeStateObj)
-	pi.statesLock.Unlock()
+	_ = pi.states.Close()
 	if err := pi.network.Peerstore().Close(); err != nil {
 		return errors.Wrap(err, "could not close peerstore")
 	}
@@ -256,20 +238,20 @@ func (pi *peersIndex) Close() error {
 // add saves the given identity
 func (pi *peersIndex) add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
 	id := pid.String()
-	pi.setState(id, StateIndexing)
+	pi.states.setState(id, StateIndexing)
 
 	raw, err := nodeInfo.MarshalRecord()
 	if err != nil {
-		pi.setState(id, StateUnknown)
+		pi.states.setState(id, StateUnknown)
 		return false, errors.Wrap(err, "could not marshal node info record")
 	}
 	// commit changes or rollback
 	if err := pi.network.Peerstore().Put(pid, formatInfoKey(nodeInfoKey), raw); err != nil {
-		pi.setState(id, StateUnknown)
+		pi.states.setState(id, StateUnknown)
 		pi.logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", id))
 		return false, err
 	}
-	pi.setState(id, StateReady)
+	pi.states.setState(id, StateReady)
 	return true, nil
 }
 
@@ -290,47 +272,4 @@ func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
 	}
 
 	return &ni, nil
-}
-
-// state returns the NodeState of the given peer
-func (pi *peersIndex) state(pid string) NodeState {
-	pi.statesLock.RLock()
-	defer pi.statesLock.RUnlock()
-
-	so, ok := pi.states[pid]
-	if !ok {
-		return StateUnknown
-	}
-	return so.state
-}
-
-// pruned checks if the given peer was pruned and that TTL was not reached
-func (pi *peersIndex) pruned(pid string) bool {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
-
-	so, ok := pi.states[pid]
-	if !ok {
-		return false
-	}
-	if so.state == StatePruned {
-		if so.time.Add(pi.pruneTTL).After(time.Now()) {
-			return true
-		}
-		// TTL reached
-		delete(pi.states, pid)
-	}
-	return false
-}
-
-// setState updates the NodeState of the peer
-func (pi *peersIndex) setState(pid string, state NodeState) {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
-
-	so := nodeStateObj{
-		state: state,
-		time:  time.Now(),
-	}
-	pi.states[pid] = so
 }
