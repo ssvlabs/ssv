@@ -73,7 +73,7 @@ func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
 // Subnets holds all the subscribed subnets of a specific node
 type Subnets []byte
 
-// Clone clones the underlying byte slice
+// Clone clones the independent byte slice
 func (s Subnets) Clone() Subnets {
 	cp := make([]byte, len(s))
 	copy(cp, s)

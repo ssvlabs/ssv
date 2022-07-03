@@ -81,6 +81,7 @@ func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.Stre
 		ids:             ids,
 		filters:         filters,
 		pending:         &sync.Map{},
+		states:          states,
 		subnetsProvider: subnetsProvider,
 	}
 	return h
