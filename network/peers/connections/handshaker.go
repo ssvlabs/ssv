@@ -55,7 +55,7 @@ type handshaker struct {
 
 	streams streams.StreamController
 
-	infoStore peers.NodeInfoStore
+	nodeInfoIdx peers.NodeInfoIndex
 
 	states peers.NodeStates
 
@@ -69,14 +69,14 @@ type handshaker struct {
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx peers.NodeInfoStore,
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, nodeInfoIdx peers.NodeInfoIndex,
 	states peers.NodeStates, connIdx peers.ConnectionIndex, ids *identify.IDService, subnetsProvider SubnetsProvider,
 	filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
 		logger:          logger,
 		streams:         streams,
-		infoStore:       idx,
+		nodeInfoIdx:     nodeInfoIdx,
 		connIdx:         connIdx,
 		ids:             ids,
 		filters:         filters,
@@ -113,7 +113,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
-		if _, err := h.infoStore.AddNodeInfo(pid, &ni); err != nil {
+		if _, err := h.nodeInfoIdx.AddNodeInfo(pid, &ni); err != nil {
 			h.logger.Warn("could not add node info", zap.Error(err))
 			return
 		}
@@ -128,7 +128,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
 			return errors.New("ignoring peer w/o shared subnets")
 		}*/
-		self, err := h.infoStore.SelfSealed()
+		self, err := h.nodeInfoIdx.SelfSealed()
 		if err != nil {
 			h.logger.Warn("could not seal self node info", zap.Error(err))
 			return
@@ -162,7 +162,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	defer h.pending.Delete(pid.String())
 	// check if the peer is known
-	ni, err := h.infoStore.GetNodeInfo(pid)
+	ni, err := h.nodeInfoIdx.GetNodeInfo(pid)
 	if err != nil && err != peers.ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
@@ -198,7 +198,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 	// adding to index
-	_, err = h.infoStore.AddNodeInfo(pid, ni)
+	_, err = h.nodeInfoIdx.AddNodeInfo(pid, ni)
 	if err != nil {
 		logger.Warn("could not add peer to index", zap.Error(err))
 		return err
@@ -223,7 +223,7 @@ func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeI
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
 	}
-	data, err := h.infoStore.SelfSealed()
+	data, err := h.nodeInfoIdx.SelfSealed()
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 		return nil, errUnknownUserAgent
 	}
 	// TODO: don't assume network is the same
-	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.infoStore.Self().NetworkID)
+	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.nodeInfoIdx.Self().NetworkID)
 	ni.Metadata = &records.NodeMetadata{
 		NodeVersion: parts[1],
 	}

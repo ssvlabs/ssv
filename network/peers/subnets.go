@@ -80,3 +80,16 @@ func (si *subnetsIndex) GetSubnetPeers(subnet int) []peer.ID {
 	copy(cp, peers)
 	return cp
 }
+
+func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
+	si.lock.RLock()
+	defer si.lock.RUnlock()
+
+	subnets, ok := si.peerSubnets[id]
+	if !ok {
+		return nil
+	}
+	cp := make(records.Subnets, len(subnets))
+	copy(cp, subnets)
+	return cp
+}

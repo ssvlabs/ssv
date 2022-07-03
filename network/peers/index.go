@@ -49,8 +49,8 @@ type ScoreIndex interface {
 	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
 
-// NodeInfoStore is an interface for managing peers identity
-type NodeInfoStore interface {
+// NodeInfoIndex is an interface for managing records.NodeInfo of network peers
+type NodeInfoIndex interface {
 	// SelfSealed returns a sealed, encoded of self node info
 	SelfSealed() ([]byte, error)
 	// Self returns the current node info
@@ -77,14 +77,18 @@ type NodeStates interface {
 
 // SubnetsIndex stores information on subnets
 type SubnetsIndex interface {
+	// UpdatePeerSubnets updates the given peer's subnets
 	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
+	// GetSubnetPeers returns peers that are interested in the given subnet
 	GetSubnetPeers(s int) []peer.ID
+	// GetPeerSubnets returns subnets of the given peer
+	GetPeerSubnets(id peer.ID) records.Subnets
 }
 
 // Index is a facade interface of this package
 type Index interface {
 	ConnectionIndex
-	NodeInfoStore
+	NodeInfoIndex
 	NodeStates
 	ScoreIndex
 	io.Closer
