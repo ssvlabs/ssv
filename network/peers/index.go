@@ -75,7 +75,8 @@ type NodeStates interface {
 	GC()
 }
 
-// SubnetsIndex stores information on subnets
+// SubnetsIndex stores information on subnets.
+// it keeps track of subnets but doesn't mind regards actual connections that we have.
 type SubnetsIndex interface {
 	// UpdatePeerSubnets updates the given peer's subnets
 	UpdatePeerSubnets(id peer.ID, s records.Subnets) bool
@@ -91,5 +92,6 @@ type Index interface {
 	NodeInfoIndex
 	NodeStates
 	ScoreIndex
+	SubnetsIndex
 	io.Closer
 }

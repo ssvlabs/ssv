@@ -30,9 +30,9 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	states   *nodeStates
-	scoreIdx ScoreIndex
-
+	states        *nodeStates
+	scoreIdx      ScoreIndex
+	subnets       SubnetsIndex
 	nodeInfoStore *nodeInfoStore
 
 	selfLock *sync.RWMutex
@@ -45,12 +45,13 @@ type peersIndex struct {
 
 // NewPeersIndex creates a new Index
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, pruneTTL time.Duration) Index {
+	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) Index {
 	return &peersIndex{
 		logger:         logger,
 		network:        network,
 		states:         newNodeStates(pruneTTL),
 		scoreIdx:       newScoreIndex(),
+		subnets:        newSubnetsIndex(subnetsCount),
 		nodeInfoStore:  newNodeInfoStore(logger, network),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
@@ -221,6 +222,18 @@ func (pi *peersIndex) EvictPruned(id peer.ID) {
 // GC does garbage collection on current peers and states
 func (pi *peersIndex) GC() {
 	pi.states.GC()
+}
+
+func (pi *peersIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
+	return pi.subnets.UpdatePeerSubnets(id, s)
+}
+
+func (pi *peersIndex) GetSubnetPeers(subnet int) []peer.ID {
+	return pi.subnets.GetSubnetPeers(subnet)
+}
+
+func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
+	return pi.subnets.GetPeerSubnets(id)
 }
 
 // Close closes peer index
