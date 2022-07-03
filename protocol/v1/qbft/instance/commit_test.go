@@ -1,12 +1,10 @@
 package instance
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -14,24 +12,11 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func init() {
 	logex.Build("test", zapcore.DebugLevel, nil)
-}
-
-func newInMemDb() basedb.IDb {
-	db, _ := kv.New(basedb.Options{
-		Type:   "badger-memory",
-		Path:   "",
-		Logger: zap.L(),
-	})
-	return db
 }
 
 func TestAggregatedMsg(t *testing.T) {
@@ -200,97 +185,6 @@ func TestCommitPipeline(t *testing.T) {
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
-}
-
-func TestProcessLateCommitMsg(t *testing.T) {
-	sks, _ := GenerateNodes(4)
-	db := qbftstorage.NewQBFTStore(newInMemDb(), zap.L(), "attestation")
-
-	share := beacon.Share{}
-	share.PublicKey = sks[1].GetPublicKey()
-	share.Committee = make(map[message.OperatorID]*beacon.Node, 4)
-	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String()) // TODO should using fork to get identifier?
-
-	var sigs []*message.SignedMessage
-	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
-	require.NoError(t, err)
-
-	for i := 1; i < 4; i++ {
-		sigs = append(sigs, SignMsg(t, uint64(i), sks[message.OperatorID(i)], &message.ConsensusMessage{
-			Height:     2,
-			MsgType:    message.CommitMsgType,
-			Round:      3,
-			Identifier: []byte(identifier),
-			Data:       commitData,
-		}, forksprotocol.V0ForkVersion.String()))
-	}
-	decided, err := AggregateMessages(sigs)
-	require.NoError(t, err)
-
-	tests := []struct {
-		name        string
-		expectedErr string
-		updated     interface{}
-		msg         *message.SignedMessage
-	}{
-		{
-			"valid",
-			"",
-			struct{}{},
-			SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-				Height:     message.Height(2),
-				MsgType:    message.CommitMsgType,
-				Round:      3,
-				Identifier: []byte(identifier),
-				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
-		},
-		{
-			"invalid",
-			"could not aggregate commit message",
-			nil,
-			func() *message.SignedMessage {
-				msg := SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-					Height:     2,
-					MsgType:    message.CommitMsgType,
-					Round:      3,
-					Identifier: []byte(identifier),
-					Data:       commitData,
-				}, forksprotocol.V0ForkVersion.String())
-				msg.Signature = []byte("dummy")
-				return msg
-			}(),
-		},
-		{
-			"not found",
-			"",
-			nil,
-			SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-				Height:     message.Height(2),
-				MsgType:    message.CommitMsgType,
-				Round:      3,
-				Identifier: []byte("xxx_ATTESTER"),
-				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			require.NoError(t, db.SaveDecided(decided))
-			updated, err := ProcessLateCommitMsg(test.msg, db, &share)
-			if len(test.expectedErr) > 0 {
-				require.NotNil(t, err)
-				require.True(t, strings.Contains(err.Error(), test.expectedErr))
-			} else {
-				require.NoError(t, err)
-			}
-			if test.updated != nil {
-				require.NotNil(t, updated)
-			} else {
-				require.Nil(t, updated)
-			}
-		})
-	}
 }
 
 // AggregateMessages will aggregate given msgs or return error

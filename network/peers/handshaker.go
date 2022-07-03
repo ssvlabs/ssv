@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,6 +24,12 @@ const (
 
 // errHandshakeInProcess is thrown when and handshake process for that peer is already running
 var errHandshakeInProcess = errors.New("handshake already in process")
+
+// errPeerWasFiltered is thrown when a peer is filtered during handshake
+var errPeerWasFiltered = errors.New("peer was filtered during handshake")
+
+// errUnknownUserAgent is thrown when a peer has an unknown user agent
+var errUnknownUserAgent = errors.New("user agent is unknown")
 
 // ErrAtPeersLimit is thrown when we reached peers limit
 var ErrAtPeersLimit = errors.New("peers limit was reached")
@@ -56,19 +63,23 @@ type handshaker struct {
 	ids *identify.IDService
 
 	pending *sync.Map
+
+	subnetsProvider func() records.Subnets
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore, connIdx ConnectionIndex, ids *identify.IDService, filters ...HandshakeFilter) Handshaker {
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore,
+	connIdx ConnectionIndex, ids *identify.IDService, subnetsProvider func() records.Subnets, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
-		ctx:       ctx,
-		logger:    logger,
-		streams:   streams,
-		infoStore: idx,
-		connIdx:   connIdx,
-		ids:       ids,
-		filters:   filters,
-		pending:   &sync.Map{},
+		ctx:             ctx,
+		logger:          logger,
+		streams:         streams,
+		infoStore:       idx,
+		connIdx:         connIdx,
+		ids:             ids,
+		filters:         filters,
+		pending:         &sync.Map{},
+		subnetsProvider: subnetsProvider,
 	}
 	return h
 }
@@ -96,18 +107,27 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		}
 		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
 		if !h.applyFilters(&ni) {
-			h.logger.Debug("filtering peer", zap.Any("info", ni))
+			//h.logger.Debug("filtering peer", zap.Any("info", ni))
 			return
 		}
-		if added, err := h.infoStore.Add(pid, &ni); err != nil {
+		if _, err := h.infoStore.Add(pid, &ni); err != nil {
 			h.logger.Warn("could not add node info", zap.Error(err))
 			return
-		} else if !added {
-			h.logger.Warn("node info was not added", zap.String("id", pid.String()))
 		}
+		// if we reached limit, check that the peer has at least 5 shared subnets
+		// TODO: dynamic/configurable value TBD
+		if h.connIdx.Limit(stream.Conn().Stat().Direction) {
+			ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(&ni)
+			if !ok {
+				h.logger.Warn("reached peers limit", zap.Error(err))
+				return
+			}
+		} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+			return errors.New("ignoring peer w/o shared subnets")
+		}*/
 		self, err := h.infoStore.SelfSealed()
 		if err != nil {
-			h.logger.Error("could not seal self node info", zap.Error(err))
+			h.logger.Warn("could not seal self node info", zap.Error(err))
 			return
 		}
 		if err := res(self); err != nil {
@@ -138,12 +158,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errHandshakeInProcess
 	}
 	defer h.pending.Delete(pid.String())
-
-	// first, check that we didn't reach peers limit
-	if h.connIdx.Limit(conn.Stat().Direction) {
-		h.logger.Debug("reached peers limit")
-		return nil
-	}
 	// check if the peer is known
 	ni, err := h.infoStore.NodeInfo(pid)
 	if err != nil && err != ErrNotFound {
@@ -157,11 +171,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 			return errors.Errorf("pruned peer [%s]", pid.String())
 		case StateUnknown:
 			// continue the flow
-		default: // ready
+		default: // ready, exit
 			return nil
 		}
 	}
-
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
@@ -170,26 +183,35 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(conn)
-	}
-	if err != nil {
-		return errors.Wrapf(err, "could not handshake with peer [%s]", pid.String())
+		if err != nil {
+			return err
+		}
 	}
 	if ni == nil {
 		return errors.New("empty identity")
 	}
 	if !h.applyFilters(ni) {
-		return errors.Errorf("peer [%s] was filtered during handshake", pid.String())
+		return errPeerWasFiltered
 	}
+	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 	// adding to index
-	added, err := h.infoStore.Add(pid, ni)
-	if added {
-		//h.logger.Debug("new peer added after handshake", zap.String("id", pid.String()), zap.Any("info", ni))
-		return nil
-	}
+	_, err = h.infoStore.Add(pid, ni)
 	if err != nil {
-		h.logger.Warn("could not add peer to index", zap.String("id", pid.String()), zap.Any("info", ni))
+		logger.Warn("could not add peer to index", zap.Error(err))
+		return err
 	}
-	return err
+	// if we reached limit, check that the peer has at least 5 shared subnets
+	// TODO: dynamic/configurable value TBD
+	if h.connIdx.Limit(conn.Stat().Direction) {
+		ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(ni)
+		if !ok {
+			return errors.New("reached peers limit")
+		}
+	} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
+		return errors.New("ignoring peer w/o shared subnets")
+	}*/
+
+	return nil
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
@@ -221,7 +243,19 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	pid := conn.RemotePeer()
 	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
-		return nil, err
+		if err == peerstore.ErrNotFound {
+			// if user agent wasn't found, retry libp2p identify after 100ms
+			time.Sleep(time.Millisecond * 100)
+			if err := h.preHandshake(conn); err != nil {
+				return nil, err
+			}
+			uaRaw, err = h.ids.Host.Peerstore().Get(pid, userAgentKey)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	ua, ok := uaRaw.(string)
 	if !ok {
@@ -229,7 +263,8 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	}
 	parts := strings.Split(ua, ":")
 	if len(parts) < 2 { // too old or unknown
-		return nil, errors.Errorf("user agent is unknown: %s", ua)
+		h.logger.Debug("user agent is unknown", zap.String("ua", ua))
+		return nil, errUnknownUserAgent
 	}
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.infoStore.Self().NetworkID)
@@ -247,7 +282,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 	for _, filter := range h.filters {
 		ok, err := filter(nodeInfo)
 		if err != nil {
-			h.logger.Warn("could not filter identity", zap.Error(err), zap.Any("identity", nodeInfo))
+			//h.logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
 			return false
 		}
 		if !ok {
@@ -261,7 +296,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 func ForkVersionFilter(forkVersion func() forksprotocol.ForkVersion) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
 		version := forkVersion()
-		if version != ni.ForkVersion {
+		if version == forksprotocol.V0ForkVersion || ni.ForkVersion == forksprotocol.V0ForkVersion {
 			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), version)
 		}
 		return true, nil
@@ -273,6 +308,28 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	return func(ni *records.NodeInfo) (bool, error) {
 		if networkID != ni.NetworkID {
 			return false, errors.Errorf("networkID '%s' instead of '%s'", ni.NetworkID, networkID)
+		}
+		return true, nil
+	}
+}
+
+// SharedSubnetsFilter determines whether we will connect to the given node by the amount of shared subnets
+func SharedSubnetsFilter(subnetsProvider func() records.Subnets, n int) HandshakeFilter {
+	return func(ni *records.NodeInfo) (bool, error) {
+		subnets := subnetsProvider()
+		if len(subnets) == 0 {
+			return true, nil
+		}
+		if len(ni.Metadata.Subnets) == 0 {
+			return true, nil
+		}
+		nodeSubnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		if err != nil {
+			return false, err
+		}
+		shared := records.SharedSubnets(subnets, nodeSubnets, n)
+		if len(shared) < n {
+			return false, nil
 		}
 		return true, nil
 	}

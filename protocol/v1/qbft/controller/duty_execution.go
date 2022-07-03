@@ -54,8 +54,6 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 		height := c.SignatureState.getHeight()
 		c.Q.Clean(
 			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, height),
-			msgqueue.SignedMsgCleaner(c.Identifier, height),
-			msgqueue.DefaultMsgCleaner(c.Identifier, message.SSVConsensusMsgType, message.SSVDecidedMsgType),
 		)
 
 		err := c.broadcastSignature()

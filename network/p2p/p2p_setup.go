@@ -16,25 +16,29 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"math/rand"
 	"net"
+	"strings"
 	"sync/atomic"
 	"time"
+
+	logging "github.com/ipfs/go-log"
 )
 
 const (
 	// defaultReqTimeout is the default timeout used for stream requests
 	defaultReqTimeout = 10 * time.Second
 	// backoffLow is when we start the backoff exponent interval
-	backoffLow = 15 * time.Second
+	backoffLow = 10 * time.Second
 	// backoffLow is when we stop the backoff exponent interval
-	backoffHigh = 15 * time.Minute
+	backoffHigh = 30 * time.Minute
 	// backoffExponentBase is the base of the backoff exponent
 	backoffExponentBase = 2.0
 	// backoffConnectorCacheSize is the cache size of the backoff connector
 	backoffConnectorCacheSize = 1024
 	// connectTimeout is the timeout used for connections
-	connectTimeout = 15 * time.Second
+	connectTimeout = time.Minute
 	// connectorQueueSize is the buffer size of the channel used by the connector
 	connectorQueueSize = 256
 )
@@ -71,6 +75,15 @@ func (n *p2pNetwork) initCfg() {
 	}
 	if len(n.cfg.UserAgent) == 0 {
 		n.cfg.UserAgent = userAgent(n.cfg.UserAgent)
+	}
+	if len(n.cfg.Subnets) > 0 {
+		s := make(records.Subnets, 0)
+		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
+		if err != nil {
+			// TODO: handle
+			return
+		}
+		n.subnets = subnets
 	}
 }
 
@@ -122,12 +135,12 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 
 func (n *p2pNetwork) setupPeerServices() error {
 	libPrivKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(n.cfg.NetworkPrivateKey))
-	//self := peers.NewIdentity(n.host.ID().String(), n.cfg.OperatorID, string(n.cfg.ForkVersion), make(map[string]string))
 
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
 		NodeVersion: commons2.GetNodeVersion(),
+		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
 		return n.cfg.MaxPeers
@@ -146,9 +159,12 @@ func (n *p2pNetwork) setupPeerServices() error {
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
 		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
 			return n.cfg.ForkVersion
-		}), peers.NetworkIDFilter(n.cfg.NetworkID))
+		}))
 	}
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, filters...)
+	filters = append(filters, peers.NetworkIDFilter(n.cfg.NetworkID))
+	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, func() records.Subnets {
+		return n.subnets
+	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
@@ -177,6 +193,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 		if n.cfg.DiscoveryTrace {
 			discV5Opts.Logger = n.logger
 		}
+		if len(n.subnets) > 0 {
+			discV5Opts.Subnets = n.subnets
+		}
 		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
 		n.logger.Debug("no bootnodes were configured, using mdns discovery")
@@ -202,6 +221,11 @@ func (n *p2pNetwork) setupDiscovery() error {
 }
 
 func (n *p2pNetwork) setupPubsub() error {
+	if n.cfg.PubSubTrace {
+		if err := logging.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
+			return errors.Wrap(err, "could not set pubsub logger level")
+		}
+	}
 	cfg := &topics.PububConfig{
 		Logger:   n.logger,
 		Host:     n.host,
@@ -223,7 +247,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
 			n.fork, time.Minute*2)
 		n.msgResolver = midHandler
-		cfg.MsgIDHandler = topics.NewMsgIDHandler(n.logger, n.fork, time.Minute*2)
+		cfg.MsgIDHandler = midHandler
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}

@@ -12,11 +12,8 @@ const (
 	UnknownSubnet = "unknown"
 	decidedTopic  = "decided"
 
-	topicPrefix = "ssv.v1"
+	topicPrefix = "ssv.v1.1"
 )
-
-// SubnetsCount returns the subnet count for v1
-var SubnetsCount uint64 = 128
 
 // GetTopicFullName returns the topic full name, including prefix
 func (v1 *ForkV1) GetTopicFullName(baseName string) string {
@@ -36,26 +33,25 @@ func (v1 *ForkV1) DecidedTopic() string {
 // ValidatorTopicID returns the topic to use for the given validator
 func (v1 *ForkV1) ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
-	subnet := validatorSubnet(pkHex)
+	subnet := v1.ValidatorSubnet(pkHex)
 	return []string{pkHex, topicOf(subnet)}
 }
 
 // topicOf returns the topic for the given subnet
-func topicOf(subnet int64) string {
+func topicOf(subnet int) string {
 	if subnet < 0 {
 		return UnknownSubnet
 	}
 	return fmt.Sprintf("%d", subnet)
 }
 
-// validatorSubnet returns the subnet for the given validator
-// TODO: allow reuse by other components
-func validatorSubnet(validatorPKHex string) int64 {
+// ValidatorSubnet returns the subnet for the given validator
+func (v1 *ForkV1) ValidatorSubnet(validatorPKHex string) int {
 	if len(validatorPKHex) < 10 {
 		return -1
 	}
 	val := hexToUint64(validatorPKHex[:10])
-	return int64(val % SubnetsCount)
+	return int(val % subnetsCount)
 }
 
 func hexToUint64(hexStr string) uint64 {

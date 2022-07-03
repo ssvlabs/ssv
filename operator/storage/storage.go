@@ -1,8 +1,10 @@
-package operator
+package storage
 
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"math/big"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -10,13 +12,10 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var (
-	prefix        = []byte("operator-")
+	storagePrefix = []byte("operator-")
 	syncOffsetKey = []byte("syncOffset")
 )
 
@@ -42,7 +41,7 @@ func NewNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
 	return &storage{
 		db:            db,
 		logger:        logger,
-		operatorStore: registrystorage.NewOperatorsStorage(db, logger, prefix),
+		operatorStore: registrystorage.NewOperatorsStorage(db, logger, storagePrefix),
 	}
 }
 
@@ -56,6 +55,10 @@ func (s *storage) GetOperatorData(index uint64) (*registrystorage.OperatorData, 
 
 func (s *storage) SaveOperatorData(operatorData *registrystorage.OperatorData) error {
 	return s.operatorStore.SaveOperatorData(operatorData)
+}
+
+func (s *storage) DeleteOperatorData(index uint64) error {
+	return s.operatorStore.DeleteOperatorData(index)
 }
 
 func (s *storage) ListOperators(from uint64, to uint64) ([]registrystorage.OperatorData, error) {
@@ -81,21 +84,21 @@ func (s *storage) CleanRegistryData() error {
 
 // SaveSyncOffset saves the offset
 func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
-	return s.db.Set(prefix, syncOffsetKey, offset.Bytes())
+	return s.db.Set(storagePrefix, syncOffsetKey, offset.Bytes())
 }
 
 func (s *storage) cleanSyncOffset() error {
-	return s.db.RemoveAllByCollection(append(prefix, syncOffsetKey...))
+	return s.db.RemoveAllByCollection(append(storagePrefix, syncOffsetKey...))
 }
 
 func (s *storage) cleanOperators() error {
 	operatorsPrefix := s.GetOperatorsPrefix()
-	return s.db.RemoveAllByCollection(append(prefix, operatorsPrefix...))
+	return s.db.RemoveAllByCollection(append(storagePrefix, operatorsPrefix...))
 }
 
 // GetSyncOffset returns the offset
 func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
-	obj, found, err := s.db.Get(prefix, syncOffsetKey)
+	obj, found, err := s.db.Get(storagePrefix, syncOffsetKey)
 	if !found {
 		return nil, found, nil
 	}
@@ -109,7 +112,7 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 
 // GetPrivateKey return rsa private key
 func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	obj, found, err := s.db.Get(prefix, []byte("private-key"))
+	obj, found, err := s.db.Get(storagePrefix, []byte("private-key"))
 	if err != nil {
 		return nil, false, err
 	}
@@ -180,7 +183,7 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 
 // SavePrivateKey save operator private key
 func (s *storage) savePrivateKey(operatorKey string) error {
-	if err := s.db.Set(prefix, []byte("private-key"), []byte(operatorKey)); err != nil {
+	if err := s.db.Set(storagePrefix, []byte("private-key"), []byte(operatorKey)); err != nil {
 		return err
 	}
 	return nil

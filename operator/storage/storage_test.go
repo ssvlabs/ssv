@@ -1,16 +1,18 @@
-package operator
+package storage
 
 import (
 	"encoding/base64"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/eth1"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 var (

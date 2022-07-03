@@ -1,22 +1,29 @@
 package records
 
 import (
+	"bytes"
+	"encoding/hex"
 	"fmt"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"strconv"
+	"strings"
 )
 
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
-func UpdateSubnets(node *enode.LocalNode, count int, added []int64, removed []int64) error {
+func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
 	subnets, err := GetSubnetsEntry(node.Node().Record())
 	if err != nil {
-		return errors.Wrap(err, "could not read subnets entry from enr")
+		return nil, errors.Wrap(err, "could not read subnets entry")
 	}
+	orig := make([]byte, len(subnets))
 	if len(subnets) == 0 { // not exist, creating slice
 		subnets = make([]byte, count)
+	} else {
+		copy(orig, subnets)
 	}
 	for _, i := range added {
 		subnets[i] = 1
@@ -24,7 +31,13 @@ func UpdateSubnets(node *enode.LocalNode, count int, added []int64, removed []in
 	for _, i := range removed {
 		subnets[i] = 0
 	}
-	return SetSubnetsEntry(node, subnets)
+	if bytes.Equal(orig, subnets) {
+		return nil, nil
+	}
+	if err := SetSubnetsEntry(node, subnets); err != nil {
+		return nil, errors.Wrap(err, "could not update subnets entry")
+	}
+	return subnets, nil
 }
 
 // SetSubnetsEntry adds subnets entry to our enode.LocalNode
@@ -33,7 +46,6 @@ func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
 	for i, subnet := range subnets {
 		subnetsVec.SetBitAt(uint64(i), subnet > 0)
 	}
-	fmt.Println("subnetsVec:", subnetsVec)
 	node.Set(enr.WithEntry("subnets", &subnetsVec))
 	return nil
 }
@@ -56,4 +68,75 @@ func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
 		res = append(res, val)
 	}
 	return res, nil
+}
+
+// Subnets holds all the subscribed subnets of a specific node
+type Subnets []byte
+
+func (s Subnets) String() string {
+	subnetsVec := bitfield.NewBitvector128()
+	for subnet, val := range s {
+		subnetsVec.SetBitAt(uint64(subnet), val > uint8(0))
+	}
+	return hex.EncodeToString(subnetsVec.Bytes())
+}
+
+// FromString parses a given subnet string
+func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
+	subnetsStr = strings.Replace(subnetsStr, "0x", "", 1)
+	var data []byte
+	for i := 0; i+1 < len(subnetsStr); i += 2 {
+		maskData1, err := getCharMask(string(subnetsStr[i]))
+		if err != nil {
+			return nil, err
+		}
+		maskData2, err := getCharMask(string(subnetsStr[i+1]))
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, maskData2...)
+		data = append(data, maskData1...)
+	}
+	return data, nil
+}
+
+// SharedSubnets returns the shared subnets
+func SharedSubnets(a, b []byte, maxLen int) []int {
+	var shared []int
+	if maxLen == 0 {
+		maxLen = len(a)
+	}
+	if len(a) == 0 || len(b) == 0 {
+		return shared
+	}
+	for subnet, aval := range a {
+		if aval == 0 {
+			continue
+		}
+		if b[subnet] == 0 {
+			continue
+		}
+		shared = append(shared, subnet)
+		if len(shared) == maxLen {
+			break
+		}
+	}
+	return shared
+}
+
+func getCharMask(str string) ([]byte, error) {
+	val, err := strconv.ParseUint(str, 16, 8)
+	if err != nil {
+		return nil, err
+	}
+	mask := fmt.Sprintf("%04b", val)
+	var maskData []byte
+	for j := 0; j < len(mask); j++ {
+		val, err := strconv.ParseUint(string(mask[len(mask)-1-j]), 2, 8)
+		if err != nil {
+			return nil, err
+		}
+		maskData = append(maskData, uint8(val))
+	}
+	return maskData, nil
 }

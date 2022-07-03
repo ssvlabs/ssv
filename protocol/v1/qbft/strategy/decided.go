@@ -5,6 +5,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/sync"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -14,53 +16,64 @@ import (
 type Mode int32
 
 const (
-	// ModeRegularNode is the regular mode, default for v1
-	ModeRegularNode Mode = iota
-	// ModeFullNode is a fullnode mode, default for v0
+	// ModeLightNode is the light mode, default for v1
+	ModeLightNode Mode = iota
+	// ModeFullNode is a full node mode, default for v0
 	ModeFullNode
 )
 
-// Decided helps to decouple regular from full-node mode where the node is saving decided history.
-// in regular mode, the node only cares about last decided messages.
+// Decided helps to decouple light from full-node mode where the node is saving decided history.
+// in light mode, the node doesn't save history, only last/highest decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier message.Identifier, knownMsg *message.SignedMessage, pip pipelines.SignedMessagePipeline) error
-	// ValidateHeight validates the height of the given message
-	ValidateHeight(msg *message.SignedMessage) (bool, error)
-	// IsMsgKnown checks if the given decided message is known
-	IsMsgKnown(msg *message.SignedMessage) (bool, *message.SignedMessage, error)
-	// UpdateDecided updates the given decided message
-	UpdateDecided(msg *message.SignedMessage) error
+	Sync(ctx context.Context, identifier message.Identifier, from, to *message.SignedMessage, pip pipelines.SignedMessagePipeline) error
+	// UpdateDecided updates the given decided message and returns the updated version (could include new signers)
+	UpdateDecided(msg *message.SignedMessage) (*message.SignedMessage, error)
 	// GetDecided returns historical decided messages
 	GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error)
 	// GetLastDecided returns height decided messages
 	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
-	// SaveDecided saves historical decided messages
-	SaveDecided(signedMsg ...*message.SignedMessage) error
 }
 
-// SaveLastDecided saves last decided message if its height is larger than persisted height
-func SaveLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, signedMsgs ...*message.SignedMessage) error {
-	for _, msg := range signedMsgs {
-		local, err := store.GetLastDecided(msg.Message.Identifier)
-		if err != nil {
-			return err
-		}
-		if local != nil && local.Message.Height > msg.Message.Height {
-			logger.Debug("skipping decided with lower height",
-				zap.String("identifier", msg.Message.Identifier.String()),
-				zap.Int64("height", int64(msg.Message.Height)))
-			continue
-		}
-		if err := store.SaveLastDecided(msg); err != nil {
-			logger.Debug("could not save decided",
-				zap.String("identifier", msg.Message.Identifier.String()),
-				zap.Int64("height", int64(msg.Message.Height)),
-				zap.Error(err))
-			return err
-		}
-		logger.Debug("saved decided", zap.String("identifier", msg.Message.Identifier.String()),
-			zap.Int64("height", int64(msg.Message.Height)))
+// UpdateLastDecided saves last decided message if its height is larger than persisted height
+func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, signedMsgs ...*message.SignedMessage) (*message.SignedMessage, error) {
+	highest := sync.GetHighestSignedMessage(signedMsgs...)
+	//logger.Debug("updating last decided", zap.Any("highest", highest))
+	if highest == nil {
+		return nil, nil
 	}
-	return nil
+	local, err := store.GetLastDecided(highest.Message.Identifier)
+	if err != nil {
+		return nil, err
+	}
+	if local == nil {
+		// should create
+	} else if local.Message.Higher(highest.Message) {
+		return nil, nil
+	} else if highest.Message.Height == local.Message.Height {
+		msg, ok := CheckSigners(local, highest)
+		if !ok {
+			// a place to check if can agg two differ decided (for future implementation)
+			return nil, nil
+		}
+		highest = msg
+	}
+	logger = logger.With(zap.Int64("height", int64(highest.Message.Height)),
+		zap.String("identifier", highest.Message.Identifier.String()), zap.Any("signers", highest.Signers))
+	if err := store.SaveLastDecided(highest); err != nil {
+		return highest, errors.Wrap(err, "could not save last decided")
+	}
+	logger.Debug("saved last decided")
+	return highest, nil
+}
+
+// CheckSigners will return the decided message with more signers if both are with the same height
+func CheckSigners(local, msg *message.SignedMessage) (*message.SignedMessage, bool) {
+	if local == nil {
+		return msg, true
+	}
+	if msg.Message.Height == local.Message.Height && len(local.Signers) < len(msg.Signers) {
+		return msg, true
+	}
+	return local, false
 }

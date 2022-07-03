@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
-
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -43,12 +42,14 @@ func ShareFromValidatorEvent(
 
 	// extract operator public keys from storage and fill the event
 	if err := SetOperatorPublicKeys(registryStorage, &validatorAddedEvent); err != nil {
-		return nil, nil, errors.Wrap(err, "could not extract and set operator public keys from storage")
+		return nil, nil, errors.Wrap(err, "could not set operator public keys")
 	}
 
 	validatorShare.PublicKey = &bls.PublicKey{}
 	if err := validatorShare.PublicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
-		return nil, nil, errors.Wrap(err, "failed to deserialize share public key")
+		return nil, nil, &abiparser.MalformedEventError{
+			Err: errors.Wrap(err, "failed to deserialize share public key"),
+		}
 	}
 
 	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress.String()
@@ -75,13 +76,15 @@ func ShareFromValidatorEvent(
 			shareSecret = &bls.SecretKey{}
 			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorAddedEvent.EncryptedKeys[i]))
 			if err != nil {
-				return nil, nil, &abiparser.DecryptError{
+				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to decrypt share private key"),
 				}
 			}
 			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {
-				return nil, nil, errors.Wrap(err, "failed to set decrypted share private key")
+				return nil, nil, &abiparser.MalformedEventError{
+					Err: errors.Wrap(err, "failed to set decrypted share private key"),
+				}
 			}
 		}
 	}
@@ -103,10 +106,12 @@ func SetOperatorPublicKeys(
 		for i, opPubKey := range validatorAddedEvent.OperatorPublicKeys {
 			od, found, err := registryStorage.GetOperatorDataByPubKey(string(opPubKey))
 			if err != nil {
-				return errors.Wrap(err, "could not get operator's data")
+				return errors.Wrap(err, "could not get operator data by public key")
 			}
 			if !found {
-				return errors.Wrap(err, "could not find operator's data")
+				return &abiparser.MalformedEventError{
+					Err: errors.New("could not find operator data by public key"),
+				}
 			}
 			validatorAddedEvent.OperatorIds[i] = big.NewInt(int64(od.Index))
 		}
@@ -119,7 +124,9 @@ func SetOperatorPublicKeys(
 			return errors.Wrap(err, "could not get operator's data")
 		}
 		if !found {
-			return errors.Wrap(err, "could not find operator's data")
+			return &abiparser.MalformedEventError{
+				Err: errors.New("could not find operator data by index"),
+			}
 		}
 		validatorAddedEvent.OperatorPublicKeys[i] = []byte(od.PublicKey)
 	}

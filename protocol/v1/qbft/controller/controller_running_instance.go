@@ -100,6 +100,9 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 	idn := c.Identifier.String()
 	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
+			if k.Cmt == message.CommitMsgType && k.H == height {
+				return false
+			}
 			return true
 		}
 		return false
@@ -126,20 +129,20 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			if err = c.DecidedStrategy.SaveDecided(agg); err != nil {
+			updated, err := c.DecidedStrategy.UpdateDecided(agg)
+			if err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
-
-			ssvMsg, err := c.GetCurrentInstance().GetCommittedAggSSVMessage()
-			if err != nil {
-				return errors.Wrap(err, "could not get SSV message aggregated commit msg")
+			logger.Info("decided current instance",
+				zap.String("identifier", agg.Message.Identifier.String()),
+				zap.Any("signers", agg.GetSigners()),
+				zap.Uint64("height", uint64(agg.Message.Height)),
+				zap.Any("updated", updated))
+			if updated != nil {
+				if err = c.onNewDecidedMessage(updated); err != nil {
+					return err
+				}
 			}
-			logger.Debug("broadcasting decided message", zap.Any("msg", ssvMsg))
-			if err = c.Network.Broadcast(ssvMsg); err != nil {
-				return errors.Wrap(err, "could not broadcast decided message")
-			}
-			logger.Info("decided current instance", zap.String("identifier", agg.Message.Identifier.String()),
-				zap.Uint64("msgHeight", uint64(agg.Message.Height)))
 			return nil
 		}
 
@@ -173,8 +176,18 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if ctxErr := c.Ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		if c.GetCurrentInstance() == nil {
+		currentInstance := c.GetCurrentInstance()
+		if currentInstance == nil {
 			return errors.New("current instance is nil")
+		}
+		logger := c.Logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
+		if stage := currentInstance.State(); stage != nil && stage.GetHeight() > msg.Message.Height {
+			logger.Debug("change round message is old, ignoring",
+				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
+			return nil
+		} else if stage.GetHeight() < msg.Message.Height {
+			logger.Debug("got change round message of an newer decided",
+				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
 		}
 		err := c.GetCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {

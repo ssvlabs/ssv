@@ -3,6 +3,10 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/exporter/api/decided"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	"github.com/bloxapp/ssv/network/records"
 	"log"
 	"net/http"
 	"time"
@@ -24,6 +28,7 @@ import (
 	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -48,10 +53,12 @@ type config struct {
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-	ClearNetworkKey            bool   `yaml:"ClearNetworkKey" env:"CLEAR_NETWORK_KEY" env-description:"flag that turns on/off network key revocation"`
 
 	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
-	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-description:"Target epoch for fork v2"`
+	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-default:"102595" env-description:"Target epoch for fork v2"`
+
+	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
+	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 }
 
 var cfg config
@@ -68,11 +75,11 @@ var StartNodeCmd = &cobra.Command{
 		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 		log.Printf("starting %s", commons.GetBuildData())
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-			log.Fatal(err)
+			log.Fatalf("could not read config %s", err)
 		}
 		if globalArgs.ShareConfigPath != "" {
 			if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-				log.Fatal(err)
+				log.Fatalf("could not read share config %s", err)
 			}
 		}
 		loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
@@ -124,7 +131,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		nodeStorage := operator.NewNodeStorage(db, Logger)
+		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
 		if err := nodeStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
 		}
@@ -141,6 +148,11 @@ var StartNodeCmd = &cobra.Command{
 		netPrivKey, err := istore.SetupNetworkKey(cfg.NetworkPrivateKey)
 		if err != nil {
 			Logger.Fatal("failed to setup network private key", zap.Error(err))
+		}
+
+		if len(cfg.P2pNetworkConfig.Subnets) == 0 {
+			subnets := getNodeSubnets(Logger, db, ssvForkVersion, operatorPubKey)
+			cfg.P2pNetworkConfig.Subnets = subnets.String()
 		}
 
 		cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
@@ -176,10 +188,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 
-		// validatorController worker flags
-		cfg.SSVOptions.ValidatorOptions.WorkersCount = 1      // TODO need as yaml flag?
-		cfg.SSVOptions.ValidatorOptions.QueueBufferSize = 100 // TODO need as yaml flag?
-
 		Logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 
 		// create new eth1 client
@@ -202,8 +210,16 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create eth1 client", zap.Error(err))
 		}
 
+		if cfg.WsAPIPort != 0 {
+			ws := api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
+			cfg.SSVOptions.WS = ws
+			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
+			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
+		}
+
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
@@ -237,4 +253,34 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enab
 		// TODO: stop node if metrics setup failed?
 		logger.Error("failed to start metrics handler", zap.Error(err))
 	}
+}
+
+// getNodeSubnets reads all shares and calculates the subnets for this node
+// note that we'll trigger another update once finished processing registry events
+func getNodeSubnets(logger *zap.Logger, db basedb.IDb, ssvForkVersion forksprotocol.ForkVersion, operatorPubKey string) records.Subnets {
+	f := forksfactory.NewFork(ssvForkVersion)
+	sharesStorage := validator.NewCollection(validator.CollectionOptions{
+		DB:     db,
+		Logger: logger,
+	})
+	subnetsMap := make(map[int]bool)
+	shares, err := sharesStorage.GetEnabledOperatorValidatorShares(operatorPubKey)
+	if err != nil {
+		logger.Warn("could not read validators to bootstrap subnets")
+		return nil
+	}
+	for _, share := range shares {
+		subnet := f.ValidatorSubnet(share.PublicKey.SerializeToHexStr())
+		if subnet < 0 {
+			continue
+		}
+		if !subnetsMap[subnet] {
+			subnetsMap[subnet] = true
+		}
+	}
+	subnets := make([]byte, f.Subnets())
+	for subnet := range subnetsMap {
+		subnets[subnet] = 1
+	}
+	return subnets
 }

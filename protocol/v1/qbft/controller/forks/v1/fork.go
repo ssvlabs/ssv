@@ -47,7 +47,6 @@ func (v1 *ForkV1) ValidateChangeRoundMsg(share *beacon.Share, identifier message
 		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.AuthorizeMsg(share, v1.VersionName()),
-		signedmsg.ValidateQuorum(share.ThresholdSize()),
 		changeround.Validate(share, v1.VersionName()),
 	)
 }

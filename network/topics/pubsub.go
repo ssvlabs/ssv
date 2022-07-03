@@ -22,9 +22,9 @@ const (
 // the following are kept in vars to allow flexibility (e.g. in tests)
 var (
 	// validationQueueSize is the size that we assign to the validation queue
-	validationQueueSize = 512
+	validationQueueSize = 128
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 256
+	outboundQueueSize = 32
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 )
@@ -93,12 +93,13 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		return nil, nil, err
 	}
 
-	sf := newSubFilter(cfg.Logger, subscriptionRequestLimit)
+	sf := newSubFilter(cfg.Logger, fork, subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
 		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
 		pubsub.WithValidateQueueSize(validationQueueSize),
-		pubsub.WithFloodPublish(true),
-		//pubsub.WithSubscriptionFilter(sf),
+		//pubsub.WithFloodPublish(true),
+		pubsub.WithValidateThrottle(2048),
+		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
 		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))

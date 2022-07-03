@@ -26,23 +26,28 @@ import (
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
 var ErrAlreadyRunning = errors.New("already running")
 
+// NewDecidedHandler handles newly saved decided messages.
+// it will be called in a new goroutine to avoid concurrency issues
+type NewDecidedHandler func(msg *message.SignedMessage)
+
 // Options is a set of options for the controller
 type Options struct {
-	Context        context.Context
-	Role           message.RoleType
-	Identifier     message.Identifier
-	Logger         *zap.Logger
-	Storage        qbftstorage.QBFTStore
-	Network        p2pprotocol.Network
-	InstanceConfig *qbft.InstanceConfig
-	ValidatorShare *beaconprotocol.Share
-	Version        forksprotocol.ForkVersion
-	Beacon         beaconprotocol.Beacon
-	Signer         beaconprotocol.Signer
-	SyncRateLimit  time.Duration
-	SigTimeout     time.Duration
-	ReadMode       bool
-	FullNode       bool
+	Context           context.Context
+	Role              message.RoleType
+	Identifier        message.Identifier
+	Logger            *zap.Logger
+	Storage           qbftstorage.QBFTStore
+	Network           p2pprotocol.Network
+	InstanceConfig    *qbft.InstanceConfig
+	ValidatorShare    *beaconprotocol.Share
+	Version           forksprotocol.ForkVersion
+	Beacon            beaconprotocol.Beacon
+	Signer            beaconprotocol.Signer
+	SyncRateLimit     time.Duration
+	SigTimeout        time.Duration
+	ReadMode          bool
+	FullNode          bool
+	NewDecidedHandler NewDecidedHandler
 }
 
 // set of states for the controller
@@ -90,8 +95,9 @@ type Controller struct {
 
 	Q msgqueue.MsgQueue
 
-	DecidedFactory  *factory.Factory
-	DecidedStrategy strategy.Decided
+	DecidedFactory    *factory.Factory
+	DecidedStrategy   strategy.Decided
+	newDecidedHandler NewDecidedHandler
 }
 
 // New is the constructor of Controller
@@ -99,14 +105,6 @@ func New(opts Options) IController {
 	logger := opts.Logger.With(zap.String("role", opts.Role.String()), zap.Bool("read mode", opts.ReadMode))
 	fork := forksfactory.NewFork(opts.Version)
 
-	q, err := msgqueue.New(
-		logger.With(zap.String("who", "msg_q")),
-		msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
-	)
-	if err != nil {
-		// TODO: we should probably stop here, TBD
-		logger.Warn("could not setup msg queue properly", zap.Error(err))
-	}
 	ctrl := &Controller{
 		Ctx:                opts.Context,
 		InstanceStorage:    opts.Storage,
@@ -126,10 +124,22 @@ func New(opts Options) IController {
 		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
-		Q: q,
-
 		CurrentInstanceLock: &sync.RWMutex{},
 		ForkLock:            &sync.Mutex{},
+
+		newDecidedHandler: opts.NewDecidedHandler,
+	}
+
+	if !opts.ReadMode {
+		q, err := msgqueue.New(
+			logger.With(zap.String("who", "msg_q")),
+			msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
+		)
+		if err != nil {
+			// TODO: we should probably stop here, TBD
+			logger.Warn("could not setup msg queue properly", zap.Error(err))
+		}
+		ctrl.Q = q
 	}
 
 	ctrl.DecidedFactory = factory.NewDecidedFactory(logger, ctrl.GetNodeMode(), opts.Storage, opts.Network)
@@ -178,12 +188,11 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (c *Controller) syncDecided(knownMsg *message.SignedMessage) error {
-	c.Logger.Debug("syncing decided", zap.String("identifier", c.Identifier.String()))
+func (c *Controller) syncDecided(from, to *message.SignedMessage) error {
 	c.ForkLock.Lock()
 	fork, decidedStrategy := c.Fork, c.DecidedStrategy
 	c.ForkLock.Unlock()
-	return decidedStrategy.Sync(c.Ctx, c.Identifier, knownMsg, fork.ValidateDecidedMsg(c.ValidatorShare))
+	return decidedStrategy.Sync(c.Ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -220,7 +229,7 @@ func (c *Controller) Init() error {
 		if err != nil {
 			c.Logger.Error("failed to get last known", zap.Error(err))
 		}
-		if err := c.syncDecided(knownMsg); err != nil {
+		if err := c.syncDecided(knownMsg, nil); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
 				c.Logger.Debug("iBFT init is already running (syncing history)")
@@ -352,5 +361,5 @@ func (c *Controller) GetNodeMode() strategy.Mode {
 	if c.fullNode {
 		return strategy.ModeFullNode
 	}
-	return strategy.ModeRegularNode
+	return strategy.ModeLightNode
 }
