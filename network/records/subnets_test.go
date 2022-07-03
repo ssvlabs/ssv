@@ -51,7 +51,6 @@ func TestSubnetsParsing(t *testing.T) {
 		{
 			"all subnets",
 			"0xffffffffffffffffffffffffffffffff",
-			//"0x11111111111111111111111111111111",
 			false,
 		},
 		{
@@ -82,4 +81,20 @@ func TestSubnetsParsing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSharedSubnets(t *testing.T) {
+	s1, err := Subnets{}.FromString("0xffffffffffffffffffffffffffffffff")
+	require.NoError(t, err)
+	s2, err := Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
+	require.NoError(t, err)
+
+	var expectedShared []int
+	for subnet, val := range s2 {
+		if val > 0 {
+			expectedShared = append(expectedShared, subnet)
+		}
+	}
+	shared := SharedSubnets(s1, s2, 0)
+	require.Equal(t, expectedShared, shared)
 }
