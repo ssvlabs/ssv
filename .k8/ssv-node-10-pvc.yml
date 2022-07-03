@@ -2,12 +2,12 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: ssv-exporter-2
+  name: ssv-node-10
   namespace: ssv
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 140Gi
+      storage: 15Gi
   storageClassName: gp2

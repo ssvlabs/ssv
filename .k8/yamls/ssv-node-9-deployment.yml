@@ -2,46 +2,46 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-node-v2-4-svc
+  name: ssv-node-9-svc
   namespace: REPLACE_NAMESPACE
   labels:
-    app: ssv-node-v2-4
+    app: ssv-node-9
 spec:
   type: ClusterIP
   ports:
-    - port: 12004
+    - port: 12011
       protocol: UDP
-      targetPort: 12004
-      name: port-12004
-    - port: 13004
+      targetPort: 12011
+      name: port-12011
+    - port: 13011
       protocol: TCP
-      targetPort: 13004
-      name: port-13004
-    - port: 15004
+      targetPort: 13011
+      name: port-13011
+    - port: 15011
       protocol: TCP
-      targetPort: 15004
-      name: port-15004
+      targetPort: 15011
+      name: port-15011
   selector:
-    app: ssv-node-v2-4
+    app: ssv-node-9
 ---
 apiVersion: REPLACE_API_VERSION 
 kind: Deployment
 metadata:
   labels:
-    app: ssv-node-v2-4
-  name: ssv-node-v2-4
+    app: ssv-node-9
+  name: ssv-node-9
   namespace: REPLACE_NAMESPACE
 spec:
-  replicas: REPLACE_REPLICAS
+  replicas: 1
   strategy:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-node-v2-4
+      app: ssv-node-9
   template:
     metadata:
       labels:
-        app: ssv-node-v2-4
+        app: ssv-node-9
     spec:
       affinity:
         nodeAffinity:
@@ -53,7 +53,7 @@ spec:
                     values:
                       - ssv-main
       containers:
-      - name: ssv-node-v2-4
+      - name: ssv-node-9
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
         imagePullPolicy: Always
         resources:
@@ -62,16 +62,16 @@ spec:
             memory: REPLACE_NODES_MEM_LIMIT            
         command: ["make", "start-node"]
         ports:
-        - containerPort: 12004
-          name: port-12004
+        - containerPort: 12011
+          name: port-12011
           protocol: UDP
-          hostPort: 12004            
-        - containerPort: 13004
-          name: port-13004
-          hostPort: 13004
-        - containerPort: 15004
-          name: port-15004
-          hostPort: 15004
+          hostPort: 12011            
+        - containerPort: 13011
+          name: port-13011
+          hostPort: 13011
+        - containerPort: 15011
+          name: port-15011
+          hostPort: 15011
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -85,22 +85,12 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
-        - name: BOOTNODES
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: boot_node
         - name: REGISTRY_CONTRACT_ADDR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: smart_contract_addr_key
+          value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
         - name: ABI_VERSION
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: abi_version
-              optional: true
+          value: "1"
+        - name: BOOTNODES
+          value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
         - name: LOG_LEVEL
           value: "debug"
         - name: DISCOVERY_TYPE_KEY
@@ -122,15 +112,15 @@ spec:
         - name: DB_REPORTING
           value: "true"
         - name: METRICS_API_PORT
-          value: "15004"
+          value: "15011"
         - name: ENABLE_PROFILE
           value: "true"
         volumeMounts:
         - mountPath: /data
-          name: ssv-node-v2-4
+          name: ssv-node-9
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-cm-validator-options-4
+          name: ssv-cm-validator-options-9
 #      - name: ubuntu
 #        image: REPLACE_HEALTH_IMAGE
 #        imagePullPolicy: Always
@@ -147,12 +137,12 @@ spec:
 #          initialDelaySeconds: 120
 #          periodSeconds: 60
       volumes:
-      - name: ssv-node-v2-4
+      - name: ssv-node-9
         persistentVolumeClaim:
-          claimName: ssv-node-v2-4
-      - name: ssv-cm-validator-options-4
+          claimName: ssv-node-9
+      - name: ssv-cm-validator-options-9
         configMap:
-          name: ssv-cm-validator-options-4
+          name: ssv-cm-validator-options-9
 #      - name: ssv-nodes-health-check-cm
 #        configMap:
 #          name: ssv-nodes-health-check-cm
