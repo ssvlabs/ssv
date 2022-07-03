@@ -91,13 +91,13 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(subnets ...int64) error {
+func (md *localDiscovery) RegisterSubnets(subnets ...int) error {
 	// TODO
 	return nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(subnets ...int64) error {
+func (md *localDiscovery) DeregisterSubnets(subnets ...int) error {
 	// TODO
 	return nil
 }

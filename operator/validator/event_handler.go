@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/exporter"
 	"strings"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -25,53 +26,8 @@ func (e *ErrorNotFound) Error() string {
 func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) error {
 		switch e.Name {
-		case abiparser.ValidatorAdded:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
-			pubKey := hex.EncodeToString(ev.PublicKey)
-			if ongoingSync {
-				if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-					c.logger.Debug("validator was loaded already")
-					return nil
-				}
-			}
-			err := c.handleValidatorAddedEvent(ev, ongoingSync)
-			if err != nil {
-				logger := c.logger.With(
-					zap.Uint64("block", e.Log.BlockNumber),
-					zap.String("txHash", e.Log.TxHash.Hex()),
-					zap.String("publicKey", pubKey),
-					zap.Error(err),
-				)
-				var decryptErr *abiparser.DecryptError
-				if errors.As(err, &decryptErr) {
-					logger.Warn("could not handle ValidatorAdded event")
-				} else {
-					logger.Error("could not handle ValidatorAdded event")
-				}
-				return err
-			}
-		case abiparser.ValidatorRemoved:
-			ev := e.Data.(abiparser.ValidatorRemovedEvent)
-			pubKey := hex.EncodeToString(ev.PublicKey)
-			err := c.handleValidatorRemovedEvent(ev, ongoingSync)
-			if err != nil {
-				logger := c.logger.With(
-					zap.Uint64("blockNumber", e.Log.BlockNumber),
-					zap.String("txHash", e.Log.TxHash.Hex()),
-					zap.String("publicKey", pubKey),
-					zap.Error(err),
-				)
-				var errNotFound *ErrorNotFound
-				if errors.As(err, &errNotFound) {
-					logger.Warn("could not handle ValidatorRemoved event")
-					return nil
-				}
-				logger.Error("could not handle ValidatorRemoved event")
-				return err
-			}
 		case abiparser.OperatorAdded:
 			ev := e.Data.(abiparser.OperatorAddedEvent)
-			err := c.handleOperatorAddedEvent(ev)
 			if strings.EqualFold(string(ev.PublicKey), c.operatorPubKey) {
 				c.logger.Debug("My Operator Event",
 					zap.String("pubKey", string(ev.PublicKey)),
@@ -81,26 +37,32 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 					zap.String("txHash", e.Log.TxHash.Hex()),
 				)
 			}
-			if err != nil {
-				c.logger.Error("could not handle OperatorAdded event", zap.Error(err))
-				return err
+			return c.handleOperatorAddedEvent(ev)
+		case abiparser.OperatorRemoved:
+			// TODO: should we stop all validators owned by this deleted operator?
+			ev := e.Data.(abiparser.OperatorRemovedEvent)
+			return c.handleOperatorRemovedEvent(ev)
+		case abiparser.ValidatorAdded:
+			ev := e.Data.(abiparser.ValidatorAddedEvent)
+			pubKey := hex.EncodeToString(ev.PublicKey)
+			if ongoingSync {
+				if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
+					c.logger.Debug("validator was loaded already")
+					return nil
+				}
 			}
+			return c.handleValidatorAddedEvent(ev, ongoingSync)
+		case abiparser.ValidatorRemoved:
+			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+			return c.handleValidatorRemovedEvent(ev, ongoingSync)
 		case abiparser.AccountLiquidated:
 			ev := e.Data.(abiparser.AccountLiquidatedEvent)
-			err := c.handleAccountLiquidatedEvent(ev, ongoingSync)
-			if err != nil {
-				c.logger.Error("could not handle AccountLiquidated event", zap.Error(err))
-				return err
-			}
+			return c.handleAccountLiquidatedEvent(ev, ongoingSync)
 		case abiparser.AccountEnabled:
 			ev := e.Data.(abiparser.AccountEnabledEvent)
-			err := c.handleAccountEnabledEvent(ev, ongoingSync)
-			if err != nil {
-				c.logger.Error("could not handle AccountEnabled event", zap.Error(err))
-				return err
-			}
+			return c.handleAccountEnabledEvent(ev, ongoingSync)
 		default:
-			c.logger.Warn("could not handle unknown event")
+			c.logger.Debug("could not handle unknown event")
 		}
 		return nil
 	}
@@ -148,8 +110,8 @@ func (c *controller) handleValidatorRemovedEvent(
 		return errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		return &ErrorNotFound{
-			Err: errors.Wrap(err, "could not find validator share"),
+		return &abiparser.MalformedEventError{
+			Err: errors.New("could not find validator share"),
 		}
 	}
 
@@ -171,7 +133,7 @@ func (c *controller) handleValidatorRemovedEvent(
 	return nil
 }
 
-// handleOperatorAddedEvent parses the given event and saves operator information
+// handleOperatorAddedEvent parses the given event and saves operator data
 func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent) error {
 	eventOperatorPubKey := string(event.PublicKey)
 	od := registrystorage.OperatorData{
@@ -182,6 +144,33 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	}
 	if err := c.storage.SaveOperatorData(&od); err != nil {
 		return errors.Wrap(err, "could not save operator data")
+	}
+
+	exporter.ReportOperatorIndex(c.logger, &od)
+	return nil
+}
+
+// handleOperatorRemovedEvent parses the given event and removing operator data
+func (c *controller) handleOperatorRemovedEvent(event abiparser.OperatorRemovedEvent) error {
+	od, found, err := c.storage.GetOperatorData(event.OperatorId.Uint64())
+	if err != nil {
+		return errors.Wrap(err, "could not get operator's data")
+	}
+	if !found {
+		return &abiparser.MalformedEventError{
+			Err: errors.New("could not find operator's data"),
+		}
+	}
+
+	if od.OwnerAddress != event.OwnerAddress {
+		return &abiparser.MalformedEventError{
+			Err: errors.New("could not match operator's data owner address and index with provided event"),
+		}
+	}
+
+	err = c.storage.DeleteOperatorData(event.OperatorId.Uint64())
+	if err != nil {
+		return errors.Wrap(err, "could not delete operator's data")
 	}
 
 	return nil

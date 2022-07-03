@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
 
@@ -60,10 +61,11 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
+	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 
 	// worker flags
-	WorkersCount    int
-	QueueBufferSize int
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"128" env-description:"Number of goroutines to use for message workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"256" env-description:"Buffer size for message workers"`
 }
 
 // Controller represent the validators controller,
@@ -110,6 +112,7 @@ type controller struct {
 // decided message processing in the qbft controllers
 func (c *controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	c.forkVersion = forkVersion
+	c.validatorOptions.ForkVersion = forkVersion
 
 	storageHandler, ok := c.validatorOptions.IbftStorage.(forksprotocol.ForkHandler)
 	if !ok {
@@ -171,6 +174,7 @@ func NewController(options ControllerOptions) Controller {
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,
+		NewDecidedHandler:          options.NewDecidedHandler,
 	}
 	ctrl := controller{
 		collection:                 collection,
@@ -246,7 +250,7 @@ func (c *controller) handleRouterMessages() {
 				}
 			} else if c.forkVersion != forksprotocol.V0ForkVersion {
 				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
-					return // not supporting other types
+					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
 					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
@@ -256,12 +260,33 @@ func (c *controller) handleRouterMessages() {
 	}
 }
 
+// getShare returns the share of the given validator public key
+// TODO: optimize
+func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, error) {
+	share, found, err := c.collection.GetValidatorShare(pk)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
+	}
+	if !found {
+		return nil, nil
+	}
+	return share, nil
+}
+
 func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
+	share, err := c.getShare(msg.GetIdentifier().GetValidatorPK())
+	if err != nil {
+		return err
+	}
+	if share == nil {
+		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetIdentifier().GetValidatorPK()))
+	}
+
 	opts := *c.validatorOptions
+	opts.Share = share
 	opts.ReadMode = true
 
-	val := validator.NewValidator(&opts)
-	return val.ProcessMsg(msg)
+	return validator.NewValidator(&opts).ProcessMsg(msg)
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
@@ -276,7 +301,18 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 		select {
 		case e := <-cn:
 			if err := handler(*e); err != nil {
-				c.logger.Warn("could not process ongoing eth1 event", zap.Error(err))
+				var malformedEventErr *abiparser.MalformedEventError
+				logger := c.logger.With(
+					zap.String("event", e.Name),
+					zap.Uint64("block", e.Log.BlockNumber),
+					zap.String("txHash", e.Log.TxHash.Hex()),
+					zap.Error(err),
+				)
+				if errors.As(err, &malformedEventErr) {
+					logger.Warn("could not handle ongoing sync event, the event is malformed")
+				} else {
+					logger.Error("could not handle ongoing sync event")
+				}
 			}
 		case err := <-sub.Err():
 			c.logger.Warn("event feed subscription error", zap.Error(err))
@@ -295,18 +331,6 @@ func (c *controller) StartValidators() {
 		return
 	}
 	c.setupValidators(shares)
-	//// inject handler for finding relevant operators
-	//p2p.UseLookupOperatorHandler(c.network, func(oid string) bool {
-	//	_, ok := c.operatorsIDs.Load(oid)
-	//	return ok
-	//})
-	// print current relevant operators (ids)
-	ids := []string{}
-	c.operatorsIDs.Range(func(key, value interface{}) bool {
-		ids = append(ids, key.(string))
-		return true
-	})
-	c.logger.Debug("relevant operators", zap.Int("len", len(ids)), zap.Strings("op_ids", ids))
 }
 
 // setupValidators setup and starts validators from the given shares
@@ -345,7 +369,7 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 func (c *controller) StartNetworkHandlers() {
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
-	c.messageWorker.SetHandler(c.handleWorkerMessages)
+	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
 // updateValidatorsMetadata updates metadata of the given public keys.

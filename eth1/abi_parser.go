@@ -69,6 +69,11 @@ func (ap AbiParser) ParseOperatorAddedEvent(data []byte, topics []common.Hash, c
 	return ap.Version.ParseOperatorAddedEvent(ap.Logger, data, topics, contractAbi)
 }
 
+// ParseOperatorRemovedEvent parses an OperatorRemovedEvent
+func (ap AbiParser) ParseOperatorRemovedEvent(data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorRemovedEvent, error) {
+	return ap.Version.ParseOperatorRemovedEvent(ap.Logger, data, topics, contractAbi)
+}
+
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (ap AbiParser) ParseValidatorAddedEvent(data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error) {
 	return ap.Version.ParseValidatorAddedEvent(ap.Logger, data, contractAbi)
@@ -92,6 +97,7 @@ func (ap AbiParser) ParseAccountEnabledEvent(topics []common.Hash) (*abiparser.A
 // AbiVersion serves as the parser client interface
 type AbiVersion interface {
 	ParseOperatorAddedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, error)
+	ParseOperatorRemovedEvent(logger *zap.Logger, data []byte, topics []common.Hash, contractAbi abi.ABI) (*abiparser.OperatorRemovedEvent, error)
 	ParseValidatorAddedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error)
 	ParseValidatorRemovedEvent(logger *zap.Logger, data []byte, contractAbi abi.ABI) (*abiparser.ValidatorRemovedEvent, error)
 	ParseAccountLiquidatedEvent(topics []common.Hash) (*abiparser.AccountLiquidatedEvent, error)

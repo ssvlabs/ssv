@@ -85,6 +85,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
+        - name: BOOTNODES
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node
         - name: ENR_KEY
           valueFrom:
             secretKeyRef:
@@ -107,8 +112,6 @@ spec:
           value: "discv5"
         - name: NETWORK
           value: "prater"
-        - name: BOOTNODES
-          value: "enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
@@ -131,6 +134,10 @@ spec:
           value: "15003"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: NETWORK_ID
+          value: "ssv-testnet-stage"
+        - name: FORKV2_EPOCH
+          value: '1'
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-3

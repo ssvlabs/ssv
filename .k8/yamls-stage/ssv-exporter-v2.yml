@@ -91,13 +91,13 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-exporter-v2
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_EXPORTER_CPU_LIMIT
             memory: REPLACE_EXPORTER_MEM_LIMIT
-        command: ["make", "start-exporter"]
+        command: ["make", "start-node"]
         ports:
         - containerPort: 12007
           name: port-12007
@@ -118,60 +118,61 @@ spec:
           - name: ETH_1_ADDR
             valueFrom:
               secretKeyRef:
-                key: eth1_addr
                 name: config-secrets
+                key: eth1_addr
           - name: CONFIG_PATH
             valueFrom:
               secretKeyRef:
-                key: config_path
                 name: config-secrets
+                key: config_path
           - name: ENR_KEY
             valueFrom:
               secretKeyRef:
-                key: enr_key
                 name: config-secrets
+                key: enr_key
           - name: REGISTRY_CONTRACT_ADDR_KEY
             valueFrom:
               secretKeyRef:
-                key: smart_contract_addr_key
                 name: config-secrets
+                key: smart_contract_addr_key
           - name: ABI_VERSION
             valueFrom:
               secretKeyRef:
                 name: config-secrets
                 key: abi_version
                 optional: true
-          - name: NETWORK_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                key: network_private_key_2
-                name: config-secrets
           - name: LOG_LEVEL
-            value: debug
+            value: "debug"
           - name: DISCOVERY_TYPE_KEY
-            value: discv5
+            value: "discv5"
           - name: NETWORK
-            value: prater
+            value: "prater"
           - name: DB_PATH
-            value: ./data/db
+            value: "./data/db"
           - name: DB_REPORTING
             value: "true"
           - name: METRICS_API_PORT
             value: "15007"
           - name: ENABLE_PROFILE
             value: "true"
-          - name: IBFT_SYNC_ENABLED
+          - name: GENERATE_OPERATOR_KEY
             value: "true"
-          - name: NUM_OF_INSTANCES
-            value: "2"
-          - name: INSTANCE_ID
-            value: "1"
           - name: UDP_PORT
             value: "12007"
           - name: TCP_PORT
             value: "13007"
           - name: WS_API_PORT
             value: "14007"
+          - name: BOOTNODES
+            value: "enr:-LK4QDAmZK-69qRU5q-cxW6BqLwIlWoYH-BoRlX2N7D9rXBlM7OJ9tWRRtryqvCW04geHC_ab8QmWT9QULnT0Tc5S1cBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
+          - name: FULLNODE
+            value: "true"
+          - name: NETWORK_ID
+            value: "ssv-testnet-stage"
+          - name: FORKV2_EPOCH
+            value: '1'
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-v2
@@ -189,4 +190,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true      
+      hostNetwork: true

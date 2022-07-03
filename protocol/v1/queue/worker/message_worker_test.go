@@ -26,7 +26,7 @@ func TestWorker(t *testing.T) {
 		Buffer:       2,
 	})
 
-	worker.SetHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *message.SSVMessage) error {
 		require.NotNil(t, msg)
 		return nil
 	})
@@ -47,7 +47,7 @@ func TestManyWorkers(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.SetHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *message.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		return nil
@@ -71,7 +71,7 @@ func TestBuffer(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.SetHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *message.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		time.Sleep(time.Millisecond * 100)

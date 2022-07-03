@@ -1,12 +1,13 @@
 package cli
 
 import (
-	"github.com/bloxapp/ssv/cli/bootnode"
-	"github.com/bloxapp/ssv/cli/exporter"
-	"github.com/bloxapp/ssv/cli/operator"
+	"log"
+
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
+
+	"github.com/bloxapp/ssv/cli/bootnode"
+	"github.com/bloxapp/ssv/cli/operator"
 )
 
 // Logger is the default logger
@@ -33,6 +34,5 @@ func Execute(appName, version string) {
 
 func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
-	RootCmd.AddCommand(exporter.StartExporterNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
 }

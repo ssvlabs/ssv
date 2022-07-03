@@ -8,7 +8,7 @@ import (
 	"log"
 	"sync"
 
-	v0 "github.com/bloxapp/ssv/ibft/conversion"
+	"github.com/bloxapp/ssv/ibft/conversion"
 	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
@@ -154,7 +154,7 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 			if err := json.Unmarshal(val, &ret); err != nil {
 				return msgs, errors.Wrap(err, "could not unmarshal signed message v0")
 			}
-			msg, err := v0.ToSignedMessageV1(&ret)
+			msg, err := conversion.ToSignedMessageV1(&ret)
 			if err != nil {
 				return msgs, err
 			}

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"fmt"
 	"github.com/bloxapp/ssv/network"
 	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -48,17 +49,26 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	}
 	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
-	// for decided message, send on decided channel as well
-	if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-		topics = append(topics, decidedTopic)
+	// for decided message, send on decided channel first
+	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
+	if msg.MsgType == message.SSVDecidedMsgType {
+		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
+			topics = append([]string{decidedTopic}, topics...)
+		}
+	}
+	sm := message.SignedMessage{}
+	if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
+		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+			zap.String("consensusMsgType", sm.Message.MsgType.String()),
+			zap.Any("signers", sm.GetSigners()))
 	}
 	for _, topic := range topics {
 		if topic == forksv1.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
+		logger.Debug("trying to broadcast message", zap.String("topic", topic), zap.Any("msg", msg))
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			//return errors.Wrap(err, "could not broadcast msg")
-			return err
+			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
 	return nil
@@ -96,7 +106,6 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
-			//return errors.Wrap(err, "could not broadcast message")
 			return err
 		}
 	}
@@ -174,21 +183,67 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
+	logger := n.logger.With(zap.String("topic", topic))
 	if n.msgRouter == nil {
 		n.logger.Warn("msg router is not configured")
 		return nil
 	}
 	if msg == nil {
-		n.logger.Warn("got nil message", zap.String("topic", topic))
+		logger.Warn("got nil message")
 		return nil
 	}
 	ssvMsg, err := n.fork.DecodeNetworkMsg(msg.GetData())
 	if err != nil {
-		n.logger.Warn("could not decode message", zap.String("topic", topic), zap.Error(err))
+		logger.Warn("could not decode message", zap.Error(err))
 		// TODO: handle..
 		return nil
 	}
-	n.logger.Debug("incoming pubsub message", zap.String("topic", topic), zap.Any("msg", msg))
+	if ssvMsg == nil {
+		logger.Debug("nil message")
+		return nil
+	}
+	logger = withIncomingMsgFields(logger, msg, ssvMsg)
+	logger.Debug("incoming pubsub message", zap.String("topic", topic),
+		zap.String("msgType", ssvMsg.MsgType.String()))
 	n.msgRouter.Route(*ssvMsg)
+	return nil
+}
+
+// withIncomingMsgFields adds fields to the given logger
+func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *message.SSVMessage) *zap.Logger {
+	logger = logger.With(zap.String("identifier", ssvMsg.ID.String()))
+	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
+		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
+		from, err := peer.IDFromBytes(msg.Message.GetFrom())
+		if err == nil {
+			logger = logger.With(zap.String("msgFrom", from.String()))
+		}
+		var sm message.SignedMessage
+		err = sm.Decode(ssvMsg.Data)
+		if err == nil && sm.Message != nil {
+			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+				zap.String("consensusMsgType", sm.Message.MsgType.String()),
+				zap.Any("signers", sm.GetSigners()))
+		}
+	}
+	return logger
+}
+
+// subscribeToSubnets subscribes to all the node's subnets
+func (n *p2pNetwork) subscribeToSubnets() error {
+	if len(n.subnets) == 0 {
+		return nil
+	}
+	n.logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
+	for i, val := range n.subnets {
+		if val > 0 {
+			subnet := fmt.Sprintf("%d", i)
+			if err := n.topicsCtrl.Subscribe(subnet); err != nil {
+				n.logger.Warn("could not subscribe to subnet",
+					zap.String("subnet", subnet), zap.Error(err))
+				// TODO: handle error
+			}
+		}
+	}
 	return nil
 }

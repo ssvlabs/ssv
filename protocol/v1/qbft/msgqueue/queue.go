@@ -187,6 +187,9 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 		n = len(msgContainers)
 	}
 	q.items[idx] = msgContainers[n:]
+	if len(q.items[idx]) == 0 {
+		delete(q.items, idx)
+	}
 	msgContainers = msgContainers[:n]
 	for _, mc := range msgContainers {
 		if mc.msg != nil {
@@ -211,7 +214,7 @@ func (q *queue) PopIndices(n int, i *IndexIterator) []*message.SSVMessage {
 		if idx == (Index{}) {
 			continue
 		}
-		results := q.Pop(n-len(msgs), genIndex())
+		results := q.Pop(n-len(msgs), idx)
 		if len(results) > 0 {
 			msgs = append(msgs, results...)
 		}

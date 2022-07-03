@@ -213,29 +213,34 @@ func (f *onForkV1) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(err, "could not start instance after fork")
 	}
 
+	<-time.After(time.Second * 5)
+
 	return nil
 }
 
 func (f *onForkV1) PostExecution(ctx *runner.ScenarioContext) error {
 	expectedMsgCount := 9
-	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(expectedMsgCount))
-	if err != nil {
-		return err
-	}
-	f.logger.Debug("msgs count", zap.Int("len", len(msgs)))
-	if len(msgs) < expectedMsgCount {
-		return errors.New("node-0 didn't sync all messages")
-	}
 
-	msg, err := ctx.Stores[0].GetLastDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester))
-	if err != nil {
-		return err
-	}
-	if msg == nil {
-		return errors.New("could not find last decided")
-	}
-	if msg.Message.Height != message.Height(expectedMsgCount) {
-		return errors.Errorf("wrong msg height: %d", msg.Message.Height)
+	for _, store := range ctx.Stores {
+		msgs, err := store.GetDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(expectedMsgCount))
+		if err != nil {
+			return err
+		}
+		f.logger.Debug("msgs count", zap.Int("len", len(msgs)))
+		if len(msgs) < expectedMsgCount {
+			return errors.New("node-0 didn't sync all messages")
+		}
+
+		msg, err := store.GetLastDecided(message.NewIdentifier(f.share.PublicKey.Serialize(), message.RoleTypeAttester))
+		if err != nil {
+			return err
+		}
+		if msg == nil {
+			return errors.New("could not find last decided")
+		}
+		if msg.Message.Height != message.Height(expectedMsgCount) {
+			return errors.Errorf("wrong msg height: %d", msg.Message.Height)
+		}
 	}
 
 	return nil
@@ -251,7 +256,8 @@ func (f *onForkV1) startInstances(from, to message.Height) error {
 			wg.Add(1)
 			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
 				if err := startNode(node, seqNumber, []byte("value"), f.logger); err != nil {
-					f.logger.Error("could not start node", zap.Uint64("node", index-1), zap.Error(err))
+					f.logger.Panic("could not start node", zap.Uint64("node", index-1),
+						zap.Uint64("height", uint64(seqNumber)), zap.Error(err))
 				}
 				wg.Done()
 			}(f.validators[i-1], i, h)
