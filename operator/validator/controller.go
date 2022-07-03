@@ -239,6 +239,7 @@ func (c *controller) handleRouterMessages() {
 	for {
 		select {
 		case <-ctx.Done():
+			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
 			pk := msg.ID.GetValidatorPK()
