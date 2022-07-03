@@ -137,7 +137,7 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 			zap.String("operatorPubKey", eventOperatorPubKey),
 		)
 	}
-  exporter.ReportOperatorIndex(c.logger, &od)
+	exporter.ReportOperatorIndex(c.logger, &od)
 	return logFields, nil
 }
 
