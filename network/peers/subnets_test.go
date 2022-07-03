@@ -29,10 +29,23 @@ func TestSubnetsIndex(t *testing.T) {
 
 	subnetsIdx := newSubnetsIndex(128)
 
-	subnetsIdx.UpdatePeerSubnets(pids[0], sAll)
-	subnetsIdx.UpdatePeerSubnets(pids[1], sNone)
-	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial)
+	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[2], sPartial.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[3], sPartial.Clone())
 
-	require.Len(t, subnetsIdx.GetSubnetPeers(0), 2)
+	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 1)
+
+	subnetsIdx.UpdatePeerSubnets(pids[0], sPartial.Clone())
+
+	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
+	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
+
+	subnetsIdx.UpdatePeerSubnets(pids[0], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[2], sNone.Clone())
+	subnetsIdx.UpdatePeerSubnets(pids[3], sNone.Clone())
+
+	require.Len(t, subnetsIdx.GetSubnetPeers(0), 0)
+	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
 }

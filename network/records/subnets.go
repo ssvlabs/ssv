@@ -73,6 +73,13 @@ func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
 // Subnets holds all the subscribed subnets of a specific node
 type Subnets []byte
 
+// Clone clones the underlying byte slice
+func (s Subnets) Clone() Subnets {
+	cp := make([]byte, len(s))
+	copy(cp, s)
+	return cp
+}
+
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
 	for subnet, val := range s {
@@ -100,18 +107,6 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	return data, nil
 }
 
-// GetActive returns the subnets that are on
-func (s Subnets) GetActive() []int {
-	var active []int
-	for subnet, aval := range s {
-		if aval == 0 {
-			continue
-		}
-		active = append(active, subnet)
-	}
-	return active
-}
-
 // SharedSubnets returns the shared subnets
 func SharedSubnets(a, b []byte, maxLen int) []int {
 	var shared []int
@@ -134,6 +129,20 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 		}
 	}
 	return shared
+}
+
+// DiffSubnets returns a diff of the two given subnets.
+// returns a map with all the different entries
+func DiffSubnets(a, b []byte) map[int]byte {
+	diff := make(map[int]byte)
+	for subnet, bval := range b {
+		if subnet >= len(a) {
+			diff[subnet] = bval
+		} else if aval := a[subnet]; aval != bval {
+			diff[subnet] = bval
+		}
+	}
+	return diff
 }
 
 func getCharMask(str string) ([]byte, error) {

@@ -1,7 +1,6 @@
 package peers
 
 import (
-	"bytes"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"sync"
@@ -31,25 +30,40 @@ func (si *subnetsIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
 	if !ok {
 		existing = make([]byte, 0)
 	}
-	if bytes.Equal(existing, s) {
+	diff := records.DiffSubnets(existing, s)
+	if len(diff) == 0 {
 		return false
 	}
 	si.peerSubnets[id] = s
 
 	// TODO: diff against existing to make sure we also clean removed subnets
-	active := s.GetActive()
-	for _, subnet := range active {
+diffLoop:
+	for subnet, val := range diff {
 		peers := si.subnets[subnet]
 		if len(peers) == 0 {
 			peers = make([]peer.ID, 0)
 		}
-	peerExistenceLoop:
-		for _, p := range peers {
+		for i, p := range peers {
 			if p == id {
-				break peerExistenceLoop
+				// if peer was removed from subnet > clear and continue to next subnet
+				if val == byte(0) {
+					if i == 0 {
+						if len(peers) == 1 { // single item in subnets
+							si.subnets[subnet] = make([]peer.ID, 0)
+						} else { // first item
+							si.subnets[subnet] = peers[1:]
+						}
+						continue diffLoop
+					}
+					si.subnets[subnet] = append(peers[:i], peers[i:]...)
+					continue diffLoop
+				}
+				continue diffLoop
 			}
 		}
-		si.subnets[subnet] = append(peers, id)
+		if val > byte(0) {
+			si.subnets[subnet] = append(peers, id)
+		}
 	}
 	return true
 }
