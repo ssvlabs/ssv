@@ -16,7 +16,12 @@ const (
 	nodeInfoKey = "nodeInfo"
 )
 
-// peersIndex implements Index interface
+// MaxPeersProvider returns the max peers for the given topic.
+// empty string means that we want to check the total max peers (for all topics).
+type MaxPeersProvider func(topic string) int
+
+// peersIndex implements Index interface.
+// It uses libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) to store node info of peers.
 type peersIndex struct {
 	logger *zap.Logger
 

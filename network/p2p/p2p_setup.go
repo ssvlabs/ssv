@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
@@ -154,21 +155,21 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return errors.Wrap(err, "failed to create ID service")
 	}
 
-	filters := make([]peers.HandshakeFilter, 0)
+	filters := make([]connections.HandshakeFilter, 0)
 	// v0 was before we checked forks, therefore asking if we are above v0
 	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
+		filters = append(filters, connections.ForkVersionFilter(func() forksprotocol.ForkVersion {
 			return n.cfg.ForkVersion
 		}))
 	}
-	filters = append(filters, peers.NetworkIDFilter(n.cfg.NetworkID))
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, n.idx, ids, func() records.Subnets {
+	filters = append(filters, connections.NetworkIDFilter(n.cfg.NetworkID))
+	handshaker := connections.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, n.idx, ids, func() records.Subnets {
 		return n.subnets
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)
+	connHandler := connections.HandleConnections(n.ctx, n.logger, handshaker)
 	n.host.Network().Notify(connHandler)
 	n.logger.Debug("connection handler is ready")
 	return nil

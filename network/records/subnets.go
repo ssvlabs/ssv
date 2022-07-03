@@ -100,6 +100,18 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	return data, nil
 }
 
+// GetActive returns the subnets that are on
+func (s Subnets) GetActive() []int {
+	var active []int
+	for subnet, aval := range s {
+		if aval == 0 {
+			continue
+		}
+		active = append(active, subnet)
+	}
+	return active
+}
+
 // SharedSubnets returns the shared subnets
 func SharedSubnets(a, b []byte, maxLen int) []int {
 	var shared []int

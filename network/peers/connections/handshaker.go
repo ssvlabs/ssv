@@ -1,7 +1,8 @@
-package peers
+package connections
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -16,8 +17,6 @@ import (
 )
 
 const (
-	// NodeInfoProtocol is the protocol.ID used for handshake
-	NodeInfoProtocol = "/ssv/info/0.0.1"
 	// userAgentKey is the key used by libp2p to save user agent
 	userAgentKey = "AgentVersion"
 )
@@ -31,11 +30,11 @@ var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 // errUnknownUserAgent is thrown when a peer has an unknown user agent
 var errUnknownUserAgent = errors.New("user agent is unknown")
 
-// ErrAtPeersLimit is thrown when we reached peers limit
-var ErrAtPeersLimit = errors.New("peers limit was reached")
-
 // HandshakeFilter can be used to filter nodes once we handshaked with them
 type HandshakeFilter func(info *records.NodeInfo) (bool, error)
+
+// SubnetsProvider returns the subnets of or node
+type SubnetsProvider func() records.Subnets
 
 // Handshaker is the interface for handshaking with peers.
 // it uses node info protocol to exchange information with other nodes and decide whether we want to connect.
@@ -56,22 +55,22 @@ type handshaker struct {
 
 	streams streams.StreamController
 
-	infoStore NodeInfoStore
+	infoStore peers.NodeInfoStore
 
-	states NodeStates
+	states peers.NodeStates
 
-	connIdx ConnectionIndex
+	connIdx peers.ConnectionIndex
 	// for backwards compatibility
 	ids *identify.IDService
 
 	pending *sync.Map
 
-	subnetsProvider func() records.Subnets
+	subnetsProvider SubnetsProvider
 }
 
 // NewHandshaker creates a new instance of handshaker
-func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx NodeInfoStore,
-	states NodeStates, connIdx ConnectionIndex, ids *identify.IDService, subnetsProvider func() records.Subnets,
+func NewHandshaker(ctx context.Context, logger *zap.Logger, streams streams.StreamController, idx peers.NodeInfoStore,
+	states peers.NodeStates, connIdx peers.ConnectionIndex, ids *identify.IDService, subnetsProvider SubnetsProvider,
 	filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
@@ -163,16 +162,16 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	defer h.pending.Delete(pid.String())
 	// check if the peer is known
 	ni, err := h.infoStore.NodeInfo(pid)
-	if err != nil && err != ErrNotFound {
+	if err != nil && err != peers.ErrNotFound {
 		return errors.Wrap(err, "could not read identity")
 	}
 	if ni != nil {
 		switch h.states.State(pid) {
-		case StateIndexing:
+		case peers.StateIndexing:
 			return errHandshakeInProcess
-		case StatePruned:
+		case peers.StatePruned:
 			return errors.Errorf("pruned peer [%s]", pid.String())
-		case StateUnknown:
+		case peers.StateUnknown:
 			// continue the flow
 		default: // ready, exit
 			return nil
@@ -218,7 +217,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
-	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), NodeInfoProtocol)
+	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
@@ -230,7 +229,7 @@ func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeI
 	if len(res) == 0 {
 		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
-	resBytes, err := h.streams.Request(conn.RemotePeer(), NodeInfoProtocol, data)
+	resBytes, err := h.streams.Request(conn.RemotePeer(), peers.NodeInfoProtocol, data)
 	if err != nil {
 		return nil, err
 	}

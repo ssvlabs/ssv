@@ -1,6 +1,7 @@
-package peers
+package connections
 
 import (
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -14,11 +15,11 @@ import (
 // TODO: add IP limiting
 type connGater struct {
 	logger *zap.Logger
-	idx    ConnectionIndex
+	idx    peers.ConnectionIndex
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, idx ConnectionIndex) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.ConnectionGater {
 	return &connGater{
 		logger: logger,
 		idx:    idx,

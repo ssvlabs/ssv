@@ -9,6 +9,11 @@ import (
 	"io"
 )
 
+const (
+	// NodeInfoProtocol is the protocol.ID used for handshake
+	NodeInfoProtocol = "/ssv/info/0.0.1"
+)
+
 var (
 	// ErrWasPruned means the desired peer was pruned
 	ErrWasPruned = errors.New("peer was pruned")
@@ -71,8 +76,13 @@ type NodeStates interface {
 	GC()
 }
 
-// Index is an interface for storing and accessing peers data
-// It uses libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) to store metadata of peers.
+// SubnetsIndex stores information on subnets
+type SubnetsIndex interface {
+	SaveSubnets(id peer.ID, s records.Subnets) bool
+	GetSubnetPeers(s int) []peer.ID
+}
+
+// Index is a facade interface of this package
 type Index interface {
 	ConnectionIndex
 	NodeInfoStore

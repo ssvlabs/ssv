@@ -1,4 +1,4 @@
-package peers
+package connections
 
 import (
 	"github.com/prometheus/client_golang/prometheus"

@@ -1,7 +1,8 @@
-package peers
+package connections
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/utils/tasks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peerstore"
@@ -30,7 +31,7 @@ func HandleConnections(ctx context.Context, logger *zap.Logger, handshaker Hands
 		err := handshaker.Handshake(conn)
 		if err != nil {
 			switch err {
-			case ErrIndexingInProcess, errHandshakeInProcess:
+			case peers.ErrIndexingInProcess, errHandshakeInProcess:
 				// ignored errors
 				return nil
 			case errPeerWasFiltered, errUnknownUserAgent, peerstore.ErrNotFound:
