@@ -1,7 +1,6 @@
 package peers
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/network/records"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -45,7 +44,7 @@ type ConnectionIndex interface {
 // ScoreIndex is an interface for managing peers scores
 type ScoreIndex interface {
 	// Score adds score to the given peer
-	Score(id peer.ID, scores ...NodeScore) error
+	Score(id peer.ID, scores ...*NodeScore) error
 	// GetScore returns the desired score for the given peer
 	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 }
@@ -89,12 +88,4 @@ type Index interface {
 	NodeStates
 	ScoreIndex
 	io.Closer
-}
-
-func formatInfoKey(k string) string {
-	return fmt.Sprintf("ssv/info/%s", k)
-}
-
-func formatScoreKey(k string) string {
-	return fmt.Sprintf("ssv/score/%s", k)
 }

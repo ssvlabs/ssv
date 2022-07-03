@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -28,7 +29,8 @@ type peersIndex struct {
 	netKeyProvider func() crypto.PrivKey
 	network        libp2pnetwork.Network
 
-	states *nodeStates
+	states   *nodeStates
+	scoreIdx ScoreIndex
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
@@ -171,18 +173,8 @@ func (pi *peersIndex) State(id peer.ID) NodeState {
 }
 
 // Score adds score to the given peer
-func (pi *peersIndex) Score(id peer.ID, scores ...NodeScore) error {
-	tx := newTransactional(id, pi.network.Peerstore())
-	defer func() {
-		_ = tx.Close()
-	}()
-	for _, score := range scores {
-		tx.Put(formatScoreKey(score.Name), score.Value)
-	}
-	if err := tx.Commit(); err != nil {
-		return tx.Rollback()
-	}
-	return nil
+func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
+	return pi.scoreIdx.Score(id, scores...)
 }
 
 // GetScore returns the desired score for the given peer
@@ -198,22 +190,8 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 		return nil, ErrNotFound
 	default:
 	}
-	tx := newTransactional(id, pi.network.Peerstore())
-	defer func() {
-		_ = tx.Close()
-	}()
-	for _, name := range names {
-		s, err := tx.Get(formatScoreKey(name))
-		if err != nil {
-			return nil, err
-		}
-		score, ok := s.(NodeScore)
-		if !ok {
-			return nil, errors.New("could not cast node score")
-		}
-		scores = append(scores, score)
-	}
-	return scores, nil
+
+	return pi.scoreIdx.GetScore(id, names...)
 }
 
 // Prune set prune state for the given peer
@@ -277,4 +255,8 @@ func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
 	}
 
 	return &ni, nil
+}
+
+func formatInfoKey(k string) string {
+	return fmt.Sprintf("ssv/info/%s", k)
 }
