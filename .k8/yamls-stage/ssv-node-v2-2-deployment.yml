@@ -90,11 +90,6 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: boot_node
-        - name: ENR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: enr_key
         - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
@@ -135,7 +130,7 @@ spec:
         - name: ENABLE_PROFILE
           value: "true"
         - name: NETWORK_ID
-          value: "ssv-testnet-stage"
+          value: "ssv-testnet-v2-stage"
         - name: FORKV2_EPOCH
           value: '1'
         volumeMounts:
