@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -154,14 +153,9 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return errors.Wrap(err, "could not create ID service")
 	}
 
-	filters := make([]connections.HandshakeFilter, 0)
-	// v0 was before we checked forks, therefore asking if we are above v0
-	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, connections.ForkVersionFilter(func() forksprotocol.ForkVersion {
-			return n.cfg.ForkVersion
-		}))
+	filters := []connections.HandshakeFilter{
+		connections.NetworkIDFilter(n.cfg.NetworkID),
 	}
-	filters = append(filters, connections.NetworkIDFilter(n.cfg.NetworkID))
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Logger:      n.logger,
 		Streams:     n.streamCtrl,

@@ -128,6 +128,15 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			h.logger.Warn("could not add node info", zap.Error(err))
 			return
 		}
+		self, err := h.nodeInfoIdx.SelfSealed()
+		if err != nil {
+			h.logger.Warn("could not seal self node info", zap.Error(err))
+			return
+		}
+		if err := res(self); err != nil {
+			h.logger.Warn("could not send self node info", zap.Error(err))
+			return
+		}
 		// if we reached limit, check that the peer has at least 5 shared subnets
 		// TODO: dynamic/configurable value TBD
 		if h.connIdx.Limit(stream.Conn().Stat().Direction) {
@@ -139,15 +148,6 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
 			return errors.New("ignoring peer w/o shared subnets")
 		}*/
-		self, err := h.nodeInfoIdx.SelfSealed()
-		if err != nil {
-			h.logger.Warn("could not seal self node info", zap.Error(err))
-			return
-		}
-		if err := res(self); err != nil {
-			h.logger.Warn("could not send self node info", zap.Error(err))
-			return
-		}
 	}
 }
 
@@ -319,47 +319,4 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 		}
 	}
 	return true
-}
-
-// ForkVersionFilter determines whether we will connect to the given node by the fork version
-func ForkVersionFilter(forkVersion func() forksprotocol.ForkVersion) HandshakeFilter {
-	return func(ni *records.NodeInfo) (bool, error) {
-		version := forkVersion()
-		if version == forksprotocol.V0ForkVersion || ni.ForkVersion == forksprotocol.V0ForkVersion {
-			return false, errors.Errorf("fork version '%s' instead of '%s'", ni.ForkVersion.String(), version)
-		}
-		return true, nil
-	}
-}
-
-// NetworkIDFilter determines whether we will connect to the given node by the network ID
-func NetworkIDFilter(networkID string) HandshakeFilter {
-	return func(ni *records.NodeInfo) (bool, error) {
-		if networkID != ni.NetworkID {
-			return false, errors.Errorf("networkID '%s' instead of '%s'", ni.NetworkID, networkID)
-		}
-		return true, nil
-	}
-}
-
-// SharedSubnetsFilter determines whether we will connect to the given node by the amount of shared subnets
-func SharedSubnetsFilter(subnetsProvider func() records.Subnets, n int) HandshakeFilter {
-	return func(ni *records.NodeInfo) (bool, error) {
-		subnets := subnetsProvider()
-		if len(subnets) == 0 {
-			return true, nil
-		}
-		if len(ni.Metadata.Subnets) == 0 {
-			return true, nil
-		}
-		nodeSubnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
-		if err != nil {
-			return false, err
-		}
-		shared := records.SharedSubnets(subnets, nodeSubnets, n)
-		if len(shared) < n {
-			return false, nil
-		}
-		return true, nil
-	}
 }
