@@ -154,9 +154,10 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	logger := ch.logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
 		zap.String("mySubnets", mySubnets.String()))
 
+	reachedPeersLimit := ch.connIdx.Limit(conn.Stat().Direction)
 	// in case we don't check subnets, and limit was reached -> check for at least 5 shared subnet
 	if !ch.subnetsCheck {
-		if !ch.connIdx.Limit(conn.Stat().Direction) {
+		if !reachedPeersLimit {
 			return true
 		}
 		logger.Debug("node at peers limit, checking shared subnets")
@@ -168,7 +169,7 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 
 	shared := records.SharedSubnets(mySubnets, subnets, 0)
 	// positive if we have at least 10 shared subnets
-	if len(shared) == 10 {
+	if len(shared) >= 10 {
 		return true
 	}
 
