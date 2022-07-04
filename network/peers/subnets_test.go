@@ -42,6 +42,9 @@ func TestSubnetsIndex(t *testing.T) {
 	require.Len(t, subnetsIdx.GetSubnetPeers(0), 3)
 	require.Len(t, subnetsIdx.GetSubnetPeers(10), 0)
 
+	stats := subnetsIdx.GetSubnetsStats()
+	require.Equal(t, 3, stats.PeersCount[0])
+
 	subnetsIdx.UpdatePeerSubnets(pids[0], sNone.Clone())
 	subnetsIdx.UpdatePeerSubnets(pids[2], sNone.Clone())
 	subnetsIdx.UpdatePeerSubnets(pids[3], sNone.Clone())
