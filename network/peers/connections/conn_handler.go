@@ -23,23 +23,28 @@ type ConnHandler interface {
 
 // connHandler implements ConnHandler
 type connHandler struct {
-	ctx        context.Context
-	logger     *zap.Logger
-	handshaker Handshaker
+	ctx    context.Context
+	logger *zap.Logger
 
+	handshaker      Handshaker
 	subnetsProvider SubnetsProvider
 	subnetsIndex    peers.SubnetsIndex
+	connIdx         peers.ConnectionIndex
+
+	subnetsCheck bool
 }
 
 // NewConnHandler creates a new connection handler
 func NewConnHandler(ctx context.Context, logger *zap.Logger, handshaker Handshaker, subnetsProvider SubnetsProvider,
-	subnetsIndex peers.SubnetsIndex) ConnHandler {
+	subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex, subnetsCheck bool) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
 		logger:          logger.With(zap.String("who", "ConnHandler")),
 		handshaker:      handshaker,
 		subnetsProvider: subnetsProvider,
 		subnetsIndex:    subnetsIndex,
+		connIdx:         connIdx,
+		subnetsCheck:    subnetsCheck,
 	}
 }
 
@@ -145,6 +150,21 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 		return false
 	}
 	mySubnets := ch.subnetsProvider()
+
+	logger := ch.logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
+		zap.String("mySubnets", mySubnets.String()))
+
+	// in case we don't check subnets, and limit was reached -> check for at least 5 shared subnet
+	if !ch.subnetsCheck {
+		if !ch.connIdx.Limit(conn.Stat().Direction) {
+			return true
+		}
+		logger.Debug("node at peers limit, checking shared subnets")
+		shared := records.SharedSubnets(mySubnets, subnets, 5)
+		return len(shared) == 5
+	}
+
+	logger.Debug("checking subnets")
 
 	shared := records.SharedSubnets(mySubnets, subnets, 0)
 	// positive if we have at least 10 shared subnets

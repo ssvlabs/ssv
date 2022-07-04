@@ -40,6 +40,7 @@ type Config struct {
 	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"100" env-description:"Connected peers limit for connections"`
 	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
 
+	UseSubnetDiscovery bool `yaml:"UseSubnetDiscovery" env:"P2P_SUBNETS_DISCOVERY" env-default:"true" env-description:"Connected peers limit per pubsub topic"`
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
