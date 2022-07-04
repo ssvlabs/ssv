@@ -117,6 +117,8 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 			h.logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
+		// update node's subnets if applicable
+		h.updateNodeSubnets(pid, &ni)
 		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
 		if !h.applyFilters(&ni) {
 			//h.logger.Debug("filtering peer", zap.Any("info", ni))
@@ -181,10 +183,9 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 			return errHandshakeInProcess
 		case peers.StatePruned:
 			return errors.Errorf("pruned peer [%s]", pid.String())
-		case peers.StateUnknown:
-			// continue the flow
-		default: // ready, exit
+		case peers.StateReady:
 			return nil
+		default: // unknown > continue the flow
 		}
 	}
 	if err := h.preHandshake(conn); err != nil {
@@ -192,7 +193,6 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}
 	ni, err = h.nodeInfoFromStream(conn)
 	if err != nil {
-		// v0 nodes are not supporting the new protocol
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(conn)
 		if err != nil {
@@ -200,7 +200,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		}
 	}
 	if ni == nil {
-		return errors.New("empty identity")
+		return errors.New("empty node info")
 	}
 	// update node's subnets if applicable
 	h.updateNodeSubnets(pid, ni)
