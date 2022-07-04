@@ -7,10 +7,10 @@ import (
 )
 
 var (
-	metricsStreams = promauto.NewGauge(prometheus.GaugeOpts{
+	metricsStreams = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:stream",
 		Help: "Counts opened/closed streams",
-	})
+	}, []string{"protocol"})
 	metricsConnections = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:network:connections",
 		Help: "Counts opened/closed connections",

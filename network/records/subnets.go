@@ -132,7 +132,7 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 }
 
 // DiffSubnets returns a diff of the two given subnets.
-// returns a map with all the different entries
+// returns a map with all the different entries and their post change value
 func DiffSubnets(a, b []byte) map[int]byte {
 	diff := make(map[int]byte)
 	for subnet, bval := range b {

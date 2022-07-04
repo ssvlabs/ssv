@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
@@ -54,6 +55,7 @@ type p2pNetwork struct {
 	topicsCtrl  topics.Controller
 	msgRouter   network.MessageRouter
 	msgResolver topics.MsgPeersResolver
+	connHandler connections.ConnHandler
 
 	state int32
 

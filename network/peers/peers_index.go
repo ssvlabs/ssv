@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -242,13 +243,17 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		return nil
 	}
 	stats.Connected = make([]int, len(stats.PeersCount))
-	for subnet := range stats.PeersCount {
+	for subnet, count := range stats.PeersCount {
+		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Add(float64(count))
 		peers := pi.subnets.GetSubnetPeers(subnet)
+		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {
-				stats.Connected[subnet]++
+				connectedCount++
 			}
 		}
+		stats.Connected[subnet] = connectedCount
+		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Add(float64(connectedCount))
 	}
 	return stats
 }

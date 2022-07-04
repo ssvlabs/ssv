@@ -153,26 +153,27 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return errors.Wrap(err, "could not create ID service")
 	}
 
+	subnetsProvider := func() records.Subnets {
+		return n.subnets
+	}
 	filters := []connections.HandshakeFilter{
 		connections.NetworkIDFilter(n.cfg.NetworkID),
 	}
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Logger:      n.logger,
-		Streams:     n.streamCtrl,
-		NodeInfoIdx: n.idx,
-		States:      n.idx,
-		ConnIdx:     n.idx,
-		SubnetsIdx:  n.idx,
-		IDService:   ids,
-		SubnetsProvider: func() records.Subnets {
-			return n.subnets
-		},
+		Logger:          n.logger,
+		Streams:         n.streamCtrl,
+		NodeInfoIdx:     n.idx,
+		States:          n.idx,
+		ConnIdx:         n.idx,
+		SubnetsIdx:      n.idx,
+		IDService:       ids,
+		SubnetsProvider: subnetsProvider,
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	connHandler := connections.HandleConnections(n.ctx, n.logger, handshaker)
-	n.host.Network().Notify(connHandler)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, subnetsProvider, n.idx)
+	n.host.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 	return nil
 }
