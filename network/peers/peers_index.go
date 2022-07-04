@@ -237,7 +237,20 @@ func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
-	return pi.subnets.GetSubnetsStats()
+	stats := pi.subnets.GetSubnetsStats()
+	if stats == nil {
+		return nil
+	}
+	stats.Connected = make([]int, len(stats.PeersCount))
+	for subnet := range stats.PeersCount {
+		peers := pi.subnets.GetSubnetPeers(subnet)
+		for _, p := range peers {
+			if pi.Connectedness(p) == libp2pnetwork.Connected {
+				stats.Connected[subnet]++
+			}
+		}
+	}
+	return stats
 }
 
 // Close closes peer index
