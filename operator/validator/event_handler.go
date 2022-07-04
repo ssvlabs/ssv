@@ -21,7 +21,6 @@ func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 			ev := e.Data.(abiparser.OperatorAddedEvent)
 			return c.handleOperatorAddedEvent(ev)
 		case abiparser.OperatorRemoved:
-			// TODO: should we stop all validators owned by this deleted operator?
 			ev := e.Data.(abiparser.OperatorRemovedEvent)
 			return c.handleOperatorRemovedEvent(ev, ongoingSync)
 		case abiparser.ValidatorAdded:

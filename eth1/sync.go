@@ -152,7 +152,7 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 		}
 	}
 	if err != nil {
-		loggerWithData.With(zap.Error(err))
+		loggerWithData = loggerWithData.With(zap.Error(err))
 		var malformedEventErr *abiparser.MalformedEventError
 
 		if errors.As(err, &malformedEventErr) {
