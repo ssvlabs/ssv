@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -201,6 +202,9 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if ni == nil {
 		return errors.New("empty identity")
 	}
+	// update node's subnets if applicable
+	h.updateNodeSubnets(pid, ni)
+
 	if !h.applyFilters(ni) {
 		return errPeerWasFiltered
 	}
@@ -211,13 +215,7 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		logger.Warn("could not add peer to index", zap.Error(err))
 		return err
 	}
-	subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
-	if err == nil && len(subnets) > 0 {
-		updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
-		h.logger.Debug("handshaked peer subnets", zap.String("id", pid.String()),
-			zap.String("subnets", subnets.String()),
-			zap.Bool("updated", updated))
-	}
+
 	// if we reached limit, check that the peer has at least 5 shared subnets
 	// TODO: dynamic/configurable value TBD
 	if h.connIdx.Limit(conn.Stat().Direction) {
@@ -230,6 +228,19 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	}*/
 
 	return nil
+}
+
+// updateNodeSubnets tries to update the subnets of the given peer
+func (h *handshaker) updateNodeSubnets(pid peer.ID, ni *records.NodeInfo) {
+	if ni.Metadata != nil {
+		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
+		if err == nil && len(subnets) > 0 {
+			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
+			h.logger.Debug("handshaked peer subnets", zap.String("peerID", pid.String()),
+				zap.String("subnets", subnets.String()),
+				zap.Bool("updated", updated))
+		}
+	}
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
