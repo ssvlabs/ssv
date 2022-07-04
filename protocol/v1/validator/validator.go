@@ -75,8 +75,9 @@ func NewValidator(opt *Options) IValidator {
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
 	ctx, cancel := context.WithCancel(opt.Context)
-	opt.Context = ctx
-	ibfts := setupIbfts(opt, logger)
+	optsCp := *opt
+	optsCp.Context = ctx
+	ibfts := setupIbfts(&optsCp, logger)
 
 	if !opt.ReadMode {
 		logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
