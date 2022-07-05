@@ -75,7 +75,11 @@ func (c *controller) handleValidatorAddedEvent(
 		if ongoingSync {
 			c.onShareStart(validatorShare)
 		}
-		logFields = append(logFields, zap.String("validatorPubKey", pubKey))
+		logFields = append(logFields,
+			zap.String("validatorPubKey", pubKey),
+			zap.String("ownerAddress", validatorShare.OwnerAddress),
+			zap.Any("operatorIds", validatorAddedEvent.OperatorIds),
+		)
 	}
 	return logFields, nil
 }
@@ -109,7 +113,10 @@ func (c *controller) handleValidatorRemovedEvent(
 				return nil, err
 			}
 		}
-		logFields = append(logFields, zap.String("validatorPubKey", validatorShare.PublicKey.SerializeToHexStr()))
+		logFields = append(logFields,
+			zap.String("validatorPubKey", validatorShare.PublicKey.SerializeToHexStr()),
+			zap.String("ownerAddress", validatorShare.OwnerAddress),
+		)
 	}
 
 	return logFields, nil
@@ -131,9 +138,10 @@ func (c *controller) handleOperatorAddedEvent(event abiparser.OperatorAddedEvent
 	logFields := make([]zap.Field, 0)
 	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) {
 		logFields = append(logFields,
-			zap.String("operatorName", event.Name),
-			zap.Uint64("operatorId", event.Id.Uint64()),
-			zap.String("operatorPubKey", eventOperatorPubKey),
+			zap.String("operatorName", od.Name),
+			zap.Uint64("operatorId", od.Index),
+			zap.String("operatorPubKey", od.PublicKey),
+			zap.String("ownerAddress", od.OwnerAddress.String()),
 		)
 	}
 	exporter.ReportOperatorIndex(c.logger, &od)
@@ -188,6 +196,7 @@ func (c *controller) handleOperatorRemovedEvent(
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
 			zap.String("operatorPubKey", od.PublicKey),
+			zap.String("ownerAddress", od.OwnerAddress.String()),
 		)
 	}
 	return logFields, nil
@@ -228,7 +237,10 @@ func (c *controller) handleAccountLiquidatedEvent(
 
 	logFields := make([]zap.Field, 0)
 	if len(operatorSharePubKeys) > 0 {
-		logFields = append(logFields, zap.Strings("liquidatedShares", operatorSharePubKeys))
+		logFields = append(logFields,
+			zap.String("ownerAddress", event.OwnerAddress.String()),
+			zap.Strings("liquidatedShares", operatorSharePubKeys),
+		)
 	}
 
 	return logFields, nil
@@ -263,7 +275,10 @@ func (c *controller) handleAccountEnabledEvent(
 
 	logFields := make([]zap.Field, 0)
 	if len(operatorSharePubKeys) > 0 {
-		logFields = append(logFields, zap.Strings("enabledShares", operatorSharePubKeys))
+		logFields = append(logFields,
+			zap.String("ownerAddress", event.OwnerAddress.String()),
+			zap.Strings("enabledShares", operatorSharePubKeys),
+		)
 	}
 
 	return logFields, nil
