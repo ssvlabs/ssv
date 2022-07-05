@@ -34,6 +34,7 @@ type MockNetwork interface {
 	Start(ctx context.Context)
 	SetLastDecidedHandler(lastDecidedHandler EventHandler)
 	SetGetHistoryHandler(getHistoryHandler EventHandler)
+	GetBroadcastMessages() []message.SSVMessage
 }
 
 // EventHandler represents a function that handles a message event
@@ -62,6 +63,9 @@ type mockNetwork struct {
 
 	messagesLock sync.Locker
 	messages     map[string]*message.SSVMessage
+
+	broadcastMessagesLock sync.Locker
+	broadcastMessages     []message.SSVMessage
 
 	lastDecidedHandler EventHandler
 	getHistoryHandler  EventHandler
@@ -94,6 +98,7 @@ func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) MockNetwork
 		handlersLock:           &sync.Mutex{},
 		peersLock:              &sync.Mutex{},
 		messagesLock:           &sync.Mutex{},
+		broadcastMessagesLock:  &sync.Mutex{},
 		lastDecidedResultsLock: &sync.Mutex{},
 		getHistoryResultsLock:  &sync.Mutex{},
 	}
@@ -215,6 +220,10 @@ func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
 		}
 		mn.PushMsg(e)
 	}
+
+	m.broadcastMessagesLock.Lock()
+	m.broadcastMessages = append(m.broadcastMessages, msg)
+	m.broadcastMessagesLock.Unlock()
 
 	return nil
 }
@@ -410,6 +419,13 @@ func (m *mockNetwork) AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork) {
 	m.topicsLock.Lock()
 	m.topics[spk] = peers
 	m.topicsLock.Unlock()
+}
+
+func (m *mockNetwork) GetBroadcastMessages() []message.SSVMessage {
+	m.broadcastMessagesLock.Lock()
+	defer m.broadcastMessagesLock.Unlock()
+
+	return m.broadcastMessages
 }
 
 // GenPeerID generates a new network key
