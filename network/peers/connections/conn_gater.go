@@ -1,6 +1,7 @@
-package peers
+package connections
 
 import (
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -11,13 +12,14 @@ import (
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go
+// TODO: add IP limiting
 type connGater struct {
 	logger *zap.Logger
-	idx    ConnectionIndex
+	idx    peers.ConnectionIndex
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, idx ConnectionIndex) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.ConnectionGater {
 	return &connGater{
 		logger: logger,
 		idx:    idx,
@@ -28,7 +30,7 @@ func NewConnectionGater(logger *zap.Logger, idx ConnectionIndex) connmgr.Connect
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) bool {
-	return n.idx.IsBad(id)
+	return n.idx.Limit(libp2pnetwork.DirOutbound)
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
@@ -43,7 +45,7 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return true
+	return n.idx.Limit(libp2pnetwork.DirInbound)
 }
 
 // InterceptSecured is called for both inbound and outbound connections,

@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"strings"
 	"time"
 
@@ -37,8 +36,10 @@ type Config struct {
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"100" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"50" env-description:"Connected peers limit for connections"`
+	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"5" env-description:"Connected peers limit per pubsub topic"`
 
+	UseSubnetDiscovery bool `yaml:"UseSubnetDiscovery" env:"P2P_SUBNETS_DISCOVERY" env-default:"false" env-description:"Connected peers limit per pubsub topic"`
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
@@ -81,14 +82,10 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 
 	opts, err := c.configureAddrs(opts)
 	if err != nil {
-		return opts, errors.Wrap(err, "failed to setup addresses")
+		return opts, errors.Wrap(err, "could not setup addresses")
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
-
-	maxPeers := c.MaxPeers + minPeersBuffer
-	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*15)
-	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)
 

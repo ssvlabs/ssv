@@ -21,13 +21,13 @@ const (
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
-			err := scoreIdx.Score(pid, peers.NodeScore{
+			err := scoreIdx.Score(pid, &peers.NodeScore{
 				Name:  "PS_Score",
 				Value: peerScores.Score,
-			}, peers.NodeScore{
+			}, &peers.NodeScore{
 				Name:  "PS_BehaviourPenalty",
 				Value: peerScores.BehaviourPenalty,
-			}, peers.NodeScore{
+			}, &peers.NodeScore{
 				Name:  "PS_IPColocationFactor",
 				Value: peerScores.IPColocationFactor,
 			})

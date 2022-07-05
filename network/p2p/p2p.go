@@ -8,11 +8,13 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
+	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
@@ -33,8 +35,9 @@ const (
 )
 
 const (
-	peerIndexGCInterval = 15 * time.Minute
-	reportingInterval   = 30 * time.Second
+	connManagerGCInterval = 5 * time.Minute
+	peerIndexGCInterval   = 15 * time.Minute
+	reportingInterval     = 30 * time.Second
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -54,6 +57,7 @@ type p2pNetwork struct {
 	topicsCtrl  topics.Controller
 	msgRouter   network.MessageRouter
 	msgResolver topics.MsgPeersResolver
+	connHandler connections.ConnHandler
 
 	state int32
 
@@ -62,6 +66,7 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
+	connManager      connmgrcore.ConnManager
 }
 
 // New creates a new p2p network
@@ -92,6 +97,9 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
+	if err := n.connManager.Close(); err != nil {
+		n.logger.Warn("could not close discovery", zap.Error(err))
+	}
 	if err := n.disc.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
@@ -115,6 +123,12 @@ func (n *p2pNetwork) Start() error {
 
 	go n.startDiscovery()
 
+	async.Interval(n.ctx, connManagerGCInterval, func() {
+		ctx, cancel := context.WithTimeout(n.ctx, time.Minute*2)
+		defer cancel()
+		n.connManager.TrimOpenConns(ctx)
+	})
+
 	async.Interval(n.ctx, peerIndexGCInterval, func() {
 		n.idx.GC()
 	})
@@ -122,6 +136,10 @@ func (n *p2pNetwork) Start() error {
 	async.Interval(n.ctx, reportingInterval, func() {
 		go n.reportAllPeers()
 		n.reportTopics()
+	})
+
+	async.Interval(n.ctx, reportingInterval/15, func() {
+		n.reportSubnetsStats()
 	})
 
 	if err := n.registerInitialTopics(); err != nil {
@@ -230,4 +248,16 @@ func (n *p2pNetwork) UpdateSubnets() {
 		return
 	}
 	n.logger.Debug("updated subnets (discovery)", zap.Any("subnets", n.subnets))
+}
+
+// getMaxPeers returns max peers of the given topic.
+func (n *p2pNetwork) getMaxPeers(topic string) int {
+	if len(topic) == 0 {
+		return n.cfg.MaxPeers
+	}
+	baseName := n.fork.GetTopicBaseName(topic)
+	if baseName == n.fork.DecidedTopic() { // allow more peers for decided topic
+		return n.cfg.TopicMaxPeers * 2
+	}
+	return n.cfg.TopicMaxPeers
 }

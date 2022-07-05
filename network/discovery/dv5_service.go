@@ -46,7 +46,8 @@ type DiscV5Service struct {
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
 
-	conns peers.ConnectionIndex
+	conns      peers.ConnectionIndex
+	subnetsIdx peers.SubnetsIndex
 
 	publishState int32
 	conn         *net.UDPConn
@@ -64,6 +65,7 @@ func newDiscV5Service(pctx context.Context, discOpts *Options) (Service, error) 
 		logger:       discOpts.Logger.With(zap.String("where", "discv5")),
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
+		subnetsIdx:   discOpts.SubnetsIdx,
 		forkv:        discOpts.ForkVersion,
 		fork:         forksfactory.NewFork(discOpts.ForkVersion),
 		subnets:      discOpts.DiscV5Opts.Subnets,
@@ -133,15 +135,24 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 	return node, nil
 }
 
-// Bootstrap start looking for new nodes
-// note that this function blocks
+// Bootstrap start looking for new nodes, note that this function blocks.
+// if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
+// which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		// if we reached peers limit, make sure to accept peers with more than 10% shared subnets
+		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+		if err != nil {
+			dvs.logger.Debug("could not read subnets", zap.String("enr", e.Node.String()))
+			return
+		}
+		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+		if updated {
+			dvs.logger.Debug("[discv5] peer subnets were updated", zap.String("enr", e.Node.String()),
+				zap.String("id", e.AddrInfo.ID.String()),
+				zap.String("subnets", records.Subnets(nodeSubnets).String()))
+		}
 		if !dvs.limitNodeFilter(e.Node) {
-			//desired := dvs.fork.Subnets() / 10
-			desired := 5
-			if !dvs.sharedSubnetsFilter(desired)(e.Node) {
+			if !dvs.sharedSubnetsFilter(1)(e.Node) {
 				metricRejectedNodes.Inc()
 				return
 			}

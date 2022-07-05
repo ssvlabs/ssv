@@ -45,6 +45,7 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 	logger := crf.logger.With(zap.String("identifier", identifier.String()), zap.Int64("height", int64(height)))
 
 	logger.Debug("got last change round msgs", zap.Int("msgs count", len(msgs)), zap.Any("msgs", msgs))
+	syncMsgs := make([]*message.SyncMessage, 0)
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
 		err = syncMsg.Decode(msg.Msg.Data)
@@ -65,7 +66,10 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			logger.Warn("could not handle message", zap.Error(err))
 			continue
 		}
+		syncMsgs = append(syncMsgs, syncMsg)
 	}
+	logger.Debug("handled change round msgs", zap.Any("msgs", syncMsgs))
+
 	return nil
 }
 
