@@ -135,8 +135,9 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 	return node, nil
 }
 
-// Bootstrap start looking for new nodes
-// note that this function blocks
+// Bootstrap start looking for new nodes, note that this function blocks.
+// if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
+// which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
@@ -150,8 +151,6 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 				zap.String("id", e.AddrInfo.ID.String()),
 				zap.String("subnets", records.Subnets(nodeSubnets).String()))
 		}
-		// if we reached peers limit, make sure to accept peers with more than 1 shared subnet
-		// let the connection handler determine whether we'll want to connect to this node
 		if !dvs.limitNodeFilter(e.Node) {
 			if !dvs.sharedSubnetsFilter(1)(e.Node) {
 				metricRejectedNodes.Inc()

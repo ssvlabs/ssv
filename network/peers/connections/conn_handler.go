@@ -156,14 +156,14 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 		zap.String("mySubnets", mySubnets.String()))
 
 	shared := records.SharedSubnets(mySubnets, subnets, 0)
+	logger.Debug("checking subnets", zap.Ints("shared", shared),
+		zap.Bool("extendedCheck", ch.subnetsCheck))
 	// in case we don't check subnets, just make sure we have at least 1 shared subnet
 	if !ch.subnetsCheck {
 		return len(shared) >= 1
 	}
 
 	// TODO: complete, protected with feature flag (`P2P_SUBNETS_DISCOVERY`)
-
-	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	// positive if we have at least 16 (TBD) shared subnets
 	if len(shared) >= 16 { // TODO: extract config

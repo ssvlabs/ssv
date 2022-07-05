@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"strings"
 	"time"
 
@@ -87,10 +86,6 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
-
-	maxPeers := c.MaxPeers + minPeersBuffer
-	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*15)
-	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)
 

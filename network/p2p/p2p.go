@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
+	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
@@ -34,8 +35,9 @@ const (
 )
 
 const (
-	peerIndexGCInterval = 15 * time.Minute
-	reportingInterval   = 30 * time.Second
+	connManagerGCInterval = 5 * time.Minute
+	peerIndexGCInterval   = 15 * time.Minute
+	reportingInterval     = 30 * time.Second
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -64,6 +66,7 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
+	connManager      connmgrcore.ConnManager
 }
 
 // New creates a new p2p network
@@ -94,6 +97,9 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
+	if err := n.connManager.Close(); err != nil {
+		n.logger.Warn("could not close discovery", zap.Error(err))
+	}
 	if err := n.disc.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
@@ -116,6 +122,12 @@ func (n *p2pNetwork) Start() error {
 	n.logger.Info("starting p2p network service")
 
 	go n.startDiscovery()
+
+	async.Interval(n.ctx, connManagerGCInterval, func() {
+		ctx, cancel := context.WithTimeout(n.ctx, time.Minute*2)
+		defer cancel()
+		n.connManager.TrimOpenConns(ctx)
+	})
 
 	async.Interval(n.ctx, peerIndexGCInterval, func() {
 		n.idx.GC()

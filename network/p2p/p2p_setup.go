@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
@@ -85,6 +86,12 @@ func (n *p2pNetwork) initCfg() {
 		}
 		n.subnets = subnets
 	}
+	if n.cfg.MaxPeers <= 0 {
+		n.cfg.MaxPeers = minPeersBuffer
+	}
+	if n.cfg.TopicMaxPeers <= 0 {
+		n.cfg.TopicMaxPeers = minPeersBuffer / 2
+	}
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
@@ -93,11 +100,16 @@ func (n *p2pNetwork) SetupHost() error {
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
+
+	connManager := connmgr.NewConnManager(n.cfg.MaxPeers/2, n.cfg.MaxPeers, time.Minute*15)
+	opts = append(opts, libp2p.ConnectionManager(connManager))
+
 	host, err := libp2p.New(n.ctx, opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
+	n.connManager = connManager
 
 	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
