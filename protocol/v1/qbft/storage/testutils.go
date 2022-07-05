@@ -3,7 +3,6 @@ package qbftstorage
 import (
 	"encoding/binary"
 	"encoding/json"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -137,24 +136,23 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, lastChangeRoundKey, msg.Message.Identifier)
+
+	var signers [][]byte
+	for _, s := range msg.GetSigners() {
+		signers = append(signers, uInt64ToByteSlice(uint64(s)))
+	}
+
+	return i.save(value, lastChangeRoundKey, msg.Message.Identifier, signers...)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
 // TODO
-func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
-	val, found, err := i.get(lastChangeRoundKey, identifier)
-	if !found {
-		return nil, nil
-	}
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier, signers ...message.OperatorID) ([]*message.SignedMessage, error) {
+	res, err := i.getAll(lastChangeRoundKey, identifier)
 	if err != nil {
 		return nil, err
 	}
-	ret := &message.SignedMessage{}
-	if err := json.Unmarshal(val, ret); err != nil {
-		return nil, errors.Wrap(err, "un-marshaling error")
-	}
-	return ret, nil
+	return res, nil
 }
 
 func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
@@ -188,6 +186,23 @@ func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 		return nil, found, err
 	}
 	return obj.Value, found, nil
+}
+
+func (i *ibftStorage) getAll(id string, pk []byte) ([]*message.SignedMessage, error) {
+	prefix := append(i.prefix, pk...)
+	prefix = append(prefix, id...)
+
+	var res []*message.SignedMessage
+	err := i.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		msg := new(message.SignedMessage)
+		if err := msg.Decode(obj.Value); err != nil {
+			return err
+		}
+		res = append(res, msg)
+		return nil
+	})
+
+	return res, err
 }
 
 func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {

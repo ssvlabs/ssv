@@ -212,7 +212,8 @@ func TestReadModeChangeRound(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			last, err := ctrl.changeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier)
+			res, err := ctrl.changeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier, test.signedMsg.GetSigners()...)
+			last := res[0]
 			require.NoError(t, err)
 			require.NotNil(t, last)
 			require.Equal(t, test.expectedHeight, last.Message.Height)
