@@ -107,11 +107,11 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		}
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
-		logger := h.logger.With(zap.String("otherPeer", pid.String()))
 		if err != nil {
-			logger.Warn("could not read node info msg", zap.Error(err))
 			return
 		}
+
+		logger := h.logger.With(zap.String("otherPeer", pid.String()))
 
 		var ni records.NodeInfo
 		err = ni.Consume(req)
@@ -171,21 +171,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 		return errHandshakeInProcess
 	}
 	defer h.pending.Delete(pid.String())
-	// check if the peer is known
-	ni, err := h.nodeInfoIdx.GetNodeInfo(pid)
-	if err != nil && err != peers.ErrNotFound {
-		return errors.Wrap(err, "could not read identity")
-	}
-	if ni != nil {
-		switch h.states.State(pid) {
-		case peers.StateIndexing:
-			return errHandshakeInProcess
-		case peers.StatePruned:
-			return errors.Errorf("pruned peer [%s]", pid.String())
-		case peers.StateReady:
-			return nil
-		default: // unknown > continue the flow
-		}
+	// check if the peer is known before we continue
+	ni, err := h.getNodeInfo(pid)
+	if err != nil || ni != nil {
+		return err
 	}
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
@@ -211,15 +200,35 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	return nil
 }
 
+func (h *handshaker) getNodeInfo(pid peer.ID) (*records.NodeInfo, error) {
+	ni, err := h.nodeInfoIdx.GetNodeInfo(pid)
+	if err != nil && err != peers.ErrNotFound {
+		return nil, errors.Wrap(err, "could not read node info")
+	}
+	if ni != nil {
+		switch h.states.State(pid) {
+		case peers.StateIndexing:
+			return nil, errHandshakeInProcess
+		case peers.StatePruned:
+			return nil, errors.Errorf("pruned peer [%s]", pid.String())
+		case peers.StateReady:
+			return ni, nil
+		default: // unknown > continue the flow
+		}
+	}
+	return nil, nil
+}
+
 // updateNodeSubnets tries to update the subnets of the given peer
 func (h *handshaker) updateNodeSubnets(pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
 		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
 		if err == nil && len(subnets) > 0 {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
-			h.logger.Debug("handshaked peer subnets", zap.String("peerID", pid.String()),
-				zap.String("subnets", subnets.String()),
-				zap.Bool("updated", updated))
+			if updated {
+				h.logger.Debug("handshaked peer subnets", zap.String("peerID", pid.String()),
+					zap.String("subnets", subnets.String()))
+			}
 		}
 	}
 }

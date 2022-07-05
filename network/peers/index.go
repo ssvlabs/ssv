@@ -80,7 +80,6 @@ type SubnetsStats struct {
 	AvgConnected int
 	PeersCount   []int
 	Connected    []int
-	// TODO: add more fields, e.g. Connected []int, Pruned []int
 }
 
 // SubnetsIndex stores information on subnets.

@@ -161,7 +161,6 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 		if !reachedPeersLimit {
 			return true
 		}
-		logger.Debug("node at peers limit, checking shared subnets")
 		shared := records.SharedSubnets(mySubnets, subnets, 5)
 		return len(shared) == 5
 	}
