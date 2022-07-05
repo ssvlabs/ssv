@@ -51,7 +51,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return n.idx.IsBad(id)
+	return n.idx.Limit(direction) || n.idx.IsBad(id)
 }
 
 // InterceptUpgraded is called for inbound and outbound connections, after
