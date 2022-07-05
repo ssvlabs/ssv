@@ -101,54 +101,53 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
-		h.pending.Store(pid.String(), true)
-		defer h.pending.Delete(pid.String())
-
+		_, wasPending := h.pending.LoadOrStore(pid.String(), true)
+		if !wasPending {
+			defer h.pending.Delete(pid.String())
+		}
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
+		logger := h.logger.With(zap.String("otherPeer", pid.String()))
 		if err != nil {
-			h.logger.Warn("could not read node info msg", zap.Error(err))
+			logger.Warn("could not read node info msg", zap.Error(err))
 			return
 		}
 
 		var ni records.NodeInfo
 		err = ni.Consume(req)
 		if err != nil {
-			h.logger.Warn("could not consume node info request", zap.Error(err))
+			logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
-		// update node's subnets if applicable
-		h.updateNodeSubnets(pid, &ni)
-		//h.logger.Debug("handling handshake request from peer", zap.Any("info", ni))
-		if !h.applyFilters(&ni) {
-			//h.logger.Debug("filtering peer", zap.Any("info", ni))
-			return
-		}
-		if _, err := h.nodeInfoIdx.AddNodeInfo(pid, &ni); err != nil {
-			h.logger.Warn("could not add node info", zap.Error(err))
-			return
-		}
+		// process the node info in a new goroutine so we won't block the stream
+		go func() {
+			err := h.processIncomingNodeInfo(pid, ni)
+			if err != nil {
+				logger.Warn("could not process node info", zap.Error(err))
+			}
+		}()
+
 		self, err := h.nodeInfoIdx.SelfSealed()
 		if err != nil {
-			h.logger.Warn("could not seal self node info", zap.Error(err))
+			logger.Warn("could not seal self node info", zap.Error(err))
 			return
 		}
 		if err := res(self); err != nil {
-			h.logger.Warn("could not send self node info", zap.Error(err))
+			logger.Warn("could not send self node info", zap.Error(err))
 			return
 		}
-		// if we reached limit, check that the peer has at least 5 shared subnets
-		// TODO: dynamic/configurable value TBD
-		if h.connIdx.Limit(stream.Conn().Stat().Direction) {
-			ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(&ni)
-			if !ok {
-				h.logger.Warn("reached peers limit", zap.Error(err))
-				return
-			}
-		} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
-			return errors.New("ignoring peer w/o shared subnets")
-		}*/
 	}
+}
+
+func (h *handshaker) processIncomingNodeInfo(pid peer.ID, ni records.NodeInfo) error {
+	h.updateNodeSubnets(pid, &ni)
+	if !h.applyFilters(&ni) {
+		return errPeerWasFiltered
+	}
+	if _, err := h.nodeInfoIdx.AddNodeInfo(pid, &ni); err != nil {
+		return err
+	}
+	return nil
 }
 
 // preHandshake makes sure that we didn't reach peers limit and have exchanged framework information (libp2p)
@@ -202,30 +201,12 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if ni == nil {
 		return errors.New("empty node info")
 	}
-	// update node's subnets if applicable
-	h.updateNodeSubnets(pid, ni)
-
-	if !h.applyFilters(ni) {
-		return errPeerWasFiltered
-	}
 	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
-	// adding to index
-	_, err = h.nodeInfoIdx.AddNodeInfo(pid, ni)
+	err = h.processIncomingNodeInfo(pid, *ni)
 	if err != nil {
-		logger.Warn("could not add peer to index", zap.Error(err))
+		logger.Debug("could not process node info", zap.Error(err))
 		return err
 	}
-
-	// if we reached limit, check that the peer has at least 5 shared subnets
-	// TODO: dynamic/configurable value TBD
-	if h.connIdx.Limit(conn.Stat().Direction) {
-		ok, _ := SharedSubnetsFilter(h.subnetsProvider, 5)(ni)
-		if !ok {
-			return errors.New("reached peers limit")
-		}
-	} /* else if ok, _ := SharedSubnetsFilter(h.subnetsProvider, 1)(ni); !ok {
-		return errors.New("ignoring peer w/o shared subnets")
-	}*/
 
 	return nil
 }
