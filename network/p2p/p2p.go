@@ -240,7 +240,10 @@ func (n *p2pNetwork) UpdateSubnets() {
 	self := n.idx.Self()
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
-	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", n.subnets))
+
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
+	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", subnetsList))
 
 	err := n.disc.RegisterSubnets(subnetsToAdd...)
 	if err != nil {
