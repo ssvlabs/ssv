@@ -159,6 +159,9 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	logger := ch.logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
 		zap.String("mySubnets", mySubnets.String()))
 
+	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
+		return true
+	}
 	shared := records.SharedSubnets(mySubnets, subnets, 0)
 	logger.Debug("checking subnets", zap.Ints("shared", shared),
 		zap.Bool("extendedCheck", ch.subnetsCheck))

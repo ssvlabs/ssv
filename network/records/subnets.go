@@ -12,6 +12,13 @@ import (
 	"strings"
 )
 
+const (
+	// ZeroSubnets is the representation of no subnets
+	ZeroSubnets = "00000000000000000000000000000000"
+	// AllSubnets is the representation of all subnets
+	AllSubnets = "ffffffffffffffffffffffffffffffff"
+)
+
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
 func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
