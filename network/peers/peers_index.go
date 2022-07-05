@@ -243,6 +243,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		return nil
 	}
 	stats.Connected = make([]int, len(stats.PeersCount))
+	var sumConnected int
 	for subnet, count := range stats.PeersCount {
 		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
 		peers := pi.subnets.GetSubnetPeers(subnet)
@@ -253,8 +254,11 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 			}
 		}
 		stats.Connected[subnet] = connectedCount
+		sumConnected += connectedCount
 		metricsSubnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(connectedCount))
 	}
+	stats.AvgConnected = sumConnected / len(stats.PeersCount)
+
 	return stats
 }
 

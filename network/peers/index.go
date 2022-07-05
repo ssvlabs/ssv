@@ -77,8 +77,9 @@ type NodeStates interface {
 
 // SubnetsStats holds a snapshot of subnets stats
 type SubnetsStats struct {
-	PeersCount []int
-	Connected  []int
+	AvgConnected int
+	PeersCount   []int
+	Connected    []int
 	// TODO: add more fields, e.g. Connected []int, Pruned []int
 }
 

@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
 )
@@ -84,7 +85,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			_logger.Debug("disconnecting after subnets check",
 				zap.String("dir", conn.Stat().Direction.String()))
 			disconnect(net, conn)
-			return nil
+			return errors.New("peer doesn't share enough subnets")
 		}
 		_logger.Debug("new connection is ready",
 			zap.String("dir", conn.Stat().Direction.String()))
@@ -168,11 +169,11 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	logger.Debug("checking subnets")
 
 	shared := records.SharedSubnets(mySubnets, subnets, 0)
+
 	// positive if we have at least 10 shared subnets
 	if len(shared) >= 10 {
 		return true
 	}
-
 	var score float64
 	stats := ch.subnetsIndex.GetSubnetsStats()
 	for subnet, count := range stats.Connected {
