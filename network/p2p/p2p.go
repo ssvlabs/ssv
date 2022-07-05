@@ -35,7 +35,7 @@ const (
 )
 
 const (
-	connManagerGCInterval = 5 * time.Minute
+	connManagerGCInterval = 30 * time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
@@ -124,8 +124,9 @@ func (n *p2pNetwork) Start() error {
 	go n.startDiscovery()
 
 	async.Interval(n.ctx, connManagerGCInterval, func() {
-		ctx, cancel := context.WithTimeout(n.ctx, time.Minute*2)
+		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
+		n.tagBestPeers(n.cfg.MaxPeers)
 		n.connManager.TrimOpenConns(ctx)
 	})
 
@@ -263,4 +264,71 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.TopicMaxPeers * 2
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+func (n *p2pNetwork) tagBestPeers(count int) {
+	allPeers := n.host.Network().Peers()
+	bestPeers := n.getBestPeers(count, allPeers)
+	if len(bestPeers) == 0 {
+		return
+	}
+	for _, pid := range allPeers {
+		if _, ok := bestPeers[pid]; ok {
+			n.connManager.Protect(pid, "ssv/subnets")
+			continue
+		}
+		n.connManager.Unprotect(pid, "ssv/subnets")
+	}
+}
+
+// getBestPeers loop over all the existing peers and returns the best set
+// according to the number of shared subnets,
+// while considering subnets with low peer count to be more important.
+// it enables to distribute peers connections across subnets in a balanced way.
+func (n *p2pNetwork) getBestPeers(count int, allPeers []peer.ID) map[peer.ID]int {
+	if len(allPeers) < count {
+		return nil
+	}
+	stats := n.idx.GetSubnetsStats()
+	subnetsScores := n.getSubnetsDistributionScores(stats, allPeers)
+
+	peerScores := make(map[peer.ID]int)
+	for _, pid := range allPeers {
+		subnets := n.idx.GetPeerSubnets(pid)
+		for subnet, val := range subnets {
+			if val == byte(0) && subnetsScores[subnet] < 0 {
+				peerScores[pid] -= subnetsScores[subnet]
+			} else {
+				peerScores[pid] += subnetsScores[subnet]
+			}
+		}
+	}
+
+	// TODO: sort and return top {count} peers
+
+	return peerScores
+}
+
+// getSubnetsDistributionScores
+func (n *p2pNetwork) getSubnetsDistributionScores(stats *peers.SubnetsStats, allPeers []peer.ID) []int {
+	peersCount := len(allPeers)
+	minPerSubnet := peersCount / 10
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	activeSubnets := records.SharedSubnets(allSubs, n.subnets, 0)
+
+	scores := make([]int, len(allSubs))
+	for _, s := range activeSubnets {
+		var connected int
+		if s < len(stats.Connected) {
+			connected = stats.Connected[s]
+		}
+		if connected == 0 {
+			scores[s] = 2
+		} else if connected <= minPerSubnet {
+			scores[s] = 1
+		} else if connected >= n.cfg.TopicMaxPeers {
+			scores[s] = -2
+		}
+	}
+	return scores
 }

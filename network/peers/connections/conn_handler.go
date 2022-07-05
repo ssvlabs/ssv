@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-const (
-	scoreOffset  = 15.0
-	minPerSubnet = 5
-)
-
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
 type ConnHandler interface {
 	Handle() *libp2pnetwork.NotifyBundle
@@ -162,30 +157,9 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
 		return true
 	}
-	shared := records.SharedSubnets(mySubnets, subnets, 0)
+	shared := records.SharedSubnets(mySubnets, subnets, 1)
 	logger.Debug("checking subnets", zap.Ints("shared", shared),
 		zap.Bool("extendedCheck", ch.subnetsCheck))
-	// in case we don't check subnets, just make sure we have at least 1 shared subnet
-	if !ch.subnetsCheck {
-		return len(shared) >= 1
-	}
 
-	// TODO: complete, protected with feature flag (`P2P_SUBNETS_DISCOVERY`)
-
-	// positive if we have at least 16 (TBD) shared subnets
-	if len(shared) >= 16 { // TODO: extract config
-		return true
-	}
-	var score float64
-	stats := ch.subnetsIndex.GetSubnetsStats()
-	for subnet, count := range stats.Connected {
-		for _, s := range shared {
-			if subnet == s {
-				if count < minPerSubnet {
-					score = score + float64(minPerSubnet-count)*1.5
-				}
-			}
-		}
-	}
-	return score > scoreOffset
+	return len(shared) == 1
 }
