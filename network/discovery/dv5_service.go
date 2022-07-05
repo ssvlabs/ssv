@@ -145,16 +145,15 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 			return
 		}
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-		dvs.logger.Debug("discovered peer subnets", zap.String("enr", e.Node.String()),
-			zap.String("id", e.AddrInfo.ID.String()),
-			zap.String("subnets", records.Subnets(nodeSubnets).String()),
-			zap.Bool("updated", updated))
-
-		// if we reached peers limit, make sure to accept peers with more than 10% shared subnets
+		if updated {
+			dvs.logger.Debug("[discv5] peer subnets were updated", zap.String("enr", e.Node.String()),
+				zap.String("id", e.AddrInfo.ID.String()),
+				zap.String("subnets", records.Subnets(nodeSubnets).String()))
+		}
+		// if we reached peers limit, make sure to accept peers with more than 1 shared subnet
+		// let the connection handler determine whether we'll want to connect to this node
 		if !dvs.limitNodeFilter(e.Node) {
-			//desired := dvs.fork.Subnets() / 10
-			desired := 5
-			if !dvs.sharedSubnetsFilter(desired)(e.Node) {
+			if !dvs.sharedSubnetsFilter(1)(e.Node) {
 				metricRejectedNodes.Inc()
 				return
 			}
