@@ -105,10 +105,10 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 
 func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	maxPeers := pi.maxPeers("")
-	if dir == libp2pnetwork.DirInbound {
-		// accepting more connection than the limit for inbound connections
-		maxPeers *= 4 / 3
-	}
+	//if dir == libp2pnetwork.DirInbound {
+	//	// accepting more connection than the limit for inbound connections
+	//	maxPeers *= 4 / 3
+	//}
 	peers := pi.network.Peers()
 	return len(peers) > maxPeers
 }

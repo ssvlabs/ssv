@@ -155,29 +155,18 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	logger := ch.logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
 		zap.String("mySubnets", mySubnets.String()))
 
-	reachedPeersLimit := ch.connIdx.Limit(conn.Stat().Direction)
-	// in case we don't check subnets, and limit was reached -> check for at least 5 shared subnet
+	shared := records.SharedSubnets(mySubnets, subnets, 0)
+	// in case we don't check subnets, just make sure we have at least 1 shared subnet
 	if !ch.subnetsCheck {
-		minShared := 5
-		if !reachedPeersLimit {
-			minShared = 1
-		}
-		shared := records.SharedSubnets(mySubnets, subnets, minShared)
-		return len(shared) == minShared
+		return len(shared) >= 1
 	}
-
-	logger.Debug("checking subnets")
 
 	// TODO: complete, protected with feature flag (`P2P_SUBNETS_DISCOVERY`)
 
-	shared := records.SharedSubnets(mySubnets, subnets, 0)
+	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
-	// once reached limit, accept if we see a node with multiple (16, TBD) shared committees
-	if reachedPeersLimit {
-		return len(shared) >= 16 // TODO: extract config
-	}
-	// positive if we have at least 10 (TBD) shared subnets
-	if len(shared) >= 10 { // TODO: extract config
+	// positive if we have at least 16 (TBD) shared subnets
+	if len(shared) >= 16 { // TODO: extract config
 		return true
 	}
 	var score float64

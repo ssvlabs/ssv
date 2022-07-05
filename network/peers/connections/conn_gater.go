@@ -30,7 +30,7 @@ func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.C
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) bool {
-	return n.idx.IsBad(id)
+	return n.idx.Limit(libp2pnetwork.DirOutbound)
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
@@ -45,7 +45,7 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return true
+	return n.idx.Limit(libp2pnetwork.DirOutbound)
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
