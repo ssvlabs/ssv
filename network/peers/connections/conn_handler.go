@@ -65,8 +65,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	disconnect := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
-		if errClose != nil {
-			ch.logger.Warn("could not close connection", zap.String("targetPeer", id.String()), zap.Error(errClose))
+		if errClose == nil {
+			metricsFilteredConnections.Inc()
 		}
 	}
 
@@ -80,6 +80,10 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		if !ok {
 			disconnect(net, conn)
 			return err
+		}
+		if ch.connIdx.Limit(conn.Stat().Direction) {
+			disconnect(net, conn)
+			return errors.New("reached peers limit")
 		}
 		if !ch.checkSubnets(conn) {
 			_logger.Debug("disconnecting after subnets check",
