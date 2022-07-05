@@ -45,7 +45,7 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return n.idx.Limit(libp2pnetwork.DirOutbound)
+	return n.idx.Limit(libp2pnetwork.DirInbound)
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
