@@ -57,7 +57,7 @@ func ShareFromValidatorEvent(
 
 	ibftCommittee := map[message.OperatorID]*beaconprotocol.Node{}
 	for i := range validatorAddedEvent.OperatorPublicKeys {
-		nodeID := message.OperatorID(i + 1)
+		nodeID := message.OperatorID(validatorAddedEvent.OperatorIds[i].Uint64())
 		ibftCommittee[nodeID] = &beaconprotocol.Node{
 			IbftID: uint64(nodeID),
 			Pk:     validatorAddedEvent.SharesPublicKeys[i],
