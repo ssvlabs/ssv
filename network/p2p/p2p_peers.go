@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"bytes"
+	"context"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -71,6 +72,22 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.TopicMaxPeers * 2
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// trimPeers will try to disconnect from a peers that were not tagged / protected
+func (n *p2pNetwork) trimPeers(ctx context.Context) {
+	// TODO: use connection manager for this
+	//n.connManager.TrimOpenConns(ctx)
+	allPeers := n.host.Network().Peers()
+	for _, pid := range allPeers {
+		if !n.connManager.IsProtected(pid, "ssv/subnets") {
+			err := n.host.Network().ClosePeer(pid)
+			if err != nil {
+				n.logger.Debug("could not close trimmed peer",
+					zap.String("pid", pid.String()), zap.Error(err))
+			}
+		}
+	}
 }
 
 func (n *p2pNetwork) tagBestPeers(count int) {

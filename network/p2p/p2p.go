@@ -126,7 +126,7 @@ func (n *p2pNetwork) Start() error {
 		defer cancel()
 		// tag the best 80% nodes and trim
 		n.tagBestPeers((n.cfg.MaxPeers / 10) * 8)
-		n.connManager.TrimOpenConns(ctx)
+		n.trimPeers(ctx)
 	})
 
 	async.Interval(n.ctx, peerIndexGCInterval, func() {
