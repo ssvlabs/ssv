@@ -79,6 +79,10 @@ func (n *p2pNetwork) tagBestPeers(count int) {
 	if len(bestPeers) == 0 {
 		return
 	}
+	n.logger.Debug("found best peers",
+		zap.Int("allPeersCount", len(allPeers)),
+		zap.Int("bestPeersCount", len(bestPeers)),
+		zap.Any("bestPeers", bestPeers))
 	for _, pid := range allPeers {
 		if _, ok := bestPeers[pid]; ok {
 			n.connManager.Protect(pid, "ssv/subnets")
