@@ -138,7 +138,7 @@ func (n *p2pNetwork) getSubnetsDistributionScores(stats *peers.SubnetsStats, all
 		} else if connected <= minPerSubnet {
 			scores[s] = 1
 		} else if connected >= n.cfg.TopicMaxPeers {
-			scores[s] = -2
+			scores[s] = -1
 		}
 	}
 	return scores
