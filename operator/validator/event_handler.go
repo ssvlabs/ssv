@@ -260,6 +260,7 @@ func (c *controller) handleAccountEnabledEvent(
 
 	for _, share := range shares {
 		if share.IsOperatorShare(c.operatorPubKey) {
+			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
 			share.Liquidated = false
 
 			// save validator data
