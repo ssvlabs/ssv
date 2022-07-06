@@ -76,13 +76,12 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 func (n *p2pNetwork) tagBestPeers(count int) {
 	allPeers := n.host.Network().Peers()
 	bestPeers := n.getBestPeers(count, allPeers)
+	n.logger.Debug("found best peers",
+		zap.Int("allPeers", len(allPeers)),
+		zap.Int("bestPeers", len(bestPeers)))
 	if len(bestPeers) == 0 {
 		return
 	}
-	n.logger.Debug("found best peers",
-		zap.Int("allPeersCount", len(allPeers)),
-		zap.Int("bestPeersCount", len(bestPeers)),
-		zap.Any("bestPeers", bestPeers))
 	for _, pid := range allPeers {
 		if _, ok := bestPeers[pid]; ok {
 			n.connManager.Protect(pid, "ssv/subnets")
@@ -97,13 +96,15 @@ func (n *p2pNetwork) tagBestPeers(count int) {
 // while considering subnets with low peer count to be more important.
 // it enables to distribute peers connections across subnets in a balanced way.
 func (n *p2pNetwork) getBestPeers(count int, allPeers []peer.ID) map[peer.ID]int {
+	peerScores := make(map[peer.ID]int)
 	if len(allPeers) < count {
-		return nil
+		for _, p := range allPeers {
+			peerScores[p] = 1
+		}
+		return peerScores
 	}
 	stats := n.idx.GetSubnetsStats()
 	subnetsScores := n.getSubnetsDistributionScores(stats, allPeers)
-
-	peerScores := make(map[peer.ID]int)
 	for _, pid := range allPeers {
 		var peerScore int
 		subnets := n.idx.GetPeerSubnets(pid)
