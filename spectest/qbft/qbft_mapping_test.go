@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"os"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -148,7 +147,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	pi, _ := protocolp2p.GenPeerID()
 	p2pNet := protocolp2p.NewMockNetwork(logger, pi, 10)
 	beacon := validator.NewTestBeacon(t)
-	keysSet := testingutils.Testing4SharesSet()
+	keysSet := testingutils.Testing13SharesSet()
 
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
@@ -165,37 +164,24 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	share := &beaconprotocol.Share{
 		NodeID:    1,
 		PublicKey: keysSet.ValidatorPK,
-		Committee: map[message.OperatorID]*beaconprotocol.Node{
-			1: {
-				IbftID: 1,
-				Pk:     keysSet.Shares[1].GetPublicKey().Serialize(),
-			},
-			2: {
-				IbftID: 2,
-				Pk:     keysSet.Shares[2].GetPublicKey().Serialize(),
-			},
-			3: {
-				IbftID: 3,
-				Pk:     keysSet.Shares[3].GetPublicKey().Serialize(),
-			},
-			4: {
-				IbftID: 4,
-				Pk:     keysSet.Shares[4].GetPublicKey().Serialize(),
-			},
-		},
+		Committee: make(map[message.OperatorID]*beaconprotocol.Node),
 	}
 
 	var mappedCommittee []*types.Operator
-	for k, v := range share.Committee {
+	for i := range test.Pre.State.Share.Committee {
+		operatorID := types.OperatorID(i) + 1
+		pk := keysSet.Shares[operatorID].GetPublicKey().Serialize()
+
+		share.Committee[message.OperatorID(i)+1] = &beaconprotocol.Node{
+			IbftID: uint64(i) + 1,
+			Pk:     pk,
+		}
+
 		mappedCommittee = append(mappedCommittee, &types.Operator{
-			OperatorID: types.OperatorID(k),
-			PubKey:     v.Pk,
+			OperatorID: operatorID,
+			PubKey:     pk,
 		})
 	}
-
-	sort.Slice(mappedCommittee, func(i, j int) bool {
-		return mappedCommittee[i].OperatorID < mappedCommittee[j].OperatorID
-	})
 
 	mappedShare := &types.Share{
 		OperatorID:      types.OperatorID(share.NodeID),
