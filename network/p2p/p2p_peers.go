@@ -118,7 +118,7 @@ func (n *p2pNetwork) getBestPeers(count int, allPeers []peer.ID) map[peer.ID]int
 		// adding the number of shared subnets to the score, considering only up to 25% subnets
 		shared := records.SharedSubnets(subnets, n.subnets, n.fork.Subnets()/4)
 		peerScore += len(shared) / 2
-		n.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScores[pid]))
+		n.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
 		peerScores[pid] = peerScore
 	}
 

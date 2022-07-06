@@ -33,7 +33,7 @@ const (
 )
 
 const (
-	connManagerGCInterval = 30 * time.Minute
+	connManagerGCInterval = 5 * time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
@@ -124,7 +124,8 @@ func (n *p2pNetwork) Start() error {
 	async.Interval(n.ctx, connManagerGCInterval, func() {
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
-		n.tagBestPeers(n.cfg.MaxPeers)
+		// tag the best 80% nodes and trim
+		n.tagBestPeers((n.cfg.MaxPeers / 10) * 8)
 		n.connManager.TrimOpenConns(ctx)
 	})
 
