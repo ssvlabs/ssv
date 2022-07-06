@@ -121,7 +121,8 @@ func (n *p2pNetwork) getBestPeers(count int, allPeers []peer.ID) map[peer.ID]int
 		return peerScores
 	}
 	stats := n.idx.GetSubnetsStats()
-	subnetsScores := n.getSubnetsDistributionScores(stats, allPeers)
+	minSubnetPeers := (len(allPeers) / 10) + 1
+	subnetsScores := getSubnetsDistributionScores(stats, minSubnetPeers, n.subnets, n.cfg.TopicMaxPeers)
 	for _, pid := range allPeers {
 		var peerScore int
 		subnets := n.idx.GetPeerSubnets(pid)
@@ -143,11 +144,9 @@ func (n *p2pNetwork) getBestPeers(count int, allPeers []peer.ID) map[peer.ID]int
 }
 
 // getSubnetsDistributionScores
-func (n *p2pNetwork) getSubnetsDistributionScores(stats *peers.SubnetsStats, allPeers []peer.ID) []int {
-	peersCount := len(allPeers)
-	minPerSubnet := peersCount / 10
+func getSubnetsDistributionScores(stats *peers.SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []int {
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	activeSubnets := records.SharedSubnets(allSubs, n.subnets, 0)
+	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
 
 	scores := make([]int, len(allSubs))
 	for _, s := range activeSubnets {
@@ -159,7 +158,7 @@ func (n *p2pNetwork) getSubnetsDistributionScores(stats *peers.SubnetsStats, all
 			scores[s] = 2
 		} else if connected <= minPerSubnet {
 			scores[s] = 1
-		} else if connected >= n.cfg.TopicMaxPeers {
+		} else if connected >= topicMaxPeers {
 			scores[s] = -1
 		}
 	}
