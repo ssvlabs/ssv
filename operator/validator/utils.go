@@ -90,6 +90,7 @@ func ShareFromValidatorEvent(
 	}
 	validatorShare.Committee = ibftCommittee
 	validatorShare.SetOperators(validatorAddedEvent.OperatorPublicKeys)
+	validatorShare.SetOperatorIds(validatorAddedEvent.OperatorIds)
 
 	return &validatorShare, shareSecret, nil
 }

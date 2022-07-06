@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
+	"math/big"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -38,6 +39,7 @@ type Share struct {
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
+	OperatorIds  []uint64
 	Liquidated   bool
 }
 
@@ -206,6 +208,14 @@ func (s *Share) OperatorReady() bool {
 func (s *Share) SetOperators(ops [][]byte) {
 	s.Operators = make([][]byte, len(ops))
 	copy(s.Operators, ops)
+}
+
+// SetOperatorIds set Operator ids
+func (s *Share) SetOperatorIds(opIds []*big.Int) {
+	s.OperatorIds = make([]uint64, len(opIds))
+	for i, o := range opIds {
+		s.OperatorIds[i] = o.Uint64()
+	}
 }
 
 // HashOperators hash all Operators keys key
