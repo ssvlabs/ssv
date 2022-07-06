@@ -2,14 +2,27 @@ package p2pv1
 
 import (
 	"github.com/bloxapp/ssv/network/commons"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"math/rand"
 	"testing"
 )
+
+func TestGetMaxPeers(t *testing.T) {
+	n := &p2pNetwork{
+		cfg:  &Config{MaxPeers: 40, TopicMaxPeers: 8},
+		fork: forksfactory.NewFork(forksprotocol.V2ForkVersion),
+	}
+
+	require.Equal(t, 40, n.getMaxPeers(""))
+	require.Equal(t, 8, n.getMaxPeers("100"))
+	require.Equal(t, 16, n.getMaxPeers(n.fork.DecidedTopic()))
+}
 
 func TestSubnetsDistributionScores(t *testing.T) {
 	nsubnets := 128
