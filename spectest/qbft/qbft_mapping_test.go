@@ -17,7 +17,8 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -41,10 +42,45 @@ import (
 
 func testsToRun() map[string]struct{} {
 	testList := spectest.AllTests
-	//testList = []spectest.SpecTest{
-	//commit.CurrentRound(),
-	//messages.CreateCommit(),
-	//}
+	testList = []spectest.SpecTest{
+		proposer.FourOperators(),
+		proposer.SevenOperators(),
+		proposer.TenOperators(),
+		proposer.ThirteenOperators(),
+
+		messages.RoundChangeDataInvalidJustifications(),
+		messages.RoundChangeDataInvalidPreparedRound(),
+		messages.RoundChangeDataInvalidPreparedValue(),
+		messages.RoundChangePrePreparedJustifications(),
+		messages.RoundChangeNotPreparedJustifications(),
+		messages.CommitDataEncoding(),
+		messages.DecidedMsgEncoding(),
+		messages.MsgNilIdentifier(),
+		messages.MsgNonZeroIdentifier(),
+		messages.MsgTypeUnknown(),
+		messages.PrepareDataEncoding(),
+		messages.ProposeDataEncoding(),
+		messages.MsgDataNil(),
+		messages.MsgDataNonZero(),
+		messages.SignedMsgSigTooShort(),
+		messages.SignedMsgSigTooLong(),
+		messages.SignedMsgNoSigners(),
+		messages.GetRoot(),
+		messages.SignedMessageEncoding(),
+		messages.CreateProposal(),
+		messages.CreateProposalPreviouslyPrepared(),
+		messages.CreateProposalNotPreviouslyPrepared(),
+		messages.CreatePrepare(),
+		messages.CreateCommit(),
+		messages.CreateRoundChange(),
+		messages.CreateRoundChangePreviouslyPrepared(),
+		messages.RoundChangeDataEncoding(),
+
+		spectests.HappyFlow(),
+		spectests.SevenOperators(),
+		spectests.TenOperators(),
+		spectests.ThirteenOperators(),
+	}
 
 	result := make(map[string]struct{})
 	for _, test := range testList {
@@ -177,6 +213,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	signatureToSpecSignatureAndID := make(map[string]signatureAndID)
 
+	var lastErr error
 	for _, msg := range test.InputMessages {
 		origSignAndID := signatureAndID{
 			Signature:  msg.Signature,
@@ -199,20 +236,10 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		signedMessage := specToSignedMessage(t, msg)
 		signedMessage.Signature = serializedSig
 
-		_, err = qbftInstance.ProcessMsg(signedMessage)
-		require.NoError(t, err)
+		if _, err := qbftInstance.ProcessMsg(signedMessage); err != nil {
+			lastErr = err
+		}
 	}
-
-	//time.Sleep(time.Second * 3) // 3s round
-
-	//decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
-	//require.NoError(t, err)
-	//decidedValue := []byte("")
-	//if decided != nil {
-	//	cd, err := decided.Message.GetCommitData()
-	//	require.NoError(t, err)
-	//	decidedValue = cd.Data
-	//}
 
 	mappedInstance := new(qbft.Instance)
 	if qbftInstance != nil {
@@ -244,6 +271,16 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	// TODO: 1) check the state of qbft instance; 2) check `test.OutputMessages`
 
+	if len(test.ExpectedError) != 0 {
+		require.EqualError(t, lastErr, test.ExpectedError)
+	} else {
+		require.NoError(t, lastErr)
+	}
+
+	mappedRoot, err := mappedInstance.State.GetRoot()
+	require.NoError(t, err)
+	require.Equal(t, test.PostRoot, hex.EncodeToString(mappedRoot))
+
 	type BroadcastMessagesGetter interface {
 		GetBroadcastMessages() []message.SSVMessage
 	}
@@ -257,10 +294,6 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		signedMessage.Message.Identifier = identifier
 		require.Equal(t, outputMessage, specToSignedMessage(t, signedMessage))
 	}
-
-	mappedRoot, err := mappedInstance.State.GetRoot()
-	require.NoError(t, err)
-	require.Equal(t, test.PostRoot, hex.EncodeToString(mappedRoot))
 
 	db.Close()
 }
