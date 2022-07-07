@@ -27,7 +27,7 @@ type ConnManager interface {
 // multiple instances can be created, but concurrency is not supported.
 func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
 	return &connManager{
-		logger, connMgr, subnetsIdx,
+		logger.With(zap.String("w", "ConnManager")), connMgr, subnetsIdx,
 	}
 }
 
@@ -40,7 +40,7 @@ type connManager struct {
 
 func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
-	c.logger.Debug("found best peers",
+	c.logger.Debug("tagging best peers",
 		zap.Int("allPeers", len(allPeers)),
 		zap.Int("bestPeers", len(bestPeers)))
 	if len(bestPeers) == 0 {
@@ -57,16 +57,20 @@ func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []p
 
 func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 	//c.connManager.TrimOpenConns(ctx)
+	trimmed := 0
 	allPeers := net.Peers()
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
-			err := net.ClosePeer(pid)
-			if err != nil {
-				c.logger.Debug("could not close trimmed peer",
-					zap.String("pid", pid.String()), zap.Error(err))
-			}
+			trimmed++
+			_ = net.ClosePeer(pid)
+			//err := net.ClosePeer(pid)
+			//if err != nil {
+			//	c.logger.Debug("could not close trimmed peer",
+			//		zap.String("pid", pid.String()), zap.Error(err))
+			//}
 		}
 	}
+	c.logger.Debug("after trimming of peers", zap.Int("count", trimmed))
 }
 
 // getBestPeers loop over all the existing peers and returns the best set
@@ -96,7 +100,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		// adding the number of shared subnets to the score, considering only up to 25% subnets
 		shared := records.SharedSubnets(subnets, mySubnets, len(mySubnets)/4)
 		peerScore += len(shared) / 2
-		c.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
+		//c.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
 		peerScores[pid] = peerScore
 	}
 
