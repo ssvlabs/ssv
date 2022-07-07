@@ -47,7 +47,7 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 
 	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
 	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
-		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
+		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)), zap.Any("signerIds", msg.GetSigners()))
 		c.signatureState.stopTimer()
 
 		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
