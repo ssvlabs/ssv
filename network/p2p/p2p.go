@@ -126,7 +126,7 @@ func (n *p2pNetwork) Start() error {
 	async.Interval(n.ctx, connManagerGCInterval, func() {
 		allPeers := n.host.Network().Peers()
 		currentCount := len(allPeers)
-		if currentCount > n.cfg.MaxPeers {
+		if currentCount < n.cfg.MaxPeers {
 			return
 		}
 		ctx, cancel := context.WithCancel(n.ctx)
@@ -134,7 +134,7 @@ func (n *p2pNetwork) Start() error {
 
 		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx)
 		mySubnets := records.Subnets(n.subnets).Clone()
-		connMgr.TagBestPeers(currentCount-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, n.host.Network())
 	})
 
