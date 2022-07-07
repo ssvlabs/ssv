@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/base64"
+	"encoding/hex"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -150,7 +151,10 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
-		c.logger.Debug("signed attestation", zap.String("pubKey", pk.SerializeToHexStr()), zap.Any("data", signedAttestation), zap.Any("decidedValue", decidedValue))
+		c.logger.Debug("signed attestation",
+			zap.String("pubKey", pk.SerializeToHexStr()),
+			zap.Any("data", signedAttestation),
+			zap.String("decidedValue", hex.EncodeToString(decidedValue)))
 
 		sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
 		retValueStruct.SignedData = sg
@@ -182,8 +186,7 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 		zap.String("signature", string(signature.Serialize())),
 		zap.Int("signature count", len(signatures)),
 		zap.Any("signatures", signatures),
-		zap.String("root", base64.StdEncoding.EncodeToString(root)),
-		zap.String("root", string(root)),
+		zap.String("root", hex.EncodeToString(root)),
 	)
 
 	// Submit validation to beacon node
