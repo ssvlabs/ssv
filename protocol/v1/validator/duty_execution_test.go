@@ -198,7 +198,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 			// TODO: do for all ibfts
 			for _, ibft := range validator.Ibfts() {
-				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty, test.expectedRootHash)
+				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
 				if len(test.expectedError) > 0 {
 					require.EqualError(t, err, test.expectedError)
 				} else {
