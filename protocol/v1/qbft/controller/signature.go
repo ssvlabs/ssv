@@ -150,6 +150,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
+		c.logger.Debug("signed attestation", zap.String("pubKey", pk.SerializeToHexStr()), zap.Any("data", signedAttestation))
 
 		sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
 		retValueStruct.SignedData = sg
@@ -176,7 +177,12 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 		return errors.New("could not reconstruct a valid signature")
 	}
 
-	c.logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
+	c.logger.Info("signatures successfully reconstructed",
+		zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())),
+		zap.Int("signature count", len(signatures)),
+		zap.Any("signatures", signatures),
+		zap.String("root", base64.StdEncoding.EncodeToString(root)),
+	)
 
 	// Submit validation to beacon node
 	switch duty.Type {
