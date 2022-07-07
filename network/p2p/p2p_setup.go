@@ -101,7 +101,8 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
 
-	connManager := connmgr.NewConnManager(n.cfg.MaxPeers/2, n.cfg.MaxPeers, time.Minute*15)
+	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
+	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	host, err := libp2p.New(n.ctx, opts...)

@@ -56,21 +56,23 @@ func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []p
 }
 
 func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
-	//c.connManager.TrimOpenConns(ctx)
-	trimmed := 0
 	allPeers := net.Peers()
-	for _, pid := range allPeers {
-		if !c.connManager.IsProtected(pid, protectedTag) {
-			trimmed++
-			_ = net.ClosePeer(pid)
-			//err := net.ClosePeer(pid)
-			//if err != nil {
-			//	c.logger.Debug("could not close trimmed peer",
-			//		zap.String("pid", pid.String()), zap.Error(err))
-			//}
-		}
-	}
-	c.logger.Debug("after trimming of peers", zap.Int("count", trimmed))
+	before := len(allPeers)
+	c.connManager.TrimOpenConns(ctx)
+	//trimmed := 0
+	//for _, pid := range allPeers {
+	//	if !c.connManager.IsProtected(pid, protectedTag) {
+	//		trimmed++
+	//		_ = net.ClosePeer(pid)
+	//		//err := net.ClosePeer(pid)
+	//		//if err != nil {
+	//		//	c.logger.Debug("could not close trimmed peer",
+	//		//		zap.String("pid", pid.String()), zap.Error(err))
+	//		//}
+	//	}
+	//}
+	c.logger.Debug("after trimming of peers", zap.Int("beforeTrim", before),
+		zap.Int("afterTrim", len(net.Peers())))
 }
 
 // getBestPeers loop over all the existing peers and returns the best set
