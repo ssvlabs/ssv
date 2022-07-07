@@ -18,9 +18,9 @@ var (
 	gsMaxIHaveLength = 1000
 
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
-	gsMcacheLen = 100
+	gsMcacheLen = 80
 	// gsMcacheGossip number of windows to gossip about
-	gsMcacheGossip = 4
+	gsMcacheGossip = 3
 
 	// heartbeat interval frequency of heartbeat, milliseconds
 	gsHeartbeatInterval = 800 * time.Millisecond

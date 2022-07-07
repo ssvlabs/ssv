@@ -124,7 +124,7 @@ func (n *p2pNetwork) Start() error {
 	go n.startDiscovery()
 
 	async.Interval(n.ctx, connManagerGCInterval, func() {
-		allPeers := n.host.Peerstore().Peers()
+		allPeers := n.host.Network().Peers()
 		currentCount := len(allPeers)
 		if currentCount > n.cfg.MaxPeers {
 			return

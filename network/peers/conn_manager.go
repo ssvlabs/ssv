@@ -56,7 +56,7 @@ func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []p
 }
 
 func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
-	//n.connManager.TrimOpenConns(ctx)
+	//c.connManager.TrimOpenConns(ctx)
 	allPeers := net.Peers()
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
@@ -72,7 +72,6 @@ func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 // getBestPeers loop over all the existing peers and returns the best set
 // according to the number of shared subnets,
 // while considering subnets with low peer count to be more important.
-// it enables to distribute peers connections across subnets in a balanced way.
 func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]int {
 	peerScores := make(map[peer.ID]int)
 	if len(allPeers) < n {

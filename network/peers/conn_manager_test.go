@@ -15,6 +15,7 @@ import (
 func TestTagBestPeers(t *testing.T) {
 	l := zap.L()
 	connMgrMock := newConnMgr()
+
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	si := newSubnetsIndex(len(allSubs))
 
@@ -52,6 +53,8 @@ func createRandomSubnets(n int) records.Subnets {
 type mockConnManager struct {
 	tags map[peer.ID]string
 }
+
+var _ connmgrcore.ConnManager = (*mockConnManager)(nil)
 
 func newConnMgr() *mockConnManager {
 	return &mockConnManager{
