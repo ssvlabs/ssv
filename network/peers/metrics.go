@@ -7,21 +7,21 @@ import (
 )
 
 var (
-	metricsStreams = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:stream",
-		Help: "Counts opened/closed streams",
-	})
-	metricsConnections = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:connections",
-		Help: "Counts opened/closed connections",
-	})
+	metricsSubnetsKnownPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:subnets:known",
+		Help: "Counts known peers in subnets",
+	}, []string{"subnet"})
+	metricsSubnetsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:subnets:connected",
+		Help: "Counts connected peers in subnets",
+	}, []string{"subnet"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsStreams); err != nil {
+	if err := prometheus.Register(metricsSubnetsKnownPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsConnections); err != nil {
+	if err := prometheus.Register(metricsSubnetsConnectedPeers); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

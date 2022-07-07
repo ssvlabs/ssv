@@ -12,6 +12,13 @@ import (
 	"strings"
 )
 
+const (
+	// ZeroSubnets is the representation of no subnets
+	ZeroSubnets = "00000000000000000000000000000000"
+	// AllSubnets is the representation of all subnets
+	AllSubnets = "ffffffffffffffffffffffffffffffff"
+)
+
 // UpdateSubnets updates subnets entry according to the given changes.
 // count is the amount of subnets, in case that the entry doesn't exist as we want to initialize it
 func UpdateSubnets(node *enode.LocalNode, count int, added []int, removed []int) ([]byte, error) {
@@ -73,6 +80,13 @@ func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
 // Subnets holds all the subscribed subnets of a specific node
 type Subnets []byte
 
+// Clone clones the independent byte slice
+func (s Subnets) Clone() Subnets {
+	cp := make([]byte, len(s))
+	copy(cp, s)
+	return cp
+}
+
 func (s Subnets) String() string {
 	subnetsVec := bitfield.NewBitvector128()
 	for subnet, val := range s {
@@ -122,6 +136,20 @@ func SharedSubnets(a, b []byte, maxLen int) []int {
 		}
 	}
 	return shared
+}
+
+// DiffSubnets returns a diff of the two given subnets.
+// returns a map with all the different entries and their post change value
+func DiffSubnets(a, b []byte) map[int]byte {
+	diff := make(map[int]byte)
+	for subnet, bval := range b {
+		if subnet >= len(a) {
+			diff[subnet] = bval
+		} else if aval := a[subnet]; aval != bval {
+			diff[subnet] = bval
+		}
+	}
+	return diff
 }
 
 func getCharMask(str string) ([]byte, error) {

@@ -60,6 +60,12 @@ func (n *p2pNetwork) reportAllPeers() {
 	MetricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
+func (n *p2pNetwork) reportSubnetsStats() {
+	stats := n.idx.GetSubnetsStats()
+	n.logger.Debug("network subnets",
+		zap.Any("stats", stats))
+}
+
 func (n *p2pNetwork) reportTopics() {
 	topics := n.topicsCtrl.Topics()
 	nTopics := len(topics)
@@ -83,7 +89,7 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	oid, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown
-	ni, err := n.idx.NodeInfo(pid)
+	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
 		oid = unknown
 		nodeVersion = unknown

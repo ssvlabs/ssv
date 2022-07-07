@@ -21,7 +21,7 @@ func (v0 *ForkV0) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
 	v0Msg := &network.Message{}
 	err := v0Msg.Decode(data)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to decode v0 message")
+		return nil, errors.Wrap(err, "could not decode v0 message")
 	}
 	return conversion.ToV1Message(v0Msg)
 }

@@ -74,14 +74,13 @@ func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
-	ctx, cancel := context.WithCancel(opt.Context)
-	opt.Context = ctx
 	ibfts := setupIbfts(opt, logger)
 
 	if !opt.ReadMode {
 		logger.Debug("new validator instance was created", zap.Strings("operators ids", opt.Share.HashOperators()))
 	}
 
+	ctx, cancel := context.WithCancel(opt.Context)
 	return &Validator{
 		ctx:         ctx,
 		cancelCtx:   cancel,
