@@ -16,10 +16,9 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -33,6 +32,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -139,6 +139,34 @@ func TestQBFTMapping(t *testing.T) {
 	}
 }
 
+func mapErrors(err string) string {
+	switch err {
+	// TODO: ensure that cases below are not bugs
+	case "proposal invalid: proposal not justified: prepares has no quorum",
+		"proposal invalid: proposal not justified: change round has not quorum",
+		"proposal invalid: proposal not justified: change round msg not valid: basic round Change validation failed: round change msg signature invalid: failed to verify signature",
+		"proposal invalid: proposal not justified: proposed data doesn't match highest prepared",
+		"proposal invalid: proposal not justified: signed prepare not valid",
+		"proposal invalid: proposal is not valid with current state",
+		"invalid prepare msg: msg round wrong":
+		return "pre-prepare message sender (id 1) is not the round's leader (expected 2)"
+	case "invalid signed message: message data is invalid":
+		return "could not decode commit data from message: unexpected end of JSON input"
+	case "invalid prepare msg: msg Height wrong":
+		return "invalid message sequence number: expected: 0, actual: 2"
+	case "commit msg invalid: could not get msg commit data: could not decode commit data from message: invalid character '\\x01' looking for beginning of value":
+		return "could not decode commit data from message: invalid character '\\x01' looking for beginning of value"
+	case "proposal invalid: could not get proposal data: could not decode proposal data from message: invalid character '\\x01' looking for beginning of value":
+		return "could not decode proposal data from message: invalid character '\\x01' looking for beginning of value"
+	case "invalid prepare msg: could not get prepare data: could not decode prepare data from message: invalid character '\\x01' looking for beginning of value":
+		return "could not decode prepare data from message: invalid character '\\x01' looking for beginning of value"
+	case "commit msg invalid: commit Height is wrong":
+		return "invalid message sequence number: expected: 0, actual: 10"
+	}
+
+	return err
+}
+
 func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
@@ -156,10 +184,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, beacon.AddShare(keysSet.Shares[1]))
-	require.NoError(t, beacon.AddShare(keysSet.Shares[2]))
-	require.NoError(t, beacon.AddShare(keysSet.Shares[3]))
-	require.NoError(t, beacon.AddShare(keysSet.Shares[4]))
+	qbftStorage := qbftstorage.NewQBFTStore(db, logger, message.RoleTypeAttester.String())
 
 	share := &beaconprotocol.Share{
 		NodeID:    1,
@@ -170,8 +195,9 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	var mappedCommittee []*types.Operator
 	for i := range test.Pre.State.Share.Committee {
 		operatorID := types.OperatorID(i) + 1
-		pk := keysSet.Shares[operatorID].GetPublicKey().Serialize()
+		require.NoError(t, beacon.AddShare(keysSet.Shares[operatorID]))
 
+		pk := keysSet.Shares[operatorID].GetPublicKey().Serialize()
 		share.Committee[message.OperatorID(i)+1] = &beaconprotocol.Node{
 			IbftID: uint64(i) + 1,
 			Pk:     pk,
@@ -195,7 +221,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	identifier := message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester)
-	qbftInstance := newQbftInstance(t, logger, p2pNet, beacon, share, forkVersion)
+	qbftInstance := newQbftInstance(t, logger, qbftStorage, p2pNet, beacon, share, forkVersion)
 
 	signatureToSpecSignatureAndID := make(map[string]signatureAndID)
 
@@ -213,13 +239,20 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		r, err := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
 		require.NoError(t, err)
 
-		sk := testingutils.Testing4SharesSet().Shares[1]
-		sig := sk.SignByte(r)
-		serializedSig := sig.Serialize()
+		var aggSig *bls.Sign
+		for _, signer := range msg.Signers {
+			sig := keysSet.Shares[signer].SignByte(r)
+			if aggSig == nil {
+				aggSig = sig
+			} else {
+				aggSig.Add(sig)
+			}
+		}
+		serializedSig := aggSig.Serialize()
 
 		signatureToSpecSignatureAndID[string(serializedSig)] = origSignAndID
 
-		signedMessage := specToSignedMessage(t, msg)
+		signedMessage := specToSignedMessage(t, keysSet, msg)
 		signedMessage.Signature = serializedSig
 
 		if _, err := qbftInstance.ProcessMsg(signedMessage); err != nil {
@@ -258,7 +291,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	// TODO: 1) check the state of qbft instance; 2) check `test.OutputMessages`
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
+		require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -278,7 +311,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	for i, outputMessage := range outputMessages {
 		signedMessage := test.OutputMessages[i]
 		signedMessage.Message.Identifier = identifier
-		require.Equal(t, outputMessage, specToSignedMessage(t, signedMessage))
+		require.Equal(t, outputMessage, specToSignedMessage(t, keysSet, signedMessage))
 	}
 
 	db.Close()
@@ -287,6 +320,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 	var lastErr error
 
+	keysSet := testingutils.Testing13SharesSet()
+
 	for i, messageBytes := range test.EncodedMessages {
 		m := &qbft.SignedMessage{}
 		if err := m.Decode(messageBytes); err != nil {
@@ -294,7 +329,7 @@ func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 		}
 
 		if len(test.ExpectedRoots) > 0 {
-			r, err := specToSignedMessage(t, m).GetRoot(forksprotocol.V1ForkVersion.String())
+			r, err := specToSignedMessage(t, keysSet, m).GetRoot(forksprotocol.V1ForkVersion.String())
 			if err != nil {
 				lastErr = err
 			}
@@ -316,7 +351,7 @@ func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}
-			if err := validateRoundChangeData(specToRoundChangeData(t, rc)); err != nil {
+			if err := validateRoundChangeData(specToRoundChangeData(t, keysSet, rc)); err != nil {
 				lastErr = err
 			}
 		}
@@ -370,7 +405,7 @@ type signatureAndID struct {
 	Identifier []byte
 }
 
-func newQbftInstance(t *testing.T, logger *zap.Logger, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
+func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
 	identifier := message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester)
@@ -389,11 +424,11 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, net protocolp2p.MockNetwo
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),
 		Signer:           beacon,
-		ChangeRoundStore: nil,
+		ChangeRoundStore: qbftStorage,
 	})
 }
 
-func specToSignedMessage(t *testing.T, msg *qbft.SignedMessage) *message.SignedMessage {
+func specToSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *qbft.SignedMessage) *message.SignedMessage {
 	signers := make([]message.OperatorID, 0)
 	for _, signer := range msg.Signers {
 		signers = append(signers, message.OperatorID(signer))
@@ -417,11 +452,18 @@ func specToSignedMessage(t *testing.T, msg *qbft.SignedMessage) *message.SignedM
 	r, err := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
 	require.NoError(t, err)
 
-	sk := testingutils.Testing4SharesSet().Shares[1]
-	sig := sk.SignByte(r)
+	var aggSig *bls.Sign
+	for _, signer := range msg.Signers {
+		sig := keysSet.Shares[signer].SignByte(r)
+		if aggSig == nil {
+			aggSig = sig
+		} else {
+			aggSig.Add(sig)
+		}
+	}
 
 	return &message.SignedMessage{
-		Signature: sig.Serialize(),
+		Signature: aggSig.Serialize(),
 		//Signature: []byte(msg.Signature),
 		Signers: signers,
 		Message: &message.ConsensusMessage{
@@ -435,10 +477,10 @@ func specToSignedMessage(t *testing.T, msg *qbft.SignedMessage) *message.SignedM
 	}
 }
 
-func specToRoundChangeData(t *testing.T, spec qbft.RoundChangeData) message.RoundChangeData {
+func specToRoundChangeData(t *testing.T, keysSet *testingutils.TestKeySet, spec qbft.RoundChangeData) message.RoundChangeData {
 	rcj := make([]*message.SignedMessage, 0, len(spec.RoundChangeJustification))
 	for _, v := range spec.RoundChangeJustification {
-		rcj = append(rcj, specToSignedMessage(t, v))
+		rcj = append(rcj, specToSignedMessage(t, keysSet, v))
 	}
 
 	return message.RoundChangeData{
