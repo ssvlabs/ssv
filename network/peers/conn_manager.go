@@ -9,6 +9,10 @@ import (
 	"go.uber.org/zap"
 )
 
+const (
+	protectedTag = "ssv/subnets"
+)
+
 // ConnManager is a wrapper on top of go-libp2p-core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
 // rather than relaying on libp2p's connection manager.
@@ -19,8 +23,8 @@ type ConnManager interface {
 	TrimPeers(ctx context.Context, net libp2pnetwork.Network)
 }
 
-// NewConnManager creates a new conn manager, it can be called multiple times
-// but concurrency of multiple managers is not supported.
+// NewConnManager creates a new conn manager.
+// multiple instances can be created, but concurrency is not supported.
 func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
 	return &connManager{
 		logger, connMgr, subnetsIdx,
@@ -35,7 +39,7 @@ type connManager struct {
 }
 
 func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
-	bestPeers := c.getBestPeers(n, mySubnets, topicMaxPeers, allPeers)
+	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
 	c.logger.Debug("found best peers",
 		zap.Int("allPeers", len(allPeers)),
 		zap.Int("bestPeers", len(bestPeers)))
@@ -44,10 +48,10 @@ func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	}
 	for _, pid := range allPeers {
 		if _, ok := bestPeers[pid]; ok {
-			c.connManager.Protect(pid, "ssv/subnets")
+			c.connManager.Protect(pid, protectedTag)
 			continue
 		}
-		c.connManager.Unprotect(pid, "ssv/subnets")
+		c.connManager.Unprotect(pid, protectedTag)
 	}
 }
 
@@ -55,7 +59,7 @@ func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 	//n.connManager.TrimOpenConns(ctx)
 	allPeers := net.Peers()
 	for _, pid := range allPeers {
-		if !c.connManager.IsProtected(pid, "ssv/subnets") {
+		if !c.connManager.IsProtected(pid, protectedTag) {
 			err := net.ClosePeer(pid)
 			if err != nil {
 				c.logger.Debug("could not close trimmed peer",
@@ -69,7 +73,7 @@ func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 // according to the number of shared subnets,
 // while considering subnets with low peer count to be more important.
 // it enables to distribute peers connections across subnets in a balanced way.
-func (c connManager) getBestPeers(n int, mySubnets records.Subnets, topicMaxPeers int, allPeers []peer.ID) map[peer.ID]int {
+func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]int {
 	peerScores := make(map[peer.ID]int)
 	if len(allPeers) < n {
 		for _, p := range allPeers {
