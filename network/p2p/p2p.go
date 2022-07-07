@@ -36,7 +36,7 @@ const (
 
 const (
 	connManagerGCInterval = time.Minute
-	connManagerGCTimeout = time.Minute
+	connManagerGCTimeout  = time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
