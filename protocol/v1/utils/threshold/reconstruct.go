@@ -18,11 +18,10 @@ func ReconstructSignatures(signatures map[message.OperatorID][]byte) (*bls.Sign,
 	sigVec := make([]bls.Sign, 0)
 	logger := logex.Build("TEST", zapcore.DebugLevel, nil)
 
-	cnt := 1
 	for index, signature := range signatures {
 		logger.Debug("reconstructing signature", zap.String("index", fmt.Sprintf("%d", index)), zap.String("signature", fmt.Sprintf("%x", signature)))
 		blsID := bls.ID{}
-		err := blsID.SetDecString(fmt.Sprintf("%d", cnt))
+		err := blsID.SetDecString(fmt.Sprintf("%d", index))
 		if err != nil {
 			return nil, err
 		}
@@ -36,7 +35,6 @@ func ReconstructSignatures(signatures map[message.OperatorID][]byte) (*bls.Sign,
 		}
 
 		sigVec = append(sigVec, blsSig)
-		cnt++
 	}
 	err := reconstructedSig.Recover(sigVec, idVec)
 	return &reconstructedSig, err
