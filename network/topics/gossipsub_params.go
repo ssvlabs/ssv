@@ -9,21 +9,21 @@ var (
 	// gsD topic stable mesh target count
 	gsD = 6
 	// gsDlo topic stable mesh low watermark
-	gsDlo = 4
+	gsDlo = 3
 	// gsDhi topic stable mesh high watermark
-	gsDhi = 10
+	gsDhi = 9
 
 	// gsMaxIHaveLength is max number fo ihave messages to send
 	// lower the maximum (default is 5000) to avoid ihave floods
 	gsMaxIHaveLength = 1000
 
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
-	gsMcacheLen = 60
+	gsMcacheLen = 80
 	// gsMcacheGossip number of windows to gossip about
 	gsMcacheGossip = 3
 
 	// heartbeat interval frequency of heartbeat, milliseconds
-	gsHeartbeatInterval = 700 * time.Millisecond
+	gsHeartbeatInterval = 800 * time.Millisecond
 )
 
 // creates a custom gossipsub parameter set.
