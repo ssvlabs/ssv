@@ -82,8 +82,6 @@ func (crf *changeRoundFetcher) msgError(msg *message.SyncMessage) error {
 		return ErrNotFound
 	} else if msg.Status != message.StatusSuccess {
 		return errors.Errorf("failed with status %d - %s", msg.Status, msg.Status.String())
-	} /*else if len(msg.Data) != 1 { // TODO: extract to validation
-		return errors.New("invalid result count")
-	}*/
+	}
 	return nil
 }
