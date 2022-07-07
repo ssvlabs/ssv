@@ -29,7 +29,7 @@ func TestReadModeChangeRound(t *testing.T) {
 	}
 	db, err := storage.GetStorageFactory(cfg)
 	require.NoError(t, err)
-	changeRoundStorage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V0ForkVersion)
+	changeRoundStorage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V1ForkVersion)
 
 	uids := []message.OperatorID{message.OperatorID(1)}
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
@@ -213,6 +213,7 @@ func TestReadModeChangeRound(t *testing.T) {
 			}
 
 			res, err := ctrl.changeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier, test.signedMsg.GetSigners()...)
+			require.Equal(t, 1, len(res))
 			last := res[0]
 			require.NoError(t, err)
 			require.NotNil(t, last)
