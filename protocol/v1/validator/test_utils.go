@@ -172,8 +172,12 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 	if l := len(seen); l < signaturesCount {
 		return fmt.Errorf("not enough post consensus signatures, received %d", l)
 	}
+	pubKey := &bls.PublicKey{}
+	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+		return errors.Wrap(err, "failed to deserialize pubkey from duty")
+	}
 
-	signature, err := threshold.ReconstructSignatures(signatures)
+	signature, err := threshold.ReconstructSignatures(signatures, pubKey.SerializeToHexStr())
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}

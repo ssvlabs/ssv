@@ -167,7 +167,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 // nodes and broadcasts the reconstructed signature to the beacon-chain
 func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
 	// Reconstruct signatures
-	signature, err := threshold.ReconstructSignatures(signatures)
+	signature, err := threshold.ReconstructSignatures(signatures, c.ValidatorShare.PublicKey.SerializeToHexStr())
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
 	}
