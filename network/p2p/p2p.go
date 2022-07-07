@@ -36,6 +36,7 @@ const (
 
 const (
 	connManagerGCInterval = time.Minute
+	connManagerGCTimeout = time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
@@ -129,7 +130,7 @@ func (n *p2pNetwork) Start() error {
 		if currentCount < n.cfg.MaxPeers {
 			return
 		}
-		ctx, cancel := context.WithCancel(n.ctx)
+		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
 		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx)
