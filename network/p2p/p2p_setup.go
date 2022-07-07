@@ -109,7 +109,7 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
-	n.connManager = connManager
+	n.libConnManager = connManager
 
 	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
