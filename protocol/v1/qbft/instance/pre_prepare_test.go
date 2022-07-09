@@ -154,7 +154,6 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 }
 
 func TestUponPrePrepareHappyFlow(t *testing.T) {
-	t.Skip()
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	leader, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)

@@ -16,7 +16,6 @@ import (
 )
 
 func TestLeaderCalculation(t *testing.T) {
-	t.Skip()
 	// leader selection
 	l, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
 	require.NoError(t, err)
