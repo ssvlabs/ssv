@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"encoding/hex"
 	"testing"
 	"time"
 
@@ -110,7 +111,6 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 		expectedSignaturesCount     int
 		expectedAttestationDataByts []byte
 		expectedReconstructedSig    []byte
-		expectedRootHash            []byte
 		expectedError               string
 	}{
 		{
@@ -124,21 +124,20 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			4,
 			refAttestationDataByts,
 			refAttestationSig,
-			refSigRoot,
 			"",
 		},
-		//{
-		//	"valid 3/4",
-		//	map[message.OperatorID][]byte{
-		//		1: refAttestationSplitSigs[0],
-		//		2: refAttestationSplitSigs[1],
-		//		3: refAttestationSplitSigs[2],
-		//	},
-		//	3,
-		//	refAttestationDataByts,
-		//	refAttestationSig,
-		//	"",
-		//},
+		{
+			"valid 3/4",
+			map[message.OperatorID][]byte{
+				1: refAttestationSplitSigs[0],
+				2: refAttestationSplitSigs[1],
+				3: refAttestationSplitSigs[2],
+			},
+			3,
+			refAttestationDataByts,
+			refAttestationSig,
+			"",
+		},
 		//{
 		//	"invalid 3/4",
 		//	map[message.OperatorID][]byte{
@@ -155,7 +154,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			identifier := _byteArray("6139636633363061613135666231643164333065653262353738646335383834383233633139363631383836616538623839323737356363623362643936623764373334353536396132616130623134653464303135633534613661306335345f4154544553544552")
+			identifier := _byteArray("801721bc17ed1f0ac1b9b7fc1c45af611d3b3d019ab0f63a38b002650e7758959cfca5cdeb26fa6c6aefce99a73339c201000000")
 			validator := testingValidator(t, true, test.expectedSignaturesCount, identifier)
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
@@ -183,6 +182,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 				}
 
 				encodedMsg, err := signedMessage.Encode()
+				println(hex.EncodeToString(identifier))
 				require.NoError(t, err)
 				ssvMsg := message.SSVMessage{
 					MsgType: message.SSVConsensusMsgType,

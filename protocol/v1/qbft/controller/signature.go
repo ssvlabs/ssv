@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"time"
 
@@ -182,8 +181,7 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[message.Ope
 	}
 
 	c.logger.Info("signatures successfully reconstructed",
-		zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())),
-		zap.String("signature", string(signature.Serialize())),
+		zap.String("reconstructed signature", hex.EncodeToString(signature.Serialize())),
 		zap.Int("signature count", len(signatures)),
 		zap.Any("signatures", signatures),
 		zap.String("root", hex.EncodeToString(root)),
