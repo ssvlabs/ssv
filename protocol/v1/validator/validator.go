@@ -74,6 +74,10 @@ func NewValidator(opt *Options) IValidator {
 	logger := opt.Logger.With(zap.String("pubKey", opt.Share.PublicKey.SerializeToHexStr())).
 		With(zap.Uint64("node_id", uint64(opt.Share.NodeID)))
 
+	//ctx, cancel := context.WithCancel(opt.Context)
+	//optsCp := *opt
+	//optsCp.Context = ctx
+	//ibfts := setupIbfts(&optsCp, logger)
 	ibfts := setupIbfts(opt, logger)
 
 	if !opt.ReadMode {
@@ -156,6 +160,7 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controlle
 
 func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
+	logger.Debug("setup new identifier", zap.String("identifier", identifier.String()))
 	opts := controller.Options{
 		Context:           opt.Context,
 		Role:              role,
