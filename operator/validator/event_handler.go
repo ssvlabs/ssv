@@ -159,7 +159,7 @@ func (c *controller) handleOperatorRemovedEvent(
 	}
 	if !found {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not find operator's data"),
+			Err: errors.New("could not find operator data"),
 		}
 	}
 
@@ -169,7 +169,7 @@ func (c *controller) handleOperatorRemovedEvent(
 		}
 	}
 
-	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, false)
+	shares, err := c.collection.GetOperatorValidatorShares(od.PublicKey, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
@@ -260,6 +260,7 @@ func (c *controller) handleAccountEnabledEvent(
 
 	for _, share := range shares {
 		if share.IsOperatorShare(c.operatorPubKey) {
+			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
 			share.Liquidated = false
 
 			// save validator data
