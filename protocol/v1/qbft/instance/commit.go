@@ -28,7 +28,10 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			i.CommitMessages.AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
-		i.uponCommitMsg(),
+		pipelines.CombineQuiet(
+			signedmsg.ValidateRound(i.State().GetRound()),
+			i.uponCommitMsg(),
+		),
 	)
 }
 
