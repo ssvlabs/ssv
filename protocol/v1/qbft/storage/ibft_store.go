@@ -27,7 +27,7 @@ type InstanceStore interface {
 // ChangeRoundStore manages change round data
 type ChangeRoundStore interface {
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error)
+	GetLastChangeRoundMsg(identifier message.Identifier, signers ...message.OperatorID) ([]*message.SignedMessage, error)
 	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
 	SaveLastChangeRoundMsg(msg *message.SignedMessage) error
 	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init

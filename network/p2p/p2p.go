@@ -35,7 +35,8 @@ const (
 )
 
 const (
-	connManagerGCInterval = 5 * time.Minute
+	connManagerGCInterval = time.Minute
+	connManagerGCTimeout  = time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
@@ -66,7 +67,7 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
-	connManager      connmgrcore.ConnManager
+	libConnManager   connmgrcore.ConnManager
 }
 
 // New creates a new p2p network
@@ -97,7 +98,7 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
-	if err := n.connManager.Close(); err != nil {
+	if err := n.libConnManager.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
@@ -124,9 +125,18 @@ func (n *p2pNetwork) Start() error {
 	go n.startDiscovery()
 
 	async.Interval(n.ctx, connManagerGCInterval, func() {
-		ctx, cancel := context.WithTimeout(n.ctx, time.Minute*2)
+		allPeers := n.host.Network().Peers()
+		currentCount := len(allPeers)
+		if currentCount < n.cfg.MaxPeers {
+			return
+		}
+		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
-		n.connManager.TrimOpenConns(ctx)
+
+		connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx)
+		mySubnets := records.Subnets(n.subnets).Clone()
+		connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+		connMgr.TrimPeers(ctx, n.host.Network())
 	})
 
 	async.Interval(n.ctx, peerIndexGCInterval, func() {

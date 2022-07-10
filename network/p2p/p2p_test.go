@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -14,6 +15,17 @@ import (
 	"testing"
 	"time"
 )
+
+func TestGetMaxPeers(t *testing.T) {
+	n := &p2pNetwork{
+		cfg:  &Config{MaxPeers: 40, TopicMaxPeers: 8},
+		fork: forksfactory.NewFork(forksprotocol.V2ForkVersion),
+	}
+
+	require.Equal(t, 40, n.getMaxPeers(""))
+	require.Equal(t, 8, n.getMaxPeers("100"))
+	require.Equal(t, 16, n.getMaxPeers(n.fork.DecidedTopic()))
+}
 
 // TODO: fix dummy messages and check that are really sent and received by peers
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
