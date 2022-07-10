@@ -50,8 +50,8 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 		}
 
 		var operatorIds []uint64
-		for _, opId := range options.OperatorIds {
-			operatorIds = append(operatorIds, uint64(opId))
+		for _, opID := range options.OperatorIds {
+			operatorIds = append(operatorIds, uint64(opID))
 		}
 
 		if err != nil {
