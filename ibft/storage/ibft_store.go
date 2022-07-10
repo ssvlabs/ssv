@@ -210,27 +210,49 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *message.SignedMessage) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
+	var signers [][]byte
+	for _, s := range msg.GetSigners() {
+		signers = append(signers, uInt64ToByteSlice(uint64(s)))
+	}
+
 	identifier := i.fork.Identifier(msg.Message.Identifier.GetValidatorPK(), msg.Message.Identifier.GetRoleType())
 	signedMsg, err := i.fork.EncodeSignedMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not encode signed message")
 	}
-	return i.save(signedMsg, lastChangeRoundKey, identifier)
+	return i.save(signedMsg, lastChangeRoundKey, identifier, signers...)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
-func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier) (*message.SignedMessage, error) {
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier, signers ...message.OperatorID) ([]*message.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	val, found, err := i.get(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
-	if err != nil {
-		return nil, err
+	if len(signers) == 0 {
+		res, err := i.getAll(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()))
+
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
 	}
-	if !found {
-		return nil, nil
+
+	var res []*message.SignedMessage
+	for _, s := range signers {
+		msg, found, err := i.get(lastChangeRoundKey, i.fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()), uInt64ToByteSlice(uint64(s)))
+		if err != nil {
+			return res, err
+		}
+		if !found {
+			return res, nil
+		}
+		sm := new(message.SignedMessage)
+		if err := sm.Decode(msg); err != nil {
+			return res, err
+		}
+		res = append(res, sm)
 	}
-	return i.fork.DecodeSignedMsg(val)
+	return res, nil
 }
 
 // CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
@@ -262,6 +284,23 @@ func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 		return nil, found, err
 	}
 	return obj.Value, found, nil
+}
+
+func (i *ibftStorage) getAll(id string, pk []byte) ([]*message.SignedMessage, error) {
+	prefix := append(i.prefix, pk...)
+	prefix = append(prefix, id...)
+
+	var res []*message.SignedMessage
+	err := i.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		msg := new(message.SignedMessage)
+		if err := msg.Decode(obj.Value); err != nil {
+			return err
+		}
+		res = append(res, msg)
+		return nil
+	})
+
+	return res, err
 }
 
 func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
