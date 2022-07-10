@@ -39,9 +39,7 @@ type Config struct {
 	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"50" env-description:"Connected peers limit for connections"`
 	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"5" env-description:"Connected peers limit per pubsub topic"`
 
-	UseSubnetDiscovery bool `yaml:"UseSubnetDiscovery" env:"P2P_SUBNETS_DISCOVERY" env-default:"false" env-description:"Connected peers limit per pubsub topic"`
 	// Subnets is a static bit list of subnets that this node will register upon start.
-	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
@@ -129,7 +127,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
-				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+				c.Logger.Warn("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}

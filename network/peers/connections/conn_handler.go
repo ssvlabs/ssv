@@ -26,13 +26,11 @@ type connHandler struct {
 	subnetsProvider SubnetsProvider
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
-
-	subnetsCheck bool
 }
 
 // NewConnHandler creates a new connection handler
 func NewConnHandler(ctx context.Context, logger *zap.Logger, handshaker Handshaker, subnetsProvider SubnetsProvider,
-	subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex, subnetsCheck bool) ConnHandler {
+	subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
 		logger:          logger.With(zap.String("who", "ConnHandler")),
@@ -40,7 +38,6 @@ func NewConnHandler(ctx context.Context, logger *zap.Logger, handshaker Handshak
 		subnetsProvider: subnetsProvider,
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
-		subnetsCheck:    subnetsCheck,
 	}
 }
 
@@ -158,8 +155,7 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 		return true
 	}
 	shared := records.SharedSubnets(mySubnets, subnets, 1)
-	logger.Debug("checking subnets", zap.Ints("shared", shared),
-		zap.Bool("extendedCheck", ch.subnetsCheck))
+	logger.Debug("checking subnets", zap.Ints("shared", shared))
 
 	return len(shared) == 1
 }

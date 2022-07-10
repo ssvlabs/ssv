@@ -80,10 +80,9 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, func(), error) {
 	s := NewStream(stream)
 
-	streamID := s.ID()
 	protocolID := stream.Protocol()
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
-	logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
+	//logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
 		if err := s.Close(); err != nil {
 			// TODO (amir): investigate
@@ -92,13 +91,13 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
-		logger.Warn("could not read stream msg", zap.Error(err))
+		//logger.Warn("could not read stream msg", zap.Error(err))
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
 	return data, func(res []byte) error {
 		if err := s.WriteWithTimeout(res, n.requestTimeout); err != nil {
-			logger.Warn("could not write to stream", zap.Error(err))
+			//logger.Warn("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
 		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()
