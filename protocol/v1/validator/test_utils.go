@@ -9,6 +9,7 @@ import (
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -193,6 +194,13 @@ func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
 
 	t.signatureMu.Lock()
 	t.signatures[signedMsg.GetSigners()[0]] = signedMsg.Signature
+	t.signatureMu.Unlock()
+	return nil
+}
+
+func (t *testIBFT) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
+	t.signatureMu.Lock()
+	t.signatures[message.OperatorID(msg.GetSigners()[0])] = msg.Messages[0].PartialSignature
 	t.signatureMu.Unlock()
 	return nil
 }

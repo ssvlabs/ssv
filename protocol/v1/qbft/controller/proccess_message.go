@@ -1,11 +1,12 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
@@ -49,9 +50,8 @@ func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) e
 	return nil
 }
 
-func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *message.SignedPostConsensusMessage) error {
-	c.logger.Debug("process post consensus message", zap.Int64("height", int64(signedPostConsensusMessage.Message.Height)), zap.Int64("signer_id", int64(signedPostConsensusMessage.Message.Signers[0])))
-	return c.ProcessSignatureMessage(signedPostConsensusMessage)
+func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *ssv.SignedPartialSignatureMessage) error {
+	return c.ProcessPostConsensusMessage(signedPostConsensusMessage)
 }
 
 // processCommitMsg first checks if this msg height is the same as the current instance. if so, need to process as consensus commit msg so no late commit processing.

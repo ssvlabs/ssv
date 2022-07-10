@@ -2,52 +2,58 @@ package controller
 
 import (
 	"encoding/hex"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 )
 
-// ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
-func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
+// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
+func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
 	if c.signatureState.getState() != StateRunning {
-		c.logger.Warn("try to process signature message but timer state is not running. can't process message.", zap.String("state", c.signatureState.getState().toString()))
+		c.logger.Warn(
+			"trying to process post consensus signature message but timer state is not running. can't process message.",
+			zap.String("state", c.signatureState.getState().toString()),
+		)
 		return nil
 	}
 
-	//	validate message
-	if len(msg.GetSigners()) == 0 {
-		c.logger.Warn("missing signers", zap.Any("msg", msg))
-		return nil
+	// adjust share committee to the spec
+	committee := make([]*types.Operator, 0)
+	for _, node := range c.ValidatorShare.Committee {
+		committee = append(committee, &types.Operator{
+			OperatorID: types.OperatorID(node.IbftID),
+			PubKey:     node.Pk,
+		})
 	}
-	//if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
-	if len(msg.Message.DutySignature) == 0 { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("missing duty signature", zap.Any("msg", msg))
+
+	if err := message.ValidatePartialSigMsg(msg, committee, c.signatureState.duty.Slot); err != nil {
+		c.logger.Warn("could not validate partial signature message", zap.Any("msg", msg))
 		return nil
 	}
 	logger := c.logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
+	logger.Info("all the msg signatures were verified",
+		zap.String("msg signature", hex.EncodeToString(msg.GetSignature())),
+		zap.String("msg beacon signature", hex.EncodeToString(msg.Messages[0].PartialSignature)),
+		zap.Any("msg", msg),
+	)
 
+	// TODO: do we need this check? [<oleg>]
 	//	check if already exist, if so, ignore
-	if _, found := c.signatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
+	if _, found := c.signatureState.signatures[message.OperatorID(msg.GetSigners()[0])]; found {
 		c.logger.Debug("sig already known, skip")
 		return nil
 	}
 
-	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
-
-	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("received invalid signature", zap.Error(err))
-		return nil
-	}
-
-	logger.Info("signature verified")
-
-	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
+	c.signatureState.signatures[message.OperatorID(msg.GetSigners()[0])] = msg.Messages[0].PartialSignature
 	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
-		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
+		c.logger.Info("collected enough signature to reconstruct",
+			zap.Int("signatures", len(c.signatureState.signatures)),
+		)
 		c.signatureState.stopTimer()
 
 		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
