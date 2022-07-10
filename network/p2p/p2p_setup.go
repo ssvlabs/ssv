@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -85,6 +86,9 @@ func (n *p2pNetwork) initCfg() {
 			return
 		}
 		n.subnets = subnets
+		for i, val := range subnets {
+			metricsMySubnets.WithLabelValues(fmt.Sprintf("%d", i)).Set(float64(val))
+		}
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer

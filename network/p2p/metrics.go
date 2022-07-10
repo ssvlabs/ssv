@@ -24,6 +24,11 @@ var (
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
 	}, []string{"pubKey", "v", "pid", "type"})
+	// metricsMySubnets marks subnets that this node is interested in
+	metricsMySubnets = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:mysubnets",
+		Help: "Marks subnets that this node is interested in",
+	}, []string{"subnet"})
 	// MetricsPeerLastMsg tracks last message
 	//MetricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
 	//	Name: "ssv:network:peer_last_msg",
@@ -42,6 +47,9 @@ func init() {
 	//	log.Println("could not register prometheus collector")
 	//}
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsMySubnets); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

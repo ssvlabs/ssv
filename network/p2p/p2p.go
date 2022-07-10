@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -235,6 +236,7 @@ func (n *p2pNetwork) UpdateSubnets() {
 	if !bytes.Equal(newSubnets, last) { // have changes
 		n.subnets = newSubnets
 		for i, b := range newSubnets {
+			metricsMySubnets.WithLabelValues(fmt.Sprintf("%d", i)).Set(float64(b))
 			if b == byte(1) {
 				subnetsToAdd = append(subnetsToAdd, i)
 			}
