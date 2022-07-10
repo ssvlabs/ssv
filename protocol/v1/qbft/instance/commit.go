@@ -56,10 +56,7 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			i.CommitMessages.OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.uponCommitMsg(),
-		),
+		i.uponCommitMsg(),
 	)
 }
 
