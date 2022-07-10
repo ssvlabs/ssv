@@ -150,7 +150,7 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 		return errors.Wrap(err, "failed to marshal attestation")
 	}
 
-	signedAttestation, root, err := t.beacon.SignAttestation(s, duty, pk.Serialize())
+	signedAttestation, _, err := t.beacon.SignAttestation(s, duty, pk.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "failed to sign attestation")
 	}
@@ -173,14 +173,9 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 		return fmt.Errorf("not enough post consensus signatures, received %d", l)
 	}
 
-	signature, err := threshold.ReconstructSignatures(signatures, pk.SerializeToHexStr())
+	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
 		return errors.Wrap(err, "failed to reconstruct signatures")
-	}
-
-	// verify reconstructed sig
-	if res := signature.VerifyByte(pk, root); !res {
-		return errors.New("could not reconstruct a valid signature")
 	}
 
 	blsSig := spec.BLSSignature{}

@@ -77,7 +77,6 @@ func (c *controller) handleValidatorAddedEvent(
 		}
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
-			zap.Any("sharePubKeys", validatorAddedEvent.SharesPublicKeys),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
 			zap.Any("operatorIds", validatorAddedEvent.OperatorIds),
 		)

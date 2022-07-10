@@ -160,7 +160,6 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controlle
 
 func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
-	logger.Debug("setup new identifier", zap.String("identifier", identifier.String()), zap.String("identifier2", string(identifier)))
 	opts := controller.Options{
 		Context:           opt.Context,
 		Role:              role,

@@ -2,8 +2,6 @@ package controller
 
 import (
 	"encoding/hex"
-	"fmt"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -48,14 +46,7 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 
 	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
 	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
-		logFields := make([]zap.Field, 0)
-		for opid, sig := range c.signatureState.signatures {
-			logFields = append(logFields, zap.String(fmt.Sprintf("operator %d", opid), hex.EncodeToString(sig)))
-		}
-		c.logger.With(logFields...).Info("collected enough signature to reconstruct...",
-			zap.Int("signatures", len(c.signatureState.signatures)),
-			zap.Any("signerIds", msg.GetSigners()),
-		)
+		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
 		c.signatureState.stopTimer()
 
 		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
