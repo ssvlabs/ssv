@@ -10,7 +10,8 @@ const (
 	changeRoundProtocol = "/ssv/sync/round/0.0.1"
 	historyProtocol     = "/ssv/sync/decided/history/0.0.1"
 
-	peersForSync = 10
+	peersForSync            = 10
+	peersForLastChangeRound = 5
 )
 
 // ProtocolID returns the protocol id of the given protocol,
@@ -20,7 +21,7 @@ func (v1 *ForkV1) ProtocolID(prot p2pprotocol.SyncProtocol) (protocol.ID, int) {
 	case p2pprotocol.LastDecidedProtocol:
 		return lastDecidedProtocol, peersForSync
 	case p2pprotocol.LastChangeRoundProtocol:
-		return changeRoundProtocol, peersForSync
+		return changeRoundProtocol, peersForLastChangeRound
 	case p2pprotocol.DecidedHistoryProtocol:
 		return historyProtocol, peersForSync
 	}
