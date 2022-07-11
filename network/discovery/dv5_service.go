@@ -131,7 +131,6 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 		nodes = dvs.dv5Listener.Lookup(id)
 		node = findNode(nodes, id)
 	}
-	logger.Debug("managed to find node")
 	return node, nil
 }
 
