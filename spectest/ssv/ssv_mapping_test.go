@@ -309,11 +309,3 @@ func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *q
 	})
 	return c
 }
-
-func convertSingers(specSigners []types.OperatorID) []message.OperatorID {
-	var signers []message.OperatorID
-	for _, s := range specSigners {
-		signers = append(signers, message.OperatorID(s))
-	}
-	return signers
-}
