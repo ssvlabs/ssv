@@ -136,13 +136,13 @@ func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id message.Identifie
 		Messages: ssv.PartialSignatureMessages{
 			&ssv.PartialSignatureMessage{
 				Slot:             slot,
-				PartialSignature: []byte("sig"),
-				SigningRoot:      []byte("root"),
-				Signers:          []types.OperatorID{1, 2, 3},
+				PartialSignature: make([]byte, 96),
+				SigningRoot:      make([]byte, 32),
+				Signers:          []types.OperatorID{1},
 			},
 		},
-		Signature: []byte("sig1"), // TODO should be msg sig and not decided sig
-		Signers:   []types.OperatorID{1, 2, 3},
+		Signature: make([]byte, 96), // TODO should be msg sig and not decided sig
+		Signers:   []types.OperatorID{1},
 	}
 
 	encoded, err := signedMsg.Encode()
