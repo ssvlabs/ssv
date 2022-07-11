@@ -61,7 +61,7 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			logger.Warn("change round api error", zap.Error(err))
 			continue
 		}
-		logger.Debug("last change round by peer", zap.Int("count", len(syncMsg.Data))) // TODO necessary log?
+
 		for _, sm := range syncMsg.Data {
 			if err := handler(sm); err != nil {
 				logger.Warn("could not handle message", zap.Error(err))
