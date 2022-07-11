@@ -25,6 +25,8 @@ var (
 	validationQueueSize = 256
 	// outboundQueueSize is the size that we assign to the outbound message queue
 	outboundQueueSize = 128
+	// validateThrottle is the amount of goroutines used for pubsub msg validation
+	validateThrottle  = 1024
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 )
@@ -44,6 +46,10 @@ type PububConfig struct {
 	Scoring             *ScoringConfig
 	MsgIDHandler        MsgIDHandler
 	Discovery           discovery.Discovery
+
+	ValidateThrottle    int
+	ValidationQueueSize int
+	OutboundQueueSize   int
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -70,12 +76,21 @@ type PubsubBundle struct {
 	Resolver   MsgPeersResolver
 }
 
-func (cfg *PububConfig) validate() error {
+func (cfg *PububConfig) init() error {
 	if cfg.Host == nil {
 		return errors.New("bad args: missing host")
 	}
 	if cfg.Logger == nil {
 		return errors.New("bad args: missing logger")
+	}
+	if cfg.OutboundQueueSize == 0 {
+		cfg.OutboundQueueSize = outboundQueueSize
+	}
+	if cfg.ValidationQueueSize == 0 {
+		cfg.ValidationQueueSize = validationQueueSize
+	}
+	if cfg.ValidateThrottle == 0 {
+		cfg.ValidateThrottle = validateThrottle
 	}
 	return nil
 }
@@ -89,16 +104,16 @@ func (cfg *PububConfig) initScoring() {
 
 // NewPubsub creates a new pubsub router and the necessary components
 func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.PubSub, Controller, error) {
-	if err := cfg.validate(); err != nil {
+	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
 
 	sf := newSubFilter(cfg.Logger, fork, subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
-		pubsub.WithPeerOutboundQueueSize(outboundQueueSize),
-		pubsub.WithValidateQueueSize(validationQueueSize),
+		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
+		pubsub.WithValidateQueueSize(cfg.ValidationQueueSize),
 		//pubsub.WithFloodPublish(true),
-		pubsub.WithValidateThrottle(1024),
+		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
 		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {

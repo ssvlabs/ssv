@@ -60,7 +60,10 @@ type Config struct {
 	// ForkVersion to use
 	ForkVersion forksprotocol.ForkVersion
 	// Logger to used by network services
-	Logger *zap.Logger
+	Logger                    *zap.Logger
+	PubsubOutQueueSize        int `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
+	PubsubValidationQueueSize int `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
+	PubsubValidateThrottle    int `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
 }
 
 // Libp2pOptions creates options list for the libp2p host
