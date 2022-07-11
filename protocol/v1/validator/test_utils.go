@@ -210,13 +210,6 @@ func (t *testIBFT) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMe
 	return nil
 }
 
-func (t *testIBFT) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
-	t.signatureMu.Lock()
-	t.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
-	t.signatureMu.Unlock()
-	return nil
-}
-
 type TestBeacon struct {
 	refAttestationData       *spec.AttestationData
 	LastSubmittedAttestation *spec.Attestation

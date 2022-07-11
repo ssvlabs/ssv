@@ -2,12 +2,13 @@ package controller
 
 import (
 	"encoding/hex"
-
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
@@ -87,7 +88,7 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
-	ssvMsg, err := c.generateSignatureMessage(sig, root, height)
+	ssvMsg, err := c.generateSignatureMessage(sig, root, duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
@@ -102,19 +103,23 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 }
 
 // generateSignatureMessage returns postConsensus type ssv message with signature signed message
-func (c *Controller) generateSignatureMessage(sig []byte, root []byte, height message.Height) (message.SSVMessage, error) {
-	SignedMsg := &message.SignedPostConsensusMessage{
-		Message: &message.PostConsensusMessage{
-			Height:          height,
-			DutySignature:   sig,
-			DutySigningRoot: root,
-			Signers:         []message.OperatorID{c.ValidatorShare.NodeID},
+func (c *Controller) generateSignatureMessage(sig []byte, root []byte, slot spec.Slot) (message.SSVMessage, error) {
+	signers := []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)}
+	signedMsg := &ssv.SignedPartialSignatureMessage{
+		Type: ssv.PostConsensusPartialSig,
+		Messages: ssv.PartialSignatureMessages{
+			&ssv.PartialSignatureMessage{
+				Slot:             slot,
+				PartialSignature: sig,
+				SigningRoot:      root,
+				Signers:          signers,
+			},
 		},
 		Signature: sig, // TODO should be msg sig and not decided sig
-		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
+		Signers:   signers,
 	}
 
-	encodedSignedMsg, err := SignedMsg.Encode()
+	encodedSignedMsg, err := signedMsg.Encode()
 	if err != nil {
 		return message.SSVMessage{}, err
 	}

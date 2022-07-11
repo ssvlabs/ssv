@@ -1,6 +1,7 @@
 package msgqueue
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
@@ -28,14 +29,14 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if msg == nil {
 			return Index{}
 		}
-		if msg.MsgType != message.SSVPostConsensusMsgType {
+		if msg.MsgType != ssv.PostConsensusPartialSig {
 			return Index{}
 		}
-		sm := message.SignedPostConsensusMessage{}
+		sm := ssv.SignedPartialSignatureMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
 			return Index{}
 		}
-		if sm.Message == nil {
+		if len(sm.Messages) == 0 {
 			return Index{}
 		}
 		return SignedPostConsensusMsgIndex(msg.ID.String(), sm.Message.Height)
