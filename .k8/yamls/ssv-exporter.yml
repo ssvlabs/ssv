@@ -134,11 +134,6 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node
-          - name: ENR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: enr_key
           - name: REGISTRY_CONTRACT_ADDR_KEY
             valueFrom:
               secretKeyRef:
@@ -182,8 +177,6 @@ spec:
             value: "0xffffffffffffffffffffffffffffffff"
           - name: P2P_MAX_PEERS
             value: "300"
-
-
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter

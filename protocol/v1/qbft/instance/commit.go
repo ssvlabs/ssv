@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // CommitMsgPipeline - the main commit msg pipeline
@@ -28,7 +29,10 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			i.containersMap[qbftspec.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
-		i.uponCommitMsg(),
+		pipelines.CombineQuiet(
+			signedmsg.ValidateRound(i.State().GetRound()),
+			i.uponCommitMsg(),
+		),
 	)
 }
 

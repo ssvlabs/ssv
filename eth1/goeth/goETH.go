@@ -221,6 +221,9 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 			ec.logger.Warn("failed to read logs from subscription", zap.Error(err))
 			return err
 		case vLog := <-logs:
+			if vLog.Removed {
+				continue
+			}
 			ec.logger.Debug("received contract event from stream")
 			eventName, err := ec.handleEvent(vLog, contractAbi)
 			if err != nil {
@@ -320,7 +323,7 @@ func (ec *eth1Client) fetchAndProcessEvents(fromBlock, toBlock *big.Int, contrac
 	for _, vLog := range logs {
 		eventName, err := ec.handleEvent(vLog, contractAbi)
 		if err != nil {
-			loggerWith := logger.With(
+			loggerWith := ec.logger.With(
 				zap.String("event", eventName),
 				zap.Uint64("block", vLog.BlockNumber),
 				zap.String("txHash", vLog.TxHash.Hex()),
@@ -358,42 +361,42 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (string, 
 
 	switch ev.Name {
 	case abiparser.OperatorAdded:
-		parsed, err := abiParser.ParseOperatorAddedEvent(vLog.Data, vLog.Topics, contractAbi)
+		parsed, err := abiParser.ParseOperatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.OperatorRemoved:
-		parsed, err := abiParser.ParseOperatorRemovedEvent(vLog.Data, vLog.Topics, contractAbi)
+		parsed, err := abiParser.ParseOperatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorAdded:
-		parsed, err := abiParser.ParseValidatorAddedEvent(vLog.Data, contractAbi)
+		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorRemoved:
-		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog.Data, contractAbi)
+		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.AccountLiquidated:
-		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog.Topics)
+		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.AccountEnabled:
-		parsed, err := abiParser.ParseAccountEnabledEvent(vLog.Topics)
+		parsed, err := abiParser.ParseAccountEnabledEvent(vLog)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
@@ -401,7 +404,7 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (string, 
 		ec.fireEvent(vLog, ev.Name, *parsed)
 
 	default:
-		ec.logger.Debug("unknown contract event was received",
+		ec.logger.Debug("unsupported contract event was received, skipping",
 			zap.String("eventName", ev.Name),
 			zap.Uint64("block", vLog.BlockNumber),
 			zap.String("txHash", vLog.TxHash.Hex()),

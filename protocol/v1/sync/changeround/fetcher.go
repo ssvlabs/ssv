@@ -44,7 +44,8 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 
 	logger := crf.logger.With(zap.String("identifier", identifier.String()), zap.Int64("height", int64(height)))
 
-	logger.Debug("got last change round msgs", zap.Int("msgs count", len(msgs)), zap.Any("msgs", msgs))
+	logger.Debug("fetched last change round messages", zap.Int("count", len(msgs)))
+	syncMsgs := make([]*message.SyncMessage, 0)
 	for _, msg := range msgs {
 		syncMsg := &message.SyncMessage{}
 		err = syncMsg.Decode(msg.Msg.Data)
@@ -60,12 +61,17 @@ func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identif
 			logger.Warn("change round api error", zap.Error(err))
 			continue
 		}
-		sm := syncMsg.Data[0]
-		if err := handler(sm); err != nil {
-			logger.Warn("could not handle message", zap.Error(err))
-			continue
+		logger.Debug("last change round by peer", zap.Int("count", len(syncMsg.Data))) // TODO necessary log?
+		for _, sm := range syncMsg.Data {
+			if err := handler(sm); err != nil {
+				logger.Warn("could not handle message", zap.Error(err))
+				continue
+			}
 		}
+		syncMsgs = append(syncMsgs, syncMsg)
 	}
+	logger.Debug("handled change round msgs", zap.Any("msgs", syncMsgs))
+
 	return nil
 }
 
@@ -76,8 +82,6 @@ func (crf *changeRoundFetcher) msgError(msg *message.SyncMessage) error {
 		return ErrNotFound
 	} else if msg.Status != message.StatusSuccess {
 		return errors.Errorf("failed with status %d - %s", msg.Status, msg.Status.String())
-	} else if len(msg.Data) != 1 { // TODO: extract to validation
-		return errors.New("invalid result count")
 	}
 	return nil
 }

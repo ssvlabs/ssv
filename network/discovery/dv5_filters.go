@@ -55,16 +55,15 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 			return true
 		}
 		if len(dvs.subnets) == 0 {
-			dvs.logger.Debug("subnets were not configured yet")
 			return true
 		}
 		nodeSubnets, err := records.GetSubnetsEntry(node.Record())
 		if err != nil {
-			dvs.logger.Debug("could not read subnets entry")
 			return false
 		}
 		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
-		dvs.logger.Debug("shared subnets", zap.Ints("shared", shared))
+		dvs.logger.Debug("shared subnets", zap.Ints("shared", shared),
+			zap.String("node", node.String()))
 
 		return len(shared) >= n
 	}

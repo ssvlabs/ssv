@@ -11,18 +11,20 @@ func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
 	if err := c.ValidateChangeRoundMsg(msg); err != nil {
 		return err
 	}
-	lastMsg, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier)
+	res, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier, msg.GetSigners()...)
 	if err != nil {
 		return errors.Wrap(err, "failed to get last change round msg")
 	}
 
-	if lastMsg == nil {
+	logger := c.Logger.With(zap.Any("signers", msg.GetSigners()))
+
+	if len(res) == 0 {
 		// no last changeRound msg exist, save the first one
 		c.Logger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
 		return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
 	}
-
-	logger := c.Logger.With(
+	lastMsg := res[0]
+	logger = logger.With(
 		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
 		zap.Int64("NewHeight", int64(msg.Message.Height)),
 		zap.Int64("lastRound", int64(lastMsg.Message.Round)),

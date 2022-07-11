@@ -264,7 +264,7 @@ func getNodeSubnets(logger *zap.Logger, db basedb.IDb, ssvForkVersion forksproto
 		Logger: logger,
 	})
 	subnetsMap := make(map[int]bool)
-	shares, err := sharesStorage.GetEnabledOperatorValidatorShares(operatorPubKey)
+	shares, err := sharesStorage.GetOperatorValidatorShares(operatorPubKey, true)
 	if err != nil {
 		logger.Warn("could not read validators to bootstrap subnets")
 		return nil

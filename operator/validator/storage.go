@@ -21,7 +21,7 @@ type ICollection interface {
 	SaveValidatorShare(share *beaconprotocol.Share) error
 	GetValidatorShare(key []byte) (*beaconprotocol.Share, bool, error)
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
-	GetEnabledOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error)
+	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*beaconprotocol.Share, error)
 	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol.Share, error)
 	DeleteValidatorShare(key []byte) error
 }
@@ -124,8 +124,8 @@ func (s *Collection) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 	return res, err
 }
 
-// GetEnabledOperatorValidatorShares returns all not liquidated validator shares belongs to operator
-func (s *Collection) GetEnabledOperatorValidatorShares(operatorPubKey string) ([]*beaconprotocol.Share, error) {
+// GetOperatorValidatorShares returns all not liquidated validator shares belongs to operator
+func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*beaconprotocol.Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -136,7 +136,7 @@ func (s *Collection) GetEnabledOperatorValidatorShares(operatorPubKey string) ([
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}
-		if !val.Liquidated {
+		if !val.Liquidated || !enabled {
 			if ok := val.IsOperatorShare(operatorPubKey); ok {
 				res = append(res, val)
 			}
