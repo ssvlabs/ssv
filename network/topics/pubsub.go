@@ -26,7 +26,7 @@ var (
 	// outboundQueueSize is the size that we assign to the outbound message queue
 	outboundQueueSize = 128
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
-	validateThrottle  = 1024
+	validateThrottle = 1024
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 )
