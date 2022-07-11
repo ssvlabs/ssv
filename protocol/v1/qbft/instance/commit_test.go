@@ -184,7 +184,7 @@ func TestCommitPipeline(t *testing.T) {
 
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, upon commit msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }
 
 // AggregateMessages will aggregate given msgs or return error
