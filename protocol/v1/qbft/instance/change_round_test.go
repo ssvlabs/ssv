@@ -798,7 +798,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: []byte("lambdaa"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
 			}, forksprotocol.V0ForkVersion.String()),
-			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
+			"message Lambda (6c616d62646161) does not equal expected Lambda (6c616d626461)",
 		},
 		{
 			"valid with different round",

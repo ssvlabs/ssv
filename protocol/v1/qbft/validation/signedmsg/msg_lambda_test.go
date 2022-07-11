@@ -25,7 +25,7 @@ func TestMsgLambda(t *testing.T) {
 			"different msg lambda",
 			[]byte{1, 2, 3, 4},
 			[]byte{1, 2, 3, 3},
-			"message Lambda (\x01\x02\x03\x03) does not equal expected Lambda (\x01\x02\x03\x04)",
+			"message Lambda (01020303) does not equal expected Lambda (01020304)",
 		},
 	}
 

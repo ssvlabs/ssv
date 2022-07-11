@@ -2,9 +2,6 @@ package validator
 
 import (
 	"encoding/hex"
-	"encoding/json"
-
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -66,18 +63,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, 0, err
 	}
 
-	// TODO(nkryuchkov): TODO: remove when implemented in spec
-	var cd types.ConsensusData
-	if err := json.Unmarshal(commitData.Data, &cd); err != nil {
-		panic(err)
-	}
-
-	encodedAttestation, err := cd.AttestationData.MarshalSSZ()
-	if err != nil {
-		panic(err)
-	}
-
-	return qbftCtrl, len(result.Msg.Signers), encodedAttestation, height, nil
+	return qbftCtrl, len(result.Msg.Signers), commitData.Data, height, nil
 }
 
 // ExecuteDuty executes the given duty
