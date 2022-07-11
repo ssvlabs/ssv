@@ -6,7 +6,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
@@ -32,7 +31,7 @@ func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.
 func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg *message.ConsensusMessage) *bls.Sign {
 	var aggregatedSig *bls.Sign
 	for _, sk := range sks {
-		sig, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		sig, err := msg.Sign(sk)
 		require.NoError(t, err)
 		if aggregatedSig == nil {
 			aggregatedSig = sig
@@ -47,7 +46,7 @@ func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg 
 func SignMsg(t *testing.T, id message.OperatorID, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
 	bls.Init(bls.BLS12_381)
 
-	signature, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+	signature, err := msg.Sign(sk)
 	require.NoError(t, err)
 
 	return &message.SignedMessage{
@@ -62,7 +61,7 @@ func TestValidateChangeRound(t *testing.T) {
 	share := &beacon.Share{
 		Committee: nodes,
 	}
-	pip := Validate(share, forksprotocol.V1ForkVersion.String())
+	pip := Validate(share)
 
 	validMessage := &message.ConsensusMessage{
 		MsgType:    message.PrepareMsgType,

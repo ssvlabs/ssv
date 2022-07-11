@@ -28,7 +28,6 @@ import (
 // network states
 const (
 	stateInitializing int32 = 0
-	stateForking      int32 = 1
 	stateClosing      int32 = 1
 	stateClosed       int32 = 2
 	stateReady        int32 = 10

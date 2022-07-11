@@ -4,9 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/proto"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"sort"
@@ -210,14 +207,9 @@ func (msg *ConsensusMessage) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (msg *ConsensusMessage) GetRoot(forkVersion string) ([]byte, error) {
+func (msg *ConsensusMessage) GetRoot() ([]byte, error) {
 	// using string version for checking in order to prevent cycle dependency
 
-	if forkVersion == forksprotocol.V0ForkVersion.String() {
-		return msg.convertToV0Root()
-	}
-
-	// use v1 encoded struct
 	marshaledRoot, err := msg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode message")
@@ -232,8 +224,8 @@ func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 }
 
 // Sign takes a secret key and signs the Message
-func (msg *ConsensusMessage) Sign(sk *bls.SecretKey, forkVersion string) (*bls.Sign, error) {
-	root, err := msg.GetRoot(forkVersion)
+func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
+	root, err := msg.GetRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -345,8 +337,8 @@ func (signedMsg *SignedMessage) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (signedMsg *SignedMessage) GetRoot(forkVersion string) ([]byte, error) {
-	return signedMsg.Message.GetRoot(forkVersion)
+func (signedMsg *SignedMessage) GetRoot() ([]byte, error) {
+	return signedMsg.Message.GetRoot()
 }
 
 // DeepCopy returns a new instance of SignedMessage, deep copied
@@ -368,99 +360,6 @@ func (signedMsg *SignedMessage) DeepCopy() *SignedMessage {
 	copy(ret.Message.Identifier, signedMsg.Message.Identifier)
 	copy(ret.Message.Data, signedMsg.Message.Data)
 	return ret
-}
-
-func (msg *ConsensusMessage) convertToV0Root() ([]byte, error) {
-	var m OrderedMap // must use ordered map!
-
-	var data []byte
-	switch msg.MsgType {
-	case ProposalMsgType:
-		m = append(m, KeyVal{"type", proto.RoundState_PrePrepare})
-		p, err := msg.GetProposalData()
-		if err != nil {
-			return nil, err
-		}
-		data = p.Data
-	case PrepareMsgType:
-		m = append(m, KeyVal{"type", proto.RoundState_Prepare})
-		p, err := msg.GetPrepareData()
-		if err != nil {
-			return nil, err
-		}
-		data = p.Data
-	case CommitMsgType:
-		m = append(m, KeyVal{"type", proto.RoundState_Commit})
-		p, err := msg.GetCommitData()
-		if err != nil {
-			return nil, err
-		}
-		data = p.Data
-	case RoundChangeMsgType:
-		m = append(m, KeyVal{"type", proto.RoundState_ChangeRound})
-		var value OrderedMap
-		if cr, err := msg.GetRoundChangeData(); err == nil {
-			if cr.GetPreparedValue() != nil && len(cr.GetPreparedValue()) > 0 {
-				value = append(value, KeyVal{Key: "prepared_round", Val: uint64(cr.GetPreparedRound())})
-				value = append(value, KeyVal{Key: "prepared_value", Val: cr.GetPreparedValue()})
-			}
-
-			if cr.GetRoundChangeJustification() != nil && len(cr.GetRoundChangeJustification()) > 0 {
-				var justificationMsg OrderedMap
-				rcj := cr.GetRoundChangeJustification()[0]
-				if rcj.Message != nil && rcj.Message.MsgType != 0 { // make sure message is not "empty" ConsensusMessage TODO need to set better checking
-					switch rcj.Message.MsgType {
-					case PrepareMsgType: // can only be PrepareMsgType in change round justification msg
-						justificationMsg = append(justificationMsg, KeyVal{Key: "type", Val: 2}) // 2 is the v0 status for prepare
-					}
-
-					justificationMsg = append(justificationMsg, KeyVal{Key: "round", Val: uint64(rcj.Message.Round)})
-					justificationMsg = append(justificationMsg, KeyVal{Key: "lambda", Val: []byte(format.IdentifierFormat(rcj.Message.Identifier.GetValidatorPK(), rcj.Message.Identifier.GetRoleType().String()))})
-					if rcj.Message.Height > 0 { // v0 version saves root without seq_number when height is 0.
-						justificationMsg = append(justificationMsg, KeyVal{Key: "seq_number", Val: uint64(rcj.Message.Height)})
-					}
-
-					pd, err := rcj.Message.GetPrepareData()
-					if err != nil {
-						return nil, err
-					}
-					justificationMsg = append(justificationMsg, KeyVal{Key: "value", Val: pd.Data})
-
-					value = append(value, KeyVal{Key: "justification_msg", Val: justificationMsg})
-					value = append(value, KeyVal{Key: "justification_sig", Val: []byte(rcj.GetSignature())})
-					value = append(value, KeyVal{Key: "signer_ids", Val: rcj.GetSigners()})
-				}
-			}
-		} else {
-			// no change round data. (could be?)
-		}
-		var err error
-		data, err = value.MarshalJSON()
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, errors.Errorf("consensus type is not known. type - %s", msg.MsgType.String())
-	}
-
-	m = append(m, KeyVal{"round", int64(msg.Round)})
-	m = append(m, KeyVal{"lambda", []byte(format.IdentifierFormat(msg.Identifier.GetValidatorPK(), msg.Identifier.GetRoleType().String()))})
-	if msg.Height > 0 { // v0 version saves root without seq_number when height is 0.
-		m = append(m, KeyVal{"seq_number", int64(msg.Height)})
-	}
-	m = append(m, KeyVal{"value", data})
-
-	marshaledRoot, err := m.MarshalJSON()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encode message")
-	}
-
-	hasher := sha256.New()
-	_, err = hasher.Write(marshaledRoot)
-	if err != nil {
-		return nil, err
-	}
-	return hasher.Sum(nil), nil
 }
 
 // KeyVal is a struct of key value pair

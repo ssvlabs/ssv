@@ -42,7 +42,7 @@ func SignMsg(t *testing.T, ids []message.OperatorID, sks []*bls.SecretKey, msg *
 
 	var agg *bls.Sign
 	for _, sk := range sks {
-		signature, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		signature, err := msg.Sign(sk)
 		require.NoError(t, err)
 		if agg == nil {
 			agg = signature
@@ -123,7 +123,7 @@ func TestAuthorizeMsg(t *testing.T) {
 
 			pipeline := AuthorizeMsg(&beacon.Share{
 				Committee: committee,
-			}, forksprotocol.V1ForkVersion.String())
+			}, forksprotocol.GenesisForkVersion.String())
 
 			if len(test.expectedError) == 0 {
 				require.NoError(t, pipeline.Run(signed))

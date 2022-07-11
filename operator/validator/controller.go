@@ -249,7 +249,7 @@ func (c *controller) handleRouterMessages() {
 				if err := v.ProcessMsg(&msg); err != nil {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
-			} else if c.forkVersion != forksprotocol.V0ForkVersion {
+			} else if c.forkVersion != forksprotocol.GenesisForkVersion {
 				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
 					continue // not supporting other types
 				}

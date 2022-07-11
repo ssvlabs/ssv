@@ -108,7 +108,7 @@ func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*b
 }
 
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion string) error {
+func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
@@ -126,7 +126,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion stri
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators, forkVersion) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators) // TODO need to check if this is the right verify func
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

@@ -75,7 +75,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
 
-	forkVersion := forksprotocol.V1ForkVersion
+	forkVersion := forksprotocol.GenesisForkVersion
 	pi, _ := protocolp2p.GenPeerID()
 	beacon := validator.NewTestBeacon(t)
 

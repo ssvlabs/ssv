@@ -51,7 +51,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Round:      3,
 			Identifier: []byte(identifier),
 			Data:       commitData,
-		}, forksprotocol.V0ForkVersion.String()))
+		}, forksprotocol.GenesisForkVersion.String()))
 	}
 	decided, err := AggregateMessages(sigs)
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte(identifier),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 		{
 			"invalid",
@@ -85,7 +85,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					Round:      3,
 					Identifier: []byte(identifier),
 					Data:       commitData,
-				}, forksprotocol.V0ForkVersion.String())
+				}, forksprotocol.GenesisForkVersion.String())
 				msg.Signature = []byte("dummy")
 				return msg
 			}(),
@@ -100,7 +100,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("xxx_ATTESTER"),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 	}
 	for _, test := range tests {
@@ -135,8 +135,8 @@ func newInMemDb() basedb.IDb {
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
 	//sigType := message.QBFTSigType
 	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.GenesisForkVersion.String())
+	sigRoot, err := msg.GetRoot()
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 

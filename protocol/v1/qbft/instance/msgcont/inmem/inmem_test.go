@@ -1,16 +1,12 @@
 package inmem
 
 import (
-	"encoding/json"
-	v0 "github.com/bloxapp/ssv/ibft/conversion"
+	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
 	"testing"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -19,113 +15,76 @@ func init() {
 	logex.Build("test", zap.InfoLevel, nil)
 }
 
-func changeRoundDataToBytes(input *proto.ChangeRoundData) []byte {
-	ret, _ := json.Marshal(input)
-	return ret
-}
-
-func signedMsgToNetworkMsg(t *testing.T, id uint64, sk *bls.SecretKey, round uint64) *network.Message {
-	return &network.Message{
-		SignedMessage: SignMsg(t, id, sk, &proto.Message{
-			Type:      proto.RoundState_ChangeRound,
-			Round:     round,
-			Lambda:    []byte{1, 2, 3, 4},
-			SeqNumber: 1,
-			Value:     changeRoundDataToBytes(&proto.ChangeRoundData{}),
-		}),
+func generateConsensusMsg(r message.Round) *message.ConsensusMessage {
+	return &message.ConsensusMessage{
+		MsgType:    message.RoundChangeMsgType,
+		Height:     1,
+		Round:      r,
+		Identifier: message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
+		Data:       nil,
 	}
-}
-
-// SignMsg signs the given message by the given private key
-func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *proto.Message) *proto.SignedMessage {
-	bls.Init(bls.BLS12_381)
-
-	signature, err := msg.Sign(sk)
-	require.NoError(t, err)
-	return &proto.SignedMessage{
-		Message:   msg,
-		Signature: signature.Serialize(),
-		SignerIds: []uint64{id},
-	}
-}
-
-// GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
-	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
-	sks := make(map[uint64]*bls.SecretKey)
-	for i := 1; i <= cnt; i++ {
-		sk := &bls.SecretKey{}
-		sk.SetByCSPRNG()
-
-		nodes[uint64(i)] = &proto.Node{
-			IbftId: uint64(i),
-			Pk:     sk.GetPublicKey().Serialize(),
-		}
-		sks[uint64(i)] = sk
-	}
-	return sks, nodes
 }
 
 func TestFindPartialChangeRound(t *testing.T) {
-	sks, _ := GenerateNodes(4)
+	uids := []message.OperatorID{1, 2, 3, 4}
+	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 
 	tests := []struct {
 		name           string
-		msgs           []*network.Message
+		msgs           []*message.SignedMessage
 		expectedFound  bool
 		expectedLowest uint64
 	}{
 		{
 			"lowest 4",
-			[]*network.Message{
-				signedMsgToNetworkMsg(t, 1, sks[1], 4),
-				signedMsgToNetworkMsg(t, 2, sks[2], 7),
+			[]*message.SignedMessage{
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(4)),
+				testing2.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(7)),
 			},
 			true,
 			4,
 		},
 		{
 			"lowest is lower than state round",
-			[]*network.Message{
-				signedMsgToNetworkMsg(t, 1, sks[1], 1),
-				signedMsgToNetworkMsg(t, 2, sks[2], 0),
+			[]*message.SignedMessage{
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(1)),
+				testing2.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(0)),
 			},
 			false,
 			100000,
 		},
 		{
 			"lowest 7",
-			[]*network.Message{
-				signedMsgToNetworkMsg(t, 1, sks[1], 7),
-				signedMsgToNetworkMsg(t, 2, sks[2], 9),
-				signedMsgToNetworkMsg(t, 3, sks[3], 10),
+			[]*message.SignedMessage{
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(7)),
+				testing2.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(9)),
+				testing2.SignMsg(t, secretKeys, uids[2:3], generateConsensusMsg(10)),
 			},
 			true,
 			7,
 		},
 		{
 			"not found",
-			[]*network.Message{},
+			[]*message.SignedMessage{},
 			false,
 			100000,
 		},
 		{
 			"duplicate msgs from same peer, no quorum",
-			[]*network.Message{
-				signedMsgToNetworkMsg(t, 1, sks[1], 4),
-				signedMsgToNetworkMsg(t, 1, sks[1], 5),
+			[]*message.SignedMessage{
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(4)),
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(5)),
 			},
 			false,
 			4,
 		},
 		{
 			"duplicate msgs from same peer, lowest 8",
-			[]*network.Message{
-				signedMsgToNetworkMsg(t, 1, sks[1], 13),
-				signedMsgToNetworkMsg(t, 1, sks[1], 12),
-				signedMsgToNetworkMsg(t, 2, sks[2], 10),
-				signedMsgToNetworkMsg(t, 2, sks[2], 8),
+			[]*message.SignedMessage{
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(13)),
+				testing2.SignMsg(t, secretKeys, uids[0:1], generateConsensusMsg(12)),
+				testing2.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(10)),
+				testing2.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(8)),
 			},
 			true,
 			8,
@@ -136,9 +95,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 		t.Run(test.name, func(tt *testing.T) {
 			c := New(3, 2)
 			for _, msg := range test.msgs {
-				v1, err := v0.ToSignedMessageV1(msg.SignedMessage)
-				require.NoError(tt, err)
-				c.AddMessage(v1, nil)
+				c.AddMessage(msg, nil)
 			}
 
 			found, lowest := c.PartialChangeRoundQuorum(1)

@@ -1,18 +1,17 @@
 package instance
 
 import (
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"testing"
 
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -30,19 +29,19 @@ func TestAggregatedMsg(t *testing.T) {
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	}, forksprotocol.V0ForkVersion.String())
+	})
 	msg2 := SignMsg(t, 2, sks[2], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	}, forksprotocol.V0ForkVersion.String())
+	})
 	msg3 := SignMsg(t, 3, sks[3], &message.ConsensusMessage{
 		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	}, forksprotocol.V0ForkVersion.String())
+	})
 
 	tests := []struct {
 		name            string
@@ -96,14 +95,14 @@ func TestAggregatedMsg(t *testing.T) {
 
 func TestCommittedAggregatedMsg(t *testing.T) {
 	t.Run("v0", func(t *testing.T) {
-		committedAggregatedMsg(t, forksprotocol.V0ForkVersion.String())
+		committedAggregatedMsg(t)
 	})
 	t.Run("v1", func(t *testing.T) {
-		committedAggregatedMsg(t, forksprotocol.V1ForkVersion.String())
+		committedAggregatedMsg(t)
 	})
 }
 
-func committedAggregatedMsg(t *testing.T, forkVersion string) {
+func committedAggregatedMsg(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	instance := &Instance{
 		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
@@ -141,9 +140,9 @@ func committedAggregatedMsg(t *testing.T, forkVersion string) {
 	commitData, err := consensusMessage.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 1, sks[1], consensusMessage, forkVersion), commitData.Data)
-	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 2, sks[2], consensusMessage, forkVersion), commitData.Data)
-	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 3, sks[3], consensusMessage, forkVersion), commitData.Data)
+	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 1, sks[1], consensusMessage), commitData.Data)
+	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 2, sks[2], consensusMessage), commitData.Data)
+	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 3, sks[3], consensusMessage), commitData.Data)
 
 	instance.decidedMsg, err = AggregateMessages(instance.containersMap[qbftspec.CommitMsgType].ReadOnlyMessagesByRound(3))
 	require.NoError(t, err)
@@ -164,14 +163,14 @@ func committedAggregatedMsg(t *testing.T, forkVersion string) {
 	commitData, err = m.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 3, sks[3], m, forkVersion), commitData.Data)
+	instance.containersMap[qbftspec.CommitMsgType].AddMessage(SignMsg(t, 3, sks[3], m), commitData.Data)
 	msg, err = instance.CommittedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
 
 	// test verification
 	share := beacon.Share{Committee: nodes}
-	require.NoError(t, share.VerifySignedMessage(msg, forkVersion))
+	require.NoError(t, share.VerifySignedMessage(msg))
 }
 
 func TestCommitPipeline(t *testing.T) {

@@ -1,7 +1,6 @@
 package message
 
 import (
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
@@ -48,7 +47,7 @@ func TestChangeRoundV0Root(t *testing.T) {
 		Identifier: identifier,
 		Data:       crmEncoded,
 	}
-	_, err = cm.GetRoot(forksprotocol.V0ForkVersion.String()) // TODO need to add the v0 real root to compare
+	_, err = cm.GetRoot() // TODO need to add the v0 real root to compare
 	require.NoError(t, err)
 }
 
@@ -66,7 +65,7 @@ func TestDecidedV0Root(t *testing.T) {
 		Data:       crmEncoded,
 	}
 
-	cm.GetRoot("v0") // TODO need to add the v0 real root to compare
+	cm.GetRoot() // TODO need to add the v0 real root to compare
 }
 
 func TestAppendSigners(t *testing.T) {
