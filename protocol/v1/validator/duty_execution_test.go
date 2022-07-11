@@ -12,7 +12,7 @@ import (
 )
 
 func marshalInputValueStructForAttestation(t *testing.T, attByts []byte) []byte {
-	ret := &testBeacon{}
+	ret := &TestBeacon{}
 	ret.refAttestationData = &spec.AttestationData{}
 	err := ret.refAttestationData.UnmarshalSSZ(attByts) // ignore error
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 			node := testingValidator(t, test.decided, test.signaturesCount, identifier)
 
 			if test.overrideAttestationData != nil {
-				node.beacon.(*testBeacon).refAttestationData = test.overrideAttestationData
+				node.beacon.(*TestBeacon).refAttestationData = test.overrideAttestationData
 			}
 
 			duty := &beacon.Duty{
@@ -201,7 +201,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 					require.EqualError(t, err, test.expectedError)
 				} else {
 					require.NoError(t, err)
-					require.EqualValues(t, test.expectedReconstructedSig, ibft.(*testIBFT).beacon.(*testBeacon).LastSubmittedAttestation.Signature[:])
+					require.EqualValues(t, test.expectedReconstructedSig, ibft.(*testIBFT).beacon.(*TestBeacon).LastSubmittedAttestation.Signature[:])
 				}
 			}
 		})

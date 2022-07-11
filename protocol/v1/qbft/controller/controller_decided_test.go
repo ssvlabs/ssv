@@ -375,7 +375,7 @@ func TestForceDecided(t *testing.T) {
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
 	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 	// test before sync
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.Height)
@@ -408,7 +408,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -446,7 +446,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	// test before sync
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -454,7 +454,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, message.Height(10), highest.Message.Height)
@@ -498,7 +498,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*Controller).decidedStrategy.GetLastDecided(identifier)
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.Height)
@@ -675,7 +675,7 @@ func populatedIbft(
 	}
 	ret := New(opts)
 
-	ret.(*Controller).state = Ready // as if they are already synced
+	ret.(*Controller).State = Ready // as if they are already synced
 	return ret
 }
 

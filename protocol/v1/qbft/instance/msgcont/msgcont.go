@@ -9,6 +9,9 @@ type MessageContainer interface {
 	// ReadOnlyMessagesByRound returns messages by the given round
 	ReadOnlyMessagesByRound(round message.Round) []*message.SignedMessage
 
+	//AllMessaged return all msg's
+	AllMessaged(func(round message.Round, msg *message.SignedMessage)) []*message.SignedMessage
+
 	// QuorumAchieved returns true if enough msgs were received (round, value)
 	QuorumAchieved(round message.Round, value []byte) (bool, []*message.SignedMessage)
 

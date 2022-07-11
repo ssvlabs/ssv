@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 	"testing"
 	"time"
@@ -31,15 +32,15 @@ func TestConsumeMessages(t *testing.T) {
 	require.NoError(t, err)
 	currentInstanceLock := &sync.RWMutex{}
 	ctrl := Controller{
-		ctx:                 context.Background(),
-		logger:              logex.GetLogger().With(zap.String("who", "controller")),
-		q:                   q,
-		signatureState:      SignatureState{},
+		Ctx:                 context.Background(),
+		Logger:              logex.GetLogger().With(zap.String("who", "controller")),
+		Q:                   q,
+		SignatureState:      SignatureState{},
 		Identifier:          message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
-		currentInstanceLock: currentInstanceLock,
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: currentInstanceLock,
+		ForkLock:            &sync.Mutex{},
 	}
-	ctrl.signatureState.setHeight(0)
+	ctrl.SignatureState.setHeight(0)
 
 	tests := []struct {
 		name            string
@@ -292,14 +293,14 @@ func TestConsumeMessages(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
-			ctrl.ctx = ctx
+			ctrl.Ctx = ctx
 			ctrl.setCurrentInstance(test.currentInstance)
-			ctrl.signatureState = SignatureState{}
-			ctrl.signatureState.setHeight(test.lastHeight)
+			ctrl.SignatureState = SignatureState{}
+			ctrl.SignatureState.setHeight(test.lastHeight)
 
 			// populating msg's
 			for _, msg := range test.msgs {
-				ctrl.q.Add(msg)
+				ctrl.Q.Add(msg)
 			}
 
 			// set timeout
@@ -314,10 +315,10 @@ func TestConsumeMessages(t *testing.T) {
 			wg.Add(len(test.expected))
 			processed := 0
 			go func() {
-				ctrl.startQueueConsumer(func(msg *message.SSVMessage) error {
-					ctrl.logger.Debug("processing msg", zap.String("type", msg.MsgType.String()))
+				ctrl.StartQueueConsumer(func(msg *message.SSVMessage) error {
+					ctrl.Logger.Debug("processing msg", zap.String("type", msg.MsgType.String()))
 					if processed == len(test.expected) {
-						ctrl.logger.Debug("processed all expected msg's. ignore msg")
+						ctrl.Logger.Debug("processed all expected msg's. ignore msg")
 						return nil
 					}
 					// when done, cancel ctx
@@ -337,10 +338,10 @@ func TestConsumeMessages(t *testing.T) {
 						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
 						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
 						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
-						ctrl.logger.Debug("msg info", zap.String("type", signedMsg.Message.MsgType.String()), zap.Uint64("h", uint64(signedMsg.Message.Height)))
+						ctrl.Logger.Debug("msg info", zap.String("type", signedMsg.Message.MsgType.String()), zap.Uint64("h", uint64(signedMsg.Message.Height)))
 					}
 					processed++
-					ctrl.logger.Debug("processed", zap.Int("processed", processed), zap.Int("total", len(test.expected)))
+					ctrl.Logger.Debug("processed", zap.Int("processed", processed), zap.Int("total", len(test.expected)))
 					wg.Done()
 					return nil
 				})
@@ -349,14 +350,14 @@ func TestConsumeMessages(t *testing.T) {
 
 			wg.Wait()                          // wait until all expected msg's are processed
 			time.Sleep(time.Millisecond * 500) // wait for clean old msg's
-			require.Equal(t, test.expectedQLen, ctrl.q.Len())
+			require.Equal(t, test.expectedQLen, ctrl.Q.Len())
 			wg.Add(1)
 			cancel()
 			wg.Wait()                             // wait for queue to cancel
 			q.Clean(func(s msgqueue.Index) bool { // make sure queue is empty for next test
 				return true
 			})
-			ctrl.logger.Debug("done by processed", zap.String("name", test.name))
+			ctrl.Logger.Debug("done by processed", zap.String("name", test.name))
 		})
 	}
 }
@@ -417,6 +418,11 @@ func generateConsensusMsg(t *testing.T, height message.Height, round message.Rou
 
 type InstanceMock struct {
 	state *qbft.State
+}
+
+func (i *InstanceMock) Containers() map[interface{}]msgcont.MessageContainer {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (i *InstanceMock) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {

@@ -26,6 +26,7 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.15.0
 	github.com/libp2p/go-libp2p-noise v0.2.2
 	github.com/libp2p/go-libp2p-pubsub v0.5.6
+	github.com/libp2p/go-nat v0.0.5 // indirect
 	github.com/libp2p/go-tcp-transport v0.2.8
 	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible

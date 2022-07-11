@@ -15,14 +15,14 @@ import (
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(msg *message.SSVMessage) error
 
-func (c *Controller) startQueueConsumer(handler MessageHandler) {
-	ctx, cancel := context.WithCancel(c.ctx)
+func (c *Controller) StartQueueConsumer(handler MessageHandler) {
+	ctx, cancel := context.WithCancel(c.Ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
 		err := c.ConsumeQueue(handler, time.Millisecond*50)
 		if err != nil {
-			c.logger.Warn("could not consume queue", zap.Error(err))
+			c.Logger.Warn("could not consume queue", zap.Error(err))
 		}
 	}
 }
@@ -30,7 +30,7 @@ func (c *Controller) startQueueConsumer(handler MessageHandler) {
 // ConsumeQueue consumes messages from the msgqueue.Queue of the controller
 // it checks for current state
 func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration) error {
-	ctx, cancel := context.WithCancel(c.ctx)
+	ctx, cancel := context.WithCancel(c.Ctx)
 	defer cancel()
 
 	identifier := c.Identifier.String()
@@ -39,43 +39,43 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 		time.Sleep(interval)
 
 		// no msg's in the queue
-		if c.q.Len() == 0 {
+		if c.Q.Len() == 0 {
 			time.Sleep(interval)
 			continue // no msg's at all. need to prevent cpu usage in query
 		}
 		// avoid process messages on fork
-		if atomic.LoadUint32(&c.state) == Forking {
+		if atomic.LoadUint32(&c.State) == Forking {
 			time.Sleep(interval)
 			continue
 		}
 
-		lastHeight := c.signatureState.getHeight()
+		lastHeight := c.SignatureState.getHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight); processed {
-			c.logger.Debug("process none running instance is done")
+			c.Logger.Debug("process none running instance is done")
 			continue
 		}
 		if processed := c.processByState(handler, identifier); processed {
-			c.logger.Debug("process by state is done")
+			c.Logger.Debug("process by state is done")
 			continue
 		}
 		if processed := c.processDefault(handler, identifier, lastHeight); processed {
-			c.logger.Debug("process default is done")
+			c.Logger.Debug("process default is done")
 			continue
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		c.q.Clean(func(index msgqueue.Index) bool {
+		c.Q.Clean(func(index msgqueue.Index) bool {
 			return index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
 	}
-	c.logger.Warn("queue consumer is closed")
+	c.Logger.Warn("queue consumer is closed")
 	return nil
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
 func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier string, lastHeight message.Height) bool {
-	instance := c.getCurrentInstance()
+	instance := c.GetCurrentInstance()
 	if instance != nil {
 		return false // only pop when no instance running
 	}
@@ -92,23 +92,23 @@ func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier
 		return indices[0]
 	})
 
-	msgs := c.q.PopIndices(1, iterator)
+	msgs := c.Q.PopIndices(1, iterator)
 
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	c.logger.Debug("found message in queue when no running instance", zap.String("sig state", c.signatureState.getState().toString()), zap.Int32("height", int32(c.signatureState.getHeight())))
+	c.Logger.Debug("found message in queue when no running instance", zap.String("sig state", c.SignatureState.getState().toString()), zap.Int32("height", int32(c.SignatureState.getHeight())))
 	err := handler(msgs[0])
 	if err != nil {
-		c.logger.Warn("could not handle msg", zap.Error(err))
+		c.Logger.Warn("could not handle msg", zap.Error(err))
 	}
 	return true // msg processed
 }
 
 // processByState if an instance is running -> get the state and get the relevant messages
 func (c *Controller) processByState(handler MessageHandler, identifier string) bool {
-	currentInstance := c.getCurrentInstance()
-	if c.getCurrentInstance() == nil {
+	currentInstance := c.GetCurrentInstance()
+	if c.GetCurrentInstance() == nil {
 		return false
 	}
 
@@ -119,7 +119,7 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 	if msg == nil {
 		return false // no msg found
 	}
-	c.logger.Debug("queue found message for state",
+	c.Logger.Debug("queue found message for state",
 		zap.Int32("stage", currentState.Stage.Load()),
 		zap.Int32("seq", int32(currentState.GetHeight())),
 		zap.Int32("round", int32(currentState.GetRound())),
@@ -127,7 +127,7 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 
 	err := handler(msg)
 	if err != nil {
-		c.logger.Warn("could not handle msg", zap.Error(err))
+		c.Logger.Warn("could not handle msg", zap.Error(err))
 	}
 	return true // msg processed
 }
@@ -149,12 +149,12 @@ func (c *Controller) processDefault(handler MessageHandler, identifier string, l
 		}
 		return indices[0]
 	})
-	msgs := c.q.PopIndices(1, iterator)
+	msgs := c.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
 		if err != nil {
-			c.logger.Warn("could not handle msg", zap.Error(err))
+			c.Logger.Warn("could not handle msg", zap.Error(err))
 		}
 		return true
 	}
@@ -180,7 +180,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *m
 			}
 			return indices[0]
 		})
-	msgs := c.q.PopIndices(1, iterator)
+	msgs := c.Q.PopIndices(1, iterator)
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -190,13 +190,13 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *m
 // processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
 func (c *Controller) processAllDecided(handler MessageHandler) {
 	idx := msgqueue.DecidedMsgIndex(c.Identifier.String())
-	msgs := c.q.Pop(1, idx)
+	msgs := c.Q.Pop(1, idx)
 	for len(msgs) > 0 {
 		err := handler(msgs[0])
 		if err != nil {
-			c.logger.Warn("could not handle msg", zap.Error(err))
+			c.Logger.Warn("could not handle msg", zap.Error(err))
 		}
-		msgs = c.q.Pop(1, idx)
+		msgs = c.Q.Pop(1, idx)
 	}
 }
 

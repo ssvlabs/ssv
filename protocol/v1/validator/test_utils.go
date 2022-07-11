@@ -77,6 +77,11 @@ type testIBFT struct {
 	signatures      map[message.OperatorID][]byte
 }
 
+func (t *testIBFT) GetCurrentInstance() instance.Instancer {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (t *testIBFT) Init() error {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
@@ -212,38 +217,38 @@ func (t *testIBFT) ProcessSignatureMessage(msg *message.SignedPostConsensusMessa
 	return nil
 }
 
-/**
-testBeacon
-*/
-type testBeacon struct {
+type TestBeacon struct {
 	refAttestationData       *spec.AttestationData
 	LastSubmittedAttestation *spec.Attestation
+	Signer                   beacon.KeyManager
 }
 
-func newTestBeacon(t *testing.T) *testBeacon {
-	ret := &testBeacon{}
+func NewTestBeacon(t *testing.T) *TestBeacon {
+	ret := &TestBeacon{}
 	ret.refAttestationData = &spec.AttestationData{}
 	err := ret.refAttestationData.UnmarshalSSZ(refAttestationDataByts) // ignore error
 	require.NoError(t, err)
+
+	ret.Signer = NewTestSigner()
 	return ret
 }
 
-func (b *testBeacon) StartReceivingBlocks() {
+func (b *TestBeacon) StartReceivingBlocks() {
 }
 
-func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (b *TestBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	return nil, nil
 }
 
-func (b *testBeacon) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
+func (b *TestBeacon) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
 	return nil, nil
 }
 
-func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+func (b *TestBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	return b.refAttestationData, nil
 }
 
-func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (b *TestBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
 	return &spec.Attestation{
@@ -253,33 +258,32 @@ func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	}, refSigRoot, nil
 }
 
-func (b *testBeacon) SubmitAttestation(attestation *spec.Attestation) error {
+func (b *TestBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	b.LastSubmittedAttestation = attestation
 	return nil
 }
 
-func (b *testBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error {
+func (b *TestBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error {
 	panic("implement me")
 }
 
-func (b *testBeacon) AddShare(shareKey *bls.SecretKey) error {
-	panic("implement me")
+func (b *TestBeacon) AddShare(shareKey *bls.SecretKey) error {
+	return b.Signer.AddShare(shareKey)
 }
 
-func (b *testBeacon) RemoveShare(pubKey string) error {
-	//TODO implement me
-	panic("implement me")
+func (b *TestBeacon) RemoveShare(pubKey string) error {
+	return b.Signer.RemoveShare(pubKey)
 }
 
-func (b *testBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
-	panic("implement me")
+func (b *TestBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+	return b.Signer.SignIBFTMessage(message, pk, forkVersion)
 }
 
-func (b *testBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+func (b *TestBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
 	panic("implement")
 }
 
-func (b *testBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
+func (b *TestBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
 	panic("implement")
 }
 
@@ -287,7 +291,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	threshold.Init()
 
 	ret := &Validator{}
-	ret.beacon = newTestBeacon(t)
+	ret.beacon = NewTestBeacon(t)
 	ret.logger = zap.L()
 
 	// validatorStorage pk
@@ -359,4 +363,51 @@ func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.
 		sks[message.OperatorID(i)] = sk
 	}
 	return sks, nodes
+}
+
+type testSigner struct {
+	lock sync.Locker
+	keys map[string]*bls.SecretKey
+}
+
+// NewTestSigner creates a new signer for tests
+func NewTestSigner() beacon.KeyManager {
+	return &testSigner{&sync.Mutex{}, make(map[string]*bls.SecretKey)}
+}
+
+func (km *testSigner) AddShare(shareKey *bls.SecretKey) error {
+	km.lock.Lock()
+	defer km.lock.Unlock()
+
+	if km.getKey(shareKey.GetPublicKey()) == nil {
+		km.keys[shareKey.GetPublicKey().SerializeToHexStr()] = shareKey
+	}
+	return nil
+}
+
+func (km *testSigner) RemoveShare(pubKey string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
+	return km.keys[key.SerializeToHexStr()]
+}
+
+func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+	km.lock.Lock()
+	defer km.lock.Unlock()
+
+	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
+		sig, err := message.Sign(key, forkVersion) // TODO need to check fork v1?
+		if err != nil {
+			return nil, errors.Wrap(err, "could not sign ibft msg")
+		}
+		return sig.Serialize(), nil
+	}
+	return nil, errors.Errorf("could not find key for pk: %x", pk)
+}
+
+func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return nil, nil, nil
 }

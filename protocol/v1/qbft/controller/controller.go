@@ -63,40 +63,41 @@ const (
 
 // Controller implements Controller interface
 type Controller struct {
-	ctx context.Context
+	Ctx context.Context
 
 	currentInstance    instance.Instancer
-	logger             *zap.Logger
-	instanceStorage    qbftstorage.InstanceStore
-	changeRoundStorage qbftstorage.ChangeRoundStore
-	network            p2pprotocol.Network
-	instanceConfig     *qbft.InstanceConfig
+	Logger             *zap.Logger
+	InstanceStorage    qbftstorage.InstanceStore
+	ChangeRoundStorage qbftstorage.ChangeRoundStore
+	Network            p2pprotocol.Network
+	InstanceConfig     *qbft.InstanceConfig
 	ValidatorShare     *beaconprotocol.Share
 	Identifier         message.Identifier
-	fork               forks.Fork
-	beacon             beaconprotocol.Beacon
-	signer             beaconprotocol.Signer
+	Fork               forks.Fork
+	Beacon             beaconprotocol.Beacon
+	Signer             beaconprotocol.Signer
 
 	// lockers
-	currentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
-	forkLock            sync.Locker
+	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
+	ForkLock            sync.Locker
 
 	// signature
-	signatureState SignatureState
+	SignatureState SignatureState
 
 	// flags
-	state uint32
+	State uint32
 
-	syncRateLimit time.Duration
+	SyncRateLimit time.Duration
+	MinPeers      int
 
 	// flags
-	readMode bool
+	ReadMode bool
 	fullNode bool
 
-	q msgqueue.MsgQueue
+	Q msgqueue.MsgQueue
 
-	decidedFactory    *factory.Factory
-	decidedStrategy   strategy.Decided
+	DecidedFactory    *factory.Factory
+	DecidedStrategy   strategy.Decided
 	newDecidedHandler NewDecidedHandler
 }
 
@@ -106,26 +107,26 @@ func New(opts Options) IController {
 	fork := forksfactory.NewFork(opts.Version)
 
 	ctrl := &Controller{
-		ctx:                opts.Context,
-		instanceStorage:    opts.Storage,
-		changeRoundStorage: opts.Storage,
-		logger:             logger,
-		network:            opts.Network,
-		instanceConfig:     opts.InstanceConfig,
+		Ctx:                opts.Context,
+		InstanceStorage:    opts.Storage,
+		ChangeRoundStorage: opts.Storage,
+		Logger:             logger,
+		Network:            opts.Network,
+		InstanceConfig:     opts.InstanceConfig,
 		ValidatorShare:     opts.ValidatorShare,
 		Identifier:         opts.Identifier,
-		fork:               fork,
-		beacon:             opts.Beacon,
-		signer:             opts.Signer,
-		signatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		Fork:               fork,
+		Beacon:             opts.Beacon,
+		Signer:             opts.Signer,
+		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
-		syncRateLimit: opts.SyncRateLimit,
+		SyncRateLimit: opts.SyncRateLimit,
 
-		readMode: opts.ReadMode,
+		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
 
-		currentInstanceLock: &sync.RWMutex{},
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: &sync.RWMutex{},
+		ForkLock:            &sync.Mutex{},
 
 		newDecidedHandler: opts.NewDecidedHandler,
 	}
@@ -139,28 +140,28 @@ func New(opts Options) IController {
 			// TODO: we should probably stop here, TBD
 			logger.Warn("could not setup msg queue properly", zap.Error(err))
 		}
-		ctrl.q = q
+		ctrl.Q = q
 	}
 
-	ctrl.decidedFactory = factory.NewDecidedFactory(logger, ctrl.getNodeMode(), opts.Storage, opts.Network)
-	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+	ctrl.DecidedFactory = factory.NewDecidedFactory(logger, ctrl.GetNodeMode(), opts.Storage, opts.Network)
+	ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
 
 	// set flags
-	ctrl.state = NotStarted
+	ctrl.State = NotStarted
 
 	return ctrl
 }
 
-func (c *Controller) getCurrentInstance() instance.Instancer {
-	c.currentInstanceLock.RLock()
-	defer c.currentInstanceLock.RUnlock()
+func (c *Controller) GetCurrentInstance() instance.Instancer {
+	c.CurrentInstanceLock.RLock()
+	defer c.CurrentInstanceLock.RUnlock()
 
 	return c.currentInstance
 }
 
 func (c *Controller) setCurrentInstance(instance instance.Instancer) {
-	c.currentInstanceLock.Lock()
-	defer c.currentInstanceLock.Unlock()
+	c.CurrentInstanceLock.Lock()
+	defer c.CurrentInstanceLock.Unlock()
 
 	c.currentInstance = instance
 }
@@ -169,82 +170,82 @@ func (c *Controller) setCurrentInstance(instance instance.Instancer) {
 // before clearing the entire msg queue.
 // it also recreates the fork instance and decided strategy with the new fork version
 func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	atomic.StoreUint32(&c.state, Forking)
-	defer atomic.StoreUint32(&c.state, Ready)
+	atomic.StoreUint32(&c.State, Forking)
+	defer atomic.StoreUint32(&c.State, Ready)
 
-	if i := c.getCurrentInstance(); i != nil {
+	if i := c.GetCurrentInstance(); i != nil {
 		i.Stop()
 		c.setCurrentInstance(nil)
 	}
-	c.processAllDecided(c.messageHandler)
-	cleared := c.q.Clean(msgqueue.AllIndicesCleaner)
-	c.logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
+	c.processAllDecided(c.MessageHandler)
+	cleared := c.Q.Clean(msgqueue.AllIndicesCleaner)
+	c.Logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
 
 	// get new QBFT controller fork and update decidedStrategy
-	c.forkLock.Lock()
-	defer c.forkLock.Unlock()
-	c.fork = forksfactory.NewFork(forkVersion)
-	c.decidedStrategy = c.decidedFactory.GetStrategy()
+	c.ForkLock.Lock()
+	defer c.ForkLock.Unlock()
+	c.Fork = forksfactory.NewFork(forkVersion)
+	c.DecidedStrategy = c.DecidedFactory.GetStrategy()
 	return nil
 }
 
 func (c *Controller) syncDecided(from, to *message.SignedMessage) error {
-	c.forkLock.Lock()
-	fork, decidedStrategy := c.fork, c.decidedStrategy
-	c.forkLock.Unlock()
-	return decidedStrategy.Sync(c.ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
+	c.ForkLock.Lock()
+	fork, decidedStrategy := c.Fork, c.DecidedStrategy
+	c.ForkLock.Unlock()
+	return decidedStrategy.Sync(c.Ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
 // if init fails to sync
 func (c *Controller) Init() error {
 	// checks if notStarted. if so, preform init handlers and set state to new state
-	if atomic.CompareAndSwapUint32(&c.state, NotStarted, InitiatedHandlers) {
-		c.logger.Info("start qbft ctrl handler init")
-		go c.startQueueConsumer(c.messageHandler)
+	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
+		c.Logger.Info("start qbft ctrl handler init")
+		go c.StartQueueConsumer(c.MessageHandler)
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
 	// if already waiting for peers no need to redundant waiting
-	if atomic.LoadUint32(&c.state) == WaitingForPeers {
+	if atomic.LoadUint32(&c.State) == WaitingForPeers {
 		return ErrAlreadyRunning
 	}
 
 	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.state, InitiatedHandlers, WaitingForPeers) {
+	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
-		c.logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := p2pprotocol.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
+		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
 			return err
 		}
-		c.logger.Debug("found enough peers")
+		c.Logger.Debug("found enough peers")
 
-		atomic.StoreUint32(&c.state, FoundPeers)
+		atomic.StoreUint32(&c.State, FoundPeers)
 
 		// IBFT sync to make sure the operator is aligned for this validator
-		knownMsg, err := c.decidedStrategy.GetLastDecided(c.Identifier)
+		knownMsg, err := c.DecidedStrategy.GetLastDecided(c.Identifier)
 		if err != nil {
-			c.logger.Error("failed to get last known", zap.Error(err))
+			c.Logger.Error("failed to get last known", zap.Error(err))
 		}
 		if err := c.syncDecided(knownMsg, nil); err != nil {
 			if err == ErrAlreadyRunning {
 				// don't fail if init is already running
-				c.logger.Debug("iBFT init is already running (syncing history)")
+				c.Logger.Debug("iBFT init is already running (syncing history)")
 				return nil
 			}
-			c.logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
+			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.state, InitiatedHandlers) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, InitiatedHandlers) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
-		atomic.StoreUint32(&c.state, Ready)
+		atomic.StoreUint32(&c.State, Ready)
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		c.logger.Info("iBFT implementation init finished")
+		c.Logger.Info("iBFT implementation init finished")
 	}
 
 	return nil
@@ -252,7 +253,7 @@ func (c *Controller) Init() error {
 
 // initialized return true is done the init process and not in forking state
 func (c *Controller) initialized() (bool, error) {
-	state := atomic.LoadUint32(&c.state)
+	state := atomic.LoadUint32(&c.State)
 	switch state {
 	case Ready:
 		return true, nil
@@ -276,8 +277,8 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.signatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
-	instanceOpts.ChangeRoundStore = c.changeRoundStorage             // in order to set the last change round msg
+	c.SignatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
+	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage             // in order to set the last change round msg
 	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
@@ -304,11 +305,11 @@ func (c *Controller) GetIdentifier() []byte {
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
 func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
-	if c.readMode {
-		return c.messageHandler(msg)
+	if c.ReadMode {
+		return c.MessageHandler(msg)
 	}
 	var fields []zap.Field
-	cInstance := c.getCurrentInstance()
+	cInstance := c.GetCurrentInstance()
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {
@@ -316,16 +317,16 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 		}
 	}
 	fields = append(fields,
-		zap.Int("queue_len", c.q.Len()),
+		zap.Int("queue_len", c.Q.Len()),
 		zap.String("msgType", msg.MsgType.String()),
 	)
-	c.logger.Debug("got message, add to queue", fields...)
-	c.q.Add(msg)
+	c.Logger.Debug("got message, add to queue", fields...)
+	c.Q.Add(msg)
 	return nil
 }
 
-// messageHandler process message from queue,
-func (c *Controller) messageHandler(msg *message.SSVMessage) error {
+// MessageHandler process message from queue,
+func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 	switch msg.GetType() {
 	case message.SSVConsensusMsgType:
 		signedMsg := &message.SignedMessage{}
@@ -352,8 +353,8 @@ func (c *Controller) messageHandler(msg *message.SSVMessage) error {
 	return nil
 }
 
-func (c *Controller) getNodeMode() strategy.Mode {
-	isPostFork := c.fork.VersionName() != forksprotocol.V0ForkVersion.String()
+func (c *Controller) GetNodeMode() strategy.Mode {
+	isPostFork := c.Fork.VersionName() != forksprotocol.V0ForkVersion.String()
 	if !isPostFork { // by default when pre fork, the mode is fullnode
 		return strategy.ModeFullNode
 	}

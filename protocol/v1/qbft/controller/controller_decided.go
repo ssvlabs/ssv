@@ -21,10 +21,10 @@ func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
 	if c.newDecidedHandler != nil {
 		go c.newDecidedHandler(msg)
 	}
-	if c.readMode {
+	if c.ReadMode {
 		return nil
 	}
-	if err := c.network.Broadcast(message.SSVMessage{
+	if err := c.Network.Broadcast(message.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,
 		ID:      c.Identifier,
 		Data:    data,
@@ -36,7 +36,7 @@ func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
 
 // ValidateDecidedMsg - the main decided msg pipeline
 func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
-	return c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+	return c.Fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
 }
 
 // processDecidedMessage is responsible for processing an incoming decided message.
@@ -47,10 +47,10 @@ func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
 // 4. last decided, try to update signers
 func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
-		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
+		c.Logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
-	logger := c.logger.With(zap.String("who", "processDecided"),
+	logger := c.Logger.With(zap.String("who", "processDecided"),
 		zap.Uint64("height", uint64(msg.Message.Height)),
 		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
@@ -71,7 +71,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 			logger.Debug("current instance decided")
 			return nil
 		}
-		updated, err := c.decidedStrategy.UpdateDecided(msg)
+		updated, err := c.DecidedStrategy.UpdateDecided(msg)
 		if err != nil {
 			return err
 		}
@@ -81,14 +81,14 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 				go c.newDecidedHandler(msg)
 			}
 		}
-		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+		if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
 			logger.Debug("stopping current instance")
 			currentInstance.Stop()
 		}
 		return c.syncDecided(localMsg, msg)
 	}
 	// last decided, try to update it (merge new signers)
-	if updated, err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+	if updated, err := c.DecidedStrategy.UpdateDecided(msg); err != nil {
 		logger.Warn("could not update decided")
 	} else if updated != nil {
 		qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), updated)
@@ -101,7 +101,7 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
-	highestKnown, err := c.decidedStrategy.GetLastDecided(c.GetIdentifier())
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +110,7 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) forceDecided(msg *message.SignedMessage) bool {
-	if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+	if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
 		// check if decided for current instance
 		currentState := currentInstance.State()
 		if currentState != nil && currentState.GetHeight() == msg.Message.Height {

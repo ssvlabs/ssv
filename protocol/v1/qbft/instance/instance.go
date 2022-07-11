@@ -3,15 +3,12 @@ package instance
 import (
 	"context"
 	"encoding/hex"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"sync"
 	"time"
 
-	"go.uber.org/atomic"
-
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -23,6 +20,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
 // Options defines option attributes for the Instance
@@ -56,6 +55,7 @@ type Instance struct {
 	signer         beaconprotocol.Signer
 
 	// messages
+	containersMap       map[qbftspec.MessageType]msgcont.MessageContainer
 	PrePrepareMessages  msgcont.MessageContainer
 	PrepareMessages     msgcont.MessageContainer
 	CommitMessages      msgcont.MessageContainer
@@ -130,6 +130,13 @@ func NewInstance(opts *Options) Instancer {
 		stopped: *atomic.NewBool(false),
 	}
 
+	ret.containersMap = map[qbftspec.MessageType]msgcont.MessageContainer{
+		qbftspec.ProposalMsgType:    ret.PrePrepareMessages,
+		qbftspec.PrepareMsgType:     ret.PrepareMessages,
+		qbftspec.CommitMsgType:      ret.CommitMessages,
+		qbftspec.RoundChangeMsgType: ret.ChangeRoundMessages,
+	}
+
 	ret.setFork(opts.Fork)
 
 	return ret
@@ -147,6 +154,11 @@ func (i *Instance) Init() {
 // State returns instance state
 func (i *Instance) State() *qbft.State {
 	return i.state
+}
+
+// Containers returns map of containers
+func (i *Instance) Containers() map[qbftspec.MessageType]msgcont.MessageContainer {
+	return i.containersMap
 }
 
 // Start implements the Algorithm 1 IBFTController pseudocode for process pi: constants, state variables, and ancillary procedures

@@ -2,13 +2,16 @@ package validator
 
 import (
 	"encoding/hex"
+	"encoding/json"
+
+	"github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/pkg/errors"
-
-	"go.uber.org/zap"
 )
 
 func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beaconprotocol.Duty) (controller.IController, int, []byte, message.Height, error) {
@@ -58,12 +61,28 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, height, errors.New("instance did not decide")
 	}
 
+	v.logger.Info("comeToConsensusOnInputValue: message is ", zap.Any("message", result.Msg.Message))
+
 	commitData, err := result.Msg.Message.GetCommitData()
+	v.logger.Info("comeToConsensusOnInputValue: commit data is ",
+		zap.Any("commit_data", commitData),
+		zap.Error(err))
 	if err != nil {
 		return nil, 0, nil, 0, err
 	}
 
-	return qbftCtrl, len(result.Msg.Signers), commitData.Data, height, nil
+	// TODO(nkryuchkov): TODO: remove when implemented in spec
+	var cd types.ConsensusData
+	if err := json.Unmarshal(commitData.Data, &cd); err != nil {
+		panic(err)
+	}
+
+	encodedAttestation, err := cd.AttestationData.MarshalSSZ()
+	if err != nil {
+		panic(err)
+	}
+
+	return qbftCtrl, len(result.Msg.Signers), encodedAttestation, height, nil
 }
 
 // ExecuteDuty executes the given duty

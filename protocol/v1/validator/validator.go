@@ -44,6 +44,7 @@ type Options struct {
 	ReadMode                   bool
 	FullNode                   bool
 	NewDecidedHandler          controller.NewDecidedHandler
+	DutyRoles                  []message.RoleType
 }
 
 // Validator represents the validator
@@ -152,7 +153,9 @@ func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
 // setupRunners return duty runners map with all the supported duty types
 func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controller.IController {
 	ibfts := make(map[message.RoleType]controller.IController)
-	ibfts[message.RoleTypeAttester] = setupIbftController(message.RoleTypeAttester, logger, opt)
+	for _, role := range opt.DutyRoles {
+		ibfts[role] = setupIbftController(role, logger, opt)
+	}
 	return ibfts
 }
 
