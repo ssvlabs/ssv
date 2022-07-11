@@ -61,12 +61,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 		return nil, 0, nil, height, errors.New("instance did not decide")
 	}
 
-	v.logger.Info("comeToConsensusOnInputValue: message is ", zap.Any("message", result.Msg.Message))
-
 	commitData, err := result.Msg.Message.GetCommitData()
-	v.logger.Info("comeToConsensusOnInputValue: commit data is ",
-		zap.Any("commit_data", commitData),
-		zap.Error(err))
 	if err != nil {
 		return nil, 0, nil, 0, err
 	}
