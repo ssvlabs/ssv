@@ -2,6 +2,8 @@ package instance
 
 import (
 	"fmt"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"strconv"
 	"testing"
 
@@ -25,9 +27,11 @@ func TestLeaderCalculation(t *testing.T) {
 
 	sk, nodes := GenerateNodes(4)
 	instance := &Instance{
-		PrepareMessages: inmem.New(3, 2),
-		Config:          qbft.DefaultConsensusParams(),
-		ValidatorShare:  &beacon.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
+		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
+			qbftspec.PrepareMsgType: inmem.New(3, 2),
+		},
+		Config:         qbft.DefaultConsensusParams(),
+		ValidatorShare: &beacon.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
 		state: &qbft.State{
 			Round: round,
 		},

@@ -55,12 +55,8 @@ type Instance struct {
 	signer         beaconprotocol.Signer
 
 	// messages
-	containersMap       map[qbftspec.MessageType]msgcont.MessageContainer
-	PrePrepareMessages  msgcont.MessageContainer
-	PrepareMessages     msgcont.MessageContainer
-	CommitMessages      msgcont.MessageContainer
-	ChangeRoundMessages msgcont.MessageContainer
-	decidedMsg          *message.SignedMessage
+	containersMap map[qbftspec.MessageType]msgcont.MessageContainer
+	decidedMsg    *message.SignedMessage
 
 	// channels
 	stageChangedChan chan qbft.RoundState
@@ -109,11 +105,6 @@ func NewInstance(opts *Options) Instancer {
 		Logger:         logger,
 		signer:         opts.Signer,
 
-		PrePrepareMessages:  msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		PrepareMessages:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
-
 		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
 
 		// locks
@@ -131,10 +122,10 @@ func NewInstance(opts *Options) Instancer {
 	}
 
 	ret.containersMap = map[qbftspec.MessageType]msgcont.MessageContainer{
-		qbftspec.ProposalMsgType:    ret.PrePrepareMessages,
-		qbftspec.PrepareMsgType:     ret.PrepareMessages,
-		qbftspec.CommitMsgType:      ret.CommitMessages,
-		qbftspec.RoundChangeMsgType: ret.ChangeRoundMessages,
+		qbftspec.ProposalMsgType:    msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
+		qbftspec.PrepareMsgType:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
+		qbftspec.CommitMsgType:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
+		qbftspec.RoundChangeMsgType: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 	}
 
 	ret.setFork(opts.Fork)

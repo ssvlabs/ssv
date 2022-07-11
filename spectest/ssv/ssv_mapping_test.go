@@ -259,7 +259,6 @@ func convertFromSpecRole(role types.BeaconRole) message.RoleType {
 	default:
 		panic(fmt.Sprintf("unknown role type! (%s)", role.String()))
 	}
-	return 0
 }
 
 func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleType) *message.SSVMessage {

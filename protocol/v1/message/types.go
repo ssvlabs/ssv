@@ -37,8 +37,8 @@ func RoleTypeFromString(rt string) RoleType {
 
 // List of roles
 const (
-	RoleTypeAttester RoleType = iota
+	RoleTypeUnknown RoleType = iota
+	RoleTypeAttester
 	RoleTypeAggregator
 	RoleTypeProposer
-	RoleTypeUnknown
 )

@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -26,7 +27,7 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.PrepareMessages.AddMessage(signedMessage, prepareMsg.Data)
+			i.containersMap[qbftspec.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -42,7 +43,7 @@ func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State().GetPreparedRound())
+	msgs := i.containersMap[qbftspec.PrepareMsgType].ReadOnlyMessagesByRound(i.State().GetPreparedRound())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
@@ -85,7 +86,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 		}
 
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
+		if quorum, _ := i.containersMap[qbftspec.PrepareMsgType].QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
 			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",

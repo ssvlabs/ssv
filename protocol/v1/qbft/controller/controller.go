@@ -152,6 +152,7 @@ func New(opts Options) IController {
 	return ctrl
 }
 
+// GetCurrentInstance returns current instance if exist. if not, returns nil
 func (c *Controller) GetCurrentInstance() instance.Instancer {
 	c.CurrentInstanceLock.RLock()
 	defer c.CurrentInstanceLock.RUnlock()
@@ -353,6 +354,7 @@ func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 	return nil
 }
 
+// GetNodeMode return node type
 func (c *Controller) GetNodeMode() strategy.Mode {
 	isPostFork := c.Fork.VersionName() != forksprotocol.V0ForkVersion.String()
 	if !isPostFork { // by default when pre fork, the mode is fullnode

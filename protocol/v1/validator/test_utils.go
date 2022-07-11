@@ -210,12 +210,14 @@ func (t *testIBFT) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMe
 	return nil
 }
 
+// TestBeacon implement beacon
 type TestBeacon struct {
 	refAttestationData       *spec.AttestationData
 	LastSubmittedAttestation *spec.Attestation
 	Signer                   beacon.KeyManager
 }
 
+// NewTestBeacon returns TestBeacon struct
 func NewTestBeacon(t *testing.T) *TestBeacon {
 	ret := &TestBeacon{}
 	ret.refAttestationData = &spec.AttestationData{}
@@ -226,21 +228,26 @@ func NewTestBeacon(t *testing.T) *TestBeacon {
 	return ret
 }
 
+// StartReceivingBlocks iml
 func (b *TestBeacon) StartReceivingBlocks() {
 }
 
+// GetDuties impl
 func (b *TestBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
 	return nil, nil
 }
 
+// GetValidatorData impl
 func (b *TestBeacon) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
 	return nil, nil
 }
 
+// GetAttestationData impl
 func (b *TestBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	return b.refAttestationData, nil
 }
 
+// SignAttestation impl
 func (b *TestBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
@@ -251,31 +258,38 @@ func (b *TestBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	}, refSigRoot, nil
 }
 
+// SubmitAttestation impl
 func (b *TestBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	b.LastSubmittedAttestation = attestation
 	return nil
 }
 
+// SubscribeToCommitteeSubnet impl
 func (b *TestBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error {
 	panic("implement me")
 }
 
+// AddShare impl
 func (b *TestBeacon) AddShare(shareKey *bls.SecretKey) error {
 	return b.Signer.AddShare(shareKey)
 }
 
+// RemoveShare impl
 func (b *TestBeacon) RemoveShare(pubKey string) error {
 	return b.Signer.RemoveShare(pubKey)
 }
 
+// SignIBFTMessage impl
 func (b *TestBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	return b.Signer.SignIBFTMessage(message, pk, forkVersion)
 }
 
+// GetDomain impl
 func (b *TestBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
 	panic("implement")
 }
 
+// ComputeSigningRoot impl
 func (b *TestBeacon) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
 	panic("implement")
 }
