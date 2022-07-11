@@ -15,10 +15,10 @@ import (
 
 // ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
 func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
-	if c.signatureState.getState() != StateRunning {
+	if c.SignatureState.getState() != StateRunning {
 		c.Logger.Warn(
 			"trying to process post consensus signature message but timer state is not running. can't process message.",
-			zap.String("state", c.signatureState.getState().toString()),
+			zap.String("state", c.SignatureState.getState().toString()),
 		)
 		return nil
 	}
@@ -32,7 +32,7 @@ func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignature
 		})
 	}
 
-	if err := message.ValidatePartialSigMsg(msg, committee, c.signatureState.duty.Slot); err != nil {
+	if err := message.ValidatePartialSigMsg(msg, committee, c.SignatureState.duty.Slot); err != nil {
 		c.Logger.Warn("could not validate partial signature message", zap.Any("msg", msg))
 		return nil
 	}

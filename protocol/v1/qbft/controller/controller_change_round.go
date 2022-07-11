@@ -24,7 +24,7 @@ func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
 		return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
 	}
 	lastMsg := res[0]
-	logger = Logger.With(
+	logger = logger.With(
 		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
 		zap.Int64("NewHeight", int64(msg.Message.Height)),
 		zap.Int64("lastRound", int64(lastMsg.Message.Round)),
