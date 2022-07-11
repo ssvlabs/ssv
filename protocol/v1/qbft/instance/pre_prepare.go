@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -25,7 +26,7 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.PrePrepareMessages.AddMessage(signedMessage, proposalData.Data)
+			i.containersMap[qbftspec.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -124,7 +125,7 @@ func (i *Instance) generatePrePrepareMessage(value []byte) (message.ConsensusMes
 }
 
 func (i *Instance) checkExistingPrePrepare(round message.Round) (bool, *message.SignedMessage, error) {
-	msgs := i.PrePrepareMessages.ReadOnlyMessagesByRound(round)
+	msgs := i.containersMap[qbftspec.ProposalMsgType].ReadOnlyMessagesByRound(round)
 	if len(msgs) == 1 {
 		return true, msgs[0], nil
 	} else if len(msgs) > 1 {

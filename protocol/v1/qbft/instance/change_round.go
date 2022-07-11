@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"math"
 	"time"
 
@@ -30,7 +31,7 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.ChangeRoundMessages.AddMessage(signedMessage, changeRoundData.GetPreparedValue())
+			i.containersMap[qbftspec.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.GetPreparedValue())
 			return nil
 		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
@@ -139,7 +140,7 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *message.SignedMessage)
 
 func (i *Instance) changeRoundQuorum(round message.Round) (quorum bool, t int, n int) {
 	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	msgs := i.ChangeRoundMessages.ReadOnlyMessagesByRound(round)
+	msgs := i.containersMap[qbftspec.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
@@ -150,7 +151,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	var aggSig []byte
 	ids := make([]message.OperatorID, 0)
 	if i.isPrepared() {
-		quorum, msgs := i.PrepareMessages.QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
+		quorum, msgs := i.containersMap[qbftspec.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
 		justificationMsg = msgs[0].Message
@@ -245,7 +246,7 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 	*/
 
 	notPrepared = true
-	for _, msg := range i.ChangeRoundMessages.ReadOnlyMessagesByRound(round) {
+	for _, msg := range i.containersMap[qbftspec.RoundChangeMsgType].ReadOnlyMessagesByRound(round) {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
 			return false, nil, err

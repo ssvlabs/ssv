@@ -2,6 +2,7 @@ package instance
 
 import (
 	"encoding/hex"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.CommitMessages.AddMessage(signedMessage, commitData.Data)
+			i.containersMap[qbftspec.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -49,7 +50,7 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.CommitMessages.OverrideMessages(signedMessage, commitData.Data)
+			i.containersMap[qbftspec.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -67,7 +68,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		if err != nil {
 			return errors.Wrap(err, "failed to get commit data")
 		}
-		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
+		quorum, sigs := i.containersMap[qbftspec.CommitMsgType].QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
