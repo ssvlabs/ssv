@@ -141,6 +141,7 @@ func (spcsm *SignedPostConsensusMessage) MatchedSigners(ids []OperatorID) bool {
 //	return ret, nil
 //}
 
+// ValidatePartialSigMsg validates the signed partial signature message
 func ValidatePartialSigMsg(signedMsg *ssv.SignedPartialSignatureMessage, committee []*types.Operator, slot spec.Slot) error {
 	if err := signedMsg.Validate(); err != nil {
 		return errors.Wrap(err, "could not validate SignedPartialSignatureMessage")
