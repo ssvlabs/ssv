@@ -15,6 +15,7 @@ import (
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(msg *message.SSVMessage) error
 
+// StartQueueConsumer start ConsumeQueue with handler
 func (c *Controller) StartQueueConsumer(handler MessageHandler) {
 	ctx, cancel := context.WithCancel(c.Ctx)
 	defer cancel()

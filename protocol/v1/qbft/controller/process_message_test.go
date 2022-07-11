@@ -37,8 +37,8 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Committee: nil,
 		},
 	}
-	ctrl.decidedFactory = factory.NewDecidedFactory(logex.GetLogger(), strategy.ModeFullNode, db, nil)
-	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+	ctrl.DecidedFactory = factory.NewDecidedFactory(logex.GetLogger(), strategy.ModeFullNode, db, nil)
+	ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
 
 	var sigs []*message.SignedMessage
 	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 	"testing"
@@ -420,7 +421,7 @@ type InstanceMock struct {
 	state *qbft.State
 }
 
-func (i *InstanceMock) Containers() map[interface{}]msgcont.MessageContainer {
+func (i *InstanceMock) Containers() map[qbftspec.MessageType]msgcont.MessageContainer {
 	//TODO implement me
 	panic("implement me")
 }

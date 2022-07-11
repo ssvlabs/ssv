@@ -41,7 +41,7 @@ import (
 
 func testsToRun() map[string]struct{} {
 	testList := spectest.AllTests
-	testList = []spectest.SpecTest{
+	/*testList = []spectest.SpecTest{
 		//proposer.FourOperators(),
 		//proposer.SevenOperators(),
 		//proposer.TenOperators(),
@@ -137,7 +137,7 @@ func testsToRun() map[string]struct{} {
 		//roundchange.PreviouslyPrepared(),
 		//roundchange.F1Speedup(),
 		//roundchange.F1SpeedupPrepared(),
-	}
+	}*/
 
 	result := make(map[string]struct{})
 	for _, test := range testList {
