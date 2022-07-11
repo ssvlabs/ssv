@@ -37,6 +37,6 @@ type IController interface {
 	// OnFork called when fork occur.
 	OnFork(forkVersion forksprotocol.ForkVersion) error
 
-	// GetCurrentInstance returns current instance if exist. if not, returns nil
+	// GetCurrentInstance returns current instance if exist. if not, returns nil TODO for mapping, need to remove once duty runner implemented
 	GetCurrentInstance() instance.Instancer
 }
