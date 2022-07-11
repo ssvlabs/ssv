@@ -39,6 +39,7 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
+// nolint
 func testsToRun() map[string]struct{} {
 	testList := spectest.AllTests
 	testList = []spectest.SpecTest{

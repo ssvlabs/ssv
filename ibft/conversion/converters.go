@@ -3,6 +3,7 @@ package conversion
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/bloxapp/ssv-spec/ssv"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -108,25 +109,27 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 	return &msg, nil
 }
 
-func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *message.SignedPostConsensusMessage {
-	signed := new(message.SignedPostConsensusMessage)
-	consensus := &message.PostConsensusMessage{
-		Height:          message.Height(sm.Message.SeqNumber),
-		DutySignature:   sm.GetSignature(),
-		DutySigningRoot: nil,
-	}
-
-	var signers []message.OperatorID
-	for _, signer := range sm.GetSignerIds() {
-		signers = append(signers, message.OperatorID(signer))
-	}
-	consensus.Signers = signers
-
-	signed.Message = consensus
-	signed.Signers = signers
-	signed.Signature = sm.GetSignature() // TODO should be message sign and not duty sign
-
-	return signed
+// nolint
+func toSignedPostConsensusMessageV1(sm *proto.SignedMessage) *ssv.SignedPartialSignatureMessage {
+	return nil
+	//signed := new(message.SignedPostConsensusMessage)
+	//consensus := &message.PostConsensusMessage{
+	//	Height:          message.Height(sm.Message.SeqNumber),
+	//	DutySignature:   sm.GetSignature(),
+	//	DutySigningRoot: nil,
+	//}
+	//
+	//var signers []message.OperatorID
+	//for _, signer := range sm.GetSignerIds() {
+	//	signers = append(signers, message.OperatorID(signer))
+	//}
+	//consensus.Signers = signers
+	//
+	//signed.Message = consensus
+	//signed.Signers = signers
+	//signed.Signature = sm.GetSignature() // TODO should be message sign and not duty sign
+	//
+	//return signed
 }
 
 // ToSignedMessageV1 converts a signed message from v0 to v1
@@ -226,6 +229,7 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 }
 
 // ToV0Message converts v1 message to v0
+// nolint
 func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 	v0Msg := &network.Message{}
 	identifierV0 := toIdentifierV0(msg.GetIdentifier())
@@ -256,7 +260,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		}
 	case message.SSVPostConsensusMsgType:
 		v0Msg.Type = network.NetworkMsg_SignatureType
-		signedMsg := &message.SignedPostConsensusMessage{}
+		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
@@ -404,17 +408,19 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 	return signedMsgV0, nil
 }
 
-func toSignedMessagePostConsensusV0(signedMsg *message.SignedPostConsensusMessage, identifierV0 []byte) *proto.SignedMessage {
-	signedMsgV0 := &proto.SignedMessage{}
-	signedMsgV0.Message = &proto.Message{
-		Lambda:    identifierV0,
-		SeqNumber: uint64(signedMsg.Message.Height),
-	}
-	signedMsgV0.Signature = signedMsg.Message.DutySignature
-	for _, signer := range signedMsg.Signers {
-		signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
-	}
-	return signedMsgV0
+// nolint
+func toSignedMessagePostConsensusV0(signedMsg *ssv.SignedPartialSignatureMessage, identifierV0 []byte) *proto.SignedMessage {
+	return nil
+	//signedMsgV0 := &proto.SignedMessage{}
+	//signedMsgV0.Message = &proto.Message{
+	//	Lambda:    identifierV0,
+	//	SeqNumber: uint64(signedMsg.Message.Height),
+	//}
+	//signedMsgV0.Signature = signedMsg.Message.DutySignature
+	//for _, signer := range signedMsg.Signers {
+	//	signedMsgV0.SignerIds = append(signedMsgV0.SignerIds, uint64(signer))
+	//}
+	//return signedMsgV0
 }
 
 func toIdentifierV0(mid message.Identifier) []byte {

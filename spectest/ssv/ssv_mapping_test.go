@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -273,30 +272,7 @@ func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleTyp
 	case types.SSVDecidedMsgType:
 		msgType = message.SSVDecidedMsgType
 	case types.SSVPartialSignatureMsgType:
-		msgType = message.SSVPostConsensusMsgType
-
-		sps := new(ssv.SignedPartialSignatureMessage)
-		require.NoError(t, sps.Decode(msg.Data))
-		spsm := sps.Messages[0]
-		spcm := &message.SignedPostConsensusMessage{
-			Message: &message.PostConsensusMessage{
-				Height:        0, // TODO need to get height fom ssv.SignedPartialSignatureMessage
-				DutySignature: spsm.PartialSignature,
-				//DutySignature:   sps.Signature,
-				DutySigningRoot: spsm.SigningRoot,
-				Signers:         convertSingers(spsm.Signers),
-				//Signers: convertSingers(sps.Signers),
-			},
-			//Signature: message.Signature(sps.Signature),
-			Signature: message.Signature(spsm.PartialSignature),
-			//Signers: convertSingers(sps.Signers),
-			Signers: convertSingers(spsm.Signers),
-		}
-
-		log.Printf("spsm: %+v", spsm)
-		log.Printf("sps: %+v", sps)
-
-		encoded, err := spcm.Encode()
+		encoded, err := msg.Encode()
 		require.NoError(t, err)
 		data = encoded
 	case types.DKGMsgType:

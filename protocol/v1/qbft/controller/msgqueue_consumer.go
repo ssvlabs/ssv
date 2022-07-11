@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"sync/atomic"
 	"time"
 
@@ -49,9 +50,10 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
+		lastSlot := c.SignatureState.duty.Slot
 		lastHeight := c.SignatureState.getHeight()
 
-		if processed := c.processNoRunningInstance(handler, identifier, lastHeight); processed {
+		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
 			c.Logger.Debug("process none running instance is done")
 			continue
 		}
@@ -74,14 +76,19 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (c *Controller) processNoRunningInstance(handler MessageHandler, identifier string, lastHeight message.Height) bool {
+func (c *Controller) processNoRunningInstance(
+	handler MessageHandler,
+	identifier string,
+	lastHeight message.Height,
+	lastSlot spec.Slot,
+) bool {
 	instance := c.GetCurrentInstance()
 	if instance != nil {
 		return false // only pop when no instance running
 	}
 
 	iterator := msgqueue.NewIndexIterator().Add(func() msgqueue.Index {
-		return msgqueue.SignedPostConsensusMsgIndex(identifier, lastHeight)
+		return msgqueue.SignedPostConsensusMsgIndex(identifier, lastSlot)
 	}, func() msgqueue.Index {
 		return msgqueue.DecidedMsgIndex(identifier)
 	}, func() msgqueue.Index {

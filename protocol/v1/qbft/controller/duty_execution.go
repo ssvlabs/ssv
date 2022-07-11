@@ -58,10 +58,9 @@ func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignature
 		)
 		c.SignatureState.stopTimer()
 
-		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
-		height := c.SignatureState.getHeight()
+		// clean queue consensus & default messages that is <= c.signatureState.duty.Slot, we don't need them anymore
 		c.Q.Clean(
-			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, height),
+			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, c.SignatureState.duty.Slot),
 		)
 
 		err := c.broadcastSignature()
