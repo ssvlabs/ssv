@@ -255,6 +255,9 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
+		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
+		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
+		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 	}
 
 	if !n.cfg.PubSubScoring {
