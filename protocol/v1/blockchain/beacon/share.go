@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
-	"math/big"
-
+	
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // PubKeys defines the type for public keys object representation
@@ -211,10 +211,10 @@ func (s *Share) SetOperators(ops [][]byte) {
 }
 
 // SetOperatorIds set Operator ids
-func (s *Share) SetOperatorIds(opIds []*big.Int) {
+func (s *Share) SetOperatorIds(opIds []uint32) {
 	s.OperatorIds = make([]uint64, len(opIds))
 	for i, o := range opIds {
-		s.OperatorIds[i] = o.Uint64()
+		s.OperatorIds[i] = uint64(o)
 	}
 }
 
