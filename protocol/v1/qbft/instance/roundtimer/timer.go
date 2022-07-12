@@ -63,8 +63,12 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		// first reset creates the timer
 		t.timer = time.NewTimer(d)
 	} else {
-		// following calls to reset will reuse the same timer
+		// following calls to reset will reuse the same timer by stopping it and draining its channel
 		t.timer.Stop()
+		select {
+		case <-t.timer.C:
+		default:
+		}
 	}
 	t.timer.Reset(d)
 	atomic.StoreUint32(&t.state, stateRunning)
