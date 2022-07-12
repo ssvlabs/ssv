@@ -114,7 +114,7 @@ func NewInstance(opts *Options) Instancer {
 		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 
-		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
+		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
 		// locks
 		runInitOnce:                  &sync.Once{},
