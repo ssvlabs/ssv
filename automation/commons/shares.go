@@ -6,6 +6,10 @@ import (
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -14,9 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // CreateShareAndValidators creates a share and the corresponding validators objects
@@ -61,6 +62,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   false,
+			DutyRoles:                  []message.RoleType{message.RoleTypeAttester},
 		})
 		validators = append(validators, val)
 	}

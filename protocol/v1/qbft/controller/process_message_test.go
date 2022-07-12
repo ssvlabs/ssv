@@ -1,6 +1,14 @@
 package controller
 
 import (
+	"strings"
+	"testing"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -8,17 +16,10 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
-	//"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"strings"
-	"testing"
 )
 
 func TestProcessLateCommitMsg(t *testing.T) {
@@ -133,10 +134,9 @@ func newInMemDb() basedb.IDb {
 
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+	sigType := message.QBFTSigType
+	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain, forkVersion)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 

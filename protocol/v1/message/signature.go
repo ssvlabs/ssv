@@ -111,8 +111,7 @@ func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, p
 		return errors.Wrap(err, "failed to deserialize public key")
 	}
 
-	//computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType), forkVersion) //TODO this code is from the new spec. need to align the signing too in order to use domain
-	computedRoot, err := data.GetRoot(forkVersion)
+	computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType), forkVersion)
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
