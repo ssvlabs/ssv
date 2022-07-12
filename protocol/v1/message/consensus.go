@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"sort"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+
 	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"sort"
 )
 
 // ErrDuplicateMsgSigner is thrown when trying to sign multiple times with the same signer
@@ -233,7 +235,9 @@ func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 
 // Sign takes a secret key and signs the Message
 func (msg *ConsensusMessage) Sign(sk *bls.SecretKey, forkVersion string) (*bls.Sign, error) {
-	root, err := msg.GetRoot(forkVersion)
+	domain := PrimusTestnet
+	sigType := QBFTSigType
+	root, err := ComputeSigningRoot(msg, ComputeSignatureDomain(domain, sigType), forkVersion)
 	if err != nil {
 		return nil, err
 	}
