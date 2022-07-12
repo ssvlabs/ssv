@@ -23,7 +23,7 @@ var (
 	gsMcacheGossip = 4
 
 	// heartbeat interval frequency of heartbeat, milliseconds
-	gsHeartbeatInterval = 800 * time.Millisecond
+	gsHeartbeatInterval = 700 * time.Millisecond
 )
 
 // creates a custom gossipsub parameter set.
