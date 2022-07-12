@@ -2,9 +2,11 @@ package instance
 
 import (
 	"encoding/json"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"testing"
+
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -133,10 +135,9 @@ func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+	sigType := message.QBFTSigType
+	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 

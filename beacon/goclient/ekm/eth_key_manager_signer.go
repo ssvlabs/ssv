@@ -4,11 +4,6 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -20,6 +15,12 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	messageprotocol "github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type ethKeyManagerSigner struct {
@@ -110,7 +111,9 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	root, err := message.GetRoot(forkVersion)
+	domain := messageprotocol.PrimusTestnet
+	sigType := messageprotocol.QBFTSigType
+	root, err := messageprotocol.ComputeSigningRoot(message, messageprotocol.ComputeSignatureDomain(domain, sigType), forkVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}
