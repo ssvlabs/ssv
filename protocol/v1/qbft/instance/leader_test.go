@@ -1,7 +1,10 @@
 package instance
 
 import (
+	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
+	"go.uber.org/zap"
 	"strconv"
 	"testing"
 
@@ -23,8 +26,11 @@ func TestLeaderCalculation(t *testing.T) {
 	round := atomic.Value{}
 	round.Store(message.Round(1))
 
+	ctx := context.Background()
 	sk, nodes := GenerateNodes(4)
 	instance := &Instance{
+		Logger:          zap.L(),
+		ctx:             ctx,
 		PrepareMessages: inmem.New(3, 2),
 		Config:          qbft.DefaultConsensusParams(),
 		ValidatorShare:  &beacon.Share{Committee: nodes, NodeID: 1, PublicKey: sk[1].GetPublicKey()},
@@ -32,6 +38,7 @@ func TestLeaderCalculation(t *testing.T) {
 			Round: round,
 		},
 		LeaderSelector: l,
+		roundTimer:     roundtimer.New(ctx, zap.L()),
 	}
 
 	for i := 1; i < 50; i++ {

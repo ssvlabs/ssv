@@ -154,8 +154,6 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 		}
 		return false, nil
 	case qbft.RoundStateChangeRound:
-		// set time for next round change
-		c.getCurrentInstance().ResetRoundTimer()
 		// broadcast round change
 		if err := c.getCurrentInstance().BroadcastChangeRound(); err != nil {
 			c.logger.Error("could not broadcast round change message", zap.Error(err))

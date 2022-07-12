@@ -191,8 +191,6 @@ func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.State().GetRound())))
 	// bump round
 	i.BumpRound()
-	// mark stage
-	i.ProcessStageChange(qbft.RoundStateChangeRound)
 }
 
 // BroadcastChangeRound will broadcast a change round message.

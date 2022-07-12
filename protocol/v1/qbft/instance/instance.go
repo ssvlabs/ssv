@@ -279,7 +279,19 @@ func (i *Instance) BumpRound() {
 	i.bumpToRound(i.State().GetRound() + 1)
 }
 
+// bumpToRound bumps current round to the given one, if the round wasn't started yet.
+// as part of this flow we also reset the timer and trigger stage change.
 func (i *Instance) bumpToRound(round message.Round) {
+	if i.State().GetRound() == round {
+		return
+	}
+	i.setNewRound(round)
+	i.ResetRoundTimer()
+	i.ProcessStageChange(qbft.RoundStateChangeRound)
+}
+
+// setNewRound updates the round state and related vars
+func (i *Instance) setNewRound(round message.Round) {
 	i.processChangeRoundQuorumOnce = &sync.Once{}
 	i.processPrepareQuorumOnce = &sync.Once{}
 	newRound := round
