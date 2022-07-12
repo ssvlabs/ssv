@@ -1,24 +1,24 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
+	"strings"
+	"testing"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
-	//"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
-	"testing"
 )
 
 func TestProcessLateCommitMsg(t *testing.T) {
@@ -51,7 +51,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Round:      3,
 			Identifier: []byte(identifier),
 			Data:       commitData,
-		}, forksprotocol.V0ForkVersion.String()))
+		}, forksprotocol.GenesisForkVersion.String()))
 	}
 	decided, err := AggregateMessages(sigs)
 	require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte(identifier),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 		{
 			"invalid",
@@ -85,7 +85,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					Round:      3,
 					Identifier: []byte(identifier),
 					Data:       commitData,
-				}, forksprotocol.V0ForkVersion.String())
+				}, forksprotocol.GenesisForkVersion.String())
 				msg.Signature = []byte("dummy")
 				return msg
 			}(),
@@ -100,7 +100,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("xxx_ATTESTER"),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 	}
 	for _, test := range tests {
@@ -135,8 +135,8 @@ func newInMemDb() basedb.IDb {
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
 	//sigType := message.QBFTSigType
 	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.GenesisForkVersion.String())
+	sigRoot, err := msg.GetRoot()
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
@@ -172,16 +172,16 @@ func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, e
 }
 
 // GenerateNodes generates randomly nodes TODO redundant func from commit_test.go
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*proto.Node) {
+func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*proto.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[message.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &proto.Node{
-			IbftId: uint64(i),
+		nodes[message.OperatorID(i)] = &beacon.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[message.OperatorID(i)] = sk

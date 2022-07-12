@@ -21,7 +21,7 @@ func init() {
 
 func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.V1ForkVersion)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	generateMsg := func(id message.Identifier, h message.Height, r message.Round, s message.OperatorID) *message.SignedMessage {
@@ -96,7 +96,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		PreparedValue: preparedValue,
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.V1ForkVersion)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveCurrentInstance(identifier, state))

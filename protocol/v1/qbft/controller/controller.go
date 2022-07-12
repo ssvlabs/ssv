@@ -356,7 +356,7 @@ func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 
 // GetNodeMode return node type
 func (c *Controller) GetNodeMode() strategy.Mode {
-	isPostFork := c.Fork.VersionName() != forksprotocol.V0ForkVersion.String()
+	isPostFork := c.Fork.VersionName() != forksprotocol.GenesisForkVersion.String()
 	if !isPostFork { // by default when pre fork, the mode is fullnode
 		return strategy.ModeFullNode
 	}

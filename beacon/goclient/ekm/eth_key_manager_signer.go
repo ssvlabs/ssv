@@ -110,7 +110,7 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	root, err := message.GetRoot(forkVersion)
+	root, err := message.GetRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

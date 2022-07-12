@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -355,16 +354,16 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*proto.Node) {
+func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*proto.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[message.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &proto.Node{
-			IbftId: uint64(i),
+		nodes[message.OperatorID(i)] = &beacon.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[message.OperatorID(i)] = sk
@@ -406,7 +405,7 @@ func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []by
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key, forkVersion) // TODO need to check fork v1?
+		sig, err := message.Sign(key) // TODO need to check fork v1?
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")
 		}

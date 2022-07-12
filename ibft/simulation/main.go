@@ -97,7 +97,7 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 
 func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key, "")
+		sig, err := message.Sign(key)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")
 		}
@@ -162,7 +162,7 @@ func main() {
 	// generate iBFT nodes
 	nodes := make([]ibft.IController, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		net := networking(forksprotocol.V0ForkVersion)
+		net := networking(forksprotocol.GenesisForkVersion)
 		dbs = append(dbs, db())
 		signer := newTestSigner()
 		_ = signer.AddShare(sks[i])
@@ -179,7 +179,7 @@ func main() {
 			Network:        net,
 			InstanceConfig: qbft.DefaultConsensusParams(),
 			ValidatorShare: shares[i],
-			Version:        forksprotocol.V0ForkVersion,
+			Version:        forksprotocol.GenesisForkVersion,
 			SyncRateLimit:  time.Millisecond * 200,
 			Signer:         signer,
 		}

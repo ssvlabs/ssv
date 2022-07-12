@@ -147,7 +147,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.GenesisForkVersion.String())
 		require.NoError(t, err)
 
 		// verify
@@ -157,7 +157,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -179,7 +179,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.GenesisForkVersion.String())
 		require.NoError(t, err)
 
 		// verify
@@ -189,7 +189,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)

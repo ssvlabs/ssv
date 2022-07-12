@@ -142,7 +142,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				Beacon:         b,
 				Signer:         b,
 				SigTimeout:     time.Second * 2,
-				Version:        forksprotocol.V1ForkVersion,
+				Version:        forksprotocol.GenesisForkVersion,
 			}
 
 			ibftc := New(opts)

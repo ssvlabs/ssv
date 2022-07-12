@@ -29,7 +29,7 @@ var (
 // Root holds an interface to access the root for signing/verification
 type Root interface {
 	// GetRoot returns the root used for signing and verification
-	GetRoot(forkVersion string) ([]byte, error)
+	GetRoot() ([]byte, error)
 }
 
 // MsgSignature includes all functions relevant for a signed message (QBFT message, post consensus msg, etc)
@@ -50,7 +50,7 @@ type SignatureDomain []byte
 type Signature []byte
 
 // VerifyByOperators verifies signature by the provided operators
-func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*Operator, forkVersion string) error {
+func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigType SignatureType, operators []*Operator) error {
 	if data.GetSignature() == nil || len(data.GetSignature()) == 0 {
 		return errors.New("message signature is invalid")
 	}
@@ -74,11 +74,11 @@ func (s Signature) VerifyByOperators(data MsgSignature, domain DomainType, sigTy
 			return errors.New("signer not found in operators")
 		}
 	}
-	return s.VerifyMultiPubKey(data, domain, sigType, pks, forkVersion)
+	return s.VerifyMultiPubKey(data, domain, sigType, pks)
 }
 
 // VerifyMultiPubKey verifies the signature for multiple public keys
-func (s Signature) VerifyMultiPubKey(data Root, domain DomainType, sigType SignatureType, pks [][]byte, forkVersion string) error {
+func (s Signature) VerifyMultiPubKey(data Root, domain DomainType, sigType SignatureType, pks [][]byte) error {
 	var aggPK *bls.PublicKey
 	for _, pkByts := range pks {
 		pk := &bls.PublicKey{}
@@ -96,11 +96,11 @@ func (s Signature) VerifyMultiPubKey(data Root, domain DomainType, sigType Signa
 	if aggPK == nil {
 		return errors.New("no public keys found")
 	}
-	return s.Verify(data, domain, sigType, aggPK.Serialize(), forkVersion)
+	return s.Verify(data, domain, sigType, aggPK.Serialize())
 }
 
 // Verify verifies the signature for the given public key
-func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, pkByts []byte, forkVersion string) error {
+func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, pkByts []byte) error {
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
 		return errors.Wrap(err, "failed to deserialize signature")
@@ -112,7 +112,7 @@ func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, p
 	}
 
 	//computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType), forkVersion) //TODO this code is from the new spec. need to align the signing too in order to use domain
-	computedRoot, err := data.GetRoot(forkVersion)
+	computedRoot, err := data.GetRoot()
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
@@ -140,7 +140,7 @@ func (s Signature) Aggregate(other Signature) (Signature, error) {
 
 // ComputeSigningRoot computes the signing root
 func ComputeSigningRoot(data Root, domain SignatureDomain, forkVersion string) ([]byte, error) {
-	dataRoot, err := data.GetRoot(forkVersion)
+	dataRoot, err := data.GetRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get root from Root")
 	}

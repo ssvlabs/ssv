@@ -286,7 +286,7 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 		return nil, errUnknownUserAgent
 	}
 	// TODO: don't assume network is the same
-	ni := records.NewNodeInfo(forksprotocol.V0ForkVersion, h.nodeInfoIdx.Self().NetworkID)
+	ni := records.NewNodeInfo(forksprotocol.GenesisForkVersion, h.nodeInfoIdx.Self().NetworkID)
 	ni.Metadata = &records.NodeMetadata{
 		NodeVersion: parts[1],
 	}

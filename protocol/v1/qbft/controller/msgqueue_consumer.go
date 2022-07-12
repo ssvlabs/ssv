@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"

@@ -2,8 +2,8 @@ package api
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/conversion"
-	"github.com/bloxapp/ssv/ibft/proto"
+	conversion "github.com/bloxapp/ssv/exporter/api/convertion"
+	"github.com/bloxapp/ssv/exporter/api/proto"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/pkg/errors"

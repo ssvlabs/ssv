@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -20,7 +20,7 @@ func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	logger := zap.L()
 	//logger := zaptest.NewLogger(t)
-	f := forksv1.ForkV1{}
+	f := genesis.ForkGenesis{}
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
 	mv := NewSSVMsgValidator(logger, &f, self)
 	require.NotNil(t, mv)

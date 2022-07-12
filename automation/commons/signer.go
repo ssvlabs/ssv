@@ -44,7 +44,7 @@ func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []by
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key, forkVersion) // TODO need to check fork v1?
+		sig, err := message.Sign(key)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign ibft msg")
 		}

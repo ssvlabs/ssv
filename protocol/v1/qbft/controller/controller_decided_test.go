@@ -261,7 +261,7 @@ import (
 //				forkLock:            &sync.Mutex{},
 //			}
 //
-//			ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+//			ctrl.fork = forksfactory.NewFork(forksprotocol.GenesisForkVersion)
 //			ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
 //			ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 //
@@ -627,7 +627,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 //		forkLock:            &sync.Mutex{},
 //	}
 //
-//	ctrl.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+//	ctrl.fork = forksfactory.NewFork(forksprotocol.GenesisForkVersion)
 //	ctrl.decidedFactory = factory.NewDecidedFactory(zap.L(), ctrl.getNodeMode(), storage, nil)
 //	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
 //
@@ -666,8 +666,8 @@ func populatedIbft(
 		Network:        network,
 		InstanceConfig: qbft.DefaultConsensusParams(),
 		ValidatorShare: share,
-		Version:        forksprotocol.V0ForkVersion, // TODO need to check v1 fork too? (:Niv)
-		Beacon:         nil,                         // ?
+		Version:        forksprotocol.GenesisForkVersion, // TODO need to check v1 fork too? (:Niv)
+		Beacon:         nil,                              // ?
 		Signer:         signer,
 		SyncRateLimit:  time.Millisecond * 100,
 		SigTimeout:     time.Second * 5,

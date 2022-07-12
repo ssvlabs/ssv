@@ -1,17 +1,16 @@
 package instance
 
 import (
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"go.uber.org/zap"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 )
 
@@ -57,9 +56,9 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	prepareData, err := consensusMessage1.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 1, sks[1], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 2, sks[2], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 3, sks[3], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 1, sks[1], consensusMessage1), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 2, sks[2], consensusMessage1), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 3, sks[3], consensusMessage1), prepareData.Data)
 
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
@@ -73,7 +72,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value2")}),
 	}
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 4, sks[4], consensusMessage2, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 4, sks[4], consensusMessage2), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)

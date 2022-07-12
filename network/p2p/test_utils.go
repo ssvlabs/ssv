@@ -5,10 +5,12 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
-	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	"github.com/bloxapp/ssv/network/testing"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
@@ -16,9 +18,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
+
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 // HostProvider holds host instance
@@ -156,9 +157,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		bns = bn.ENR
 	}
 	ua := ""
-	if forkVersion == forksprotocol.V0ForkVersion { // for v0 using user agent
-		ua = forksv0.GenUserAgentWithOperatorID(operatorID)
-	}
 	return &Config{
 		Bootnodes:         bns,
 		TCPPort:           tcpPort,
