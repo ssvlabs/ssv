@@ -652,9 +652,10 @@ func populatedIbft(
 	signer beaconprotocol.Signer,
 ) IController {
 	share := &beaconprotocol.Share{
-		NodeID:    nodeID,
-		PublicKey: sks[1].GetPublicKey(),
-		Committee: nodes,
+		NodeID:      nodeID,
+		PublicKey:   sks[1].GetPublicKey(),
+		Committee:   nodes,
+		OperatorIds: []uint64{1, 2, 3, 4},
 	}
 
 	opts := Options{

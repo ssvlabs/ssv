@@ -446,7 +446,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*beaconprotocol.Share, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*beaconprotocol.Share, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -462,7 +462,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 
 	if isOperatorShare {
 		if shareSecret == nil {
-			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorAdded event")
+			return nil, isOperatorShare, errors.New("could not decode shareSecret")
 		}
 
 		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
