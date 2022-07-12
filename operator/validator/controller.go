@@ -177,6 +177,7 @@ func NewController(options ControllerOptions) Controller {
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,
 		NewDecidedHandler:          options.NewDecidedHandler,
+		DutyRoles:                  []message.RoleType{message.RoleTypeAttester},
 	}
 	ctrl := controller{
 		collection:                 collection,
