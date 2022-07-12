@@ -4,11 +4,6 @@ import (
 	"encoding/hex"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -20,6 +15,12 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	messageprotocol "github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type ethKeyManagerSigner struct {
@@ -28,10 +29,12 @@ type ethKeyManagerSigner struct {
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
 	signingUtils beacon.SigningUtil
+	domain       messageprotocol.DomainType
+	sigType      []byte
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network beaconprotocol.Network) (beaconprotocol.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain messageprotocol.DomainType, sigType []byte) (beaconprotocol.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -63,6 +66,8 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 		signer:       beaconSigner,
 		storage:      signerStore,
 		signingUtils: signingUtils,
+		domain:       domain,
+		sigType:      sigType,
 	}, nil
 }
 
@@ -110,7 +115,8 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	root, err := message.GetRoot()
+	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, km.sigType)
+	root, err := messageprotocol.ComputeSigningRoot(message, signatureDomain, forkVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

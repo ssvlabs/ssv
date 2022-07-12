@@ -5,6 +5,7 @@ import (
 
 	"testing"
 
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -133,10 +134,9 @@ func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.
 
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.GenesisForkVersion.String())
-	sigRoot, err := msg.GetRoot()
+	sigType := message.QBFTSigType
+	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 

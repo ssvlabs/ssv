@@ -4,9 +4,13 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -16,6 +20,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -23,11 +28,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -177,6 +177,7 @@ func NewController(options ControllerOptions) Controller {
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,
 		NewDecidedHandler:          options.NewDecidedHandler,
+		DutyRoles:                  []message.RoleType{message.RoleTypeAttester},
 	}
 	ctrl := controller{
 		collection:                 collection,

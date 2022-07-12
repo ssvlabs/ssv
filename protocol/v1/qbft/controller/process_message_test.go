@@ -4,6 +4,15 @@ import (
 	"strings"
 	"testing"
 
+	"strings"
+	"testing"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -133,10 +142,9 @@ func newInMemDb() basedb.IDb {
 
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.GenesisForkVersion.String())
-	sigRoot, err := msg.GetRoot()
+	sigType := message.QBFTSigType
+	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain, forkVersion)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
