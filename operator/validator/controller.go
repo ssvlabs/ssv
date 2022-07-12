@@ -460,7 +460,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistratio
 
 	if isOperatorShare {
 		if shareSecret == nil {
-			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorRegistration event")
+			return nil, isOperatorShare, errors.New("could not decode shareSecret")
 		}
 
 		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
