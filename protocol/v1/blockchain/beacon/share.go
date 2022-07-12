@@ -5,11 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // PubKeys defines the type for public keys object representation
@@ -38,6 +39,7 @@ type Share struct {
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
+	OperatorIds  []uint64
 	Liquidated   bool
 }
 
@@ -206,6 +208,14 @@ func (s *Share) OperatorReady() bool {
 func (s *Share) SetOperators(ops [][]byte) {
 	s.Operators = make([][]byte, len(ops))
 	copy(s.Operators, ops)
+}
+
+// SetOperatorIds set Operator ids
+func (s *Share) SetOperatorIds(opIds []uint32) {
+	s.OperatorIds = make([]uint64, len(opIds))
+	for i, o := range opIds {
+		s.OperatorIds[i] = uint64(o)
+	}
 }
 
 // HashOperators hash all Operators keys key

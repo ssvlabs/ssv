@@ -14,13 +14,15 @@ import (
 )
 
 func TestPreparedAggregatedMsg(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
+
 	instance := &Instance{
 		PrepareMessages: inmem.New(3, 2),
 		Config:          qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
-			Committee: nodes,
-			NodeID:    1,
+			Committee:   nodes,
+			NodeID:      operatorIds[0],
+			OperatorIds: shareOperatorIds,
 		},
 		state:  &qbft.State{},
 		Logger: zap.L(),
@@ -53,14 +55,14 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	prepareData, err := consensusMessage1.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.PrepareMessages.AddMessage(SignMsg(t, 1, sks[1], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 2, sks[2], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 3, sks[3], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage1, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
 
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
+	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
 
 	// test that doesn't aggregate different value
 	consensusMessage2 := &message.ConsensusMessage{
@@ -69,21 +71,23 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value2")}),
 	}
-	instance.PrepareMessages.AddMessage(SignMsg(t, 4, sks[4], consensusMessage2, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
+	instance.PrepareMessages.AddMessage(SignMsg(t, operatorIds[3:4], sks[operatorIds[3]], consensusMessage2, forksprotocol2.V0ForkVersion.String()), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
-	require.ElementsMatch(t, []message.OperatorID{1, 2, 3}, msg.Signers)
+	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
 }
 
 func TestPreparePipeline(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
+
 	instance := &Instance{
 		PrepareMessages: inmem.New(3, 2),
 		Config:          qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
-			Committee: nodes,
-			NodeID:    1,
-			PublicKey: sks[1].GetPublicKey(),
+			Committee:   nodes,
+			NodeID:      operatorIds[0],
+			PublicKey:   sks[operatorIds[0]].GetPublicKey(),
+			OperatorIds: shareOperatorIds,
 		},
 		state: &qbft.State{},
 	}
