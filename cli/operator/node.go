@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"net/http"
 	"time"
@@ -204,6 +205,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
 		}
 
+		cfg.SSVOptions.ValidatorOptions.DutyRoles = []message.RoleType{message.RoleTypeAttester} // TODO could be better to set in other place
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

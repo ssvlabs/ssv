@@ -58,6 +58,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
 			Signer:                     km,
+			DutyRoles:                  []message.RoleType{message.RoleTypeAttester}, // TODO when implemented, need to add more types
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   false,

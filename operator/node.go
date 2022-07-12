@@ -219,13 +219,16 @@ func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
 }
 
 func (n *operatorNode) startWSServer() error {
-	n.logger.Info("starting WS server")
+	if n.ws != nil {
+		n.logger.Info("starting WS server")
 
-	n.ws.UseQueryHandler(n.handleQueryRequests)
+		n.ws.UseQueryHandler(n.handleQueryRequests)
 
-	if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
-		return err
+		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+			return err
+		}
 	}
+
 	return nil
 }
 

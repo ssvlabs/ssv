@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"testing"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -11,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/bloxapp/ssv/exporter/api/proto"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"

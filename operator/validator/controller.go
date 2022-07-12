@@ -62,6 +62,7 @@ type ControllerOptions struct {
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
+	DutyRoles                  []message.RoleType
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
@@ -169,6 +170,7 @@ func NewController(options ControllerOptions) Controller {
 		Beacon:                     options.Beacon,
 		ForkVersion:                options.ForkVersion,
 		Signer:                     options.Beacon,
+		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 		IbftStorage:                qbftStorage,

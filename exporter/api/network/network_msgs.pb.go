@@ -91,9 +91,9 @@ type SyncMessage struct {
 	SignedMessages       []*proto1.SignedMessage `protobuf:"bytes,1,rep,name=SignedMessages,proto3" json:"SignedMessages,omitempty"`
 	FromPeerID           string                  `protobuf:"bytes,2,opt,name=FromPeerID,proto3" json:"FromPeerID,omitempty"`
 	Params               []uint64                `protobuf:"varint,3,rep,packed,name=params,proto3" json:"params,omitempty"`
-	Lambda []byte `protobuf:"bytes,4,opt,name=Lambda,proto3" json:"Lambda,omitempty"`
-	Type   Sync   `protobuf:"varint,5,opt,name=Type,proto3,enum=network.Sync" json:"Type,omitempty"`
-	Error  string `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	Lambda               []byte                  `protobuf:"bytes,4,opt,name=Lambda,proto3" json:"Lambda,omitempty"`
+	Type                 Sync                    `protobuf:"varint,5,opt,name=Type,proto3,enum=network.Sync" json:"Type,omitempty"`
+	Error                string                  `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
 	XXX_NoUnkeyedLiteral struct{}                `json:"-"`
 	XXX_unrecognized     []byte                  `json:"-"`
 	XXX_sizecache        int32                   `json:"-"`

@@ -2,12 +2,12 @@ package controller
 
 import (
 	"context"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
@@ -51,7 +51,11 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
-		lastSlot := c.SignatureState.duty.Slot
+		lastSlot := spec.Slot(0)
+		if c.SignatureState.duty != nil {
+			lastSlot = c.SignatureState.duty.Slot
+		}
+
 		lastHeight := c.SignatureState.getHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {

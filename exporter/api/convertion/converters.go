@@ -74,7 +74,6 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 		return &msg, nil
 	case network.NetworkMsg_SignatureType:
 		panic("convert signature type is not supported!!!")
-		return &msg, nil
 	case network.NetworkMsg_IBFTType:
 		msg.MsgType = message.SSVConsensusMsgType
 	case network.NetworkMsg_DecidedType:
