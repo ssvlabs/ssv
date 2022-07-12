@@ -116,7 +116,7 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	defer km.walletLock.RUnlock()
 
 	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, km.sigType)
-	root, err := messageprotocol.ComputeSigningRoot(message, signatureDomain, forkVersion)
+	root, err := messageprotocol.ComputeSigningRoot(message, signatureDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

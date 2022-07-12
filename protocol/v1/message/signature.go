@@ -111,7 +111,7 @@ func (s Signature) Verify(data Root, domain DomainType, sigType SignatureType, p
 		return errors.Wrap(err, "failed to deserialize public key")
 	}
 
-	computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType), forkVersion)
+	computedRoot, err := ComputeSigningRoot(data, ComputeSignatureDomain(domain, sigType))
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
@@ -138,7 +138,7 @@ func (s Signature) Aggregate(other Signature) (Signature, error) {
 }
 
 // ComputeSigningRoot computes the signing root
-func ComputeSigningRoot(data Root, domain SignatureDomain, forkVersion string) ([]byte, error) {
+func ComputeSigningRoot(data Root, domain SignatureDomain) ([]byte, error) {
 	dataRoot, err := data.GetRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get root from Root")
