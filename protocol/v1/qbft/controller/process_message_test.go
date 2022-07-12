@@ -136,7 +136,7 @@ func newInMemDb() basedb.IDb {
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
 	sigType := message.QBFTSigType
 	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
+	sigRoot, err := message.ComputeSigningRoot(msg, domain, forkVersion)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
