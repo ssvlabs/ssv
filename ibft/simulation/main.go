@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv-spec/types"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -95,13 +96,14 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key)
+		computedRoot, err := types.ComputeSigningRoot(data, nil) // TODO need to use sigType
 		if err != nil {
-			return nil, errors.Wrap(err, "could not sign ibft msg")
+			return nil, errors.Wrap(err, "could not sign root")
 		}
-		return sig.Serialize(), nil
+
+		return key.SignByte(computedRoot).Serialize(), nil
 	}
 	return nil, errors.New("could not find key for pk")
 }

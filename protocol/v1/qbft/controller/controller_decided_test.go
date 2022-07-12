@@ -690,7 +690,7 @@ func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (s *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	return nil, nil
 }
 
