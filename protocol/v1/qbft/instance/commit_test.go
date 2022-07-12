@@ -1,18 +1,16 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -23,36 +21,36 @@ func init() {
 
 func TestAggregatedMsg(t *testing.T) {
 	sks, _, operatorIds, _ := GenerateNodes(4)
-	commitData, err := (&specqbft.CommitData{Data: []byte("value")}).Encode()
+	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
 	require.NoError(t, err)
-	msg1 := SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
+	msg1 := SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	})
-	msg2 := SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
+	}, forksprotocol.V0ForkVersion.String())
+	msg2 := SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	})
-	msg3 := SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
+	}, forksprotocol.V0ForkVersion.String())
+	msg3 := SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
 		Data:       commitData,
-	})
+	}, forksprotocol.V0ForkVersion.String())
 
 	tests := []struct {
 		name            string
-		msgs            []*specqbft.SignedMessage
-		expectedSigners []spectypes.OperatorID
+		msgs            []*message.SignedMessage
+		expectedSigners []message.OperatorID
 		expectedError   string
 	}{
 		{
 			"valid 3 signatures",
-			[]*specqbft.SignedMessage{
+			[]*message.SignedMessage{
 				msg1, msg2, msg3,
 			},
 			operatorIds[:3],
@@ -60,7 +58,7 @@ func TestAggregatedMsg(t *testing.T) {
 		},
 		{
 			"valid 2 signatures",
-			[]*specqbft.SignedMessage{
+			[]*message.SignedMessage{
 				msg1, msg2,
 			},
 			operatorIds[:2],
@@ -68,7 +66,7 @@ func TestAggregatedMsg(t *testing.T) {
 		},
 		{
 			"valid 1 signatures",
-			[]*specqbft.SignedMessage{
+			[]*message.SignedMessage{
 				msg1,
 			},
 			operatorIds[:1],
@@ -76,8 +74,8 @@ func TestAggregatedMsg(t *testing.T) {
 		},
 		{
 			"no sigs return err",
-			[]*specqbft.SignedMessage{},
-			[]spectypes.OperatorID{},
+			[]*message.SignedMessage{},
+			[]message.OperatorID{},
 			"could not aggregate decided messages, no msgs",
 		},
 	}
@@ -96,25 +94,24 @@ func TestAggregatedMsg(t *testing.T) {
 
 func TestCommittedAggregatedMsg(t *testing.T) {
 	t.Run("v0", func(t *testing.T) {
-		committedAggregatedMsg(t)
+		committedAggregatedMsg(t, forksprotocol.V0ForkVersion.String())
 	})
 	t.Run("v1", func(t *testing.T) {
-		committedAggregatedMsg(t)
+		committedAggregatedMsg(t, forksprotocol.V1ForkVersion.String())
 	})
 }
 
-func committedAggregatedMsg(t *testing.T) {
+func committedAggregatedMsg(t *testing.T, forkVersion string) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
+
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
-			specqbft.CommitMsgType: inmem.New(3, 2),
-		},
+		CommitMessages: inmem.New(3, 2),
 		Config:         qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIds},
 		state: &qbft.State{
-			Round:         qbft.NewRound(specqbft.Round(1)),
+			Round:         qbft.NewRound(message.Round(1)),
 			PreparedValue: qbft.NewByteValue([]byte(nil)),
-			PreparedRound: qbft.NewRound(specqbft.Round(0)),
+			PreparedRound: qbft.NewRound(message.Round(0)),
 		},
 	}
 
@@ -123,7 +120,7 @@ func committedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "missing decided message")
 
 	// set prepared state
-	instance.State().PreparedRound.Store(specqbft.Round(1))
+	instance.State().PreparedRound.Store(message.Round(1))
 	instance.State().PreparedValue.Store([]byte("value"))
 
 	// test prepared but no committed msgs
@@ -131,21 +128,21 @@ func committedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "missing decided message")
 
 	// test valid aggregation
-	consensusMessage := &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
+	consensusMessage := &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value")}),
 	}
 
 	commitData, err := consensusMessage.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage), commitData.Data)
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage), commitData.Data)
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage, forkVersion), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage, forkVersion), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage, forkVersion), commitData.Data)
 
-	instance.decidedMsg, err = AggregateMessages(instance.containersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(3))
+	instance.decidedMsg, err = AggregateMessages(instance.CommitMessages.ReadOnlyMessagesByRound(3))
 	require.NoError(t, err)
 
 	// test aggregation
@@ -154,40 +151,38 @@ func committedAggregatedMsg(t *testing.T) {
 	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
 
 	// test that doesn't aggregate different value
-	m := &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
+	m := &message.ConsensusMessage{
+		MsgType:    message.CommitMsgType,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value2")}),
+		Data:       commitDataToBytes(t, &message.CommitData{Data: []byte("value2")}),
 	}
 
 	commitData, err = m.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], m), commitData.Data)
+	instance.CommitMessages.AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], m, forkVersion), commitData.Data)
 	msg, err = instance.CommittedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
 
 	// test verification
 	share := beacon.Share{Committee: nodes}
-	require.NoError(t, share.VerifySignedMessage(msg))
+	require.NoError(t, share.VerifySignedMessage(msg, forkVersion))
 }
 
 func TestCommitPipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
-			specqbft.PrepareMsgType: inmem.New(3, 2),
-		},
-		ValidatorShare: &beacon.Share{Committee: nodes, PublicKey: sks[operatorIds[0]].GetPublicKey(), OperatorIds: shareOperatorIds},
-		state:          &qbft.State{},
+		PrepareMessages: inmem.New(3, 2),
+		ValidatorShare:  &beacon.Share{Committee: nodes, PublicKey: sks[operatorIds[0]].GetPublicKey(), OperatorIds: shareOperatorIds},
+		state:           &qbft.State{},
 	}
 
-	instance.state.Round.Store(specqbft.Round(1))
+	instance.state.Round.Store(message.Round(1))
 	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(specqbft.Round(0))
+	instance.state.PreparedRound.Store(message.Round(0))
 
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
@@ -195,8 +190,8 @@ func TestCommitPipeline(t *testing.T) {
 }
 
 // AggregateMessages will aggregate given msgs or return error
-func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	var decided *specqbft.SignedMessage
+func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, error) {
+	var decided *message.SignedMessage
 	var err error
 	for _, msg := range sigs {
 		if decided == nil {
@@ -205,7 +200,7 @@ func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage,
 				return nil, errors.Wrap(err, "could not copy message")
 			}
 		} else {
-			if err := message.Aggregate(decided, msg); err != nil {
+			if err := decided.Aggregate(msg); err != nil {
 				return nil, errors.Wrap(err, "could not aggregate message")
 			}
 		}
@@ -218,7 +213,7 @@ func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage,
 	return decided, nil
 }
 
-func commitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
+func commitDataToBytes(t *testing.T, input *message.CommitData) []byte {
 	ret, err := input.Encode()
 	require.NoError(t, err)
 	return ret
