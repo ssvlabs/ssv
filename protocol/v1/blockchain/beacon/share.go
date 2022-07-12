@@ -6,7 +6,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"math"
-	
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
