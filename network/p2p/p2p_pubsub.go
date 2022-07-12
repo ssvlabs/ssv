@@ -189,7 +189,6 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		return nil
 	}
 	if msg == nil {
-		logger.Warn("got nil message")
 		return nil
 	}
 	ssvMsg, err := n.fork.DecodeNetworkMsg(msg.GetData())
@@ -199,7 +198,6 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		return nil
 	}
 	if ssvMsg == nil {
-		logger.Debug("nil message")
 		return nil
 	}
 	logger = withIncomingMsgFields(logger, msg, ssvMsg)

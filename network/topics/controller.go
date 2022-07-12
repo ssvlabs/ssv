@@ -237,7 +237,7 @@ func (ctrl *topicsCtrl) start(name string, tc *topicContainer) {
 	for {
 		err := ctrl.listen(tc.sub)
 		// rejoin in case failed for some reason
-		if err != nil {
+		if err != nil && ctrl.ctx.Err() == nil {
 			ctrl.logger.Warn("could not listen to topic", zap.String("topic", name), zap.Error(err))
 			time.Sleep(time.Second)
 			err = ctrl.rejoinTopic(name)
@@ -285,7 +285,6 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 // setupTopicValidator registers the topic validator
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidatorFactory != nil {
-		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
 		_ = ctrl.ps.UnregisterTopicValidator(name)
 		var opts []pubsub.ValidatorOpt

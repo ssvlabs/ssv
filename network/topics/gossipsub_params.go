@@ -20,10 +20,10 @@ var (
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
 	gsMcacheLen = 80
 	// gsMcacheGossip number of windows to gossip about
-	gsMcacheGossip = 3
+	gsMcacheGossip = 4
 
 	// heartbeat interval frequency of heartbeat, milliseconds
-	gsHeartbeatInterval = 800 * time.Millisecond
+	gsHeartbeatInterval = 700 * time.Millisecond
 )
 
 // creates a custom gossipsub parameter set.

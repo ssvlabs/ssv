@@ -105,7 +105,7 @@ func NewInstance(opts *Options) Instancer {
 		Logger:         logger,
 		signer:         opts.Signer,
 
-		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
+		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
 		// locks
 		runInitOnce:                  &sync.Once{},
