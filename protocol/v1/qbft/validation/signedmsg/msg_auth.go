@@ -7,8 +7,8 @@ import (
 )
 
 // AuthorizeMsg is the pipeline to authorize message
-func AuthorizeMsg(share *beacon.Share, forkVersion string) pipelines.SignedMessagePipeline {
+func AuthorizeMsg(share *beacon.Share) pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("authorize", func(signedMessage *message.SignedMessage) error {
-		return share.VerifySignedMessage(signedMessage, forkVersion)
+		return share.VerifySignedMessage(signedMessage)
 	})
 }

@@ -12,15 +12,13 @@ import (
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share       *beacon.Share
-	forkVersion string
+	share *beacon.Share
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *beacon.Share, forkVersion string) pipelines.SignedMessagePipeline {
+func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
 	return &validateJustification{
-		share:       share,
-		forkVersion: forkVersion,
+		share: share,
 	}
 }
 
@@ -88,7 +86,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	}
 	aggregated := pks.Aggregate()
 	for _, justification := range data.RoundChangeJustification {
-		err = justification.Signature.Verify(justification, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize(), p.forkVersion)
+		err = justification.Signature.Verify(justification, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}

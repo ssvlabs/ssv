@@ -39,6 +39,7 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
+// nolint
 func testsToRun() map[string]struct{} {
 	testList := spectest.AllTests
 	/*testList = []spectest.SpecTest{
@@ -229,7 +230,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
 
-	forkVersion := forksprotocol.V1ForkVersion
+	forkVersion := forksprotocol.GenesisForkVersion
 	pi, _ := protocolp2p.GenPeerID()
 	p2pNet := protocolp2p.NewMockNetwork(logger, pi, 10)
 	beacon := validator.NewTestBeacon(t)
@@ -428,7 +429,7 @@ func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 		}
 
 		if len(test.ExpectedRoots) > 0 {
-			r, err := specToSignedMessage(t, keysSet, m).GetRoot(forksprotocol.V1ForkVersion.String())
+			r, err := specToSignedMessage(t, keysSet, m).GetRoot()
 			if err != nil {
 				lastErr = err
 			}

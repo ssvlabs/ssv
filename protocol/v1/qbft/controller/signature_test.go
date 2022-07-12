@@ -142,7 +142,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				Beacon:         b,
 				Signer:         b,
 				SigTimeout:     time.Second * 2,
-				Version:        forksprotocol.V1ForkVersion,
+				Version:        forksprotocol.GenesisForkVersion,
 			}
 
 			ibftc := New(opts)
@@ -257,7 +257,7 @@ func (b *testBeacon) RemoveShare(pubKey string) error {
 	panic("implement me")
 }
 
-func (b *testBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (b *testBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	panic("implement me")
 }
 

@@ -113,7 +113,7 @@ var domain = message.PrimusTestnet
 var sigType = message.QBFTSigType
 
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion string) error {
+func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
@@ -131,7 +131,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion stri
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators, forkVersion) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators)
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

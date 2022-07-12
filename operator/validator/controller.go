@@ -62,6 +62,7 @@ type ControllerOptions struct {
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
+	DutyRoles                  []message.RoleType
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
@@ -169,13 +170,13 @@ func NewController(options ControllerOptions) Controller {
 		Beacon:                     options.Beacon,
 		ForkVersion:                options.ForkVersion,
 		Signer:                     options.Beacon,
+		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,
 		NewDecidedHandler:          options.NewDecidedHandler,
-		DutyRoles:                  []message.RoleType{message.RoleTypeAttester},
 	}
 	ctrl := controller{
 		collection:                 collection,
@@ -250,7 +251,7 @@ func (c *controller) handleRouterMessages() {
 				if err := v.ProcessMsg(&msg); err != nil {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
-			} else if c.forkVersion != forksprotocol.V0ForkVersion {
+			} else if c.forkVersion != forksprotocol.GenesisForkVersion {
 				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
 					continue // not supporting other types
 				}

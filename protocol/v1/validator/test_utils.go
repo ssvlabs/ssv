@@ -3,18 +3,19 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv-spec/types"
 	"sync"
 	"testing"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/proto"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -202,9 +203,9 @@ func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
 	return nil
 }
 
-func (t *testIBFT) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
+func (t *testIBFT) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
 	t.signatureMu.Lock()
-	t.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
+	t.signatures[message.OperatorID(msg.GetSigners()[0])] = msg.Messages[0].PartialSignature
 	t.signatureMu.Unlock()
 	return nil
 }
@@ -279,8 +280,8 @@ func (b *TestBeacon) RemoveShare(pubKey string) error {
 }
 
 // SignIBFTMessage impl
-func (b *TestBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
-	return b.Signer.SignIBFTMessage(message, pk, forkVersion)
+func (b *TestBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+	return b.Signer.SignIBFTMessage(data, pk, sigType)
 }
 
 // GetDomain impl
@@ -354,16 +355,16 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*proto.Node) {
+func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*proto.Node)
+	nodes := make(map[message.OperatorID]*beacon.Node)
 	sks := make(map[message.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &proto.Node{
-			IbftId: uint64(i),
+		nodes[message.OperatorID(i)] = &beacon.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[message.OperatorID(i)] = sk
@@ -400,16 +401,17 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	km.lock.Lock()
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key, forkVersion) // TODO need to check fork v1?
+		computedRoot, err := types.ComputeSigningRoot(data, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not sign ibft msg")
+			return nil, errors.Wrap(err, "could not sign root")
 		}
-		return sig.Serialize(), nil
+
+		return key.SignByte(computedRoot).Serialize(), nil
 	}
 	return nil, errors.Errorf("could not find key for pk: %x", pk)
 }

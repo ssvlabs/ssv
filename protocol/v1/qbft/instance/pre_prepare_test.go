@@ -2,20 +2,18 @@ package instance
 
 import (
 	"encoding/json"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"strconv"
 	"testing"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ibft/proto"
-	forksprotocol2 "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -63,7 +61,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 
 	t.Run("not quorum, not justified", func(t *testing.T) {
 		// change round no quorum
-		msg := SignMsg(t, 1, secretKeys[1], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg := SignMsg(t, 1, secretKeys[1], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, err
@@ -72,7 +70,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Round:      2,
 			Identifier: []byte("Lambda"),
 			Data:       value,
-		}, forksprotocol2.V0ForkVersion.String())
+		})
 		instance.containersMap[qbftspec.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 		err := instance.JustifyPrePrepare(2, value)
 		require.EqualError(t, err, "no change round quorum")
@@ -80,9 +78,9 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
-		msg := SignMsg(t, 2, secretKeys[2], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg := SignMsg(t, 2, secretKeys[2], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
-		msg = SignMsg(t, 3, secretKeys[3], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg = SignMsg(t, 3, secretKeys[3], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		err := instance.JustifyPrePrepare(2, value)
@@ -129,10 +127,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 
 	t.Run("no change round quorum, not justified", func(t *testing.T) {
 		// change round no quorum
-		msg := SignMsg(t, 1, secretKeys[1], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg := SignMsg(t, 1, secretKeys[1], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
-		msg = SignMsg(t, 2, secretKeys[2], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg = SignMsg(t, 2, secretKeys[2], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
@@ -142,7 +140,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
-		msg := SignMsg(t, 3, secretKeys[3], consensusMessage, forksprotocol2.V0ForkVersion.String())
+		msg := SignMsg(t, 3, secretKeys[3], consensusMessage)
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
@@ -198,12 +196,12 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Round:      1,
 		Identifier: []byte("Lambda"),
 		Data:       proposalDataToBytes(t, &message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
-	}, forksprotocol2.V0ForkVersion.String())
+	})
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
 	msgs := instance.containersMap[qbftspec.ProposalMsgType].ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.State().Stage.Load() == int32(proto.RoundState_PrePrepare))
+	require.True(t, instance.State().Stage.Load() == int32(qbft.RoundStatePrePrepare))
 
 	// return nil if another pre-prepare received.
 	require.NoError(t, instance.UponPrePrepareMsg().Run(msg))
@@ -250,7 +248,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err := msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, secretKeys[1], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
+	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, secretKeys[1], msg), roundChangeData.PreparedValue)
 
 	msg = &message.ConsensusMessage{
 		MsgType:    message.RoundChangeMsgType,
@@ -260,7 +258,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 2, secretKeys[2], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
+	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 2, secretKeys[2], msg), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.EqualError(t, err, "no change round quorum")
@@ -274,7 +272,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 3, secretKeys[3], msg, forksprotocol2.V0ForkVersion.String()), roundChangeData.PreparedValue)
+	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 3, secretKeys[3], msg), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.NoError(t, err)
@@ -317,7 +315,7 @@ func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (s *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	return nil, nil
 }
 

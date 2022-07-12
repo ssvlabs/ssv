@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -336,7 +337,7 @@ func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 		return c.processConsensusMsg(signedMsg)
 
 	case message.SSVPostConsensusMsgType:
-		signedMsg := &message.SignedPostConsensusMessage{}
+		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
@@ -355,7 +356,7 @@ func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 
 // GetNodeMode return node type
 func (c *Controller) GetNodeMode() strategy.Mode {
-	isPostFork := c.Fork.VersionName() != forksprotocol.V0ForkVersion.String()
+	isPostFork := c.Fork.VersionName() != forksprotocol.GenesisForkVersion.String()
 	if !isPostFork { // by default when pre fork, the mode is fullnode
 		return strategy.ModeFullNode
 	}

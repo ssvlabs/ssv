@@ -4,12 +4,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	forksv0 "github.com/bloxapp/ssv/ibft/storage/forks/v0"
 	"log"
 	"sync"
 
-	"github.com/bloxapp/ssv/ibft/conversion"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -17,8 +14,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/format"
-
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -88,16 +83,7 @@ func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*message.Si
 		return nil, err
 	}
 	if !found {
-		// trying v0 if v1 not found
-		identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
-		val, found, err = i.get(highestKey, identifierV0)
-		if err != nil {
-			return nil, err
-		}
-		if !found {
-			return nil, nil
-		}
-		return forksv0.ForkV0{}.DecodeSignedMsg(val)
+		return nil, nil
 	}
 	return i.fork.DecodeSignedMsg(val)
 }
@@ -126,7 +112,6 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	identifierV0 := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
 	msgs := make([]*message.SignedMessage, 0)
 
 	for seq := from; seq <= to; seq++ {
@@ -142,23 +127,6 @@ func (i *ibftStorage) GetDecided(identifier message.Identifier, from message.Hei
 			}
 			msgs = append(msgs, &msg)
 			continue
-		}
-
-		// v1 not found, try with v0 identifier
-		val, found, err = i.get(decidedKey, identifierV0, uInt64ToByteSlice(uint64(seq)))
-		if err != nil {
-			return msgs, err
-		}
-		if found {
-			ret := proto.SignedMessage{}
-			if err := json.Unmarshal(val, &ret); err != nil {
-				return msgs, errors.Wrap(err, "could not unmarshal signed message v0")
-			}
-			msg, err := conversion.ToSignedMessageV1(&ret)
-			if err != nil {
-				return msgs, err
-			}
-			msgs = append(msgs, msg)
 		}
 	}
 

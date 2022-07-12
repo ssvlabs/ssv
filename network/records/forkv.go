@@ -41,7 +41,7 @@ func GetForkVersionEntry(record *enr.Record) (forksprotocol.ForkVersion, error) 
 	if err := record.Load(oid); err != nil {
 		if enr.IsNotFound(err) {
 			// if not found, assuming v0 for compatibility
-			return forksprotocol.V0ForkVersion, nil
+			return forksprotocol.GenesisForkVersion, nil
 		}
 		return "", err
 	}

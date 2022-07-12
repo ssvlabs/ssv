@@ -1,11 +1,11 @@
 module github.com/bloxapp/ssv
 
-go 1.15
+go 1.16
 
 require (
 	github.com/attestantio/go-eth2-client v0.11.3
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
-	github.com/bloxapp/ssv-spec v0.0.0-20220630092415-9ac31859b4ad // indirect
+	github.com/bloxapp/ssv-spec v0.0.0-20220630092415-9ac31859b4ad
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.10.18
 	github.com/ferranbt/fastssz v0.0.0-20220103083642-bc5fefefa28b
@@ -26,7 +26,6 @@ require (
 	github.com/libp2p/go-libp2p-kad-dht v0.15.0
 	github.com/libp2p/go-libp2p-noise v0.2.2
 	github.com/libp2p/go-libp2p-pubsub v0.5.6
-	github.com/libp2p/go-nat v0.0.5 // indirect
 	github.com/libp2p/go-tcp-transport v0.2.8
 	github.com/multiformats/go-multiaddr v0.4.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -44,7 +43,6 @@ require (
 	go.opencensus.io v0.23.0
 	go.uber.org/atomic v1.9.0
 	go.uber.org/zap v1.19.0
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	google.golang.org/grpc v1.40.0
 	olympos.io/encoding/edn v0.0.0-20201019073823-d3554ca0b0a3 // indirect

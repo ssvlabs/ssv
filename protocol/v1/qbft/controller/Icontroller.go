@@ -1,11 +1,13 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv-spec/ssv"
+	"go.uber.org/zap"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"go.uber.org/zap"
 )
 
 // IController represents behavior of the IController
@@ -28,8 +30,8 @@ type IController interface {
 
 	ProcessMsg(msg *message.SSVMessage) error
 
-	// ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
-	ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error
+	// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
+	ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
 	PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error

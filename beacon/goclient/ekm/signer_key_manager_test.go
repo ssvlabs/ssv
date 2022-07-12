@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -64,7 +63,7 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 func testKeyManager(t *testing.T) beacon2.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), message.PrimusTestnet, message.QBFTSigType)
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), message.PrimusTestnet)
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 
@@ -147,7 +146,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
 		require.NoError(t, err)
 
 		// verify
@@ -157,7 +156,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -179,7 +178,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), forksprotocol.V0ForkVersion.String())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
 		require.NoError(t, err)
 
 		// verify
@@ -189,7 +188,7 @@ func TestSignIBFTMessage(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}}, forksprotocol.V0ForkVersion.String())
+		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"testing"
 	"time"
@@ -76,7 +75,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
 
-	forkVersion := forksprotocol.V1ForkVersion
+	forkVersion := forksprotocol.GenesisForkVersion
 	pi, _ := protocolp2p.GenPeerID()
 	beacon := validator.NewTestBeacon(t)
 
@@ -272,30 +271,7 @@ func convertSSVMessage(t *testing.T, msg *types.SSVMessage, role message.RoleTyp
 	case types.SSVDecidedMsgType:
 		msgType = message.SSVDecidedMsgType
 	case types.SSVPartialSignatureMsgType:
-		msgType = message.SSVPostConsensusMsgType
-
-		sps := new(ssv.SignedPartialSignatureMessage)
-		require.NoError(t, sps.Decode(msg.Data))
-		spsm := sps.Messages[0]
-		spcm := &message.SignedPostConsensusMessage{
-			Message: &message.PostConsensusMessage{
-				Height:        0, // TODO need to get height fom ssv.SignedPartialSignatureMessage
-				DutySignature: spsm.PartialSignature,
-				//DutySignature:   sps.Signature,
-				DutySigningRoot: spsm.SigningRoot,
-				Signers:         convertSingers(spsm.Signers),
-				//Signers: convertSingers(sps.Signers),
-			},
-			//Signature: message.Signature(sps.Signature),
-			Signature: message.Signature(spsm.PartialSignature),
-			//Signers: convertSingers(sps.Signers),
-			Signers: convertSingers(spsm.Signers),
-		}
-
-		log.Printf("spsm: %+v", spsm)
-		log.Printf("sps: %+v", sps)
-
-		encoded, err := spcm.Encode()
+		encoded, err := msg.Encode()
 		require.NoError(t, err)
 		data = encoded
 	case types.DKGMsgType:
@@ -332,12 +308,4 @@ func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *q
 		require.True(t, ok)
 	})
 	return c
-}
-
-func convertSingers(specSigners []types.OperatorID) []message.OperatorID {
-	var signers []message.OperatorID
-	for _, s := range specSigners {
-		signers = append(signers, message.OperatorID(s))
-	}
-	return signers
 }

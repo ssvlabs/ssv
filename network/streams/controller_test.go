@@ -3,7 +3,7 @@ package streams
 import (
 	"bytes"
 	"context"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	ssv_protocol "github.com/bloxapp/ssv/protocol/v1/message"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
@@ -21,9 +21,9 @@ func TestStreamCtrl(t *testing.T) {
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	ctrl0 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
-		hosts[0], forksv1.New(), time.Second)
+		hosts[0], genesis.New(), time.Second)
 	ctrl1 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
-		hosts[1], forksv1.New(), time.Second)
+		hosts[1], genesis.New(), time.Second)
 
 	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {

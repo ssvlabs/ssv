@@ -33,7 +33,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 		ForkLock:            &sync.Mutex{},
 	}
 
-	ret.Fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+	ret.Fork = forksfactory.NewFork(forksprotocol.GenesisForkVersion)
 	return ret
 }
 

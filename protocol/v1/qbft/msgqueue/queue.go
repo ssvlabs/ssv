@@ -1,6 +1,7 @@
 package msgqueue
 
 import (
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"sync"
 	"sync/atomic"
 
@@ -77,6 +78,8 @@ type Index struct {
 	ID string
 	// H (optional) is the height, -1 is treated as nil
 	H message.Height
+	// S (optional) is the slot
+	S spec.Slot
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
 	Cmt message.ConsensusMessageType
 }

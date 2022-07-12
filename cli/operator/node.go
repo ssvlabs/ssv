@@ -7,13 +7,13 @@ import (
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ilyakaznacheev/cleanenv"
-	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -25,7 +25,6 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -53,9 +52,6 @@ type config struct {
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-
-	ForkV1Epoch uint64 `yaml:"ForkV1Epoch" env:"FORKV1_EPOCH" env-default:"102594" env-description:"Target epoch for fork v1"`
-	ForkV2Epoch uint64 `yaml:"ForkV2Epoch" env:"FORKV2_EPOCH" env-default:"102595" env-description:"Target epoch for fork v2"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
@@ -111,13 +107,6 @@ var StartNodeCmd = &cobra.Command{
 		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
-		if cfg.ForkV1Epoch > 0 {
-			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV1Epoch), forksprotocol.V1ForkVersion)
-		}
-		if cfg.ForkV2Epoch > 0 {
-			Logger.Debug("setting v2 epoch", zap.Uint64("epoch", cfg.ForkV2Epoch))
-			forksprotocol.SetForkEpoch(types.Epoch(cfg.ForkV2Epoch), forksprotocol.V2ForkVersion)
-		}
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 		Logger.Info("using ssv fork version", zap.String("version", string(ssvForkVersion)))
 		// TODO Not refactored yet Start (refactor in exporter as well):
@@ -159,7 +148,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
-		cfg.P2pNetworkConfig.UserAgent = forksv0.GenUserAgentWithOperatorID(cfg.P2pNetworkConfig.OperatorID)
 		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
 		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
 		if err := p2pNet.Setup(); err != nil {
@@ -217,6 +205,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
 		}
 
+		cfg.SSVOptions.ValidatorOptions.DutyRoles = []message.RoleType{message.RoleTypeAttester} // TODO could be better to set in other place
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

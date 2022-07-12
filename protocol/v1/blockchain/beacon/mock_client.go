@@ -37,9 +37,9 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (m *MockBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1

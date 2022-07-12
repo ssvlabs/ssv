@@ -1,6 +1,9 @@
 package msgqueue
 
 import (
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -90,10 +93,10 @@ func TestNewMsgQueue(t *testing.T) {
 		q.Add(generatePostConsensusMsg(t, 3, identifier))
 
 		for i := 0; i <= 3; i++ {
-			height := message.Height(i)
-			idx := SignedPostConsensusMsgIndex(identifier.String(), height)
+			slot := spec.Slot(i)
+			idx := SignedPostConsensusMsgIndex(identifier.String(), slot)
 			require.Equal(t, 1, q.Count(idx))
-			require.Equal(t, int64(1), q.Clean(SignedPostConsensusMsgCleaner(identifier, height)))
+			require.Equal(t, int64(1), q.Clean(SignedPostConsensusMsgCleaner(identifier, slot)))
 			require.Equal(t, 0, q.Count(idx))
 		}
 	})
@@ -122,26 +125,27 @@ func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height messa
 	return ssvMsg
 }
 
-func generatePostConsensusMsg(t *testing.T, height message.Height, id message.Identifier) *message.SSVMessage {
+func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id message.Identifier) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
 		MsgType: message.SSVPostConsensusMsgType,
 		ID:      id,
 	}
 
-	pcm := &message.PostConsensusMessage{
-		Height:          height,
-		DutySignature:   []byte("sig"),
-		DutySigningRoot: []byte("root"),
-		Signers:         []message.OperatorID{1, 2, 3},
+	signedMsg := &ssv.SignedPartialSignatureMessage{
+		Type: ssv.PostConsensusPartialSig,
+		Messages: ssv.PartialSignatureMessages{
+			&ssv.PartialSignatureMessage{
+				Slot:             slot,
+				PartialSignature: make([]byte, 96),
+				SigningRoot:      make([]byte, 32),
+				Signers:          []types.OperatorID{1},
+			},
+		},
+		Signature: make([]byte, 96), // TODO should be msg sig and not decided sig
+		Signers:   []types.OperatorID{1},
 	}
 
-	spcm := message.SignedPostConsensusMessage{
-		Message:   pcm,
-		Signature: []byte("sig1"),
-		Signers:   []message.OperatorID{1, 2, 3},
-	}
-
-	encoded, err := spcm.Encode()
+	encoded, err := signedMsg.Encode()
 	require.NoError(t, err)
 	ssvMsg.Data = encoded
 	return ssvMsg

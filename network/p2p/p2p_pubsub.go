@@ -3,12 +3,14 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/bloxapp/ssv/network"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	genesisFork "github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -63,7 +65,7 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 			zap.Any("signers", sm.GetSigners()))
 	}
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		logger.Debug("trying to broadcast message", zap.String("topic", topic), zap.Any("msg", msg))
@@ -102,7 +104,7 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 	}
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
@@ -117,7 +119,7 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 func (n *p2pNetwork) subscribe(pk message.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {

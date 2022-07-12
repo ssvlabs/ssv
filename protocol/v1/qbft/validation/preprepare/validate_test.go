@@ -4,25 +4,24 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/ibft/proto"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) {
+func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*proto.Node)
+	nodes := make(map[uint64]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[uint64(i)] = &proto.Node{
-			IbftId: uint64(i),
+		nodes[uint64(i)] = &beacon.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
 		sks[uint64(i)] = sk
@@ -34,7 +33,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*proto.Node) 
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
 	bls.Init(bls.BLS12_381)
 
-	signature, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+	signature, err := msg.Sign(sk)
 	require.NoError(t, err)
 	sm := &message.SignedMessage{
 		Message:   msg,

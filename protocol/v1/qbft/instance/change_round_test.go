@@ -2,15 +2,15 @@ package instance
 
 import (
 	"encoding/json"
+
 	"testing"
 
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -44,7 +44,7 @@ func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *
 		signedmsg.MsgTypeCheck(message.ProposalMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 		preprepare.ValidatePrePrepareMsg(roundLeader),
 	)
 }
@@ -56,7 +56,7 @@ func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbf
 		signedmsg.MsgTypeCheck(message.PrepareMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 
@@ -67,7 +67,7 @@ func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier 
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 
@@ -88,8 +88,8 @@ func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identi
 		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
-		changeround.Validate(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
+		changeround.Validate(share),
 	)
 }
 
@@ -132,10 +132,10 @@ func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.
 }
 
 // SignMsg signs the given message by the given private key
-func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
+func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
 	sigType := message.QBFTSigType
 	domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	sigRoot, err := message.ComputeSigningRoot(msg, domain, forkVersion)
+	sigRoot, err := message.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
@@ -187,8 +187,8 @@ func TestRoundChangeInputValue(t *testing.T) {
 	prepareData, err := msg.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 1, secretKey[1], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 2, secretKey[2], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 1, secretKey[1], msg), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 2, secretKey[2], msg), prepareData.Data)
 
 	// with some prepare votes but not enough
 	byts, err = instance.roundChangeInputValue()
@@ -203,7 +203,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.Len(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSigners(), 0)
 
 	// add more votes
-	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 3, secretKey[3], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
+	instance.containersMap[qbftspec.PrepareMsgType].AddMessage(SignMsg(t, 3, secretKey[3], msg), prepareData.Data)
 	instance.State().PreparedRound.Store(message.Round(1))
 	instance.State().PreparedValue.Store([]byte("value"))
 
@@ -535,10 +535,10 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				test.msg.Data = changeRoundDataToBytes(t, data)
 			}
 
-			signature, err := test.msg.Sign(secretKeys[test.signerID], forksprotocol.V1ForkVersion.String())
+			signature, err := test.msg.Sign(secretKeys[test.signerID])
 			require.NoError(t, err)
 
-			err = changeround.Validate(instance.ValidatorShare, forksprotocol.V1ForkVersion.String()).
+			err = changeround.Validate(instance.ValidatorShare).
 				Run(&message.SignedMessage{
 					Signature: signature.Serialize(),
 					Signers:   []message.OperatorID{test.signerID},
@@ -600,8 +600,8 @@ func TestRoundChangeJustification(t *testing.T) {
 		prepareData, err := msg.GetPrepareData()
 		require.NoError(t, err)
 
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, sks[1], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, sks[2], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
+		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, sks[1], msg), prepareData.Data)
+		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, 1, sks[2], msg), prepareData.Data)
 
 		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(&message.SignedMessage{
 			Signature: nil,
@@ -762,7 +762,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      1,
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"",
 		},
 		{
@@ -773,7 +773,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      1,
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: []byte("ad")}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"change round justification is nil",
 		},
 		{
@@ -784,7 +784,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      1,
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"invalid message sequence number: expected: 1, actual: 2",
 		},
 
@@ -796,7 +796,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      1,
 				Identifier: []byte("lambdaa"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"message Lambda (6c616d62646161) does not equal expected Lambda (6c616d626461)",
 		},
 		{
@@ -807,7 +807,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      4,
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"",
 		},
 		{
@@ -818,7 +818,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Round:      1,
 				Identifier: []byte("lambda"),
 				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+			}),
 			"message type is wrong",
 		},
 	}
@@ -923,7 +923,7 @@ func prepareDataToBytes(t *testing.T, input *message.PrepareData) []byte {
 func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg *message.ConsensusMessage) *bls.Sign {
 	var aggregatedSig *bls.Sign
 	for _, sk := range sks {
-		sig, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		sig, err := msg.Sign(sk)
 		require.NoError(t, err)
 		if aggregatedSig == nil {
 			aggregatedSig = sig
