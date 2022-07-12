@@ -29,10 +29,12 @@ type ethKeyManagerSigner struct {
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
 	signingUtils beacon.SigningUtil
+	domain       messageprotocol.DomainType
+	sigType      []byte
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, network beaconprotocol.Network) (beaconprotocol.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain messageprotocol.DomainType, sigType []byte) (beaconprotocol.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -64,6 +66,8 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beacon.SigningUtil, netw
 		signer:       beaconSigner,
 		storage:      signerStore,
 		signingUtils: signingUtils,
+		domain:       domain,
+		sigType:      sigType,
 	}, nil
 }
 
@@ -111,9 +115,8 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	domain := messageprotocol.PrimusTestnet
-	sigType := messageprotocol.QBFTSigType
-	root, err := messageprotocol.ComputeSigningRoot(message, messageprotocol.ComputeSignatureDomain(domain, sigType), forkVersion)
+	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, km.sigType)
+	root, err := messageprotocol.ComputeSigningRoot(message, signatureDomain, forkVersion)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

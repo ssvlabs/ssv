@@ -5,11 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // PubKeys defines the type for public keys object representation
@@ -107,6 +108,10 @@ func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*b
 	return ret, nil
 }
 
+// TODO(nkryuchkov): move to a better place
+var domain = message.PrimusTestnet
+var sigType = message.QBFTSigType
+
 // VerifySignedMessage returns true of signed message verifies against pks
 func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion string) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
@@ -126,7 +131,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion stri
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators, forkVersion) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators, forkVersion) // TODO need to check if this is the right verify func
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err
