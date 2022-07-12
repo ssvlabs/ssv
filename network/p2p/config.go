@@ -36,12 +36,10 @@ type Config struct {
 
 	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"50" env-description:"Connected peers limit for connections"`
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"70" env-description:"Connected peers limit for connections"`
 	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"5" env-description:"Connected peers limit per pubsub topic"`
 
-	UseSubnetDiscovery bool `yaml:"UseSubnetDiscovery" env:"P2P_SUBNETS_DISCOVERY" env-default:"false" env-description:"Connected peers limit per pubsub topic"`
 	// Subnets is a static bit list of subnets that this node will register upon start.
-	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
@@ -63,6 +61,10 @@ type Config struct {
 	ForkVersion forksprotocol.ForkVersion
 	// Logger to used by network services
 	Logger *zap.Logger
+
+	PubsubOutQueueSize        int `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
+	PubsubValidationQueueSize int `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
+	PubsubValidateThrottle    int `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -129,7 +131,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
-				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+				c.Logger.Warn("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}

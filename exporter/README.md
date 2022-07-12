@@ -72,8 +72,8 @@ The following information will be stored and served by exporter:
 #### Contract Data
 
 Events to listen:
-* `OperatorAdded`
-* `ValidatorAdded`
+* `OperatorRegistration`
+* `ValidatorRegistration`
 
 #### Contract Sync
 

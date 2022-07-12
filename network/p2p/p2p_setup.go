@@ -101,7 +101,8 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
 
-	connManager := connmgr.NewConnManager(n.cfg.MaxPeers/2, n.cfg.MaxPeers, time.Minute*15)
+	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
+	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	host, err := libp2p.New(n.ctx, opts...)
@@ -109,7 +110,7 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
-	n.connManager = connManager
+	n.libConnManager = connManager
 
 	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
@@ -184,7 +185,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, subnetsProvider, n.idx, n.idx, n.cfg.UseSubnetDiscovery)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, subnetsProvider, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 	return nil
@@ -254,6 +255,9 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
+		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
+		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
+		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 	}
 
 	if !n.cfg.PubSubScoring {

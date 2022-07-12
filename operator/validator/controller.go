@@ -64,8 +64,8 @@ type ControllerOptions struct {
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"128" env-description:"Number of goroutines to use for message workers"`
-	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"256" env-description:"Buffer size for message workers"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
+	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
 }
 
 // Controller represent the validators controller,
@@ -444,7 +444,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*beaconprotocol.Share, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*beaconprotocol.Share, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -460,7 +460,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 
 	if isOperatorShare {
 		if shareSecret == nil {
-			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorAdded event")
+			return nil, isOperatorShare, errors.New("could not decode shareSecret")
 		}
 
 		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))

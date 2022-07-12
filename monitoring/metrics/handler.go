@@ -7,13 +7,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
-	"time"
 )
 
 // Handler handles incoming metrics requests
@@ -111,5 +109,4 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 func (mh *metricsHandler) configureProfiling() {
 	runtime.SetBlockProfileRate(1000)
 	runtime.SetMutexProfileFraction(1)
-	async.RunEvery(mh.ctx, time.Minute*2, reportRuntimeStats)
 }

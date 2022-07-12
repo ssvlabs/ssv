@@ -35,7 +35,8 @@ const (
 )
 
 const (
-	connManagerGCInterval = 5 * time.Minute
+	connManagerGCInterval = time.Minute
+	connManagerGCTimeout  = time.Minute
 	peerIndexGCInterval   = 15 * time.Minute
 	reportingInterval     = 30 * time.Second
 )
@@ -66,7 +67,7 @@ type p2pNetwork struct {
 
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
-	connManager      connmgrcore.ConnManager
+	libConnManager   connmgrcore.ConnManager
 }
 
 // New creates a new p2p network
@@ -97,7 +98,7 @@ func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
-	if err := n.connManager.Close(); err != nil {
+	if err := n.libConnManager.Close(); err != nil {
 		n.logger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
@@ -123,23 +124,13 @@ func (n *p2pNetwork) Start() error {
 
 	go n.startDiscovery()
 
-	async.Interval(n.ctx, connManagerGCInterval, func() {
-		ctx, cancel := context.WithTimeout(n.ctx, time.Minute*2)
-		defer cancel()
-		n.connManager.TrimOpenConns(ctx)
-	})
+	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing)
 
-	async.Interval(n.ctx, peerIndexGCInterval, func() {
-		n.idx.GC()
-	})
+	async.Interval(n.ctx, peerIndexGCInterval, n.idx.GC)
 
 	async.Interval(n.ctx, reportingInterval, func() {
 		go n.reportAllPeers()
 		n.reportTopics()
-	})
-
-	async.Interval(n.ctx, reportingInterval/15, func() {
-		n.reportSubnetsStats()
 	})
 
 	if err := n.registerInitialTopics(); err != nil {
@@ -147,6 +138,21 @@ func (n *p2pNetwork) Start() error {
 	}
 
 	return nil
+}
+
+func (n *p2pNetwork) peersBalancing() {
+	allPeers := n.host.Network().Peers()
+	currentCount := len(allPeers)
+	if currentCount < n.cfg.MaxPeers {
+		return
+	}
+	ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
+	defer cancel()
+
+	connMgr := peers.NewConnManager(n.logger, n.libConnManager, n.idx)
+	mySubnets := records.Subnets(n.subnets).Clone()
+	connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
+	connMgr.TrimPeers(ctx, n.host.Network())
 }
 
 func (n *p2pNetwork) registerInitialTopics() error {
@@ -233,7 +239,6 @@ func (n *p2pNetwork) UpdateSubnets() {
 	n.activeValidatorsLock.Unlock()
 
 	if len(subnetsToAdd) == 0 {
-		n.logger.Debug("no changes in subnets")
 		return
 	}
 
@@ -241,16 +246,14 @@ func (n *p2pNetwork) UpdateSubnets() {
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
 
-	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-	subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
-	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", subnetsList))
-
 	err := n.disc.RegisterSubnets(subnetsToAdd...)
 	if err != nil {
 		n.logger.Warn("could not register subnets", zap.Error(err))
 		return
 	}
-	n.logger.Debug("updated subnets (discovery)", zap.Any("subnets", n.subnets))
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
+	n.logger.Debug("updated subnets (node-info)", zap.Any("subnets", subnetsList))
 }
 
 // getMaxPeers returns max peers of the given topic.

@@ -111,3 +111,26 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 	copy(cp, subnets)
 	return cp
 }
+
+// GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
+// subnets with low peer count would get higher score, and overloaded subnets gets a lower score.
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []int {
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
+
+	scores := make([]int, len(allSubs))
+	for _, s := range activeSubnets {
+		var connected int
+		if s < len(stats.Connected) {
+			connected = stats.Connected[s]
+		}
+		if connected == 0 {
+			scores[s] = 2
+		} else if connected <= minPerSubnet {
+			scores[s] = 1
+		} else if connected >= topicMaxPeers {
+			scores[s] = -1
+		}
+	}
+	return scores
+}

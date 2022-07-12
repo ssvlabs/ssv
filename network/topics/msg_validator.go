@@ -21,7 +21,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		logger := plogger.With(zap.String("topic", pmsg.GetTopic()), zap.String("peer", p.String()))
 		//logger.Debug("validating msg")
 		if len(pmsg.GetData()) == 0 {
-			logger.Debug("invalid: no data")
+			//logger.Debug("invalid: no data")
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
 		}
@@ -32,7 +32,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
 			// can't decode message
-			logger.Debug("invalid: can't decode message", zap.Error(err))
+			//logger.Debug("invalid: can't decode message", zap.Error(err))
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
