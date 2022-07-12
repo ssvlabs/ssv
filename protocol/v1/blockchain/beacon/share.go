@@ -51,6 +51,7 @@ type serializedShare struct {
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
+	OperatorIds  []uint64
 	Liquidated   bool
 }
 
@@ -148,6 +149,7 @@ func (s *Share) Serialize() ([]byte, error) {
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
 		Operators:    s.Operators,
+		OperatorIds:  s.OperatorIds,
 		Liquidated:   s.Liquidated,
 	}
 	// copy committee by value
@@ -190,6 +192,7 @@ func (s *Share) Deserialize(key []byte, val []byte) (*Share, error) {
 		Metadata:     value.Metadata,
 		OwnerAddress: value.OwnerAddress,
 		Operators:    value.Operators,
+		OperatorIds:  value.OperatorIds,
 		Liquidated:   value.Liquidated,
 	}, nil
 }
