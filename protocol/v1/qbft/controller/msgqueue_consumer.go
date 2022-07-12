@@ -51,7 +51,10 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
-		lastSlot := c.SignatureState.duty.Slot
+		lastSlot := spec.Slot(0)
+		if c.SignatureState.duty != nil {
+			lastSlot = c.SignatureState.duty.Slot
+		}
 		lastHeight := c.SignatureState.getHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
