@@ -63,7 +63,6 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   false,
-			DutyRoles:                  []message.RoleType{message.RoleTypeAttester},
 		})
 		validators = append(validators, val)
 	}
