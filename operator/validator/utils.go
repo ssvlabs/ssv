@@ -3,14 +3,14 @@ package validator
 import (
 	"strings"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 )
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
@@ -54,9 +54,9 @@ func ShareFromValidatorEvent(
 	validatorShare.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
-	ibftCommittee := map[spectypes.OperatorID]*beaconprotocol.Node{}
+	ibftCommittee := map[message.OperatorID]*beaconprotocol.Node{}
 	for i := range validatorRegistrationEvent.OperatorPublicKeys {
-		nodeID := spectypes.OperatorID(validatorRegistrationEvent.OperatorIds[i])
+		nodeID := message.OperatorID(i + 1)
 		ibftCommittee[nodeID] = &beaconprotocol.Node{
 			IbftID: uint64(nodeID),
 			Pk:     validatorRegistrationEvent.SharesPublicKeys[i],
@@ -89,7 +89,6 @@ func ShareFromValidatorEvent(
 	}
 	validatorShare.Committee = ibftCommittee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
-	validatorShare.SetOperatorIds(validatorRegistrationEvent.OperatorIds)
 
 	return &validatorShare, shareSecret, nil
 }

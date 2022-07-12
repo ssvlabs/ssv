@@ -2,11 +2,8 @@ package validator
 
 import (
 	"encoding/hex"
-	"strings"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/exporter"
+	"strings"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -59,7 +56,7 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.FullNode {
+	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -88,24 +85,8 @@ func (c *controller) handleOperatorRemovalEvent(
 
 	if od.OwnerAddress != event.OwnerAddress {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match operator owner address with provided event owner address"),
+			Err: errors.New("could not match operator data owner address and index with provided event"),
 		}
-	}
-
-	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
-	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.String("operatorName", od.Name),
-			zap.Uint64("operatorId", od.Index),
-			zap.String("operatorPubKey", od.PublicKey),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
-
-	if !isOperatorEvent {
-		// TODO: remove this check when we will support operator removal for non-operator (mark as inactive)
-		return logFields, nil
 	}
 
 	shares, err := c.collection.GetOperatorValidatorShares(od.PublicKey, false)
@@ -129,6 +110,15 @@ func (c *controller) handleOperatorRemovalEvent(
 		return nil, errors.Wrap(err, "could not delete operator data")
 	}
 
+	logFields := make([]zap.Field, 0)
+	if strings.EqualFold(od.PublicKey, c.operatorPubKey) {
+		logFields = append(logFields,
+			zap.String("operatorName", od.Name),
+			zap.Uint64("operatorId", od.Index),
+			zap.String("operatorPubKey", od.PublicKey),
+			zap.String("ownerAddress", od.OwnerAddress.String()),
+		)
+	}
 	return logFields, nil
 }
 
@@ -165,16 +155,12 @@ func (c *controller) handleValidatorRegistrationEvent(
 		if ongoingSync {
 			c.onShareStart(validatorShare)
 		}
-	}
-
-	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
 			zap.Uint32s("operatorIds", validatorRegistrationEvent.OperatorIds),
 		)
 	}
-
 	return logFields, nil
 }
 
@@ -194,21 +180,6 @@ func (c *controller) handleValidatorRemovalEvent(
 		}
 	}
 
-	if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match validator owner address with provided event owner address"),
-		}
-	}
-
-	// remove decided messages
-	messageID := spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	if err := c.ibftStorage.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean all decided messages")
-	}
-	// remove change round messages
-	if err := c.ibftStorage.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean last change round")
-	}
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
@@ -222,9 +193,6 @@ func (c *controller) handleValidatorRemovalEvent(
 				return nil, err
 			}
 		}
-	}
-
-	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", validatorShare.PublicKey.SerializeToHexStr()),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
@@ -247,11 +215,8 @@ func (c *controller) handleAccountLiquidationEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.FullNode {
+		if share.IsOperatorShare(c.operatorPubKey) {
 			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
-		}
-		if isOperatorShare {
 			share.Liquidated = true
 
 			// save validator data
@@ -294,11 +259,8 @@ func (c *controller) handleAccountEnableEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.FullNode {
-			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
-		}
 		if share.IsOperatorShare(c.operatorPubKey) {
+			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
 			share.Liquidated = false
 
 			// save validator data
