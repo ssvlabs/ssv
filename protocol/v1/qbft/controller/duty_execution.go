@@ -34,17 +34,15 @@ func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignature
 	}
 
 	if err := message.ValidatePartialSigMsg(msg, committee, c.SignatureState.duty.Slot); err != nil {
-		c.Logger.Warn("could not validate partial signature message", zap.Any("msg", msg))
-		return nil
+		return errors.WithMessage(err, "could not validate partial signature message")
 	}
 	logger := c.Logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
-	logger.Info("all the msg signatures were verified",
+	logger.Info("received valid partial signature message",
 		zap.String("msg signature", hex.EncodeToString(msg.GetSignature())),
 		zap.String("msg beacon signature", hex.EncodeToString(msg.Messages[0].PartialSignature)),
 		zap.Any("msg", msg),
 	)
 
-	// TODO: do we need this check? [<oleg>]
 	//	check if already exist, if so, ignore
 	if _, found := c.SignatureState.signatures[message.OperatorID(msg.GetSigners()[0])]; found {
 		c.Logger.Debug("sig already known, skip")
@@ -87,44 +85,63 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height messa
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
-	ssvMsg, err := c.generateSignatureMessage(sig, root, duty.Slot)
+	psm, err := c.generatePartialSignatureMessage(sig, root, duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
-	if err := c.Network.Broadcast(ssvMsg); err != nil {
-		return errors.Wrap(err, "failed to broadcast signature")
+	if err := c.signAndBroadcast(psm); err != nil {
+		return errors.Wrap(err, "failed to sign and broadcast post consensus")
 	}
-	logger.Info("broadcasting partial signature post consensus")
 
 	//	start timer, clear new map and set var's
 	c.SignatureState.start(c.Logger, height, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 
-// generateSignatureMessage returns postConsensus type ssv message with signature signed message
-func (c *Controller) generateSignatureMessage(sig []byte, root []byte, slot spec.Slot) (message.SSVMessage, error) {
-	signers := []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)}
+// signAndBroadcast checks and adds the signed message to the appropriate round state type
+func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
+	pk, err := c.ValidatorShare.OperatorSharePubKey()
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator share pubkey")
+	}
+	signature, err := c.Signer.SignIBFTMessage(psm, pk.Serialize(), message.PostConsensusSigType)
+	if err != nil {
+		return errors.Wrap(err, "failed to sign message")
+	}
+
 	signedMsg := &ssv.SignedPartialSignatureMessage{
-		Type: ssv.PostConsensusPartialSig,
-		Messages: ssv.PartialSignatureMessages{
-			&ssv.PartialSignatureMessage{
-				Slot:             slot,
-				PartialSignature: sig,
-				SigningRoot:      root,
-				Signers:          signers,
-			},
-		},
-		Signature: sig, // TODO should be msg sig and not decided sig
-		Signers:   signers,
+		Type:      ssv.PostConsensusPartialSig,
+		Messages:  psm,
+		Signature: signature,
+		Signers:   []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)},
 	}
 
 	encodedSignedMsg, err := signedMsg.Encode()
 	if err != nil {
-		return message.SSVMessage{}, err
+		return errors.Wrap(err, "failed to encode signed message")
 	}
-	return message.SSVMessage{
+	ssvMsg := message.SSVMessage{
 		MsgType: message.SSVPostConsensusMsgType,
-		ID:      c.GetIdentifier(), // TODO this is the right id? (:Niv)
+		ID:      c.GetIdentifier(),
 		Data:    encodedSignedMsg,
+	}
+
+	if err := c.Network.Broadcast(ssvMsg); err != nil {
+		return errors.Wrap(err, "failed to broadcast signature")
+	}
+	c.Logger.Info("broadcasting partial signature post consensus")
+	return nil
+}
+
+// generatePartialSignatureMessage returns a PartialSignatureMessage struct
+func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (ssv.PartialSignatureMessages, error) {
+	signers := []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)}
+	return ssv.PartialSignatureMessages{
+		&ssv.PartialSignatureMessage{
+			Slot:             slot,
+			PartialSignature: sig,
+			SigningRoot:      root,
+			Signers:          signers,
+		},
 	}, nil
 }

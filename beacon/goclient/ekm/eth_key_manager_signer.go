@@ -18,7 +18,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	messageprotocol "github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -30,11 +29,10 @@ type ethKeyManagerSigner struct {
 	storage      *signerStorage
 	signingUtils beacon.SigningUtil
 	domain       messageprotocol.DomainType
-	sigType      []byte
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain messageprotocol.DomainType, sigType []byte) (beaconprotocol.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain messageprotocol.DomainType) (beaconprotocol.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -67,7 +65,6 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUt
 		storage:      signerStore,
 		signingUtils: signingUtils,
 		domain:       domain,
-		sigType:      sigType,
 	}, nil
 }
 
@@ -111,12 +108,12 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (km *ethKeyManagerSigner) SignIBFTMessage(data messageprotocol.Root, pk []byte, sigType messageprotocol.SignatureType) ([]byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, km.sigType)
-	root, err := messageprotocol.ComputeSigningRoot(message, signatureDomain)
+	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, sigType)
+	root, err := messageprotocol.ComputeSigningRoot(data, signatureDomain)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get message signing root")
 	}

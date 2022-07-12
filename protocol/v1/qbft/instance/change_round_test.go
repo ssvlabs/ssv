@@ -5,7 +5,6 @@ import (
 
 	"testing"
 
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"

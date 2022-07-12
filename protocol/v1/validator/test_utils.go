@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv-spec/types"
 	"sync"
 	"testing"
 
@@ -279,8 +280,8 @@ func (b *TestBeacon) RemoveShare(pubKey string) error {
 }
 
 // SignIBFTMessage impl
-func (b *TestBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
-	return b.Signer.SignIBFTMessage(message, pk, forkVersion)
+func (b *TestBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+	return b.Signer.SignIBFTMessage(data, pk, sigType)
 }
 
 // GetDomain impl
@@ -400,16 +401,17 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	km.lock.Lock()
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key) // TODO need to check fork v1?
+		computedRoot, err := types.ComputeSigningRoot(data, nil)
 		if err != nil {
-			return nil, errors.Wrap(err, "could not sign ibft msg")
+			return nil, errors.Wrap(err, "could not sign root")
 		}
-		return sig.Serialize(), nil
+
+		return key.SignByte(computedRoot).Serialize(), nil
 	}
 	return nil, errors.Errorf("could not find key for pk: %x", pk)
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ValidatePartialSigMsg validates the signed partial signature message
+// ValidatePartialSigMsg validates the signed partial signature message | NOTE: using this code and not from spec until duty runner is implemented
 func ValidatePartialSigMsg(signedMsg *ssv.SignedPartialSignatureMessage, committee []*types.Operator, slot spec.Slot) error {
 	if err := signedMsg.Validate(); err != nil {
 		return errors.Wrap(err, "could not validate SignedPartialSignatureMessage")

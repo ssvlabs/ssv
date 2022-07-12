@@ -14,6 +14,6 @@ func (gc *goClient) RemoveShare(pubKey string) error {
 	return gc.keyManager.RemoveShare(pubKey)
 }
 
-func (gc *goClient) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
-	return gc.keyManager.SignIBFTMessage(message, pk, forkVersion)
+func (gc *goClient) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+	return gc.keyManager.SignIBFTMessage(data, pk, sigType)
 }

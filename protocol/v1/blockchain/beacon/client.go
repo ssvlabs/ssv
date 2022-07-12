@@ -5,11 +5,11 @@ import (
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
@@ -47,7 +47,7 @@ type KeyManager interface {
 // Signer is an interface responsible for all signing operations
 type Signer interface {
 	// SignIBFTMessage signs a network iBFT msg
-	SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error)
+	SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }

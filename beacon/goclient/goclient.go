@@ -92,7 +92,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, message.PrimusTestnet, message.QBFTSigType)
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, message.PrimusTestnet)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
