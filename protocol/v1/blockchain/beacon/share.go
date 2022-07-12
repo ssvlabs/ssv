@@ -131,7 +131,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage) error {
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators)
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

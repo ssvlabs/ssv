@@ -35,7 +35,7 @@ func (g *ForkGenesis) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMe
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.CommitMsgType),
-		signedmsg.AuthorizeMsg(share, g.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 		signedmsg.ValidateQuorum(share.ThresholdSize()),
 	)
 }
@@ -46,7 +46,7 @@ func (g *ForkGenesis) ValidateChangeRoundMsg(share *beacon.Share, identifier mes
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
 		signedmsg.ValidateLambdas(identifier),
-		signedmsg.AuthorizeMsg(share, g.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
 	)
 }

@@ -7,7 +7,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -123,7 +122,7 @@ func TestAuthorizeMsg(t *testing.T) {
 
 			pipeline := AuthorizeMsg(&beacon.Share{
 				Committee: committee,
-			}, forksprotocol.GenesisForkVersion.String())
+			})
 
 			if len(test.expectedError) == 0 {
 				require.NoError(t, pipeline.Run(signed))

@@ -225,7 +225,8 @@ func (msg *ConsensusMessage) DeepCopy() *ConsensusMessage {
 
 // Sign takes a secret key and signs the Message
 func (msg *ConsensusMessage) Sign(sk *bls.SecretKey) (*bls.Sign, error) {
-	root, err := msg.GetRoot()
+	signatureDomain := ComputeSignatureDomain(PrimusTestnet, QBFTSigType)
+	root, err := ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
 	}

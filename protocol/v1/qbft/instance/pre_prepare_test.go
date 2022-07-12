@@ -201,7 +201,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	msgs := instance.containersMap[qbftspec.ProposalMsgType].ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.State().Stage.Load() == int32(message.ProposalMsgType))
+	require.True(t, instance.State().Stage.Load() == int32(qbft.RoundStatePrePrepare))
 
 	// return nil if another pre-prepare received.
 	require.NoError(t, instance.UponPrePrepareMsg().Run(msg))
