@@ -6,19 +6,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
-
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -57,9 +58,9 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			[]*message.SSVMessage{generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
+			[]*message.SSVMessage{generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
 			nil,
@@ -67,7 +68,7 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_too_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), 0, ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), 0, ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			nil,
 			0,
@@ -77,22 +78,22 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_late_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier)},
+			[]*message.SSVMessage{generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
 			nil,
 		},
 		{
-			"no_running_instance_sig_current_height",
+			"no_running_instance_sig_current_slot",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
-				generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier), // verify priority is right
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
+				generatePartialSignatureMsg(t, message.SSVPostConsensusMsgType, phase0.Slot(1), ctrl.Identifier),
 			},
-			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(1), ctrl.Identifier)},
+			[]*message.SSVMessage{generatePartialSignatureMsg(t, message.SSVPostConsensusMsgType, phase0.Slot(1), ctrl.Identifier)},
 			3,
 			specqbft.Height(1),
 			nil,
@@ -100,10 +101,10 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_not_started_proposal",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), 1, ctrl.Identifier, specqbft.ProposalMsgType), // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(1), 1, ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), 1, ctrl.Identifier, specqbft.ProposalMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.ProposalMsgType),
 			},
-			[]*message.SSVMessage{generateConsensusMsg(t, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType)},
+			[]*message.SSVMessage{generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType)},
 			1,
 			specqbft.Height(1),
 			generateInstance(1, 1, qbft.RoundStateNotStarted),
@@ -111,11 +112,11 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_not_started_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1,
 			specqbft.Height(0),
@@ -124,12 +125,12 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_PrePrepare",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),     // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),     // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
 			0,
 			specqbft.Height(0),
@@ -138,12 +139,12 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_prepare",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),    // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),    // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1,
 			specqbft.Height(0),
@@ -152,12 +153,12 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_change_round",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			2,
 			specqbft.Height(0),
@@ -166,12 +167,12 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_no_message_pop_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),      // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),      // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			2,
 			specqbft.Height(0),
@@ -180,11 +181,11 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_no_message_pop_change_round",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			1,
 			specqbft.Height(0),
@@ -193,10 +194,10 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"default_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // expect previews height commit
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // expect previews height commit
 			},
 			0,
 			specqbft.Height(1), // current height
@@ -205,10 +206,10 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"default_late_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			0,
 			specqbft.Height(1), // current height
@@ -217,13 +218,13 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_force_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			2,
 			specqbft.Height(1),
@@ -232,13 +233,13 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_force_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			2,
 			specqbft.Height(1),
@@ -247,22 +248,22 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"instance_change_round_clean_old_messages",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1, // only "signed_index" for decided in height 9
 			specqbft.Height(10),
@@ -271,22 +272,22 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_change_round_clean_old_messages",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generatePartialSignatureMsg(t, message.SSVPostConsensusMsgType, phase0.Slot(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generatePartialSignatureMsg(t, message.SSVPostConsensusMsgType, phase0.Slot(1), ctrl.Identifier),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, message.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1, // only "signed_index" for decided in height 10
 			specqbft.Height(10),
@@ -301,6 +302,7 @@ func TestConsumeMessages(t *testing.T) {
 			ctrl.setCurrentInstance(test.currentInstance)
 			ctrl.SignatureState = SignatureState{}
 			ctrl.SignatureState.setHeight(test.lastHeight)
+			ctrl.SignatureState.duty = &beacon.Duty{Slot: 1}
 
 			// populating msg's
 			for _, msg := range test.msgs {
@@ -330,6 +332,14 @@ func TestConsumeMessages(t *testing.T) {
 					require.Equal(t, expectedMsg.MsgType, msg.MsgType)
 
 					switch expectedMsg.MsgType {
+					case message.SSVPostConsensusMsgType:
+						testSignedMsg := new(ssv.PartialSignatureMessage)
+						require.NoError(t, testSignedMsg.Decode(expectedMsg.Data))
+
+						signedMsg := new(ssv.PartialSignatureMessage)
+						require.NoError(t, signedMsg.Decode(msg.Data))
+
+						require.Equal(t, testSignedMsg.Slot, signedMsg.Slot)
 					case message.SSVDecidedMsgType:
 						fallthrough
 					case message.SSVConsensusMsgType:
@@ -356,7 +366,7 @@ func TestConsumeMessages(t *testing.T) {
 			}()
 
 			wg.Wait()                          // wait until all expected msg's are processed
-			time.Sleep(time.Millisecond * 500) // wait for clean old msg's
+			time.Sleep(time.Millisecond * 250) // wait for clean old msg's
 			require.Equal(t, test.expectedQLen, ctrl.Q.Len())
 			wg.Add(1)
 			cancel()
@@ -377,32 +387,38 @@ func generateInstance(height specqbft.Height, round specqbft.Round, stage qbft.R
 	return i
 }
 
-func generatePostConsensusOrSig(t *testing.T, msgType message.MsgType, height specqbft.Height, id message.Identifier) *message.SSVMessage {
+func generatePartialSignatureMsg(t *testing.T, msgType message.MsgType, slot phase0.Slot, id message.Identifier) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
 		MsgType: msgType,
 		ID:      id,
 	}
 
-	signedMsg := specqbft.SignedMessage{
-		Signature: nil,
-		Signers:   nil,
-		Message: &specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Height:     height,
-			Round:      0,
-			Identifier: nil,
-			Data:       nil,
+	psms := ssv.PartialSignatureMessages{
+		&ssv.PartialSignatureMessage{
+			Slot:             slot,
+			PartialSignature: []byte("sig"),
+			SigningRoot:      []byte("root"),
+			Signers:          nil,
+			MetaData:         nil,
 		},
 	}
+
+	signedMsg := ssv.SignedPartialSignatureMessage{
+		Type:      ssv.PostConsensusPartialSig,
+		Messages:  psms,
+		Signature: []byte("sig"),
+		Signers:   nil,
+	}
+
 	data, err := signedMsg.Encode()
 	require.NoError(t, err)
 	ssvMsg.Data = data
 	return ssvMsg
 }
 
-func generateConsensusMsg(t *testing.T, height specqbft.Height, round specqbft.Round, id message.Identifier, consensusType specqbft.MessageType) *message.SSVMessage {
+func generateSignedMsg(t *testing.T, msgType message.MsgType, height specqbft.Height, round specqbft.Round, id message.Identifier, consensusType specqbft.MessageType) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
+		MsgType: msgType,
 		ID:      id,
 	}
 

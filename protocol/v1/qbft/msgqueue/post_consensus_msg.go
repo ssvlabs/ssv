@@ -38,10 +38,6 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if err := sm.Decode(msg.Data); err != nil {
 			return Index{}
 		}
-		err := sm.Validate()
-		if err != nil {
-			return Index{}
-		}
 		return SignedPostConsensusMsgIndex(msg.ID.String(), sm.Messages[0].Slot)
 	}
 }
@@ -53,6 +49,7 @@ func SignedPostConsensusMsgIndex(mid string, s spec.Slot) Index {
 		Mt:   message.SSVPostConsensusMsgType,
 		ID:   mid,
 		S:    s,
+		H:    -1,
 		Cmt:  -1, // as unknown
 	}
 }
