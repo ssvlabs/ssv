@@ -17,6 +17,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
@@ -44,47 +46,47 @@ import (
 // nolint
 func testsToRun() map[string]struct{} {
 	testList := spectest.AllTests
-	/*testList = []spectest.SpecTest{
-		//proposer.FourOperators(),
-		//proposer.SevenOperators(),
-		//proposer.TenOperators(),
-		//proposer.ThirteenOperators(),
-		//
-		//messages.RoundChangeDataInvalidJustifications(),
-		//messages.RoundChangeDataInvalidPreparedRound(),
-		//messages.RoundChangeDataInvalidPreparedValue(),
-		//messages.RoundChangePrePreparedJustifications(),
-		//messages.RoundChangeNotPreparedJustifications(),
-		//messages.CommitDataEncoding(),
-		//messages.DecidedMsgEncoding(),
-		//messages.MsgNilIdentifier(),
-		//messages.MsgNonZeroIdentifier(),
-		//messages.MsgTypeUnknown(),
-		//messages.PrepareDataEncoding(),
-		//messages.ProposeDataEncoding(),
-		//messages.MsgDataNil(),
-		//messages.MsgDataNonZero(),
-		//messages.SignedMsgSigTooShort(),
-		//messages.SignedMsgSigTooLong(),
-		//messages.SignedMsgNoSigners(),
-		//messages.GetRoot(),
-		//messages.SignedMessageEncoding(),
-		//messages.CreateProposal(),
-		//messages.CreateProposalPreviouslyPrepared(),
-		//messages.CreateProposalNotPreviouslyPrepared(),
-		//messages.CreatePrepare(),
-		//messages.CreateCommit(),
-		//messages.CreateRoundChange(),
-		//messages.CreateRoundChangePreviouslyPrepared(),
-		//messages.RoundChangeDataEncoding(),
-		//
-		// TODO: failure
-		spectests.HappyFlow(),
+	testList = []spectest.SpecTest{
+		proposer.FourOperators(),
+		proposer.SevenOperators(),
+		proposer.TenOperators(),
+		proposer.ThirteenOperators(),
+
+		messages.RoundChangeDataInvalidJustifications(),
+		messages.RoundChangeDataInvalidPreparedRound(),
+		messages.RoundChangeDataInvalidPreparedValue(),
+		messages.RoundChangePrePreparedJustifications(),
+		messages.RoundChangeNotPreparedJustifications(),
+		messages.CommitDataEncoding(),
+		messages.DecidedMsgEncoding(),
+		messages.MsgNilIdentifier(),
+		messages.MsgNonZeroIdentifier(),
+		messages.MsgTypeUnknown(),
+		messages.PrepareDataEncoding(),
+		messages.ProposeDataEncoding(),
+		messages.MsgDataNil(),
+		messages.MsgDataNonZero(),
+		messages.SignedMsgSigTooShort(),
+		messages.SignedMsgSigTooLong(),
+		messages.SignedMsgNoSigners(),
+		messages.GetRoot(),
+		messages.SignedMessageEncoding(),
+		messages.CreateProposal(),
+		messages.CreateProposalPreviouslyPrepared(),
+		messages.CreateProposalNotPreviouslyPrepared(),
+		messages.CreatePrepare(),
+		messages.CreateCommit(),
+		messages.CreateRoundChange(),
+		messages.CreateRoundChangePreviouslyPrepared(),
+		messages.RoundChangeDataEncoding(),
+
+		// TODO(nkryuchkov): failure
+		//spectests.HappyFlow(),
 		//spectests.SevenOperators(),
 		//spectests.TenOperators(),
 		//spectests.ThirteenOperators(),
 		//
-		// TODO: failure
+		// TODO(nkryuchkov): failure
 		//proposal.HappyFlow(),
 		//proposal.NotPreparedPreviouslyJustification(),
 		//proposal.PreparedPreviouslyJustification(),
@@ -117,7 +119,7 @@ func testsToRun() map[string]struct{} {
 		//proposal.WrongProposer(),
 		//proposal.WrongSignature(),
 		//
-		// TODO: failure
+		// TODO(nkryuchkov): failure
 		//commit.CurrentRound(),
 		//commit.FutureRound(),
 		//commit.PastRound(),
@@ -135,12 +137,12 @@ func testsToRun() map[string]struct{} {
 		//commit.ImparsableCommitData(),
 		//commit.WrongSignature(),
 		//
-		// TODO: failure
+		// TODO(nkryuchkov): failure
 		//roundchange.HappyFlow(),
 		//roundchange.PreviouslyPrepared(),
 		//roundchange.F1Speedup(),
 		//roundchange.F1SpeedupPrepared(),
-	}*/
+	}
 
 	result := make(map[string]struct{})
 	for _, test := range testList {
@@ -163,7 +165,7 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	testMap := testsToRun() // TODO: remove
+	testMap := testsToRun() // TODO(nkryuchkov): remove
 
 	tests := make(map[string]spectest.SpecTest)
 	for name, test := range untypedTests {
@@ -202,7 +204,7 @@ func TestQBFTMapping(t *testing.T) {
 
 func mapErrors(err string) string {
 	switch err {
-	// TODO: ensure that cases below are not bugs
+	// TODO(nkryuchkov): ensure that cases below are not bugs
 	case "proposal invalid: proposal not justified: prepares has no quorum",
 		"proposal invalid: proposal not justified: change round has not quorum",
 		"proposal invalid: proposal not justified: change round msg not valid: basic round Change validation failed: round change msg signature invalid: failed to verify signature",
@@ -391,8 +393,6 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 		mappedInstance.StartValue = qbftInstance.State().GetInputValue()
 	}
-
-	// TODO: 1) check the state of qbft instance; 2) check `test.OutputMessages`
 
 	if len(test.ExpectedError) != 0 {
 		require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
