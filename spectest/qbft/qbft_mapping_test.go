@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"os"
+	"net/http"
 	"reflect"
 	"strconv"
 	"strings"
@@ -153,15 +153,18 @@ func testsToRun() map[string]struct{} {
 }
 
 func TestQBFTMapping(t *testing.T) {
-	path, _ := os.Getwd()
-	fileName := "tests.json"
-	untypedTests := map[string]interface{}{}
-	byteValue, err := ioutil.ReadFile(path + "/" + fileName)
-	if err != nil {
-		panic(err.Error())
-	}
+	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/qbft/spectest/generate/tests.json")
+	require.NoError(t, err)
 
-	if err := json.Unmarshal(byteValue, &untypedTests); err != nil {
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
+
+	jsonTests, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	untypedTests := map[string]interface{}{}
+	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
 
