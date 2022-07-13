@@ -1,6 +1,7 @@
 package controller
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -9,33 +10,33 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
-func (c *Controller) processConsensusMsg(signedMessage *message.SignedMessage) error {
-	logger := c.Logger.With(zap.String("type", signedMessage.Message.MsgType.String()),
+func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) error {
+	logger := c.Logger.With(zap.Int("type", int(signedMessage.Message.MsgType)),
 		zap.Int64("height", int64(signedMessage.Message.Height)),
 		zap.Int64("round", int64(signedMessage.Message.Round)),
 		zap.Any("sender", signedMessage.GetSigners()))
 	if c.ReadMode {
 		switch signedMessage.Message.MsgType {
-		case message.RoundChangeMsgType, message.CommitMsgType:
+		case specqbft.RoundChangeMsgType, specqbft.CommitMsgType:
 		default: // other types not supported in read mode
 			return nil
 		}
 	}
 	logger.Debug("process consensus message")
 	switch signedMessage.Message.MsgType {
-	case message.RoundChangeMsgType: // supporting read-mode
+	case specqbft.RoundChangeMsgType: // supporting read-mode
 		if c.ReadMode {
 			return c.ProcessChangeRound(signedMessage)
 		}
 		fallthrough // not in read mode, need to process regular way
-	case message.CommitMsgType:
+	case specqbft.CommitMsgType:
 		if processed, err := c.processCommitMsg(signedMessage); err != nil {
 			return errors.Wrap(err, "failed to process late commit")
 		} else if processed {
 			return nil
 		}
 		fallthrough // not processed, need to process as regular consensus commit msg
-	case message.ProposalMsgType, message.PrepareMsgType:
+	case specqbft.ProposalMsgType, specqbft.PrepareMsgType:
 		if c.GetCurrentInstance() == nil {
 			return errors.New("current instance is nil")
 		}
@@ -61,7 +62,7 @@ func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *ssv.Sig
 // when there is an updated decided msg -
 // and "fullSync" mode, regular process for late commit (saving all range of high msg's)
 // if height is the same as last decided msg height, update the last decided with the updated one.
-func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (bool, error) {
+func (c *Controller) processCommitMsg(signedMessage *specqbft.SignedMessage) (bool, error) {
 	if c.GetCurrentInstance() != nil {
 		if signedMessage.Message.Height >= c.GetCurrentInstance().State().GetHeight() {
 			// process as regular consensus commit msg
@@ -71,7 +72,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 
 	logger := c.Logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
-		zap.String("identifier", signedMessage.Message.Identifier.String()),
+		zap.String("identifier", message.Identifier(signedMessage.Message.Identifier).String()),
 		zap.Any("signers", signedMessage.GetSigners()))
 
 	if agg, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
@@ -93,7 +94,7 @@ func (c *Controller) processCommitMsg(signedMessage *message.SignedMessage) (boo
 }
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
-func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.SignedMessage) (*message.SignedMessage, error) {
+func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	decidedMessages, err := c.DecidedStrategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 
 	if err != nil {
@@ -115,10 +116,12 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *message.Signe
 	}
 	// aggregate message with stored decided
 	if err := decidedMsg.Aggregate(msg); err != nil {
-		if err == message.ErrDuplicateMsgSigner {
+		// TODO(nkryuchkov): declare the error in spec, use errors.Is
+		if err.Error() == "can't aggregate 2 signed messages with mutual signers" {
 			logger.Debug("duplicated signer")
 			return nil, nil
 		}
+
 		return nil, errors.Wrap(err, "could not aggregate commit message")
 	}
 	return decidedMsg, nil

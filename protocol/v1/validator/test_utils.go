@@ -3,14 +3,15 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv-spec/types"
 	"sync"
 	"testing"
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,7 @@ type testIBFT struct {
 	beacon          beacon.Beacon
 	share           *beaconprotocol.Share
 	signatureMu     sync.Mutex
-	signatures      map[message.OperatorID][]byte
+	signatures      map[spectypes.OperatorID][]byte
 }
 
 func (t *testIBFT) GetCurrentInstance() instance.Instancer {
@@ -85,29 +86,29 @@ func (t *testIBFT) GetCurrentInstance() instance.Instancer {
 func (t *testIBFT) Init() error {
 	pk := &bls.PublicKey{}
 	_ = pk.Deserialize(refPk)
-	t.signatures = map[message.OperatorID][]byte{}
+	t.signatures = map[spectypes.OperatorID][]byte{}
 	return nil
 }
 
 func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error) {
-	commitData, err := (&message.CommitData{Data: opts.Value}).Encode()
+	commitData, err := (&specqbft.CommitData{Data: opts.Value}).Encode()
 	if err != nil {
 		return nil, err
 	}
 	return &instance.Result{
 		Decided: t.decided,
-		Msg: &message.SignedMessage{
-			Message: &message.ConsensusMessage{
+		Msg: &specqbft.SignedMessage{
+			Message: &specqbft.Message{
 				Data: commitData,
 			},
-			Signers: make([]message.OperatorID, t.signaturesCount),
+			Signers: make([]spectypes.OperatorID, t.signaturesCount),
 		},
 	}, nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (t *testIBFT) GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node {
-	return map[message.OperatorID]*beaconprotocol.Node{
+func (t *testIBFT) GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol.Node {
+	return map[spectypes.OperatorID]*beaconprotocol.Node{
 		1: {
 			IbftID: 1,
 			Pk:     refSplitSharesPubKeys[0],
@@ -131,7 +132,7 @@ func (t *testIBFT) GetIdentifier() []byte {
 	return t.identifier
 }
 
-func (t *testIBFT) NextSeqNumber() (message.Height, error) {
+func (t *testIBFT) NextSeqNumber() (specqbft.Height, error) {
 	return 0, nil
 }
 
@@ -139,7 +140,7 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
+func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
 	// get operator pk for sig
 	pk, err := t.share.OperatorSharePubKey()
 	if err != nil {
@@ -147,7 +148,7 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 	}
 
 	retValueStruct := &beaconprotocol.DutyData{}
-	if duty.Type != message.RoleTypeAttester {
+	if duty.Type != spectypes.BNRoleAttester {
 		return errors.New("unsupported role, can't sign")
 	}
 
@@ -192,7 +193,7 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height message
 }
 
 func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
-	signedMsg := &message.SignedMessage{}
+	signedMsg := &specqbft.SignedMessage{}
 	if err := signedMsg.Decode(msg.GetData()); err != nil {
 		return errors.Wrap(err, "could not decode consensus signed message")
 	}
@@ -205,7 +206,7 @@ func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
 
 func (t *testIBFT) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
 	t.signatureMu.Lock()
-	t.signatures[message.OperatorID(msg.GetSigners()[0])] = msg.Messages[0].PartialSignature
+	t.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
 	t.signatureMu.Unlock()
 	return nil
 }
@@ -308,7 +309,7 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	share := &beaconprotocol.Share{
 		NodeID:    1,
 		PublicKey: pk,
-		Committee: map[message.OperatorID]*beaconprotocol.Node{
+		Committee: map[spectypes.OperatorID]*beaconprotocol.Node{
 			1: {
 				IbftID: 1,
 				Pk:     refSplitSharesPubKeys[0],
@@ -334,14 +335,14 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 	p2pNet := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	ret.ibfts = make(controller.Controllers)
-	ret.ibfts[message.RoleTypeAttester] = &testIBFT{
+	ret.ibfts[spectypes.BNRoleAttester] = &testIBFT{
 		decided:         decided,
 		signaturesCount: signaturesCount,
 		beacon:          ret.beacon,
 		share:           share,
 	}
-	ret.ibfts[message.RoleTypeAttester].(*testIBFT).identifier = identifier
-	require.NoError(t, ret.ibfts[message.RoleTypeAttester].Init())
+	ret.ibfts[spectypes.BNRoleAttester].(*testIBFT).identifier = identifier
+	require.NoError(t, ret.ibfts[spectypes.BNRoleAttester].Init())
 	ret.signer = ret.beacon
 
 	// nodes
@@ -355,19 +356,19 @@ func testingValidator(t *testing.T, decided bool, signaturesCount int, identifie
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[spectypes.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*beacon.Node)
-	sks := make(map[message.OperatorID]*bls.SecretKey)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &beacon.Node{
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[message.OperatorID(i)] = sk
+		sks[spectypes.OperatorID(i)] = sk
 	}
 	return sks, nodes
 }
@@ -406,7 +407,7 @@ func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType mess
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		computedRoot, err := types.ComputeSigningRoot(data, nil)
+		computedRoot, err := spectypes.ComputeSigningRoot(data, nil)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign root")
 		}

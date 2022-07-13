@@ -3,16 +3,15 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestMsgSeq(t *testing.T) {
 	tests := []struct {
 		name          string
-		expectedSeq   message.Height
-		actualSeq     message.Height
+		expectedSeq   specqbft.Height
+		actualSeq     specqbft.Height
 		expectedError string
 	}{
 		{
@@ -32,8 +31,8 @@ func TestMsgSeq(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pipeline := ValidateSequenceNumber(test.expectedSeq)
-			err := pipeline.Run(&message.SignedMessage{
-				Message: &message.ConsensusMessage{
+			err := pipeline.Run(&specqbft.SignedMessage{
+				Message: &specqbft.Message{
 					Height: test.actualSeq,
 				},
 			})

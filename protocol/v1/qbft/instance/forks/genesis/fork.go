@@ -1,6 +1,8 @@
 package genesis
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -37,7 +39,7 @@ func (g *ForkGenesis) VersionName() string {
 func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.ProposalMsgType),
+		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
@@ -49,7 +51,7 @@ func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state
 func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.PrepareMsgType),
+		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
 		signedmsg.ValidateLambdas(state.GetIdentifier()),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
@@ -57,10 +59,10 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 }
 
 // CommitMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.CommitMsgType),
+		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
@@ -68,10 +70,10 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifie
 }
 
 // ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
+		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
 		signedmsg.ValidateLambdas(identifier),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),

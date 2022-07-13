@@ -2,13 +2,14 @@ package controller
 
 import (
 	"encoding/hex"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
@@ -25,10 +26,10 @@ func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignature
 	}
 
 	// adjust share committee to the spec
-	committee := make([]*types.Operator, 0)
+	committee := make([]*spectypes.Operator, 0)
 	for _, node := range c.ValidatorShare.Committee {
-		committee = append(committee, &types.Operator{
-			OperatorID: types.OperatorID(node.IbftID),
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(node.IbftID),
 			PubKey:     node.Pk,
 		})
 	}
@@ -44,12 +45,12 @@ func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignature
 	)
 
 	//	check if already exist, if so, ignore
-	if _, found := c.SignatureState.signatures[message.OperatorID(msg.GetSigners()[0])]; found {
+	if _, found := c.SignatureState.signatures[msg.GetSigners()[0]]; found {
 		c.Logger.Debug("sig already known, skip")
 		return nil
 	}
 
-	c.SignatureState.signatures[message.OperatorID(msg.GetSigners()[0])] = msg.Messages[0].PartialSignature
+	c.SignatureState.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
 	if len(c.SignatureState.signatures) >= c.SignatureState.sigCount {
 		c.Logger.Info("collected enough signature to reconstruct",
 			zap.Int("signatures", len(c.SignatureState.signatures)),
@@ -79,7 +80,7 @@ func (c *Controller) broadcastSignature() error {
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
+func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := c.signDuty(decidedValue, duty)
 	if err != nil {
@@ -113,7 +114,7 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 		Type:      ssv.PostConsensusPartialSig,
 		Messages:  psm,
 		Signature: signature,
-		Signers:   []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)},
+		Signers:   []spectypes.OperatorID{c.ValidatorShare.NodeID},
 	}
 
 	encodedSignedMsg, err := signedMsg.Encode()
@@ -135,7 +136,7 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 
 // generatePartialSignatureMessage returns a PartialSignatureMessage struct
 func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (ssv.PartialSignatureMessages, error) {
-	signers := []types.OperatorID{types.OperatorID(c.ValidatorShare.NodeID)}
+	signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
 	return ssv.PartialSignatureMessages{
 		&ssv.PartialSignatureMessage{
 			Slot:             slot,

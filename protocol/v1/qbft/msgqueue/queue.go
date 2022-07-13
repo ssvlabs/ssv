@@ -1,13 +1,16 @@
 package msgqueue
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // Cleaner is a function for iterating over keys and clean irrelevant ones
@@ -77,11 +80,11 @@ type Index struct {
 	// ID is the identifier
 	ID string
 	// H (optional) is the height, -1 is treated as nil
-	H message.Height
+	H specqbft.Height
 	// S (optional) is the slot
 	S spec.Slot
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
-	Cmt message.ConsensusMessageType
+	Cmt specqbft.MessageType
 }
 
 // queue implements MsgQueue
@@ -111,7 +114,7 @@ func (q *queue) Add(msg *message.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Inc()
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
@@ -122,7 +125,7 @@ func (q *queue) Purge(idx Index) int64 {
 
 	size := len(q.items[idx])
 	delete(q.items, idx)
-	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
+	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 
 	return int64(size)
 }
@@ -138,7 +141,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 			if cleaner(idx) {
 				size := len(q.items[idx])
 				atomic.AddInt64(&cleaned, int64(size))
-				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(size))
+				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 				return true
 			}
 		}
@@ -200,7 +203,7 @@ func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 		}
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), idx.Cmt.String()).Sub(float64(nMsgs))
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(nMsgs))
 	}
 	return msgs
 }

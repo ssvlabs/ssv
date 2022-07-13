@@ -7,8 +7,7 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -20,18 +19,19 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 )
 
 func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
-	value, err := (&message.ProposalData{Data: []byte(time.Now().Weekday().String())}).Encode()
+	value, err := (&specqbft.ProposalData{Data: []byte(time.Now().Weekday().String())}).Encode()
 	require.NoError(t, err)
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.ProposalMsgType:    inmem.New(3, 2),
-			qbftspec.RoundChangeMsgType: inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.ProposalMsgType:    inmem.New(3, 2),
+			specqbft.RoundChangeMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		state:  &qbft.State{},
@@ -43,17 +43,17 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
-	instance.state.Round.Store(message.Round(1))
+	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(message.Round(0))
+	instance.state.PreparedRound.Store(specqbft.Round(0))
 
-	consensusMessage := &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	consensusMessage := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("Lambda"),
-		Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-			Round:         1,
+		Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+			PreparedRound: 1,
 			PreparedValue: value,
 		}),
 	}
@@ -64,16 +64,16 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	t.Run("not quorum, not justified", func(t *testing.T) {
 		// change round no quorum
 		msg := SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, err
-		msg = SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], &message.ConsensusMessage{
-			MsgType:    message.ProposalMsgType,
+		msg = SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
 			Round:      2,
 			Identifier: []byte("Lambda"),
 			Data:       value,
 		})
-		instance.containersMap[qbftspec.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 		err := instance.JustifyPrePrepare(2, value)
 		require.EqualError(t, err, "no change round quorum")
 	})
@@ -81,9 +81,9 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
 		msg := SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 		msg = SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		err := instance.JustifyPrePrepare(2, value)
 		require.NoError(t, err)
@@ -99,10 +99,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.ProposalMsgType:    inmem.New(3, 2),
-			qbftspec.PrepareMsgType:     inmem.New(3, 2),
-			qbftspec.RoundChangeMsgType: inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.ProposalMsgType:    inmem.New(3, 2),
+			specqbft.PrepareMsgType:     inmem.New(3, 2),
+			specqbft.RoundChangeMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		state:  &qbft.State{},
@@ -114,16 +114,16 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
-	instance.state.Round.Store(message.Round(1))
+	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(message.Round(0))
+	instance.state.PreparedRound.Store(specqbft.Round(0))
 
-	consensusMessage := &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	consensusMessage := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 
 	roundChangeData, err := consensusMessage.GetRoundChangeData()
@@ -132,10 +132,10 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	t.Run("no change round quorum, not justified", func(t *testing.T) {
 		// change round no quorum
 		msg := SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		msg = SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
 		err := instance.JustifyPrePrepare(2, nil)
@@ -145,7 +145,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	t.Run("change round quorum, justified", func(t *testing.T) {
 		// test justified change round
 		msg := SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], consensusMessage)
-		instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
 		err := instance.JustifyPrePrepare(2, nil)
@@ -169,9 +169,9 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.ProposalMsgType: inmem.New(3, 2),
-			qbftspec.PrepareMsgType:  inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.ProposalMsgType: inmem.New(3, 2),
+			specqbft.PrepareMsgType:  inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		state:  &qbft.State{},
@@ -187,24 +187,24 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		signer:         newTestSigner(),
 	}
 
-	instance.state.Round.Store(message.Round(1))
+	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(message.Identifier("Lambda"))
 	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(message.Round(0))
-	instance.state.Height.Store(message.Height(0))
+	instance.state.PreparedRound.Store(specqbft.Round(0))
+	instance.state.Height.Store(specqbft.Height(0))
 	instance.state.Stage.Store(int32(qbft.RoundStateNotStarted))
 
 	instance.fork = testingFork(instance)
 
 	// test happy flow
-	msg := SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], &message.ConsensusMessage{
-		MsgType:    message.ProposalMsgType,
+	msg := SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       proposalDataToBytes(t, &message.ProposalData{Data: []byte(time.Now().Weekday().String())}),
+		Data:       proposalDataToBytes(t, &specqbft.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	})
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
-	msgs := instance.containersMap[qbftspec.ProposalMsgType].ReadOnlyMessagesByRound(1)
+	msgs := instance.containersMap[specqbft.ProposalMsgType].ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
 	require.True(t, instance.State().Stage.Load() == int32(qbft.RoundStatePrePrepare))
@@ -222,8 +222,8 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.RoundChangeMsgType: inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.RoundChangeMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
@@ -235,51 +235,51 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 		network: network,
 	}
 
-	instance.state.Round.Store(message.Round(1))
+	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(message.Round(0))
+	instance.state.PreparedRound.Store(specqbft.Round(0))
 
 	require.NoError(t, instance.JustifyPrePrepare(1, nil))
 
 	// try to justify round 2 without round change
-	instance.State().Round.Store(message.Round(2))
+	instance.State().Round.Store(specqbft.Round(2))
 	err = instance.JustifyPrePrepare(2, nil)
 	require.EqualError(t, err, "no change round quorum")
 
 	// test no change round quorum
-	msg := &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err := msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], msg), roundChangeData.PreparedValue)
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], msg), roundChangeData.PreparedValue)
 
-	msg = &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	msg = &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], msg), roundChangeData.PreparedValue)
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], msg), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.EqualError(t, err, "no change round quorum")
 
 	// test with quorum of change round
-	msg = &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	msg = &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
 		Identifier: []byte("lambdas"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
 	require.NoError(t, err)
-	instance.containersMap[qbftspec.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], msg), roundChangeData.PreparedValue)
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], msg), roundChangeData.PreparedValue)
 
 	err = instance.JustifyPrePrepare(2, nil)
 	require.NoError(t, err)
@@ -289,8 +289,8 @@ func TestPrePreparePipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.PrepareMsgType: inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
@@ -303,9 +303,9 @@ func TestPrePreparePipeline(t *testing.T) {
 		LeaderSelector: &constant.Constant{LeaderIndex: 0},
 	}
 
-	instance.state.Round.Store(message.Round(1))
+	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(message.Identifier("Lambda"))
-	instance.state.Height.Store(message.Height(0))
+	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)
 
@@ -332,7 +332,7 @@ func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Du
 	return nil, nil, nil
 }
 
-func proposalDataToBytes(t *testing.T, input *message.ProposalData) []byte {
+func proposalDataToBytes(t *testing.T, input *specqbft.ProposalData) []byte {
 	ret, err := json.Marshal(input)
 	require.NoError(t, err)
 	return ret

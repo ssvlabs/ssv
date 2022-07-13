@@ -6,10 +6,9 @@ import (
 	"strconv"
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 type shareSet struct {
@@ -18,7 +17,7 @@ type shareSet struct {
 	message     []byte
 	sk          bls.SecretKey
 	skSig       *bls.Sign
-	shares      map[message.OperatorID]*bls.SecretKey
+	shares      map[spectypes.OperatorID]*bls.SecretKey
 }
 
 func generateShares(n uint64, k uint64, message string) (*shareSet, error) {
@@ -41,7 +40,7 @@ func TestSplitAndReconstruct(t *testing.T) {
 	require.NoError(t, err)
 
 	// partial sigs
-	sigVec := make(map[message.OperatorID][]byte)
+	sigVec := make(map[spectypes.OperatorID][]byte)
 	for i, s := range shareSet.shares {
 		partialSig := s.SignByte(shareSet.message)
 		sigVec[i] = partialSig.Serialize()
@@ -65,7 +64,7 @@ func TestIncorrectShare(t *testing.T) {
 	shareSet.shares[2] = &randomShare
 
 	// partial sigs
-	sigVec := make(map[message.OperatorID][]byte)
+	sigVec := make(map[spectypes.OperatorID][]byte)
 	for i, s := range shareSet.shares {
 		partialSig := s.SignByte(shareSet.message)
 		sigVec[i] = partialSig.Serialize()

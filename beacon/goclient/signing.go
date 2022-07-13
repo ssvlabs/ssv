@@ -3,12 +3,11 @@ package goclient
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/go-ssz"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // getSigningRoot returns signing root
@@ -24,10 +23,10 @@ func (gc *goClient) getSigningRoot(data *phase0spec.AttestationData) ([32]byte, 
 	return root, nil
 }
 
-// getSigningRoot returns signing root
+// GetDomain returns domain
 func (gc *goClient) GetDomain(data *phase0spec.AttestationData) ([]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
-	domainType, err := gc.getDomainType(message.RoleTypeAttester)
+	domainType, err := gc.getDomainType(spectypes.BNRoleAttester)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +38,7 @@ func (gc *goClient) GetDomain(data *phase0spec.AttestationData) ([]byte, error) 
 }
 
 // getDomainType returns domain type by role type
-func (gc *goClient) getDomainType(roleType message.RoleType) (*phase0spec.DomainType, error) {
+func (gc *goClient) getDomainType(roleType spectypes.BeaconRole) (*phase0spec.DomainType, error) {
 	if provider, isProvider := gc.client.(eth2client.SpecProvider); isProvider {
 		spec, err := provider.Spec(gc.ctx)
 		if err != nil {
@@ -48,11 +47,11 @@ func (gc *goClient) getDomainType(roleType message.RoleType) (*phase0spec.Domain
 		var val interface{}
 		var exists bool
 		switch roleType {
-		case message.RoleTypeAttester:
+		case spectypes.BNRoleAttester:
 			val, exists = spec["DOMAIN_BEACON_ATTESTER"]
-		case message.RoleTypeAggregator:
+		case spectypes.BNRoleAggregator:
 			val, exists = spec["DOMAIN_AGGREGATE_AND_PROOF"]
-		case message.RoleTypeProposer:
+		case spectypes.BNRoleProposer:
 			val, exists = spec["DOMAIN_BEACON_PROPOSER"]
 		default:
 			return nil, errors.New("role type domain is not implemented")

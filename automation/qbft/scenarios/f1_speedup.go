@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -146,7 +148,7 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *f1SpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores[:2] {
-		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
+		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
 		if err != nil {
 			return err
 		}
@@ -163,7 +165,7 @@ func (r *f1SpeedupScenario) initNode(val validator.IValidator, net network.P2PNe
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
-	ibftc := val.(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	if err := ibftc.Init(); err != nil {
 		if err == controller.ErrAlreadyRunning {
@@ -178,7 +180,7 @@ func (r *f1SpeedupScenario) initNode(val validator.IValidator, net network.P2PNe
 }
 
 func (r *f1SpeedupScenario) startNode(val validator.IValidator) error {
-	ibftc := val.(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
 		Logger:    r.logger,

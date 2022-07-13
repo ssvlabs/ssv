@@ -2,9 +2,12 @@ package controller
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -67,7 +70,7 @@ instanceLoop:
 			break instanceLoop
 		}
 	}
-	var seq message.Height
+	var seq specqbft.Height
 	if c.GetCurrentInstance() != nil {
 		// saves seq as instance will be cleared
 		seq = c.GetCurrentInstance().State().GetHeight()
@@ -82,11 +85,11 @@ instanceLoop:
 }
 
 // afterInstance is triggered after the instance was finished
-func (c *Controller) afterInstance(height message.Height, res *instance.Result, err error) {
+func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
-		if height == message.Height(0) {
+		if height == specqbft.Height(0) {
 			if res.Msg == nil || res.Msg.Message == nil {
 				// missing sequence number
 				return
@@ -100,7 +103,7 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 	idn := c.Identifier.String()
 	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
-			if k.Cmt == message.CommitMsgType && k.H == height {
+			if k.Cmt == specqbft.CommitMsgType && k.H == height {
 				return false
 			}
 			return true
@@ -134,7 +137,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 			logger.Info("decided current instance",
-				zap.String("identifier", agg.Message.Identifier.String()),
+				zap.String("identifier", message.Identifier(agg.Message.Identifier).String()),
 				zap.Any("signers", agg.GetSigners()),
 				zap.Uint64("height", uint64(agg.Message.Height)),
 				zap.Any("updated", updated))
@@ -172,7 +175,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	count := 0
 	f := changeround.NewLastRoundFetcher(c.Logger, c.Network)
-	handler := func(msg *message.SignedMessage) error {
+	handler := func(msg *specqbft.SignedMessage) error {
 		if ctxErr := c.Ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}

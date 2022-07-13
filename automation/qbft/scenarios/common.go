@@ -1,14 +1,15 @@
 package scenarios
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v1/validator"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/validator"
 )
 
-func startNode(val validator.IValidator, h message.Height, value []byte, logger *zap.Logger) error {
+func startNode(val validator.IValidator, h specqbft.Height, value []byte, logger *zap.Logger) error {
 	ibftControllers := val.(*validator.Validator).Ibfts()
 
 	for _, ibftc := range ibftControllers {

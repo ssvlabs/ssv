@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -44,7 +45,7 @@ type Options struct {
 	ReadMode                   bool
 	FullNode                   bool
 	NewDecidedHandler          controller.NewDecidedHandler
-	DutyRoles                  []message.RoleType
+	DutyRoles                  []spectypes.BeaconRole
 }
 
 // Validator represents the validator
@@ -151,15 +152,15 @@ func (v *Validator) OnFork(forkVersion forksprotocol.ForkVersion) error {
 }
 
 // setupRunners return duty runners map with all the supported duty types
-func setupIbfts(opt *Options, logger *zap.Logger) map[message.RoleType]controller.IController {
-	ibfts := make(map[message.RoleType]controller.IController)
+func setupIbfts(opt *Options, logger *zap.Logger) map[spectypes.BeaconRole]controller.IController {
+	ibfts := make(map[spectypes.BeaconRole]controller.IController)
 	for _, role := range opt.DutyRoles {
 		ibfts[role] = setupIbftController(role, logger, opt)
 	}
 	return ibfts
 }
 
-func setupIbftController(role message.RoleType, logger *zap.Logger, opt *Options) controller.IController {
+func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Options) controller.IController {
 	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
 	opts := controller.Options{
 		Context:           opt.Context,

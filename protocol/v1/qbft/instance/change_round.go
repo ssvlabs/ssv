@@ -3,11 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"math"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -21,7 +22,7 @@ import (
 func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.ChangeRoundMsgValidationPipeline(),
-		pipelines.WrapFunc("add change round msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add change round msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid change round message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Any("msg", signedMessage.Message),
@@ -31,7 +32,7 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.containersMap[qbftspec.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.GetPreparedValue())
+			i.containersMap[specqbft.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.PreparedValue)
 			return nil
 		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
@@ -61,7 +62,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
 */
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *message.SignedMessage) error {
+	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
 		quorum, msgsCount, committeeSize := i.changeRoundQuorum(signedMessage.Message.Round)
 
@@ -110,7 +111,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			}
 
 			// send pre-prepare msg
-			var broadcastMsg message.ConsensusMessage
+			var broadcastMsg specqbft.Message
 			broadcastMsg, err = i.generatePrePrepareMessage(value)
 			if err != nil {
 				return
@@ -126,7 +127,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 
 // actOnExistingPrePrepare will try to find exiting pre-prepare msg and run the UponPrePrepareMsg if found.
 // We do this in case a future pre-prepare msg was sent before we reached change round quorum, this check is to prevent the instance to wait another round.
-func (i *Instance) actOnExistingPrePrepare(signedMessage *message.SignedMessage) error {
+func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage) error {
 	found, msg, err := i.checkExistingPrePrepare(signedMessage.Message.Round)
 	if err != nil {
 		return err
@@ -138,20 +139,20 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *message.SignedMessage)
 	return i.UponPrePrepareMsg().Run(msg)
 }
 
-func (i *Instance) changeRoundQuorum(round message.Round) (quorum bool, t int, n int) {
+func (i *Instance) changeRoundQuorum(round specqbft.Round) (quorum bool, t int, n int) {
 	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	msgs := i.containersMap[qbftspec.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
+	msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
 	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
-	var justificationMsg *message.ConsensusMessage
+	var justificationMsg *specqbft.Message
 	var aggSig []byte
-	ids := make([]message.OperatorID, 0)
+	ids := make([]spectypes.OperatorID, 0)
 	if i.isPrepared() {
-		quorum, msgs := i.containersMap[qbftspec.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
+		quorum, msgs := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
 		var aggregatedSig *bls.Sign
 		justificationMsg = msgs[0].Message
@@ -175,11 +176,11 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		// return nil, errors.New("not prepared")
 	}
 
-	data := &message.RoundChangeData{
+	data := &specqbft.RoundChangeData{
 		PreparedValue:    i.State().GetPreparedValue(),
-		Round:            i.State().GetPreparedRound(),
+		PreparedRound:    i.State().GetPreparedRound(),
 		NextProposalData: nil, // TODO should fill?
-		RoundChangeJustification: []*message.SignedMessage{{
+		RoundChangeJustification: []*specqbft.SignedMessage{{
 			Signature: aggSig,
 			Signers:   ids,
 			Message:   justificationMsg,
@@ -209,7 +210,7 @@ func (i *Instance) BroadcastChangeRound() error {
 }
 
 // JustifyRoundChange see below
-func (i *Instance) JustifyRoundChange(round message.Round) error {
+func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 	// ### Algorithm 4 IBFTController pseudocode for process pi: message justification
 	//	predicate JustifyRoundChange(Qrc) return
 	//		∀⟨ROUND-CHANGE, λi, ri, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∧ pvj = ⊥
@@ -234,7 +235,7 @@ func (i *Instance) JustifyRoundChange(round message.Round) error {
 }
 
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
-func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highestPrepared *message.RoundChangeData, err error) {
+func (i *Instance) HighestPrepared(round specqbft.Round) (notPrepared bool, highestPrepared *specqbft.RoundChangeData, err error) {
 	/**
 	### Algorithm 4 IBFTController pseudocode for process pi: message justification
 		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
@@ -246,17 +247,17 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 	*/
 
 	notPrepared = true
-	for _, msg := range i.containersMap[qbftspec.RoundChangeMsgType].ReadOnlyMessagesByRound(round) {
+	for _, msg := range i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round) {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
 			return false, nil, err
 		}
 
 		// compare to highest found
-		if candidateChangeData.GetPreparedValue() != nil && len(candidateChangeData.GetPreparedValue()) > 0 {
+		if candidateChangeData.PreparedValue != nil && len(candidateChangeData.PreparedValue) > 0 {
 			notPrepared = false
 			if highestPrepared != nil {
-				if candidateChangeData.GetPreparedRound() > highestPrepared.GetPreparedRound() {
+				if candidateChangeData.PreparedRound > highestPrepared.PreparedRound {
 					highestPrepared = candidateChangeData
 				}
 			} else {
@@ -267,14 +268,14 @@ func (i *Instance) HighestPrepared(round message.Round) (notPrepared bool, highe
 	return notPrepared, highestPrepared, nil
 }
 
-func (i *Instance) generateChangeRoundMessage() (*message.ConsensusMessage, error) {
+func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {
 	roundChange, err := i.roundChangeInputValue()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create round change data for round")
 	}
 
-	return &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	return &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
 		Identifier: i.State().GetIdentifier(),

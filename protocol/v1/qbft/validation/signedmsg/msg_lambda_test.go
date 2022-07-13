@@ -3,9 +3,8 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestMsgLambda(t *testing.T) {
@@ -32,8 +31,8 @@ func TestMsgLambda(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pipeline := ValidateLambdas(test.expectedLambda)
-			err := pipeline.Run(&message.SignedMessage{
-				Message: &message.ConsensusMessage{
+			err := pipeline.Run(&specqbft.SignedMessage{
+				Message: &specqbft.Message{
 					Identifier: test.actualLambda,
 				},
 			})

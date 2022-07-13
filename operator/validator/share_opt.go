@@ -2,10 +2,12 @@ package validator
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 // ShareOptions - used to load validator share from config
@@ -37,9 +39,9 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 			}
 			return val
 		}
-		ibftCommittee := make(map[message.OperatorID]*beacon.Node)
+		ibftCommittee := make(map[spectypes.OperatorID]*beacon.Node)
 		for pk, id := range options.Committee {
-			ibftCommittee[message.OperatorID(id)] = &beacon.Node{
+			ibftCommittee[spectypes.OperatorID(id)] = &beacon.Node{
 				IbftID: uint64(id),
 				Pk:     _getBytesFromHex(pk),
 			}
@@ -60,7 +62,7 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 		}
 
 		share := beacon.Share{
-			NodeID:       message.OperatorID(options.NodeID),
+			NodeID:       spectypes.OperatorID(options.NodeID),
 			Metadata:     nil,
 			PublicKey:    validatorPk,
 			Committee:    ibftCommittee,

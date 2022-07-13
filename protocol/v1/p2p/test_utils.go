@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
@@ -299,12 +300,12 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 	return m.PollLastDecidedMessages(), nil
 }
 
-func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, message.Height, error) {
+func (m *mockNetwork) GetHistory(mid message.Identifier, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error) {
 	// TODO: remove hardcoded return, use input parameters
 	return m.PollGetHistoryMessages(), to, nil
 }
 
-func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error) {
+func (m *mockNetwork) LastChangeRound(mid message.Identifier, height specqbft.Height) ([]SyncResult, error) {
 	//m.lock.Lock()
 	//defer m.lock.Unlock()
 

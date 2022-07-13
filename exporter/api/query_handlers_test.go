@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -86,24 +88,24 @@ func TestHandleDecidedQuery(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := validator.GenerateNodes(4)
-	oids := make([]message.OperatorID, 0)
+	oids := make([]spectypes.OperatorID, 0)
 	for oid := range sks {
 		oids = append(oids, oid)
 	}
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, message.Height(0), message.Height(250), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
-		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
+	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
 			panic(err)
 		}
 
-		return oids, &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
-			Identifier: message.NewIdentifier(pk.Serialize(), message.RoleTypeAttester),
+			Identifier: message.NewIdentifier(pk.Serialize(), spectypes.BNRoleAttester),
 			Data:       commitDataBytes,
 		}
 	})

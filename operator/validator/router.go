@@ -1,8 +1,9 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 const bufSize = 1024

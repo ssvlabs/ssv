@@ -1,19 +1,22 @@
 package qbftstorage
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 // DecidedMsgStore manages persistence of messages
 type DecidedMsgStore interface {
-	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
+	GetLastDecided(identifier message.Identifier) (*specqbft.SignedMessage, error)
 	// SaveLastDecided saves the given decided message, after checking that it is indeed the highest
-	SaveLastDecided(signedMsg ...*message.SignedMessage) error
+	SaveLastDecided(signedMsg ...*specqbft.SignedMessage) error
 	// GetDecided returns historical decided messages in the given range
-	GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error)
+	GetDecided(identifier message.Identifier, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// SaveDecided saves historical decided messages
-	SaveDecided(signedMsg ...*message.SignedMessage) error
+	SaveDecided(signedMsg ...*specqbft.SignedMessage) error
 }
 
 // InstanceStore manages instance data
@@ -27,9 +30,9 @@ type InstanceStore interface {
 // ChangeRoundStore manages change round data
 type ChangeRoundStore interface {
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	GetLastChangeRoundMsg(identifier message.Identifier, signers ...message.OperatorID) ([]*message.SignedMessage, error)
+	GetLastChangeRoundMsg(identifier message.Identifier, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error)
 	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	SaveLastChangeRoundMsg(msg *message.SignedMessage) error
+	SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error
 	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
 	CleanLastChangeRound(identifier message.Identifier)
 }

@@ -1,13 +1,16 @@
 package msgqueue
 
 import (
+	"testing"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"testing"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestNewMsgQueue(t *testing.T) {
@@ -64,17 +67,17 @@ func TestNewMsgQueue(t *testing.T) {
 	t.Run("cleanSingedMsg", func(t *testing.T) {
 		q, err := New(logger, WithIndexers(SignedMsgIndexer()))
 		require.NoError(t, err)
-		identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(0), 1, identifier, message.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(0), 1, identifier, message.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(1), 1, identifier, message.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(1), 1, identifier, message.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, message.Height(2), 1, identifier, message.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, message.Height(2), 1, identifier, message.CommitMsgType))
+		identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
 
 		for i := 0; i <= 2; i++ {
-			height := message.Height(i)
-			idxs := SignedMsgIndex(message.SSVConsensusMsgType, identifier.String(), height, message.CommitMsgType)
+			height := specqbft.Height(i)
+			idxs := SignedMsgIndex(message.SSVConsensusMsgType, identifier.String(), height, specqbft.CommitMsgType)
 			require.Equal(t, len(idxs), 1)
 			idx := idxs[0]
 			require.Equal(t, 1, q.Count(idx))
@@ -86,7 +89,7 @@ func TestNewMsgQueue(t *testing.T) {
 	t.Run("cleanPostConsensusMsg", func(t *testing.T) {
 		q, err := New(logger, WithIndexers(SignedPostConsensusMsgIndexer()))
 		require.NoError(t, err)
-		identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
+		identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
 		q.Add(generatePostConsensusMsg(t, 0, identifier))
 		q.Add(generatePostConsensusMsg(t, 1, identifier))
 		q.Add(generatePostConsensusMsg(t, 2, identifier))
@@ -102,16 +105,16 @@ func TestNewMsgQueue(t *testing.T) {
 	})
 }
 
-func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height message.Height, round message.Round, id message.Identifier, consensusType message.ConsensusMessageType) *message.SSVMessage {
+func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height specqbft.Height, round specqbft.Round, id message.Identifier, consensusType specqbft.MessageType) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
 		MsgType: ssvMsgType,
 		ID:      id,
 	}
 
-	signedMsg := message.SignedMessage{
+	signedMsg := specqbft.SignedMessage{
 		Signature: nil,
 		Signers:   nil,
-		Message: &message.ConsensusMessage{
+		Message: &specqbft.Message{
 			MsgType:    consensusType,
 			Height:     height,
 			Round:      round,
@@ -138,11 +141,11 @@ func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id message.Identifie
 				Slot:             slot,
 				PartialSignature: make([]byte, 96),
 				SigningRoot:      make([]byte, 32),
-				Signers:          []types.OperatorID{1},
+				Signers:          []spectypes.OperatorID{1},
 			},
 		},
 		Signature: make([]byte, 96), // TODO should be msg sig and not decided sig
-		Signers:   []types.OperatorID{1},
+		Signers:   []spectypes.OperatorID{1},
 	}
 
 	encoded, err := signedMsg.Encode()

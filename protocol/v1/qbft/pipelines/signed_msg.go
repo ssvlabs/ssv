@@ -1,8 +1,6 @@
 package pipelines
 
-import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-)
+import specqbft "github.com/bloxapp/ssv-spec/qbft"
 
 // TODO: use generics when updating to go 1.18
 // to avoid duplicating the pipeline interface for SignedMessages and PostConsensusSignedMessages
@@ -10,14 +8,14 @@ import (
 // SignedMessagePipeline represents the behavior of round pipeline
 type SignedMessagePipeline interface {
 	// Run runs the pipeline
-	Run(signedMessage *message.SignedMessage) error
+	Run(signedMessage *specqbft.SignedMessage) error
 	Name() string
 }
 
 // CombineQuiet runs quiet and afterwards pipeline if not error returned.
 // if quiet returns an error it will be ignored
 func CombineQuiet(quiet SignedMessagePipeline, pipeline SignedMessagePipeline) SignedMessagePipeline {
-	return WrapFunc("if first pipeline non error, continue to second", func(signedMessage *message.SignedMessage) error {
+	return WrapFunc("if first pipeline non error, continue to second", func(signedMessage *specqbft.SignedMessage) error {
 		if quiet.Run(signedMessage) == nil {
 			return pipeline.Run(signedMessage)
 		}
@@ -38,7 +36,7 @@ type pipelinesCombination struct {
 }
 
 // Run implements SignedMessagePipeline interface
-func (p *pipelinesCombination) Run(signedMessage *message.SignedMessage) error {
+func (p *pipelinesCombination) Run(signedMessage *specqbft.SignedMessage) error {
 	for _, pp := range p.pipelines {
 		if err := pp.Run(signedMessage); err != nil {
 			return err
@@ -58,12 +56,12 @@ func (p *pipelinesCombination) Name() string {
 
 // pipelineFunc implements SignedMessagePipeline interface using just a function.
 type pipelineFunc struct {
-	fn   func(signedMessage *message.SignedMessage) error
+	fn   func(signedMessage *specqbft.SignedMessage) error
 	name string
 }
 
 // WrapFunc represents the given function as a pipeline implementor
-func WrapFunc(name string, fn func(signedMessage *message.SignedMessage) error) SignedMessagePipeline {
+func WrapFunc(name string, fn func(signedMessage *specqbft.SignedMessage) error) SignedMessagePipeline {
 	return &pipelineFunc{
 		fn:   fn,
 		name: name,
@@ -71,7 +69,7 @@ func WrapFunc(name string, fn func(signedMessage *message.SignedMessage) error) 
 }
 
 // Run implements SignedMessagePipeline interface
-func (p *pipelineFunc) Run(signedMessage *message.SignedMessage) error {
+func (p *pipelineFunc) Run(signedMessage *specqbft.SignedMessage) error {
 	return p.fn(signedMessage)
 }
 

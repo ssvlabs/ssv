@@ -2,9 +2,11 @@ package genesis
 
 import (
 	"bytes"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestForkV1_Encoding(t *testing.T) {

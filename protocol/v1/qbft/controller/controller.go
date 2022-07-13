@@ -6,7 +6,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -29,12 +31,12 @@ var ErrAlreadyRunning = errors.New("already running")
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *message.SignedMessage)
+type NewDecidedHandler func(msg *specqbft.SignedMessage)
 
 // Options is a set of options for the controller
 type Options struct {
 	Context           context.Context
-	Role              message.RoleType
+	Role              spectypes.BeaconRole
 	Identifier        message.Identifier
 	Logger            *zap.Logger
 	Storage           qbftstorage.QBFTStore
@@ -190,7 +192,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (c *Controller) syncDecided(from, to *message.SignedMessage) error {
+func (c *Controller) syncDecided(from, to *specqbft.SignedMessage) error {
 	c.ForkLock.Lock()
 	fork, decidedStrategy := c.Fork, c.DecidedStrategy
 	c.ForkLock.Unlock()
@@ -295,7 +297,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-func (c *Controller) GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node {
+func (c *Controller) GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol.Node {
 	return c.ValidatorShare.Committee
 }
 
@@ -330,7 +332,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 	switch msg.GetType() {
 	case message.SSVConsensusMsgType:
-		signedMsg := &message.SignedMessage{}
+		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
@@ -343,7 +345,7 @@ func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 		}
 		return c.processPostConsensusSig(signedMsg)
 	case message.SSVDecidedMsgType:
-		signedMsg := &message.SignedMessage{}
+		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}

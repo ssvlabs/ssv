@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -13,7 +14,6 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -49,7 +49,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			P2pNetwork:  net.Nodes[i],
 			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),
 			Share: &beacon.Share{
-				NodeID:       message.OperatorID(i + 1),
+				NodeID:       spectypes.OperatorID(i + 1),
 				PublicKey:    share.PublicKey,
 				Committee:    share.Committee,
 				Metadata:     share.Metadata,
@@ -59,7 +59,7 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
 			Signer:                     km,
-			DutyRoles:                  []message.RoleType{message.RoleTypeAttester}, // TODO when implemented, need to add more types
+			DutyRoles:                  []spectypes.BeaconRole{spectypes.BNRoleAttester}, // TODO when implemented, need to add more types
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   false,
@@ -78,9 +78,9 @@ func CreateShare(operators [][]byte) (*beacon.Share, map[uint64]*bls.SecretKey, 
 	if err != nil {
 		return nil, nil, err
 	}
-	committee := make(map[message.OperatorID]*beacon.Node)
+	committee := make(map[spectypes.OperatorID]*beacon.Node)
 	for i := 0; i < len(operators); i++ {
-		oid := message.OperatorID(i + 1)
+		oid := spectypes.OperatorID(i + 1)
 		committee[oid] = &beacon.Node{
 			IbftID: uint64(oid),
 			Pk:     m[uint64(oid)].GetPublicKey().Serialize(),

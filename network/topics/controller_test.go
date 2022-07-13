@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/network/forks/genesis"
 
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -297,7 +300,7 @@ func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, message.RoleTypeAttester)
+	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

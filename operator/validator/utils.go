@@ -3,9 +3,10 @@ package validator
 import (
 	"strings"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
@@ -54,9 +55,9 @@ func ShareFromValidatorEvent(
 	validatorShare.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
-	ibftCommittee := map[message.OperatorID]*beaconprotocol.Node{}
+	ibftCommittee := map[spectypes.OperatorID]*beaconprotocol.Node{}
 	for i := range validatorRegistrationEvent.OperatorPublicKeys {
-		nodeID := message.OperatorID(validatorRegistrationEvent.OperatorIds[i])
+		nodeID := spectypes.OperatorID(validatorRegistrationEvent.OperatorIds[i])
 		ibftCommittee[nodeID] = &beaconprotocol.Node{
 			IbftID: uint64(nodeID),
 			Pk:     validatorRegistrationEvent.SharesPublicKeys[i],
