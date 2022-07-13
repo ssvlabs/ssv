@@ -63,6 +63,7 @@ func TestSSVMapping(t *testing.T) {
 	}
 }
 
+// nolint: unused
 func testsToRun() map[string]struct{} {
 	//testList := spectest.AllTests
 	testList := []*tests.SpecTest{attester.HappyFlow()}
