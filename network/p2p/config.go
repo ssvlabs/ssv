@@ -4,7 +4,6 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/bloxapp/ssv/network/forks"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"strings"
 	"time"
 
@@ -35,12 +34,12 @@ type Config struct {
 	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
 	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 
-	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"5s"`
+	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"7s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
-	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"100" env-description:"Connected peers limit for outbound connections, inbound connections can grow up to 2 times of this value"`
+	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit for connections"`
+	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"5" env-description:"Connected peers limit per pubsub topic"`
 
 	// Subnets is a static bit list of subnets that this node will register upon start.
-	// using no subnets by default. to register to all subnets use: 0xffffffffffffffffffffffffffffffff
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
@@ -62,6 +61,10 @@ type Config struct {
 	ForkVersion forksprotocol.ForkVersion
 	// Logger to used by network services
 	Logger *zap.Logger
+
+	PubsubOutQueueSize        int `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
+	PubsubValidationQueueSize int `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
+	PubsubValidateThrottle    int `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -81,14 +84,10 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 
 	opts, err := c.configureAddrs(opts)
 	if err != nil {
-		return opts, errors.Wrap(err, "failed to setup addresses")
+		return opts, errors.Wrap(err, "could not setup addresses")
 	}
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
-
-	maxPeers := c.MaxPeers + minPeersBuffer
-	connManager := connmgr.NewConnManager(maxPeers/2, maxPeers, time.Minute*15)
-	opts = append(opts, libp2p.ConnectionManager(connManager))
 
 	opts = fork.AddOptions(opts)
 
@@ -132,7 +131,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
-				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+				c.Logger.Warn("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}

@@ -208,7 +208,7 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
 		if err := ctrl.setupTopicValidator(name); err != nil {
 			// TODO: close topic?
 			//return err
-			ctrl.logger.Warn("failed to setup topic", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
 		}
 	}
 	// lock topic and release main lock
@@ -237,8 +237,8 @@ func (ctrl *topicsCtrl) start(name string, tc *topicContainer) {
 	for {
 		err := ctrl.listen(tc.sub)
 		// rejoin in case failed for some reason
-		if err != nil {
-			ctrl.logger.Warn("failed listening to topic", zap.String("topic", name), zap.Error(err))
+		if err != nil && ctrl.ctx.Err() == nil {
+			ctrl.logger.Warn("could not listen to topic", zap.String("topic", name), zap.Error(err))
 			time.Sleep(time.Second)
 			err = ctrl.rejoinTopic(name)
 			if err == nil {
@@ -285,7 +285,6 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 // setupTopicValidator registers the topic validator
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 	if ctrl.msgValidatorFactory != nil {
-		ctrl.logger.Debug("setup topic validator", zap.String("topic", name))
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
 		_ = ctrl.ps.UnregisterTopicValidator(name)
 		var opts []pubsub.ValidatorOpt
@@ -308,7 +307,7 @@ func (ctrl *topicsCtrl) rejoinTopic(name string) error {
 		defer tc.locker.Unlock()
 		tc.sub.Cancel()
 		if err := tc.topic.Close(); err != nil {
-			ctrl.logger.Warn("failed to close topic", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Warn("could not close topic", zap.String("topic", name), zap.Error(err))
 		}
 		if err := ctrl.joinTopicUnsafe(tc, name); err != nil {
 			ctrl.logger.Warn("could not join topic", zap.String("topic", name), zap.Error(err))

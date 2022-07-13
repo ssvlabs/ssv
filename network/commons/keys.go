@@ -13,7 +13,7 @@ import (
 func GenNetworkKey() (*ecdsa.PrivateKey, error) {
 	privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to generate 256k1 key")
+		return nil, errors.WithMessage(err, "could not generate 256k1 key")
 	}
 	privKey := (*ecdsa.PrivateKey)(privInterfaceKey.(*crypto.Secp256k1PrivateKey))
 	privKey.Curve = gcrypto.S256()

@@ -4,12 +4,13 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
+	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
@@ -85,6 +86,12 @@ func (n *p2pNetwork) initCfg() {
 		}
 		n.subnets = subnets
 	}
+	if n.cfg.MaxPeers <= 0 {
+		n.cfg.MaxPeers = minPeersBuffer
+	}
+	if n.cfg.TopicMaxPeers <= 0 {
+		n.cfg.TopicMaxPeers = minPeersBuffer / 2
+	}
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
@@ -93,11 +100,17 @@ func (n *p2pNetwork) SetupHost() error {
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
+
+	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
+	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
+	opts = append(opts, libp2p.ConnectionManager(connManager))
+
 	host, err := libp2p.New(n.ctx, opts...)
 	if err != nil {
-		return errors.Wrap(err, "failed to create p2p host")
+		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
+	n.libConnManager = connManager
 
 	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
@@ -142,34 +155,38 @@ func (n *p2pNetwork) setupPeerServices() error {
 		NodeVersion: commons2.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, func() int {
-		return n.cfg.MaxPeers
-	}, func() crypto.PrivKey {
+	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
-	}, 10*time.Minute)
+	}
+	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
 	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
 	if err != nil {
-		return errors.Wrap(err, "failed to create ID service")
+		return errors.Wrap(err, "could not create ID service")
 	}
 
-	filters := make([]peers.HandshakeFilter, 0)
-	// v0 was before we checked forks, therefore asking if we are above v0
-	if n.cfg.ForkVersion != forksprotocol.V0ForkVersion {
-		filters = append(filters, peers.ForkVersionFilter(func() forksprotocol.ForkVersion {
-			return n.cfg.ForkVersion
-		}))
-	}
-	filters = append(filters, peers.NetworkIDFilter(n.cfg.NetworkID))
-	handshaker := peers.NewHandshaker(n.ctx, n.logger, n.streamCtrl, n.idx, n.idx, ids, func() records.Subnets {
+	subnetsProvider := func() records.Subnets {
 		return n.subnets
+	}
+	filters := []connections.HandshakeFilter{
+		connections.NetworkIDFilter(n.cfg.NetworkID),
+	}
+	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
+		Logger:          n.logger,
+		Streams:         n.streamCtrl,
+		NodeInfoIdx:     n.idx,
+		States:          n.idx,
+		ConnIdx:         n.idx,
+		SubnetsIdx:      n.idx,
+		IDService:       ids,
+		SubnetsProvider: subnetsProvider,
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
 	n.logger.Debug("handshaker is ready")
 
-	connHandler := peers.HandleConnections(n.ctx, n.logger, handshaker)
-	n.host.Network().Notify(connHandler)
+	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, subnetsProvider, n.idx, n.idx)
+	n.host.Network().Notify(n.connHandler.Handle())
 	n.logger.Debug("connection handler is ready")
 	return nil
 }
@@ -205,6 +222,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		Host:        n.host,
 		DiscV5Opts:  discV5Opts,
 		ConnIndex:   n.idx,
+		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
 		ForkVersion: n.cfg.ForkVersion,
@@ -237,6 +255,9 @@ func (n *p2pNetwork) setupPubsub() error {
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
+		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
+		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
+		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 	}
 
 	if !n.cfg.PubSubScoring {

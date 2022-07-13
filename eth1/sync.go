@@ -1,6 +1,7 @@
 package eth1
 
 import (
+	"fmt"
 	"math/big"
 	"sync"
 
@@ -22,7 +23,7 @@ const (
 type SyncOffset = big.Int
 
 // SyncEventHandler handles a given event
-type SyncEventHandler func(Event) error
+type SyncEventHandler func(Event) ([]zap.Field, error)
 
 // SyncOffsetStorage represents the interface for compatible storage
 type SyncOffsetStorage interface {
@@ -69,22 +70,8 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 				return
 			}
 			if handler != nil {
-				err := handler(*event)
-				if err != nil {
-					var malformedEventErr *abiparser.MalformedEventError
-					loggerWith := logger.With(
-						zap.String("event", event.Name),
-						zap.Uint64("block", event.Log.BlockNumber),
-						zap.String("txHash", event.Log.TxHash.Hex()),
-						zap.Error(err),
-					)
-					if errors.As(err, &malformedEventErr) {
-						loggerWith.Warn("could not handle history sync event, the event is malformed")
-					} else {
-						loggerWith.Error("could not handle history sync event")
-						errs = append(errs, err)
-					}
-				}
+				logFields, err := handler(*event)
+				errs = HandleEventResult(logger, *event, logFields, err, false)
 			}
 		}
 	}()
@@ -143,4 +130,40 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 	logger.Debug("using default sync offset",
 		zap.Uint64("syncOffset", syncOffset.Uint64()))
 	return syncOffset
+}
+
+// HandleEventResult handles the result of an event
+func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
+	var errs []error
+	var loggerWithData *zap.Logger
+	syncTitle := "history"
+	if ongoingSync {
+		syncTitle = "ongoing"
+	}
+
+	if err != nil || len(logFields) > 0 {
+		loggerWithData = logger.With(
+			zap.String("event", event.Name),
+			zap.Uint64("block", event.Log.BlockNumber),
+			zap.String("txHash", event.Log.TxHash.Hex()),
+		)
+		if len(logFields) > 0 {
+			loggerWithData = loggerWithData.With(logFields...)
+		}
+	}
+	if err != nil {
+		loggerWithData = loggerWithData.With(zap.Error(err))
+		var malformedEventErr *abiparser.MalformedEventError
+
+		if errors.As(err, &malformedEventErr) {
+			loggerWithData.Warn(fmt.Sprintf("could not handle %s sync event, the event is malformed", syncTitle))
+		} else {
+			loggerWithData.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
+			errs = append(errs, err)
+		}
+	} else if loggerWithData != nil {
+		loggerWithData.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
+	}
+
+	return errs
 }

@@ -83,7 +83,7 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	oid, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown
-	ni, err := n.idx.NodeInfo(pid)
+	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
 		oid = unknown
 		nodeVersion = unknown

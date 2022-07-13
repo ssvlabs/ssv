@@ -79,6 +79,8 @@ type Instance struct {
 	stageChanCloseChan           sync.Mutex
 
 	changeRoundStore qbftstorage.ChangeRoundStore
+	ctx              context.Context
+	cancelCtx        context.CancelFunc
 }
 
 // NewInstanceWithState used for testing, not PROD!
@@ -94,8 +96,11 @@ func NewInstance(opts *Options) Instancer {
 	role := opts.Identifier.GetRoleType().String()
 	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundStateNotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
+	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	ret := &Instance{
+		ctx:            ctx,
+		cancelCtx:      cancelCtx,
 		ValidatorShare: opts.ValidatorShare,
 		state:          generateState(opts),
 		network:        opts.Network,
@@ -109,7 +114,7 @@ func NewInstance(opts *Options) Instancer {
 		CommitMessages:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 		ChangeRoundMessages: msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 
-		roundTimer: roundtimer.New(context.Background(), logger.With(zap.String("who", "RoundTimer"))),
+		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
 		// locks
 		runInitOnce:                  &sync.Once{},
@@ -208,6 +213,7 @@ func (i *Instance) Stop() {
 	// stop can be run just once
 	i.runStopOnce.Do(func() {
 		i.stop()
+		i.cancelCtx()
 	})
 }
 

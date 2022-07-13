@@ -58,13 +58,22 @@ func (t *RoundTimer) Reset(d time.Duration) {
 		t.logger.Warn("could not reset timer as it was killed already")
 		return
 	}
-	//t.logger.Debug("resetting timer", zap.Duration("timeout", d))
-	if atomic.SwapUint32(&t.state, stateResetting) == statePreInit {
+	switch atomic.SwapUint32(&t.state, stateResetting) {
+	case stateResetting:
+		t.logger.Debug("round timer is already in reset state")
+		return
+	case statePreInit:
 		// first reset creates the timer
 		t.timer = time.NewTimer(d)
-	} else {
-		// following calls to reset will reuse the same timer
+	default:
+		// following calls to reset will reuse the same timer by stopping it
 		t.timer.Stop()
+		// draining its channel, but taking into account the other goroutine
+		// which might have drained the channel already
+		select {
+		case <-t.timer.C:
+		default:
+		}
 	}
 	t.timer.Reset(d)
 	atomic.StoreUint32(&t.state, stateRunning)

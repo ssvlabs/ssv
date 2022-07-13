@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -16,36 +17,46 @@ const (
 	nodeInfoKey = "nodeInfo"
 )
 
-// peersIndex implements Index interface
+// MaxPeersProvider returns the max peers for the given topic.
+// empty string means that we want to check the total max peers (for all topics).
+type MaxPeersProvider func(topic string) int
+
+// NetworkKeyProvider is a function that provides the network private key
+type NetworkKeyProvider func() crypto.PrivKey
+
+// peersIndex implements Index interface.
 type peersIndex struct {
 	logger *zap.Logger
 
-	netKeyProvider func() crypto.PrivKey
+	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	statesLock *sync.RWMutex
-	states     map[string]nodeStateObj
+	states        *nodeStates
+	scoreIdx      ScoreIndex
+	subnets       SubnetsIndex
+	nodeInfoStore *nodeInfoStore
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
 	// selfSealed helps to cache the node info record instead of signing multiple times
 	selfSealed []byte
 
-	maxPeers func() int
-	pruneTTL time.Duration
+	maxPeers MaxPeersProvider
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers func() int, netKeyProvider func() crypto.PrivKey, pruneTTL time.Duration) Index {
+func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
+	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) Index {
 	return &peersIndex{
 		logger:         logger,
 		network:        network,
-		statesLock:     &sync.RWMutex{},
-		states:         make(map[string]nodeStateObj),
+		states:         newNodeStates(pruneTTL),
+		scoreIdx:       newScoreIndex(),
+		subnets:        newSubnetsIndex(subnetsCount),
+		nodeInfoStore:  newNodeInfoStore(logger, network),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
-		pruneTTL:       pruneTTL,
 		netKeyProvider: netKeyProvider,
 	}
 }
@@ -56,7 +67,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - bad score
 func (pi *peersIndex) IsBad(id peer.ID) bool {
 	logger := pi.logger.With(zap.String("id", id.String()))
-	if pi.pruned(id.String()) {
+	if pi.states.pruned(id.String()) {
 		logger.Debug("bad peer (pruned)")
 		return true
 	}
@@ -93,11 +104,11 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 }
 
 func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
-	maxPeers := pi.maxPeers()
-	if dir == libp2pnetwork.DirInbound {
-		// accepting more connection than the limit for inbound connections
-		maxPeers *= 4 / 3
-	}
+	maxPeers := pi.maxPeers("")
+	//if dir == libp2pnetwork.DirInbound {
+	//	// accepting more connection than the limit for inbound connections
+	//	maxPeers *= 4 / 3
+	//}
 	peers := pi.network.Peers()
 	return len(peers) > maxPeers
 }
@@ -129,9 +140,9 @@ func (pi *peersIndex) SelfSealed() ([]byte, error) {
 	return pi.selfSealed, nil
 }
 
-// Add adds a new peer identity
-func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	switch pi.state(id.String()) {
+// AddNodeInfo adds a new node info
+func (pi *peersIndex) AddNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+	switch pi.states.State(id) {
 	case StateReady:
 		return true, nil
 	case StateIndexing:
@@ -142,12 +153,20 @@ func (pi *peersIndex) Add(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) 
 	case StateUnknown:
 	default:
 	}
-	return pi.add(id, nodeInfo)
+	pid := id.String()
+	pi.states.setState(pid, StateIndexing)
+	added, err := pi.nodeInfoStore.Add(id, nodeInfo)
+	if err != nil || !added {
+		pi.states.setState(pid, StateUnknown)
+	} else {
+		pi.states.setState(pid, StateReady)
+	}
+	return added, err
 }
 
-// NodeInfo returns the identity of the given peer
-func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	switch pi.state(id.String()) {
+// GetNodeInfo returns the node info of the given peer
+func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
+	switch pi.states.State(id) {
 	case StateIndexing:
 		return nil, ErrIndexingInProcess
 	case StatePruned:
@@ -157,7 +176,7 @@ func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
 	default:
 	}
 	// if in good state -> get node info
-	ni, err := pi.get(id)
+	ni, err := pi.nodeInfoStore.Get(id)
 	if err == peerstore.ErrNotFound {
 		return nil, ErrNotFound
 	}
@@ -166,28 +185,18 @@ func (pi *peersIndex) NodeInfo(id peer.ID) (*records.NodeInfo, error) {
 }
 
 func (pi *peersIndex) State(id peer.ID) NodeState {
-	return pi.state(id.String())
+	return pi.states.State(id)
 }
 
 // Score adds score to the given peer
-func (pi *peersIndex) Score(id peer.ID, scores ...NodeScore) error {
-	tx := newTransactional(id, pi.network.Peerstore())
-	defer func() {
-		_ = tx.Close()
-	}()
-	for _, score := range scores {
-		tx.Put(formatScoreKey(score.Name), score.Value)
-	}
-	if err := tx.Commit(); err != nil {
-		return tx.Rollback()
-	}
-	return nil
+func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
+	return pi.scoreIdx.Score(id, scores...)
 }
 
 // GetScore returns the desired score for the given peer
 func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
 	var scores []NodeScore
-	switch pi.state(id.String()) {
+	switch pi.states.State(id) {
 	case StateIndexing:
 		// TODO: handle
 		return scores, nil
@@ -197,140 +206,74 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 		return nil, ErrNotFound
 	default:
 	}
-	tx := newTransactional(id, pi.network.Peerstore())
-	defer func() {
-		_ = tx.Close()
-	}()
-	for _, name := range names {
-		s, err := tx.Get(formatScoreKey(name))
-		if err != nil {
-			return nil, err
-		}
-		score, ok := s.(NodeScore)
-		if !ok {
-			return nil, errors.New("could not cast node score")
-		}
-		scores = append(scores, score)
-	}
-	return scores, nil
+
+	return pi.scoreIdx.GetScore(id, names...)
 }
 
 // Prune set prune state for the given peer
 func (pi *peersIndex) Prune(id peer.ID) error {
-	pi.setState(id.String(), StatePruned)
-	return nil
+	return pi.states.Prune(id)
 }
 
 // EvictPruned changes to ready state instead of pruned
 func (pi *peersIndex) EvictPruned(id peer.ID) {
-	pi.setState(id.String(), StateReady)
+	pi.states.EvictPruned(id)
 }
 
 // GC does garbage collection on current peers and states
 func (pi *peersIndex) GC() {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
+	pi.states.GC()
+}
 
-	now := time.Now()
-	for pid, s := range pi.states {
-		if s.state == StatePruned {
-			// check ttl
-			if !s.time.Add(pi.pruneTTL).After(now) {
-				delete(pi.states, pid)
+func (pi *peersIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
+	return pi.subnets.UpdatePeerSubnets(id, s)
+}
+
+func (pi *peersIndex) GetSubnetPeers(subnet int) []peer.ID {
+	return pi.subnets.GetSubnetPeers(subnet)
+}
+
+func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
+	return pi.subnets.GetPeerSubnets(id)
+}
+
+func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
+	mySubnets, err := records.Subnets{}.FromString(pi.self.Metadata.Subnets)
+	if err != nil {
+		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+	}
+	stats := pi.subnets.GetSubnetsStats()
+	if stats == nil {
+		return nil
+	}
+	stats.Connected = make([]int, len(stats.PeersCount))
+	var sumConnected int
+	for subnet, count := range stats.PeersCount {
+		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
+		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
+		peers := pi.subnets.GetSubnetPeers(subnet)
+		connectedCount := 0
+		for _, p := range peers {
+			if pi.Connectedness(p) == libp2pnetwork.Connected {
+				connectedCount++
 			}
 		}
+		stats.Connected[subnet] = connectedCount
+		sumConnected += connectedCount
+		metricsSubnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(connectedCount))
 	}
+	if len(stats.PeersCount) > 0 {
+		stats.AvgConnected = sumConnected / len(stats.PeersCount)
+	}
+
+	return stats
 }
 
 // Close closes peer index
 func (pi *peersIndex) Close() error {
-	pi.statesLock.Lock()
-	pi.states = make(map[string]nodeStateObj)
-	pi.statesLock.Unlock()
+	_ = pi.states.Close()
 	if err := pi.network.Peerstore().Close(); err != nil {
 		return errors.Wrap(err, "could not close peerstore")
 	}
 	return nil
-}
-
-// add saves the given identity
-func (pi *peersIndex) add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	id := pid.String()
-	pi.setState(id, StateIndexing)
-
-	raw, err := nodeInfo.MarshalRecord()
-	if err != nil {
-		pi.setState(id, StateUnknown)
-		return false, errors.Wrap(err, "could not marshal node info record")
-	}
-	// commit changes or rollback
-	if err := pi.network.Peerstore().Put(pid, formatInfoKey(nodeInfoKey), raw); err != nil {
-		pi.setState(id, StateUnknown)
-		pi.logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", id))
-		return false, err
-	}
-	pi.setState(id, StateReady)
-	return true, nil
-}
-
-// add saves the given identity
-func (pi *peersIndex) get(pid peer.ID) (*records.NodeInfo, error) {
-	// build identity object
-	raw, err := pi.network.Peerstore().Get(pid, formatInfoKey(nodeInfoKey))
-	if err != nil {
-		return nil, err
-	}
-	if raw == nil {
-		return nil, nil
-	}
-	var ni records.NodeInfo
-	err = ni.UnmarshalRecord(raw.([]byte))
-	if err != nil {
-		return nil, err
-	}
-
-	return &ni, nil
-}
-
-// state returns the NodeState of the given peer
-func (pi *peersIndex) state(pid string) NodeState {
-	pi.statesLock.RLock()
-	defer pi.statesLock.RUnlock()
-
-	so, ok := pi.states[pid]
-	if !ok {
-		return StateUnknown
-	}
-	return so.state
-}
-
-// pruned checks if the given peer was pruned and that TTL was not reached
-func (pi *peersIndex) pruned(pid string) bool {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
-
-	so, ok := pi.states[pid]
-	if !ok {
-		return false
-	}
-	if so.state == StatePruned {
-		if so.time.Add(pi.pruneTTL).After(time.Now()) {
-			return true
-		}
-		// TTL reached
-		delete(pi.states, pid)
-	}
-	return false
-}
-
-// setState updates the NodeState of the peer
-func (pi *peersIndex) setState(pid string, state NodeState) {
-	pi.statesLock.Lock()
-	defer pi.statesLock.Unlock()
-
-	so := nodeStateObj{
-		state: state,
-		time:  time.Now(),
-	}
-	pi.states[pid] = so
 }

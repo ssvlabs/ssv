@@ -1,21 +1,29 @@
 package instance
 
 import (
+	"context"
 	"go.uber.org/zap"
 )
 
 func (i *Instance) startRoundTimerLoop() {
+	ctx, cancel := context.WithCancel(i.ctx)
+	defer cancel()
 loop:
 	for {
 		if i.Stopped() {
 			break loop
 		}
-		res := <-i.roundTimer.ResultChan()
-		if res { // timed out
-			i.uponChangeRoundTrigger()
-		} else { // stopped
-			i.Logger.Info("stopped timeout clock", zap.Uint64("round", uint64(i.State().GetRound())))
+		select {
+		case <-ctx.Done():
+			break loop
+		case res := <-i.roundTimer.ResultChan():
+			if res { // timed out
+				i.uponChangeRoundTrigger()
+			} else { // stopped
+				i.Logger.Info("stopped timeout clock", zap.Uint64("round", uint64(i.State().GetRound())))
+			}
 		}
+
 	}
 	//i.roundTimer.CloseChan()
 	i.Logger.Debug("instance round timer loop stopped")

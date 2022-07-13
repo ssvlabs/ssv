@@ -37,6 +37,7 @@ type Options struct {
 	Host        host.Host
 	DiscV5Opts  *DiscV5Options
 	ConnIndex   peers.ConnectionIndex
+	SubnetsIdx  peers.SubnetsIndex
 	HostAddress string
 	HostDNS     string
 

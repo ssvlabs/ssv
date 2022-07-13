@@ -89,11 +89,11 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
-        - name: ENR_KEY
+        - name: BOOTNODES
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: enr_key
+              key: boot_node
         - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
@@ -111,8 +111,6 @@ spec:
           value: "discv5"
         - name: NETWORK
           value: "prater"
-        - name: BOOTNODES
-          value: "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS

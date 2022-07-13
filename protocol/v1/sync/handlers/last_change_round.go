@@ -30,7 +30,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 				logger.Warn("change round sync msg error", zap.Error(err))
 			}
 			logger.Debug("last change round handler", zap.Any("msgs", res), zap.Error(err))
-			sm.UpdateResults(err, res)
+			sm.UpdateResults(err, res...)
 		}
 
 		data, err := sm.Encode()
