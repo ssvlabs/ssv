@@ -51,7 +51,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
-		lastSlot := spec.Slot(0)
+		lastSlot := spec.Slot(0) // no slot 0.
 		if c.SignatureState.duty != nil {
 			lastSlot = c.SignatureState.duty.Slot
 		}
@@ -72,7 +72,9 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
 		c.Q.Clean(func(index msgqueue.Index) bool {
-			return index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
+			oldHeight := index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
+			oldSlot := index.S > 0 && index.S < lastSlot
+			return oldHeight || oldSlot
 		})
 	}
 	c.Logger.Warn("queue consumer is closed")
@@ -91,6 +93,11 @@ func (c *Controller) processNoRunningInstance(
 		return false // only pop when no instance running
 	}
 
+	logger := c.Logger.With(
+		zap.String("sig state", c.SignatureState.getState().toString()),
+		zap.Int32("height", int32(lastHeight)),
+		zap.Int32("slot", int32(lastSlot)))
+
 	iterator := msgqueue.NewIndexIterator().Add(func() msgqueue.Index {
 		return msgqueue.SignedPostConsensusMsgIndex(identifier, lastSlot)
 	}, func() msgqueue.Index {
@@ -108,10 +115,10 @@ func (c *Controller) processNoRunningInstance(
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	c.Logger.Debug("found message in queue when no running instance", zap.String("sig state", c.SignatureState.getState().toString()), zap.Int32("height", int32(c.SignatureState.getHeight())))
+	logger.Debug("found message in queue when no running instance")
 	err := handler(msgs[0])
 	if err != nil {
-		c.Logger.Warn("could not handle msg", zap.Error(err))
+		logger.Warn("could not handle msg", zap.Error(err))
 	}
 	return true // msg processed
 }
