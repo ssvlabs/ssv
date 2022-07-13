@@ -277,6 +277,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			Pk:     pk,
 		}
 
+		share.OperatorIds = append(share.OperatorIds, uint64(i)+1)
+
 		mappedCommittee = append(mappedCommittee, &types.Operator{
 			OperatorID: operatorID,
 			PubKey:     pk,
