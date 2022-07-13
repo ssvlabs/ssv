@@ -41,6 +41,7 @@ type connManager struct {
 func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
 	c.logger.Debug("tagging best peers",
+		zap.Int("n", n),
 		zap.Int("allPeers", len(allPeers)),
 		zap.Int("bestPeers", len(bestPeers)))
 	if len(bestPeers) == 0 {
