@@ -114,7 +114,7 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 		Type:      ssv.PostConsensusPartialSig,
 		Messages:  psm,
 		Signature: signature,
-		Signers:   []spectypes.OperatorID{spectypes.OperatorID(c.ValidatorShare.NodeID)},
+		Signers:   []spectypes.OperatorID{c.ValidatorShare.NodeID},
 	}
 
 	encodedSignedMsg, err := signedMsg.Encode()
@@ -136,7 +136,7 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 
 // generatePartialSignatureMessage returns a PartialSignatureMessage struct
 func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (ssv.PartialSignatureMessages, error) {
-	signers := []spectypes.OperatorID{spectypes.OperatorID(c.ValidatorShare.NodeID)}
+	signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
 	return ssv.PartialSignatureMessages{
 		&ssv.PartialSignatureMessage{
 			Slot:             slot,
