@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	forksv2 "github.com/bloxapp/ssv/network/forks/v2"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
@@ -142,7 +143,7 @@ func setupController(logger *zap.Logger, validators map[string]validator.IValida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger),
+		messageRouter:          newMessageRouter(logger, forksv2.New().MsgID()),
 		messageWorker: worker.NewWorker(&worker.Config{
 			Ctx:          context.Background(),
 			Logger:       logger,

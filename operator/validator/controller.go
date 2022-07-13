@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
@@ -154,6 +155,8 @@ func NewController(options ControllerOptions) Controller {
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
+	msgID := forksfactory.NewFork(options.ForkVersion).MsgID()
+
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
 		Logger:       options.Logger,
@@ -196,7 +199,7 @@ func NewController(options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter: newMessageRouter(options.Logger),
+		messageRouter: newMessageRouter(options.Logger, msgID),
 		messageWorker: worker.NewWorker(workerCfg),
 	}
 
