@@ -2,7 +2,8 @@ package instance
 
 import (
 	"encoding/hex"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -17,7 +18,7 @@ import (
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -26,7 +27,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.containersMap[qbftspec.CommitMsgType].AddMessage(signedMessage, commitData.Data)
+			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -45,7 +46,7 @@ func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -54,7 +55,7 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.containersMap[qbftspec.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
+			i.containersMap[specqbft.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -67,12 +68,12 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
+	return pipelines.WrapFunc("upon commit msg", func(signedMessage *specqbft.SignedMessage) error {
 		msgCommitData, err := signedMessage.Message.GetCommitData()
 		if err != nil {
 			return errors.Wrap(err, "failed to get commit data")
 		}
-		quorum, sigs := i.containersMap[qbftspec.CommitMsgType].QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
+		quorum, sigs := i.containersMap[specqbft.CommitMsgType].QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
@@ -86,8 +87,10 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 				}
 
 				aggMsg := sigs[0].DeepCopy()
-				if err := aggMsg.Aggregate(msgSig[1:]...); err != nil {
-					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
+				for _, s := range msgSig[1:] {
+					if err := aggMsg.Aggregate(s); err != nil {
+						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
+					}
 				}
 
 				i.decidedMsg = aggMsg
@@ -99,14 +102,14 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generateCommitMessage(value []byte) (*message.ConsensusMessage, error) {
-	commitMsg := &message.CommitData{Data: value}
+func (i *Instance) generateCommitMessage(value []byte) (*specqbft.Message, error) {
+	commitMsg := &specqbft.CommitData{Data: value}
 	encodedCommitMsg, err := commitMsg.Encode()
 	if err != nil {
 		return nil, err
 	}
-	return &message.ConsensusMessage{
-		MsgType:    message.CommitMsgType,
+	return &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
 		Identifier: i.State().GetIdentifier(),

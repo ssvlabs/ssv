@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
@@ -36,7 +36,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 		return err
 	}
 
-	highestSeqKnown := message.Height(0)
+	highestSeqKnown := specqbft.Height(0)
 	if highestKnown != nil {
 		highestSeqKnown = highestKnown.Message.Height
 	}
@@ -62,7 +62,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (c *Controller) NextSeqNumber() (message.Height, error) {
+func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
 	knownDecided, err := c.highestKnownDecided()
 	if err != nil {
 		return 0, err

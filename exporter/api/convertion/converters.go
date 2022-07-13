@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -32,9 +34,9 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 			syncMsg.Params = new(message.SyncParams)
 			syncMsg.Params.Identifier = identifier
 			params := msgV0.SyncMessage.GetParams()
-			syncMsg.Params.Height = make([]message.Height, 0)
+			syncMsg.Params.Height = make([]specqbft.Height, 0)
 			for _, p := range params {
-				syncMsg.Params.Height = append(syncMsg.Params.Height, message.Height(p))
+				syncMsg.Params.Height = append(syncMsg.Params.Height, specqbft.Height(p))
 			}
 			for _, sm := range msgV0.SyncMessage.GetSignedMessages() {
 				signed, err := ToSignedMessageV1(sm)
@@ -99,45 +101,45 @@ func ToV1Message(msgV0 *network.Message) (*message.SSVMessage, error) {
 }
 
 // ToSignedMessageV1 converts a signed message from v0 to v1
-func ToSignedMessageV1(sm *proto.SignedMessage) (*message.SignedMessage, error) {
-	signed := new(message.SignedMessage)
+func ToSignedMessageV1(sm *proto.SignedMessage) (*specqbft.SignedMessage, error) {
+	signed := new(specqbft.SignedMessage)
 	signed.Signature = sm.GetSignature()
 	signers := sm.GetSignerIds()
 	for _, s := range signers {
-		signed.Signers = message.AppendSigners(signed.Signers, message.OperatorID(s))
+		signed.Signers = message.AppendSigners(signed.Signers, spectypes.OperatorID(s))
 	}
 	if msg := sm.GetMessage(); msg != nil {
-		signed.Message = new(message.ConsensusMessage)
+		signed.Message = new(specqbft.Message)
 		data := msg.GetValue()
-		signed.Message.Round = message.Round(msg.GetRound())
+		signed.Message.Round = specqbft.Round(msg.GetRound())
 		signed.Message.Identifier = toIdentifierV1(msg.GetLambda())
-		signed.Message.Height = message.Height(msg.GetSeqNumber())
+		signed.Message.Height = specqbft.Height(msg.GetSeqNumber())
 		switch msg.GetType() {
 		case proto.RoundState_NotStarted:
 			// TODO
 		case proto.RoundState_PrePrepare:
-			signed.Message.MsgType = message.ProposalMsgType
-			p, err := (&message.ProposalData{Data: data}).Encode()
+			signed.Message.MsgType = specqbft.ProposalMsgType
+			p, err := (&specqbft.ProposalData{Data: data}).Encode()
 			if err != nil {
 				return nil, err
 			}
 			signed.Message.Data = p
 		case proto.RoundState_Prepare:
-			signed.Message.MsgType = message.PrepareMsgType
-			p, err := (&message.PrepareData{Data: data}).Encode()
+			signed.Message.MsgType = specqbft.PrepareMsgType
+			p, err := (&specqbft.PrepareData{Data: data}).Encode()
 			if err != nil {
 				return nil, err
 			}
 			signed.Message.Data = p
 		case proto.RoundState_Commit:
-			signed.Message.MsgType = message.CommitMsgType
-			c, err := (&message.CommitData{Data: data}).Encode()
+			signed.Message.MsgType = specqbft.CommitMsgType
+			c, err := (&specqbft.CommitData{Data: data}).Encode()
 			if err != nil {
 				return nil, err
 			}
 			signed.Message.Data = c
 		case proto.RoundState_ChangeRound:
-			signed.Message.MsgType = message.RoundChangeMsgType
+			signed.Message.MsgType = specqbft.RoundChangeMsgType
 			rcd, err := toV1ChangeRound(data)
 			if err != nil {
 				return nil, err
@@ -154,33 +156,33 @@ func toV1ChangeRound(changeRoundData []byte) ([]byte, error) {
 	ret := &proto.ChangeRoundData{}
 	if err := json.Unmarshal(changeRoundData, ret); err != nil {
 		logex.GetLogger().Warn("failed to unmarshal v0 change round struct", zap.Error(err))
-		return new(message.RoundChangeData).Encode() // should return empty struct
+		return new(specqbft.RoundChangeData).Encode() // should return empty struct
 	}
 
-	var signers []message.OperatorID
+	var signers []spectypes.OperatorID
 	for _, signer := range ret.GetSignerIds() {
-		signers = message.AppendSigners(signers, message.OperatorID(signer))
+		signers = message.AppendSigners(signers, spectypes.OperatorID(signer))
 	}
 
-	consensusMsg := &message.ConsensusMessage{}
+	consensusMsg := &specqbft.Message{}
 	if ret.GetJustificationMsg() != nil {
-		consensusMsg.Height = message.Height(ret.GetJustificationMsg().SeqNumber)
-		consensusMsg.Round = message.Round(ret.GetJustificationMsg().Round)
+		consensusMsg.Height = specqbft.Height(ret.GetJustificationMsg().SeqNumber)
+		consensusMsg.Round = specqbft.Round(ret.GetJustificationMsg().Round)
 		consensusMsg.Identifier = toIdentifierV1(ret.GetJustificationMsg().Lambda)
-		pd := message.PrepareData{Data: ret.GetJustificationMsg().Value}
+		pd := specqbft.PrepareData{Data: ret.GetJustificationMsg().Value}
 		encodedPrepare, err := pd.Encode()
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to encode prepare data")
 		}
 		consensusMsg.Data = encodedPrepare
-		consensusMsg.MsgType = message.PrepareMsgType // can be only prepare
+		consensusMsg.MsgType = specqbft.PrepareMsgType // can be only prepare
 	}
 
-	crm := &message.RoundChangeData{
+	crm := &specqbft.RoundChangeData{
 		PreparedValue:    ret.GetPreparedValue(),
-		Round:            message.Round(ret.GetPreparedRound()),
+		PreparedRound:    specqbft.Round(ret.GetPreparedRound()),
 		NextProposalData: nil,
-		RoundChangeJustification: []*message.SignedMessage{{
+		RoundChangeJustification: []*specqbft.SignedMessage{{
 			Signature: ret.GetJustificationSig(),
 			Signers:   signers,
 			Message:   consensusMsg,
@@ -206,7 +208,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 		if v0Msg.Type != network.NetworkMsg_DecidedType {
 			v0Msg.Type = network.NetworkMsg_IBFTType
 		}
-		signedMsg := &message.SignedMessage{}
+		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return nil, errors.Wrap(err, "could not decode consensus signed message")
 		}
@@ -274,7 +276,7 @@ func ToV0Message(msg *message.SSVMessage) (*network.Message, error) {
 }
 
 // ToSignedMessageV0 converts a signed message from v1 to v0
-func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
+func ToSignedMessageV0(signedMsg *specqbft.SignedMessage, identifierV0 []byte) (*proto.SignedMessage, error) {
 	signedMsgV0 := &proto.SignedMessage{}
 	signedMsgV0.Message = &proto.Message{
 		Round:     uint64(signedMsg.Message.Round),
@@ -284,21 +286,21 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 	}
 
 	switch signedMsg.Message.MsgType {
-	case message.ProposalMsgType:
+	case specqbft.ProposalMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_PrePrepare
 		p, err := signedMsg.Message.GetProposalData()
 		if err != nil {
 			return nil, err
 		}
 		signedMsgV0.Message.Value = p.Data
-	case message.PrepareMsgType:
+	case specqbft.PrepareMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Prepare
 		p, err := signedMsg.Message.GetPrepareData()
 		if err != nil {
 			return nil, err
 		}
 		signedMsgV0.Message.Value = p.Data
-	case message.CommitMsgType:
+	case specqbft.CommitMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_Commit
 		c, err := signedMsg.Message.GetCommitData()
 		if err != nil {
@@ -306,32 +308,36 @@ func ToSignedMessageV0(signedMsg *message.SignedMessage, identifierV0 []byte) (*
 		}
 		signedMsgV0.Message.Value = c.Data
 
-	case message.RoundChangeMsgType:
+	case specqbft.RoundChangeMsgType:
 		signedMsgV0.Message.Type = proto.RoundState_ChangeRound
 		cr, err := signedMsg.Message.GetRoundChangeData()
 		if err != nil {
 			return nil, err
 		}
-		if cr.GetPreparedValue() != nil && len(cr.GetPreparedValue()) > 0 {
+		if cr.PreparedValue != nil && len(cr.PreparedValue) > 0 {
 			crV0 := proto.ChangeRoundData{
-				PreparedRound:    uint64(cr.GetPreparedRound()),
-				PreparedValue:    cr.GetPreparedValue(),
+				PreparedRound:    uint64(cr.PreparedRound),
+				PreparedValue:    cr.PreparedValue,
 				JustificationMsg: nil,
 				JustificationSig: nil,
 				SignerIds:        nil,
 			}
-			if len(cr.GetRoundChangeJustification()) > 0 {
-				m := cr.GetRoundChangeJustification()[0]
+			if len(cr.RoundChangeJustification) > 0 {
+				m := cr.RoundChangeJustification[0]
 
-				prepareData := new(message.PrepareData)
+				prepareData := new(specqbft.PrepareData)
 				if err := prepareData.Decode(m.Message.Data); err != nil {
 					return nil, err
 				}
 
+				identifier := message.Identifier(m.Message.Identifier)
+				validatorPK := identifier.GetValidatorPK()
+				roleType := identifier.GetRoleType()
+
 				crV0.JustificationMsg = &proto.Message{
 					Type:      proto.RoundState_Prepare,
 					Round:     uint64(m.Message.Round),
-					Lambda:    []byte(format.IdentifierFormat(m.Message.Identifier.GetValidatorPK(), m.Message.Identifier.GetRoleType().String())),
+					Lambda:    []byte(format.IdentifierFormat(validatorPK, roleType.String())),
 					SeqNumber: uint64(m.Message.Height),
 					Value:     prepareData.Data,
 				}

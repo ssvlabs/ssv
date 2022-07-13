@@ -5,13 +5,14 @@ import (
 	"sync"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
@@ -40,11 +41,11 @@ func testIBFTInstance(t *testing.T) *Controller {
 // TODO: (lint) fix test
 //nolint
 func TestCanStartNewInstance(t *testing.T) {
-	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
+	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
 	height10 := atomic.Value{}
-	height10.Store(message.Height(10))
+	height10.Store(specqbft.Height(10))
 
 	tests := []struct {
 		name            string

@@ -2,16 +2,17 @@ package instance
 
 import (
 	"fmt"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"strconv"
 	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -23,13 +24,13 @@ func TestLeaderCalculation(t *testing.T) {
 	require.NoError(t, err)
 
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	sk, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[qbftspec.MessageType]msgcont.MessageContainer{
-			qbftspec.PrepareMsgType: inmem.New(3, 2),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{

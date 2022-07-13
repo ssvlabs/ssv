@@ -3,10 +3,10 @@ package main
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv-spec/types"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -98,7 +98,7 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 
 func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		computedRoot, err := types.ComputeSigningRoot(data, nil) // TODO need to use sigType
+		computedRoot, err := spectypes.ComputeSigningRoot(data, nil) // TODO need to use sigType
 		if err != nil {
 			return nil, errors.Wrap(err, "could not sign root")
 		}
@@ -127,7 +127,7 @@ func db() qbftstorage.QBFTStore {
 
 func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*beacon.Node)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 
 	ret := make(map[uint64]*beacon.Share)
@@ -135,7 +135,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 	for i := uint64(1); i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
-		nodes[message.OperatorID(i)] = &beacon.Node{
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
 			IbftID: i,
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -147,7 +147,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 	for i := uint64(1); i <= cnt; i++ {
 		ret[i] = &beacon.Share{
-			NodeID:    message.OperatorID(i),
+			NodeID:    spectypes.OperatorID(i),
 			PublicKey: sk.GetPublicKey(),
 			Committee: nodes,
 		}
@@ -158,7 +158,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
-	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), message.RoleTypeAttester)
+	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
 	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
@@ -174,7 +174,7 @@ func main() {
 
 		nodeOpts := ibft.Options{
 			Context:        context.Background(),
-			Role:           message.RoleTypeAttester,
+			Role:           spectypes.BNRoleAttester,
 			Identifier:     identifier,
 			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
 			Storage:        dbs[i-1],

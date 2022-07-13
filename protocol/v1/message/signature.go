@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -35,12 +36,12 @@ type Root interface {
 // MsgSignature includes all functions relevant for a signed message (QBFT message, post consensus msg, etc)
 type MsgSignature interface {
 	Root
-	GetSignature() Signature
-	GetSigners() []OperatorID
+	GetSignature() spectypes.Signature
+	GetSigners() []spectypes.OperatorID
 	// MatchedSigners returns true if the provided signer ids are equal to GetSignerIds() without order significance
-	MatchedSigners(ids []OperatorID) bool
+	MatchedSigners(ids []spectypes.OperatorID) bool
 	// Aggregate will aggregate the signed message if possible (unique signers, same digest, valid)
-	Aggregate(signedMsg ...MsgSignature) error // value should depend on implementation
+	Aggregate(signedMsg spectypes.MessageSignature) error // value should depend on implementation
 }
 
 // SignatureDomain represents signature domain bytes
@@ -155,7 +156,7 @@ func ComputeSignatureDomain(domain DomainType, sigType SignatureType) SignatureD
 
 // ReconstructSignatures receives a map of user indexes and serialized bls.Sign.
 // It then reconstructs the original threshold signature using lagrange interpolation
-func ReconstructSignatures(signatures map[OperatorID][]byte) (*bls.Sign, error) {
+func ReconstructSignatures(signatures map[spectypes.OperatorID][]byte) (*bls.Sign, error) {
 	reconstructedSig := bls.Sign{}
 
 	idVec := make([]bls.ID, 0)
@@ -196,8 +197,8 @@ func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey, root []byte) e
 	return nil
 }
 
-func verifyUniqueSigners(singerIds []OperatorID) error {
-	unique := map[OperatorID]bool{}
+func verifyUniqueSigners(singerIds []spectypes.OperatorID) error {
+	unique := map[spectypes.OperatorID]bool{}
 	for _, signer := range singerIds {
 		if _, found := unique[signer]; !found {
 			unique[signer] = true

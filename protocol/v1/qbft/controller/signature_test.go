@@ -7,6 +7,7 @@ import (
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -26,7 +27,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 		root          []byte
 		useWrongRoot  bool
 		useEmptyRoot  bool
-		ibftID        message.OperatorID
+		ibftID        spectypes.OperatorID
 		expectedError string
 	}{
 		{
@@ -112,7 +113,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			share := &beacon.Share{
 				NodeID:    1,
 				PublicKey: pk,
-				Committee: map[message.OperatorID]*beacon.Node{
+				Committee: map[spectypes.OperatorID]*beacon.Node{
 					1: {
 						IbftID: 1,
 						Pk:     refSplitSharesPubKeys[0],
@@ -131,7 +132,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 					},
 				},
 			}
-			role := message.RoleTypeAttester
+			role := spectypes.BNRoleAttester
 			identifier := message.NewIdentifier(share.PublicKey.Serialize(), role)
 			opts := Options{
 				Role:           role,

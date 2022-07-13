@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"fmt"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // HistoryHandler handler for decided history protocol
@@ -28,7 +31,7 @@ func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, repo
 		} else {
 			items := int(sm.Params.Height[1] - sm.Params.Height[0])
 			if items > maxBatchSize {
-				sm.Params.Height[1] = sm.Params.Height[0] + message.Height(maxBatchSize)
+				sm.Params.Height[1] = sm.Params.Height[0] + specqbft.Height(maxBatchSize)
 			}
 			results, err := store.GetDecided(msg.ID, sm.Params.Height[0], sm.Params.Height[1])
 			sm.UpdateResults(err, results...)

@@ -4,16 +4,18 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"sync/atomic"
-	"testing"
-	"time"
+
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -242,7 +244,7 @@ func (r *dummyRouter) Route(message message.SSVMessage) {
 //	if err != nil {
 //		return nil, err
 //	}
-//	id := message.NewIdentifier(pk, message.RoleTypeAttester)
+//	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 //	v0SignedMsg := &proto.SignedMessage{
 //		Message: &proto.Message{
 //			Type:      3,

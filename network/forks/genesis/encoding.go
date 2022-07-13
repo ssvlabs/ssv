@@ -1,8 +1,6 @@
 package genesis
 
-import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-)
+import "github.com/bloxapp/ssv/protocol/v1/message"
 
 // EncodeNetworkMsg encodes network message
 func (g *ForkGenesis) EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error) {

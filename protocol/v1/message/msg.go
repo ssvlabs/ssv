@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -48,38 +49,41 @@ func (vid ValidatorPK) MessageIDBelongs(msgID Identifier) bool {
 }
 
 // Identifier is used to identify and route messages to the right validator and DutyRunner
+// TODO(nkryuchkov): remove
 type Identifier []byte
 
 // NewIdentifier creates a new Identifier. expect pk hex sting as byte[]
-func NewIdentifier(pk []byte, role RoleType) Identifier {
-	roleByts := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roleByts, uint32(role))
+func NewIdentifier(pk []byte, role spectypes.BeaconRole) Identifier {
+	// TODO(nkryuchkov): On machines with 8-byte int, if 0x00000000FFFFFFFF < role < 0xFFFFFFFF00000000,
+	// Identifier will contain a wrong spectypes.BeaconRole value.
+	roleBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(roleBytes, uint32(role))
 	id := make([]byte, len(pk))
 	copy(id, pk)
-	return append(id, roleByts...)
+	return append(id, roleBytes...)
 }
 
 // GetRoleType extracts the role type from the id
-func (msgID Identifier) GetRoleType() RoleType {
-	if len(msgID) == 0 {
-		return RoleTypeUnknown
+func (identifier Identifier) GetRoleType() spectypes.BeaconRole {
+	if len(identifier) == 0 {
+		return spectypes.BeaconRole(-1)
 	}
-	roleByts := msgID[len(msgID)-4:]
-	return RoleType(binary.LittleEndian.Uint32(roleByts))
+	roleByts := identifier[len(identifier)-4:]
+	return spectypes.BeaconRole(binary.LittleEndian.Uint32(roleByts))
 }
 
 // GetValidatorPK extracts the validator public key from the id
-func (msgID Identifier) GetValidatorPK() ValidatorPK {
-	if len(msgID) == 0 {
+func (identifier Identifier) GetValidatorPK() ValidatorPK {
+	if len(identifier) == 0 {
 		return []byte{}
 	}
-	vpk := msgID[:len(msgID)-4]
+	vpk := identifier[:len(identifier)-4]
 	return ValidatorPK(vpk)
 }
 
 // String returns the string representation of the id
-func (msgID Identifier) String() string {
-	return hex.EncodeToString(msgID)
+func (identifier Identifier) String() string {
+	return hex.EncodeToString(identifier)
 }
 
 // SSVMessage is the main message passed within the SSV network, it can contain different types of messages (QBTF, Sync, etc.)

@@ -2,16 +2,20 @@ package validator
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"sync"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -32,7 +36,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(2)
 
-	identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
+	identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
 	ctr.messageRouter.Route(message.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,
 		ID:      identifier,
@@ -162,19 +166,19 @@ func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier message.Identifier) []byte {
-	crd := message.RoundChangeData{
+	crd := specqbft.RoundChangeData{
 		PreparedValue:            nil,
-		Round:                    0,
+		PreparedRound:            0,
 		NextProposalData:         nil,
 		RoundChangeJustification: nil,
 	}
 	encoded, err := crd.Encode()
 	require.NoError(t, err)
-	sm := message.SignedMessage{
+	sm := specqbft.SignedMessage{
 		Signature: []byte("sig"),
-		Signers:   []message.OperatorID{1},
-		Message: &message.ConsensusMessage{
-			MsgType:    message.RoundChangeMsgType,
+		Signers:   []spectypes.OperatorID{1},
+		Message: &specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     0,
 			Round:      1,
 			Identifier: identifier,

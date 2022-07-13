@@ -10,11 +10,12 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 func init() {
@@ -81,7 +82,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		blsPubKeys[i] = blsPubKey
 	}
 
-	// bc := beacon.NewMockBeacon(map[message.OperatorID][]*Duty{}, data)
+	// bc := beacon.NewMockBeacon(map[spectypes.OperatorID][]*Duty{}, data)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

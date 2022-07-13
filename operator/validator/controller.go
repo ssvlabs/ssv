@@ -8,6 +8,7 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
@@ -62,7 +63,7 @@ type ControllerOptions struct {
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []message.RoleType
+	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
@@ -150,7 +151,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	qbftStorage := storage.New(options.DB, options.Logger, message.RoleTypeAttester.String(), options.ForkVersion) // TODO need to support multi duties
+	qbftStorage := storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion) // TODO need to support multi duties
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}

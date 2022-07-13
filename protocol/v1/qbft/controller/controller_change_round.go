@@ -1,13 +1,13 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 // ProcessChangeRound check basic pipeline validation than check if height or round is higher than the last one. if so, update
-func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
+func (c *Controller) ProcessChangeRound(msg *specqbft.SignedMessage) error {
 	if err := c.ValidateChangeRoundMsg(msg); err != nil {
 		return err
 	}
@@ -50,6 +50,6 @@ func (c *Controller) ProcessChangeRound(msg *message.SignedMessage) error {
 // ValidateChangeRoundMsg - validation for read mode change round msg
 // validating -
 // basic validation, signature, changeRound data
-func (c *Controller) ValidateChangeRoundMsg(msg *message.SignedMessage) error {
+func (c *Controller) ValidateChangeRoundMsg(msg *specqbft.SignedMessage) error {
 	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, c.Identifier).Run(msg)
 }

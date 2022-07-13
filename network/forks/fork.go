@@ -1,11 +1,12 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // Fork is an interface for network specific fork implementations

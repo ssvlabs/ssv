@@ -3,16 +3,12 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/api/decided"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/spf13/cobra"
@@ -22,10 +18,14 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -205,7 +205,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
 		}
 
-		cfg.SSVOptions.ValidatorOptions.DutyRoles = []message.RoleType{message.RoleTypeAttester} // TODO could be better to set in other place
+		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 

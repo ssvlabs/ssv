@@ -2,11 +2,14 @@ package controller
 
 import (
 	"context"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 	"testing"
 	"time"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -37,7 +40,7 @@ func TestConsumeMessages(t *testing.T) {
 		Logger:              logex.GetLogger().With(zap.String("who", "controller")),
 		Q:                   q,
 		SignatureState:      SignatureState{},
-		Identifier:          message.NewIdentifier([]byte("1"), message.RoleTypeAttester),
+		Identifier:          message.NewIdentifier([]byte("1"), spectypes.BNRoleAttester),
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
 	}
@@ -48,245 +51,245 @@ func TestConsumeMessages(t *testing.T) {
 		msgs            []*message.SSVMessage
 		expected        []*message.SSVMessage
 		expectedQLen    int
-		lastHeight      message.Height
+		lastHeight      specqbft.Height
 		currentInstance instance.Instancer
 	}{
 		{
 			"no_running_instance_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(1), 0, ctrl.Identifier, message.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			[]*message.SSVMessage{generateConsensusMsg(t, message.Height(1), 0, ctrl.Identifier, message.CommitMsgType)},
+			[]*message.SSVMessage{generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
-			message.Height(2),
+			specqbft.Height(2),
 			nil,
 		},
 		{
 			"no_running_instance_too_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), 0, ctrl.Identifier, message.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), 0, ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			nil,
 			0,
-			message.Height(2),
+			specqbft.Height(2),
 			nil,
 		},
 		{
 			"no_running_instance_late_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
 			},
-			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier)},
+			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier)},
 			0,
-			message.Height(2),
+			specqbft.Height(2),
 			nil,
 		},
 		{
 			"no_running_instance_sig_current_height",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), 0, ctrl.Identifier, message.RoundChangeMsgType),
-				generateConsensusMsg(t, message.Height(1), 0, ctrl.Identifier, message.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier), // verify priority is right
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, message.Height(1), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(0), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateConsensusMsg(t, specqbft.Height(1), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier), // verify priority is right
+				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(1), ctrl.Identifier),
 			},
-			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, message.Height(1), ctrl.Identifier)},
+			[]*message.SSVMessage{generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(1), ctrl.Identifier)},
 			3,
-			message.Height(1),
+			specqbft.Height(1),
 			nil,
 		},
 		{
 			"by_state_not_started_proposal",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), 1, ctrl.Identifier, message.ProposalMsgType), // verify priority is right
-				generateConsensusMsg(t, message.Height(1), 1, ctrl.Identifier, message.ProposalMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), 1, ctrl.Identifier, specqbft.ProposalMsgType), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(1), 1, ctrl.Identifier, specqbft.ProposalMsgType),
 			},
-			[]*message.SSVMessage{generateConsensusMsg(t, message.Height(1), message.Round(1), ctrl.Identifier, message.ProposalMsgType)},
+			[]*message.SSVMessage{generateConsensusMsg(t, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType)},
 			1,
-			message.Height(1),
+			specqbft.Height(1),
 			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 		{
 			"by_state_not_started_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType), // verify priority is right
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			1,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStateNotStarted),
 		},
 		{
 			"by_state_PrePrepare",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.PrepareMsgType),
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.PrepareMsgType),     // verify priority is right
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),     // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.PrepareMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
 			0,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"by_state_prepare",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType),
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.ProposalMsgType),    // verify priority is right
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),    // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStatePrepare),
 		},
 		{
 			"by_state_change_round",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(1), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType), // verify priority is right
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			2,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStateChangeRound),
 		},
 		{
 			"by_state_no_message_pop_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType),      // verify priority is right
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType), // verify priority is right
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),      // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			2,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"by_state_no_message_pop_change_round",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType), // verify priority is right
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.RoundChangeMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			1,
-			message.Height(0),
+			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"default_late_commit",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(0), message.Round(1), ctrl.Identifier, message.CommitMsgType), // expect previews height commit
+				generateConsensusMsg(t, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // expect previews height commit
 			},
 			0,
-			message.Height(1), // current height
+			specqbft.Height(1), // current height
 			nil,
 		},
 		{
 			"default_late_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			0,
-			message.Height(1), // current height
+			specqbft.Height(1), // current height
 			nil,
 		},
 		{
 			"no_running_instance_force_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
 			},
 			2,
-			message.Height(1),
+			specqbft.Height(1),
 			nil,
 		},
 		{
 			"by_state_force_decided",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(0), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(0), ctrl.Identifier),
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(2), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(1), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(2), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(1), ctrl.Identifier),
 			},
 			2,
-			message.Height(1),
+			specqbft.Height(1),
 			generateInstance(1, 1, qbft.RoundStatePrePrepare),
 		},
 		{
 			"instance_change_round_clean_old_messages",
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(10), message.Round(2), ctrl.Identifier, message.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(10), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(9), message.Round(1), ctrl.Identifier, message.CommitMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
 			},
 			[]*message.SSVMessage{
-				generateConsensusMsg(t, message.Height(10), message.Round(2), ctrl.Identifier, message.RoundChangeMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(9), message.Round(1), ctrl.Identifier, message.CommitMsgType),
+				generateConsensusMsg(t, specqbft.Height(10), specqbft.Round(2), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1, // only "signed_index" for decided in height 9
-			message.Height(10),
+			specqbft.Height(10),
 			generateInstance(10, 1, qbft.RoundStateChangeRound),
 		},
 		{
 			"no_running_instance_change_round_clean_old_messages",
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, message.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(10), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(9), message.Round(1), ctrl.Identifier, message.CommitMsgType),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(8), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.ProposalMsgType), // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
-				generateConsensusMsg(t, message.Height(7), message.Round(1), ctrl.Identifier, message.PrepareMsgType),  // should be removed
+				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(10), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType), // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
+				generateConsensusMsg(t, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
 			},
 			[]*message.SSVMessage{
-				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, message.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(10), ctrl.Identifier),
-				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, message.Height(9), ctrl.Identifier),
-				generateConsensusMsg(t, message.Height(9), message.Round(1), ctrl.Identifier, message.CommitMsgType),
+				generatePostConsensusOrSig(t, message.SSVPostConsensusMsgType, specqbft.Height(10), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(10), ctrl.Identifier),
+				generatePostConsensusOrSig(t, message.SSVDecidedMsgType, specqbft.Height(9), ctrl.Identifier),
+				generateConsensusMsg(t, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
 			1, // only "signed_index" for decided in height 10
-			message.Height(10),
+			specqbft.Height(10),
 			nil,
 		},
 	}
@@ -330,16 +333,19 @@ func TestConsumeMessages(t *testing.T) {
 					case message.SSVDecidedMsgType:
 						fallthrough
 					case message.SSVConsensusMsgType:
-						testSignedMsg := new(message.SignedMessage)
+						testSignedMsg := new(specqbft.SignedMessage)
 						require.NoError(t, testSignedMsg.Decode(expectedMsg.Data))
 
-						signedMsg := new(message.SignedMessage)
+						signedMsg := new(specqbft.SignedMessage)
 						require.NoError(t, signedMsg.Decode(msg.Data))
 
 						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
 						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
 						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
-						ctrl.Logger.Debug("msg info", zap.String("type", signedMsg.Message.MsgType.String()), zap.Uint64("h", uint64(signedMsg.Message.Height)))
+						ctrl.Logger.Debug("msg info",
+							zap.Int("type", int(signedMsg.Message.MsgType)),
+							zap.Uint64("h", uint64(signedMsg.Message.Height)),
+						)
 					}
 					processed++
 					ctrl.Logger.Debug("processed", zap.Int("processed", processed), zap.Int("total", len(test.expected)))
@@ -363,7 +369,7 @@ func TestConsumeMessages(t *testing.T) {
 	}
 }
 
-func generateInstance(height message.Height, round message.Round, stage qbft.RoundState) instance.Instancer {
+func generateInstance(height specqbft.Height, round specqbft.Round, stage qbft.RoundState) instance.Instancer {
 	i := &InstanceMock{state: &qbft.State{
 		Height: qbft.NewHeight(height),
 		Round:  qbft.NewRound(round),
@@ -371,17 +377,17 @@ func generateInstance(height message.Height, round message.Round, stage qbft.Rou
 	return i
 }
 
-func generatePostConsensusOrSig(t *testing.T, msgType message.MsgType, height message.Height, id message.Identifier) *message.SSVMessage {
+func generatePostConsensusOrSig(t *testing.T, msgType message.MsgType, height specqbft.Height, id message.Identifier) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
 		MsgType: msgType,
 		ID:      id,
 	}
 
-	signedMsg := message.SignedMessage{
+	signedMsg := specqbft.SignedMessage{
 		Signature: nil,
 		Signers:   nil,
-		Message: &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
+		Message: &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      0,
 			Identifier: nil,
@@ -394,16 +400,16 @@ func generatePostConsensusOrSig(t *testing.T, msgType message.MsgType, height me
 	return ssvMsg
 }
 
-func generateConsensusMsg(t *testing.T, height message.Height, round message.Round, id message.Identifier, consensusType message.ConsensusMessageType) *message.SSVMessage {
+func generateConsensusMsg(t *testing.T, height specqbft.Height, round specqbft.Round, id message.Identifier, consensusType specqbft.MessageType) *message.SSVMessage {
 	ssvMsg := &message.SSVMessage{
 		MsgType: message.SSVConsensusMsgType,
 		ID:      id,
 	}
 
-	signedMsg := message.SignedMessage{
+	signedMsg := specqbft.SignedMessage{
 		Signature: nil,
 		Signers:   nil,
-		Message: &message.ConsensusMessage{
+		Message: &specqbft.Message{
 			MsgType:    consensusType,
 			Height:     height,
 			Round:      round,
@@ -421,7 +427,7 @@ type InstanceMock struct {
 	state *qbft.State
 }
 
-func (i *InstanceMock) Containers() map[qbftspec.MessageType]msgcont.MessageContainer {
+func (i *InstanceMock) Containers() map[specqbft.MessageType]msgcont.MessageContainer {
 	//TODO implement me
 	panic("implement me")
 }
@@ -469,20 +475,20 @@ func (i *InstanceMock) Stop() {}
 func (i *InstanceMock) State() *qbft.State {
 	return i.state
 }
-func (i *InstanceMock) ForceDecide(msg *message.SignedMessage) {}
+func (i *InstanceMock) ForceDecide(msg *specqbft.SignedMessage) {}
 func (i *InstanceMock) GetStageChan() chan qbft.RoundState {
 	panic("not implemented")
 }
-func (i *InstanceMock) GetLastChangeRoundMsg() *message.SignedMessage {
+func (i *InstanceMock) GetLastChangeRoundMsg() *specqbft.SignedMessage {
 	panic("not implemented")
 }
-func (i *InstanceMock) CommittedAggregatedMsg() (*message.SignedMessage, error) {
+func (i *InstanceMock) CommittedAggregatedMsg() (*specqbft.SignedMessage, error) {
 	panic("not implemented")
 }
 func (i *InstanceMock) GetCommittedAggSSVMessage() (message.SSVMessage, error) {
 	panic("not implemented")
 }
-func (i *InstanceMock) ProcessMsg(msg *message.SignedMessage) (bool, error) {
+func (i *InstanceMock) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	panic("not implemented")
 }
 func (i *InstanceMock) ResetRoundTimer() {}

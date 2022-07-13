@@ -15,15 +15,15 @@ package history
 //)
 //
 //// GetLastDecided reads last decided message from store
-//type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
+//type GetLastDecided func(i message.Identifier) (*specqbft.SignedMessage, error)
 //
 //
 //// History takes care for syncing decided history
 //type History interface {
 //	// SyncDecided syncs decided message with other peers in the network
-//	SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error)
+//	SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*specqbft.SignedMessage, error)
 //	// SyncDecidedRange syncs decided messages for the given identifier and range
-//	SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error
+//	SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error
 //}
 //
 //// history implements History
@@ -42,7 +42,7 @@ package history
 //	}
 //}
 //
-//func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*message.SignedMessage, error) {
+//func (h *history) SyncDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided, handler DecidedHandler) (*specqbft.SignedMessage, error) {
 //	logger := h.logger.With(zap.String("identifier", fmt.Sprintf("%x", identifier)))
 //	var err error
 //	var remoteMsgs []p2pprotocol.SyncResult
@@ -66,7 +66,7 @@ package history
 //	if err != nil {
 //		return nil, errors.Wrap(err, "could not fetch local highest instance during sync")
 //	}
-//	var localHeight message.Height
+//	var localHeight specqbft.Height
 //	if localMsg != nil {
 //		localHeight = localMsg.Message.Height
 //	}
@@ -98,8 +98,8 @@ package history
 //	return highest, nil
 //}
 //
-//func (h *history) SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to message.Height, targetPeers ...string) error {
-//	visited := make(map[message.Height]bool)
+//func (h *history) SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error {
+//	visited := make(map[specqbft.Height]bool)
 //	msgs, err := h.syncer.GetHistory(identifier, from, to, targetPeers...)
 //	if err != nil {
 //		return err

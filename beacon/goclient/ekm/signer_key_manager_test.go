@@ -5,6 +5,8 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -87,7 +89,7 @@ func TestSignAttestation(t *testing.T) {
 	require.NoError(t, km.AddShare(sk1))
 
 	duty := &beacon2.Duty{
-		Type:                    message.RoleTypeAttester,
+		Type:                    spectypes.BNRoleAttester,
 		PubKey:                  [48]byte{},
 		Slot:                    30,
 		ValidatorIndex:          1,
@@ -134,13 +136,13 @@ func TestSignIBFTMessage(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
-		commitData, err := (&message.CommitData{Data: []byte("value1")}).Encode()
+		commitData, err := (&specqbft.CommitData{Data: []byte("value1")}).Encode()
 		require.NoError(t, err)
 
-		msg := &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
-			Height:     message.Height(3),
-			Round:      message.Round(2),
+		msg := &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     specqbft.Height(3),
+			Round:      specqbft.Round(2),
 			Identifier: []byte("lambda1"),
 			Data:       commitData,
 		}
@@ -150,13 +152,13 @@ func TestSignIBFTMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// verify
-		signed := &message.SignedMessage{
+		signed := &specqbft.SignedMessage{
 			Signature: sig,
-			Signers:   []message.OperatorID{message.OperatorID(1)},
+			Signers:   []spectypes.OperatorID{spectypes.OperatorID(1)},
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -166,13 +168,13 @@ func TestSignIBFTMessage(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
-		commitData, err := (&message.CommitData{Data: []byte("value2")}).Encode()
+		commitData, err := (&specqbft.CommitData{Data: []byte("value2")}).Encode()
 		require.NoError(t, err)
 
-		msg := &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
-			Height:     message.Height(1),
-			Round:      message.Round(3),
+		msg := &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     specqbft.Height(1),
+			Round:      specqbft.Round(3),
 			Identifier: []byte("lambda2"),
 			Data:       commitData,
 		}
@@ -182,13 +184,13 @@ func TestSignIBFTMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		// verify
-		signed := &message.SignedMessage{
+		signed := &specqbft.SignedMessage{
 			Signature: sig,
-			Signers:   []message.OperatorID{message.OperatorID(1)},
+			Signers:   []spectypes.OperatorID{spectypes.OperatorID(1)},
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, message.PrimusTestnet, message.QBFTSigType, []*message.Operator{{OperatorID: message.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)

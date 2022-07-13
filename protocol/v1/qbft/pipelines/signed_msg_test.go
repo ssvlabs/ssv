@@ -4,17 +4,16 @@ import (
 	"fmt"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestIfFirstTrueContinueToSecond(t *testing.T) {
-	validPipline := WrapFunc("valid", func(signedMessage *message.SignedMessage) error {
+	validPipline := WrapFunc("valid", func(signedMessage *specqbft.SignedMessage) error {
 		return nil
 	})
 
-	invalidPipeline := WrapFunc("invalid", func(signedMessage *message.SignedMessage) error {
+	invalidPipeline := WrapFunc("invalid", func(signedMessage *specqbft.SignedMessage) error {
 		return fmt.Errorf("error")
 	})
 
@@ -37,7 +36,7 @@ func TestIfFirstTrueContinueToSecond(t *testing.T) {
 
 // IfFirstTrueContinueToSecond runs pipeline a, if returns no error continues to pipeline b. otherwise returns without an error
 func IfFirstTrueContinueToSecond(a, b SignedMessagePipeline) SignedMessagePipeline {
-	return WrapFunc("if first pipeline non error, continue to second", func(signedMessage *message.SignedMessage) error {
+	return WrapFunc("if first pipeline non error, continue to second", func(signedMessage *specqbft.SignedMessage) error {
 		if a.Run(signedMessage) == nil {
 			return b.Run(signedMessage)
 		}

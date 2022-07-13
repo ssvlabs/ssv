@@ -1,8 +1,11 @@
 package msgqueue
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sort"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // By is function to compare messages
@@ -55,9 +58,9 @@ func ByRound() By {
 }
 
 // ByConsensusMsgType implements By for msg type based priority ()
-func ByConsensusMsgType(messageTypes ...message.ConsensusMessageType) By {
+func ByConsensusMsgType(messageTypes ...specqbft.MessageType) By {
 	// using a single map to lookup msg types order
-	m := map[message.ConsensusMessageType]int{}
+	m := map[specqbft.MessageType]int{}
 	for i, mt := range messageTypes {
 		m[mt] = i + 1
 	}

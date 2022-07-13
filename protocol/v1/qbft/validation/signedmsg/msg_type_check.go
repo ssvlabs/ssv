@@ -2,13 +2,15 @@ package signedmsg
 
 import (
 	"errors"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // MsgTypeCheck is the pipeline to check message type
-func MsgTypeCheck(msgType message.ConsensusMessageType) pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("type check", func(signedMessage *message.SignedMessage) error {
+func MsgTypeCheck(msgType specqbft.MessageType) pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("type check", func(signedMessage *specqbft.SignedMessage) error {
 		if signedMessage.Message.MsgType != msgType {
 			return errors.New("message type is wrong")
 		}

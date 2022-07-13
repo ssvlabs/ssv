@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -96,13 +98,13 @@ func (r *farFutureSyncScenario) PreExecution(ctx *runner.ScenarioContext) error 
 	wg.Wait()
 
 	// start several instances one by one
-	seqNumber := message.Height(0)
+	seqNumber := specqbft.Height(0)
 loop:
 	for {
 		r.logger.Info("started instances")
 		for i := uint64(1); i < uint64(r.NumOfOperators()); i++ {
 			wg.Add(1)
-			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
+			go func(node validator.IValidator, index uint64, seqNumber specqbft.Height) {
 				if err := r.startNode(node, seqNumber); err != nil {
 					r.logger.Error("could not start node", zap.Error(err))
 				}
@@ -139,7 +141,7 @@ func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *farFutureSyncScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(26))
+	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(26))
 	if err != nil {
 		return err
 	}
@@ -172,7 +174,7 @@ func (r *farFutureSyncScenario) initNode(val validator.IValidator, net network.P
 	return nil
 }
 
-func (r *farFutureSyncScenario) startNode(val validator.IValidator, seqNumber message.Height) error {
+func (r *farFutureSyncScenario) startNode(val validator.IValidator, seqNumber specqbft.Height) error {
 	ibftControllers := val.(*validator.Validator).Ibfts()
 
 	for _, ibftc := range ibftControllers {

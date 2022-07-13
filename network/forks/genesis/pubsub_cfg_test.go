@@ -2,9 +2,11 @@ package genesis
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestSSVMsgID(t *testing.T) {

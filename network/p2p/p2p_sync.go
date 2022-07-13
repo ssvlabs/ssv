@@ -2,13 +2,16 @@ package p2pv1
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // LastDecided fetches last decided from a random set of peers
@@ -30,7 +33,7 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]p2pprotocol.SyncResult, message.Height, error) {
+func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error) {
 	if from >= to {
 		return nil, 0, nil
 	}
@@ -55,7 +58,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 		}
 		peers = random
 	}
-	maxBatchRes := message.Height(n.cfg.MaxBatchResponse)
+	maxBatchRes := specqbft.Height(n.cfg.MaxBatchResponse)
 
 	var results []p2pprotocol.SyncResult
 	var err error
@@ -65,7 +68,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 	}
 	results, err = n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
 		Params: &message.SyncParams{
-			Height:     []message.Height{from, currentEnd},
+			Height:     []specqbft.Height{from, currentEnd},
 			Identifier: mid,
 		},
 		Protocol: message.DecidedHistoryType,
@@ -77,7 +80,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to message.Height,
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height specqbft.Height) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -88,7 +91,7 @@ func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height message.Heig
 	}
 	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
 		Params: &message.SyncParams{
-			Height:     []message.Height{height},
+			Height:     []specqbft.Height{height},
 			Identifier: mid,
 		},
 		Protocol: message.LastChangeRoundType,
