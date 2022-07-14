@@ -204,7 +204,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:network:subnets:known{instance=~\"$instance.*\"}",
               "format": "table",
@@ -214,7 +217,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:network:subnets:connected{instance=~\"$instance.*\"}",
               "format": "table",
@@ -225,7 +231,10 @@
               "refId": "B"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:network:subnets:my{instance=~\"$instance.*\"}",
               "format": "table",
@@ -293,7 +302,10 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -375,7 +387,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -445,7 +460,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate(ssv:network:discovery:found{instance=~\"$instance.*\"}[2m])",
               "interval": "",
@@ -453,7 +471,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate(ssv:network:discovery:rejected{instance=~\"$instance.*\"}[2m])",
               "hide": false,
@@ -466,7 +487,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -536,7 +560,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:network:discovery:enr_ping{instance=~\"$instance.*\"}",
               "interval": "",
@@ -544,7 +571,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:network:discovery:enr_pong{instance=~\"$instance.*\"}",
               "hide": false,
@@ -557,7 +587,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -629,7 +662,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
               "interval": "",
@@ -731,7 +767,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate (container_network_receive_bytes_total{pod=~\"$instance.*\"}[1m])) by (pod)",
               "hide": false,
@@ -744,7 +783,10 @@
               "step": 10
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate (container_network_transmit_bytes_total{pod=~\"$instance.*\"}[1m])) by (pod)",
               "hide": false,
@@ -761,7 +803,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -833,7 +878,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[2m]))",
               "format": "time_series",
@@ -843,7 +891,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate(ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m]))",
               "format": "time_series",
@@ -923,7 +974,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate (ssv:network:pubsub:msg:validation{instance=~\"$instance.*\"}[2m])",
               "interval": "",
@@ -935,7 +989,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1011,7 +1068,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate (ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[2m])",
               "interval": "",
@@ -1097,7 +1157,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate (ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m])",
               "interval": "",
@@ -1109,7 +1172,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1178,7 +1244,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate(ssv:network:pubsub:trace{instance=~\"$instance.*\"}[2m])",
               "format": "time_series",
@@ -1192,7 +1261,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1261,7 +1333,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:p2p:streams:res{instance=~\"$instance.*\"}",
               "format": "table",
@@ -1271,7 +1346,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:p2p:streams:req:count{instance=~\"$instance.*\"}",
               "format": "table",
@@ -1282,7 +1360,10 @@
               "refId": "B"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:p2p:streams:req:success{instance=~\"$instance.*\"}",
               "format": "table",
@@ -1293,7 +1374,10 @@
               "refId": "C"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:p2p:streams:req:active{instance=~\"$instance.*\"}",
               "format": "table",
@@ -1361,7 +1445,10 @@
       "id": 40,
       "panels": [
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1432,7 +1519,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count(ssv:validator:status{instance=~\"$instance.*\"} == 3)",
               "interval": "",
@@ -1440,7 +1530,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count(ssv:validator:status{instance=~\"$instance.*\"})",
               "hide": false,
@@ -1453,7 +1546,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1498,7 +1594,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count(ssv:validator:ibft_stage{instance=~\"$instance.*\"} == 4)",
               "hide": false,
@@ -1507,7 +1606,10 @@
               "refId": "B"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count(ssv:validator:ibft_round{instance=~\"$instance.*\"} > 2)",
               "hide": false,
@@ -1516,7 +1618,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count_values(\"round\", ssv:validator:ibft_round{instance=~\"$instance.*\"} > 2)",
               "hide": false,
@@ -1529,7 +1634,10 @@
           "type": "bargauge"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1606,7 +1714,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "count(ssv:validator:ibft_stage{instance=~\"$instance.*\"} == 4)",
               "hide": false,
@@ -1619,7 +1730,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "description": "Information on attestation duties for all validators registered to an operator",
           "fieldConfig": {
             "defaults": {
@@ -2129,7 +2243,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:validator:ibft_stage{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2140,7 +2257,10 @@
               "refId": "E"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:validator:ibft_highest_decided{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2150,7 +2270,10 @@
               "refId": "A"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2161,7 +2284,10 @@
               "refId": "B"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:validator:ibft_current_sequence{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2172,7 +2298,10 @@
               "refId": "C"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:validator:ibft_round{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2183,7 +2312,10 @@
               "refId": "D"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:validator:running_ibfts_count{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2194,7 +2326,10 @@
               "refId": "F"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "ssv:validator:ibft_current_slot{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2204,7 +2339,10 @@
               "refId": "G"
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:validator:status{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2364,7 +2502,10 @@
       "id": 83,
       "panels": [
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2434,7 +2575,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "rate (ssv:worker:msg:process{instance=~\"$instance.*\"}[2m])",
               "interval": "",
@@ -2446,7 +2590,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2524,7 +2671,10 @@
           },
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum by (v) (ssv:ibft:msgq:ratio{instance=~\"$instance.*\"})",
               "interval": "",
@@ -2536,7 +2686,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2625,7 +2778,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:ibft:msgq:ratio{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2676,7 +2832,10 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2761,7 +2920,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:ibft:msgq:ratio{instance=~\"$instance.*\"}",
               "format": "table",
@@ -2820,7 +2982,10 @@
       "id": 50,
       "panels": [
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -2883,7 +3048,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": false,
               "expr": "ssv:network:peers_identity{instance=~\"ssv-exporter.*\"}",
               "format": "table",
@@ -3016,7 +3184,10 @@
           "type": "table"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3234,7 +3405,10 @@
       "id": 38,
       "panels": [
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3379,7 +3553,10 @@
           "type": "gauge"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3463,7 +3640,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "description": "Status of the connected ETH1 node",
           "fieldConfig": {
             "defaults": {
@@ -3572,7 +3752,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "description": "Status of the connected beacon node",
           "fieldConfig": {
             "defaults": {
@@ -3695,7 +3878,10 @@
       "id": 36,
       "panels": [
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -3806,7 +3992,10 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "decimals": 3,
           "editable": true,
           "error": false,
@@ -3911,7 +4100,10 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "decimals": 2,
           "editable": true,
           "error": false,
@@ -4009,7 +4201,10 @@
           "bars": false,
           "dashLength": 10,
           "dashes": false,
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "description": "",
           "fieldConfig": {
             "defaults": {},
@@ -4107,7 +4302,10 @@
           }
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4203,7 +4401,10 @@
           "type": "timeseries"
         },
         {
-          "datasource": "${DS_PROMETHEUS}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -4280,7 +4481,10 @@
           "pluginVersion": "8.3.4",
           "targets": [
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate (container_network_receive_bytes_total{pod=~\"$instance.*\"}[1m])) by (pod)",
               "hide": false,
@@ -4293,7 +4497,10 @@
               "step": 10
             },
             {
-              "datasource": "${DS_PROMETHEUS}",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
               "exemplar": true,
               "expr": "sum (rate (container_network_transmit_bytes_total{pod=~\"$instance.*\"}[1m])) by (pod)",
               "hide": false,
