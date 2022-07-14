@@ -71,7 +71,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": null,
-  "iteration": 1631686313507,
+  "iteration": 1657703225024,
   "links": [],
   "panels": [
     {
@@ -85,10 +85,6 @@
       "id": 85,
       "panels": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -140,16 +136,60 @@
                     "value": "auto"
                   }
                 ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Value #C"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 100
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "text",
+                          "value": null
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {
+                            "color": "#808080",
+                            "index": 0,
+                            "text": "no"
+                          },
+                          "1": {
+                            "color": "text",
+                            "index": 1,
+                            "text": "yes"
+                          }
+                        },
+                        "type": "value"
+                      }
+                    ]
+                  }
+                ]
               }
             ]
           },
           "gridPos": {
             "h": 9,
-            "w": 7,
+            "w": 8,
             "x": 0,
             "y": 1
           },
-          "id": 81,
+          "id": 104,
           "options": {
             "footer": {
               "fields": "",
@@ -158,7 +198,8 @@
               ],
               "show": false
             },
-            "showHeader": true
+            "showHeader": true,
+            "sortBy": []
           },
           "pluginVersion": "8.3.4",
           "targets": [
@@ -188,6 +229,20 @@
               "interval": "",
               "legendFormat": "",
               "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "exemplar": false,
+              "expr": "ssv:network:subnets:my{instance=~\"$instance.*\"}",
+              "format": "table",
+              "hide": false,
+              "instant": true,
+              "interval": "",
+              "legendFormat": "",
+              "refId": "C"
             }
           ],
           "title": "Subnets Peers Count",
@@ -204,18 +259,41 @@
                 "excludeByName": {
                   "Time 1": true,
                   "Time 2": true,
+                  "Time 3": true,
                   "__name__ 1": true,
                   "__name__ 2": true,
+                  "__name__ 3": true,
                   "instance 1": true,
                   "instance 2": true,
+                  "instance 3": true,
                   "job 1": true,
-                  "job 2": true
+                  "job 2": true,
+                  "job 3": true
                 },
-                "indexByName": {},
+                "indexByName": {
+                  "Time 1": 2,
+                  "Time 2": 7,
+                  "Time 3": 12,
+                  "Value #A": 6,
+                  "Value #B": 11,
+                  "Value #C": 1,
+                  "__name__ 1": 3,
+                  "__name__ 2": 8,
+                  "__name__ 3": 13,
+                  "instance 1": 4,
+                  "instance 2": 9,
+                  "instance 3": 14,
+                  "job 1": 5,
+                  "job 2": 10,
+                  "job 3": 15,
+                  "subnet": 0
+                },
                 "renameByName": {
-                  "Value #A": "Peers (DHT)",
-                  "Value #B": "Peers (connected)",
-                  "instance 2": "",
+                  "Time 2": "",
+                  "Value #A": "Known Peers (DHT)",
+                  "Value #B": "Connected Peers",
+                  "Value #C": "Subscribed",
+                  "__name__ 3": "",
                   "subnet": "Subnet"
                 }
               }
@@ -278,7 +356,7 @@
           "gridPos": {
             "h": 9,
             "w": 9,
-            "x": 7,
+            "x": 8,
             "y": 1
           },
           "id": 44,
@@ -559,32 +637,7 @@
                 ]
               }
             },
-            "overrides": [
-              {
-                "__systemRef": "hideSeriesFrom",
-                "matcher": {
-                  "id": "byNames",
-                  "options": {
-                    "mode": "exclude",
-                    "names": [
-                      "decided"
-                    ],
-                    "prefix": "All except:",
-                    "readOnly": true
-                  }
-                },
-                "properties": [
-                  {
-                    "id": "custom.hideFrom",
-                    "value": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": true
-                    }
-                  }
-                ]
-              }
-            ]
+            "overrides": []
           },
           "gridPos": {
             "h": 11,
@@ -638,10 +691,6 @@
       "id": 87,
       "panels": [
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -695,7 +744,7 @@
           },
           "gridPos": {
             "h": 9,
-            "w": 11,
+            "w": 15,
             "x": 0,
             "y": 2
           },
@@ -810,10 +859,10 @@
             "overrides": []
           },
           "gridPos": {
-            "h": 9,
+            "h": 8,
             "w": 11,
-            "x": 11,
-            "y": 2
+            "x": 0,
+            "y": 11
           },
           "id": 73,
           "options": {
@@ -857,6 +906,86 @@
             }
           ],
           "title": "Pubsub Messages (2m rate)",
+          "type": "timeseries"
+        },
+        {
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 11,
+            "x": 11,
+            "y": 11
+          },
+          "id": 106,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "single"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+              },
+              "exemplar": true,
+              "expr": "rate (ssv:network:pubsub:msg:validation{instance=~\"$instance.*\"}[2m])",
+              "interval": "",
+              "legendFormat": "{{type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Pubsub Message Validation Result",
           "type": "timeseries"
         },
         {
@@ -920,7 +1049,7 @@
             "h": 12,
             "w": 11,
             "x": 0,
-            "y": 11
+            "y": 19
           },
           "id": 70,
           "options": {
@@ -954,10 +1083,6 @@
           "type": "timeseries"
         },
         {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
-          },
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1013,7 +1138,7 @@
             "h": 12,
             "w": 11,
             "x": 11,
-            "y": 11
+            "y": 19
           },
           "id": 71,
           "options": {
@@ -1101,7 +1226,7 @@
             "h": 10,
             "w": 13,
             "x": 0,
-            "y": 23
+            "y": 31
           },
           "id": 89,
           "options": {
@@ -1191,7 +1316,7 @@
             "h": 10,
             "w": 9,
             "x": 13,
-            "y": 23
+            "y": 31
           },
           "id": 102,
           "options": {
@@ -1375,7 +1500,7 @@
             "h": 10,
             "w": 7,
             "x": 0,
-            "y": 35
+            "y": 3
           },
           "id": 58,
           "options": {
@@ -1451,7 +1576,7 @@
             "h": 10,
             "w": 7,
             "x": 7,
-            "y": 35
+            "y": 3
           },
           "id": 96,
           "options": {
@@ -1570,7 +1695,7 @@
             "h": 10,
             "w": 8,
             "x": 14,
-            "y": 35
+            "y": 3
           },
           "id": 98,
           "options": {
@@ -2096,7 +2221,7 @@
             "h": 13,
             "w": 23,
             "x": 0,
-            "y": 45
+            "y": 13
           },
           "id": 22,
           "options": {
@@ -2431,7 +2556,7 @@
             "h": 10,
             "w": 11,
             "x": 0,
-            "y": 3
+            "y": 4
           },
           "id": 75,
           "options": {
@@ -2529,7 +2654,7 @@
             "h": 10,
             "w": 8,
             "x": 11,
-            "y": 3
+            "y": 4
           },
           "id": 66,
           "options": {
@@ -2631,7 +2756,7 @@
             "h": 10,
             "w": 14,
             "x": 0,
-            "y": 13
+            "y": 14
           },
           "id": 68,
           "options": {
@@ -2646,7 +2771,7 @@
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Value (sum)"
+                "displayName": "Messages"
               }
             ]
           },
@@ -2773,7 +2898,7 @@
             "h": 11,
             "w": 17,
             "x": 0,
-            "y": 23
+            "y": 24
           },
           "id": 64,
           "options": {
@@ -2876,8 +3001,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "dark-green",
@@ -2908,7 +3032,7 @@
             "h": 12,
             "w": 15,
             "x": 0,
-            "y": 5
+            "y": 88
           },
           "id": 94,
           "options": {
@@ -3079,8 +3203,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   }
                 ]
               }
@@ -3173,7 +3296,7 @@
             "h": 13,
             "w": 23,
             "x": 0,
-            "y": 17
+            "y": 100
           },
           "id": 55,
           "options": {
@@ -3314,8 +3437,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
-                    "value": null
+                    "color": "red"
                   },
                   {
                     "color": "#EAB839",
@@ -3361,8 +3483,7 @@
                       "mode": "absolute",
                       "steps": [
                         {
-                          "color": "red",
-                          "value": null
+                          "color": "red"
                         },
                         {
                           "color": "green",
@@ -3474,8 +3595,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
-                    "value": null
+                    "color": "green"
                   },
                   {
                     "color": "red",
@@ -3586,8 +3706,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
-                    "value": null
+                    "color": "red"
                   },
                   {
                     "color": "#EAB839",
@@ -3699,8 +3818,7 @@
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
-                    "value": null
+                    "color": "red"
                   },
                   {
                     "color": "#EAB839",
@@ -3815,7 +3933,7 @@
             "h": 10,
             "w": 11,
             "x": 0,
-            "y": 7
+            "y": 129
           },
           "id": 57,
           "options": {
@@ -3894,7 +4012,7 @@
             "h": 10,
             "w": 11,
             "x": 11,
-            "y": 7
+            "y": 129
           },
           "height": "",
           "hiddenSeries": false,
@@ -3996,7 +4114,7 @@
             "h": 9,
             "w": 11,
             "x": 0,
-            "y": 17
+            "y": 139
           },
           "hiddenSeries": false,
           "id": 8,
@@ -4111,7 +4229,7 @@
             "h": 9,
             "w": 11,
             "x": 11,
-            "y": 17
+            "y": 139
           },
           "hiddenSeries": false,
           "id": 32,
@@ -4240,7 +4358,7 @@
             "h": 8,
             "w": 11,
             "x": 0,
-            "y": 26
+            "y": 148
           },
           "id": 30,
           "options": {
@@ -4342,7 +4460,7 @@
             "h": 8,
             "w": 11,
             "x": 11,
-            "y": 26
+            "y": 148
           },
           "id": 92,
           "links": [],
@@ -4403,7 +4521,7 @@
       "type": "row"
     }
   ],
-  "refresh": "60s",
+  "refresh": false,
   "schemaVersion": 34,
   "style": "dark",
   "tags": [],
