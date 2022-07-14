@@ -1,9 +1,10 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // uponFullQuorum implements pipeline.Pipeline interface
@@ -27,7 +28,7 @@ func UponFullQuorum(logger *zap.Logger) pipelines.SignedMessagePipeline {
 //		else
 //			let v such that v = inputValue i
 //		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
-func (p *uponFullQuorum) Run(signedMessage *message.SignedMessage) error {
+func (p *uponFullQuorum) Run(signedMessage *specqbft.SignedMessage) error {
 	panic("not implemented yet")
 }
 

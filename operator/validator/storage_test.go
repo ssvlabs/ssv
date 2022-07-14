@@ -3,12 +3,12 @@ package validator
 import (
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -87,7 +87,7 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*beacon.
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
 
-	ibftCommittee := map[message.OperatorID]*beacon.Node{
+	ibftCommittee := map[spectypes.OperatorID]*beacon.Node{
 		1: {
 			IbftID: 1,
 			Pk:     splitKeys[1].Serialize(),

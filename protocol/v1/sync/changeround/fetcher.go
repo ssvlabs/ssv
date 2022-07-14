@@ -3,6 +3,7 @@ package changeround
 import (
 	"fmt"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -14,12 +15,12 @@ import (
 var ErrNotFound = fmt.Errorf("not found")
 
 // MsgHandler handles incoming change round messages
-type MsgHandler func(*message.SignedMessage) error
+type MsgHandler func(*specqbft.SignedMessage) error
 
 // Fetcher is responsible for fetching change round messages from other peers in the subnet
 type Fetcher interface {
 	// GetChangeRoundMessages fetches change round messages for the given identifier and height
-	GetChangeRoundMessages(identifier message.Identifier, height message.Height, handler MsgHandler) error
+	GetChangeRoundMessages(identifier message.Identifier, height specqbft.Height, handler MsgHandler) error
 }
 
 // changeRoundFetcher implements Fetcher
@@ -36,7 +37,7 @@ func NewLastRoundFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetcher 
 	}
 }
 
-func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identifier, height message.Height, handler MsgHandler) error {
+func (crf *changeRoundFetcher) GetChangeRoundMessages(identifier message.Identifier, height specqbft.Height, handler MsgHandler) error {
 	msgs, err := crf.syncer.LastChangeRound(identifier, height)
 	if err != nil {
 		return errors.Wrap(err, "could not get change round messages")

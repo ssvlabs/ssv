@@ -3,6 +3,10 @@ package controller
 import (
 	"encoding/hex"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -11,53 +15,55 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 )
 
-// ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
-func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error {
-	if c.signatureState.getState() != StateRunning {
-		c.logger.Warn("try to process signature message but timer state is not running. can't process message.", zap.String("state", c.signatureState.getState().toString()))
+// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
+func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
+	if c.SignatureState.getState() != StateRunning {
+		c.Logger.Warn(
+			"trying to process post consensus signature message but timer state is not running. can't process message.",
+			zap.String("state", c.SignatureState.getState().toString()),
+		)
 		return nil
 	}
 
-	//	validate message
-	if len(msg.GetSigners()) == 0 {
-		c.logger.Warn("missing signers", zap.Any("msg", msg))
-		return nil
+	// adjust share committee to the spec
+	committee := make([]*spectypes.Operator, 0)
+	for _, node := range c.ValidatorShare.Committee {
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(node.IbftID),
+			PubKey:     node.Pk,
+		})
 	}
-	//if len(msg.GetSignature()) == 0 { // no KeyManager, empty sig
-	if len(msg.Message.DutySignature) == 0 { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("missing duty signature", zap.Any("msg", msg))
-		return nil
+
+	if err := message.ValidatePartialSigMsg(msg, committee, c.SignatureState.duty.Slot); err != nil {
+		return errors.WithMessage(err, "could not validate partial signature message")
 	}
-	logger := c.logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
+	logger := c.Logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
+	logger.Info("received valid partial signature message",
+		zap.String("msg signature", hex.EncodeToString(msg.GetSignature())),
+		zap.String("msg beacon signature", hex.EncodeToString(msg.Messages[0].PartialSignature)),
+		zap.Any("msg", msg),
+	)
 
 	//	check if already exist, if so, ignore
-	if _, found := c.signatureState.signatures[msg.GetSigners()[0]]; found { // sig already exists
-		c.logger.Debug("sig already known, skip")
+	if _, found := c.SignatureState.signatures[msg.GetSigners()[0]]; found {
+		c.Logger.Debug("sig already known, skip")
 		return nil
 	}
 
-	logger.Info("collected valid signature", zap.String("sig", hex.EncodeToString(msg.Message.DutySignature)), zap.Any("msg", msg))
+	c.SignatureState.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
+	if len(c.SignatureState.signatures) >= c.SignatureState.sigCount {
+		c.Logger.Info("collected enough signature to reconstruct",
+			zap.Int("signatures", len(c.SignatureState.signatures)),
+		)
+		c.SignatureState.stopTimer()
 
-	if err := c.verifyPartialSignature(msg.Message.DutySignature, c.signatureState.root, msg.GetSigners()[0], c.ValidatorShare.Committee); err != nil { // TODO need to add sig to msg and not use this sig
-		c.logger.Warn("received invalid signature", zap.Error(err))
-		return nil
-	}
-
-	logger.Info("signature verified")
-
-	c.signatureState.signatures[msg.GetSigners()[0]] = msg.Message.DutySignature
-	if len(c.signatureState.signatures) >= c.signatureState.sigCount {
-		c.logger.Info("collected enough signature to reconstruct...", zap.Int("signatures", len(c.signatureState.signatures)))
-		c.signatureState.stopTimer()
-
-		// clean queue consensus & default messages that is <= c.signatureState.height, we don't need them anymore
-		height := c.signatureState.getHeight()
-		c.q.Clean(
-			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, height),
+		// clean queue consensus & default messages that is <= c.signatureState.duty.Slot, we don't need them anymore
+		c.Q.Clean(
+			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, c.SignatureState.duty.Slot),
 		)
 
 		err := c.broadcastSignature()
-		c.signatureState.clear()
+		c.SignatureState.clear()
 		return err
 	}
 	return nil
@@ -66,54 +72,77 @@ func (c *Controller) ProcessSignatureMessage(msg *message.SignedPostConsensusMes
 // broadcastSignature reconstruct sigs and broadcast to network
 func (c *Controller) broadcastSignature() error {
 	// Reconstruct signatures
-	if err := c.reconstructAndBroadcastSignature(c.signatureState.signatures, c.signatureState.root, c.signatureState.valueStruct, c.signatureState.duty); err != nil {
+	if err := c.reconstructAndBroadcastSignature(c.SignatureState.signatures, c.SignatureState.root, c.SignatureState.valueStruct, c.SignatureState.duty); err != nil {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
-	c.logger.Info("Successfully submitted role!")
+	c.Logger.Info("Successfully submitted role!")
 	return nil
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
+func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := c.signDuty(decidedValue, duty)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
-	ssvMsg, err := c.generateSignatureMessage(sig, root, height)
+	psm, err := c.generatePartialSignatureMessage(sig, root, duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
-	if err := c.network.Broadcast(ssvMsg); err != nil {
-		return errors.Wrap(err, "failed to broadcast signature")
+	if err := c.signAndBroadcast(psm); err != nil {
+		return errors.Wrap(err, "failed to sign and broadcast post consensus")
 	}
-	logger.Info("broadcasting partial signature post consensus")
 
 	//	start timer, clear new map and set var's
-	c.signatureState.start(c.logger, height, signaturesCount, root, valueStruct, duty)
+	c.SignatureState.start(c.Logger, height, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 
-// generateSignatureMessage returns postConsensus type ssv message with signature signed message
-func (c *Controller) generateSignatureMessage(sig []byte, root []byte, height message.Height) (message.SSVMessage, error) {
-	SignedMsg := &message.SignedPostConsensusMessage{
-		Message: &message.PostConsensusMessage{
-			Height:          height,
-			DutySignature:   sig,
-			DutySigningRoot: root,
-			Signers:         []message.OperatorID{c.ValidatorShare.NodeID},
-		},
-		Signature: sig, // TODO should be msg sig and not decided sig
-		Signers:   []message.OperatorID{c.ValidatorShare.NodeID},
+// signAndBroadcast checks and adds the signed message to the appropriate round state type
+func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
+	pk, err := c.ValidatorShare.OperatorSharePubKey()
+	if err != nil {
+		return errors.Wrap(err, "failed to get operator share pubkey")
+	}
+	signature, err := c.Signer.SignIBFTMessage(psm, pk.Serialize(), message.PostConsensusSigType)
+	if err != nil {
+		return errors.Wrap(err, "failed to sign message")
 	}
 
-	encodedSignedMsg, err := SignedMsg.Encode()
-	if err != nil {
-		return message.SSVMessage{}, err
+	signedMsg := &ssv.SignedPartialSignatureMessage{
+		Type:      ssv.PostConsensusPartialSig,
+		Messages:  psm,
+		Signature: signature,
+		Signers:   []spectypes.OperatorID{c.ValidatorShare.NodeID},
 	}
-	return message.SSVMessage{
+
+	encodedSignedMsg, err := signedMsg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode signed message")
+	}
+	ssvMsg := message.SSVMessage{
 		MsgType: message.SSVPostConsensusMsgType,
-		ID:      c.GetIdentifier(), // TODO this is the right id? (:Niv)
+		ID:      c.GetIdentifier(),
 		Data:    encodedSignedMsg,
+	}
+
+	if err := c.Network.Broadcast(ssvMsg); err != nil {
+		return errors.Wrap(err, "failed to broadcast signature")
+	}
+	c.Logger.Info("broadcasting partial signature post consensus")
+	return nil
+}
+
+// generatePartialSignatureMessage returns a PartialSignatureMessage struct
+func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (ssv.PartialSignatureMessages, error) {
+	signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
+	return ssv.PartialSignatureMessages{
+		&ssv.PartialSignatureMessage{
+			Slot:             slot,
+			PartialSignature: sig,
+			SigningRoot:      root,
+			Signers:          signers,
+		},
 	}, nil
 }

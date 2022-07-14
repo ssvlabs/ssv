@@ -1,11 +1,12 @@
 package handlers
 
 import (
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // LastDecidedHandler handler for last-decided protocol

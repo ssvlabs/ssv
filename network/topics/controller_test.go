@@ -4,21 +4,25 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/network/forks/genesis"
+
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
-	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -32,19 +36,11 @@ func TestTopicManager(t *testing.T) {
 		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
-	t.Run("v0 features", func(t *testing.T) {
+	// genesis features includes msg_id, msg validator, subnets, scoring
+	t.Run("features", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		f := forksv0.New()
-		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, 1, len(pks)+2)
-	})
-
-	// v1 features includes msg_id, msg validator, subnets, scoring
-	t.Run("v1 features", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		f := forksv1.New()
+		f := genesis.New()
 		peers := newPeers(ctx, t, nPeers, true, true, f)
 		baseTest(ctx, t, peers, pks, f, 1, 2)
 	})
@@ -304,7 +300,7 @@ func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, message.RoleTypeAttester)
+	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

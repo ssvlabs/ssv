@@ -1,11 +1,12 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // ChangeRoundPartialQuorumMsgPipeline returns the pipeline which handles partial change ronud quorum
@@ -21,8 +22,8 @@ func (i *Instance) ChangeRoundPartialQuorumMsgPipeline() pipelines.SignedMessage
 // 		set timer i to running and expire after t(ri)
 //		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 func (i *Instance) uponChangeRoundPartialQuorum() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon change round partial quorum", func(_ *message.SignedMessage) error {
-		foundPartialQuorum, lowestChangeRound := i.ChangeRoundMessages.PartialChangeRoundQuorum(i.State().GetRound())
+	return pipelines.WrapFunc("upon change round partial quorum", func(_ *specqbft.SignedMessage) error {
+		foundPartialQuorum, lowestChangeRound := i.containersMap[specqbft.RoundChangeMsgType].PartialChangeRoundQuorum(i.State().GetRound())
 		if foundPartialQuorum {
 			i.bumpToRound(lowestChangeRound)
 

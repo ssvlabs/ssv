@@ -3,9 +3,8 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestMsgLambda(t *testing.T) {
@@ -25,15 +24,15 @@ func TestMsgLambda(t *testing.T) {
 			"different msg lambda",
 			[]byte{1, 2, 3, 4},
 			[]byte{1, 2, 3, 3},
-			"message Lambda (\x01\x02\x03\x03) does not equal expected Lambda (\x01\x02\x03\x04)",
+			"message Lambda (01020303) does not equal expected Lambda (01020304)",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pipeline := ValidateLambdas(test.expectedLambda)
-			err := pipeline.Run(&message.SignedMessage{
-				Message: &message.ConsensusMessage{
+			err := pipeline.Run(&specqbft.SignedMessage{
+				Message: &specqbft.Message{
 					Identifier: test.actualLambda,
 				},
 			})

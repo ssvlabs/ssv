@@ -3,28 +3,27 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestMsgTypeCheck(t *testing.T) {
 	tests := []struct {
 		name          string
-		expectedType  message.ConsensusMessageType
-		actualType    message.ConsensusMessageType
+		expectedType  specqbft.MessageType
+		actualType    specqbft.MessageType
 		expectedError string
 	}{
 		{
 			"valid",
-			message.PrepareMsgType,
-			message.PrepareMsgType,
+			specqbft.PrepareMsgType,
+			specqbft.PrepareMsgType,
 			"",
 		},
 		{
 			"different round state",
-			message.PrepareMsgType,
-			message.DecidedMsgType,
+			specqbft.PrepareMsgType,
+			specqbft.ProposalMsgType,
 			"message type is wrong",
 		},
 	}
@@ -32,8 +31,8 @@ func TestMsgTypeCheck(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pipeline := MsgTypeCheck(test.expectedType)
-			err := pipeline.Run(&message.SignedMessage{
-				Message: &message.ConsensusMessage{
+			err := pipeline.Run(&specqbft.SignedMessage{
+				Message: &specqbft.Message{
 					MsgType: test.actualType,
 				},
 			})

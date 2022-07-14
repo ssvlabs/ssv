@@ -4,23 +4,26 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"testing"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
+
+	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	logger := zap.L()
 	//logger := zaptest.NewLogger(t)
-	f := forksv1.ForkV1{}
+	f := genesis.ForkGenesis{}
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
 	mv := NewSSVMsgValidator(logger, &f, self)
 	require.NotNil(t, mv)
@@ -99,7 +102,7 @@ func dummySSVConsensusMsg(pkHex string, height int) (*message.SSVMessage, error)
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, message.RoleTypeAttester)
+	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

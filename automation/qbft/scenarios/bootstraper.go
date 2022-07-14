@@ -41,7 +41,7 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 			}
 			dbs = append(dbs, db)
 		}
-		forkVersion := forksprotocol.V0ForkVersion
+		forkVersion := forksprotocol.GenesisForkVersion
 
 		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, scenario.NumOfBootnodes() > 0)
 		if err != nil {

@@ -37,18 +37,18 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockBeacon) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (m *MockBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SignIBFTMessage indicates an expected call of SignIBFTMessage
-func (mr *MockBeaconMockRecorder) SignIBFTMessage(message, pk interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockBeacon)(nil).SignIBFTMessage), message, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockBeacon)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method
@@ -75,15 +75,24 @@ func (m *MockBeacon) AddShare(shareKey *bls.SecretKey) error {
 	return ret0
 }
 
-func (m *MockBeacon) RemoveShare(pubKey string) error {
-	//TODO implement me
-	panic("implement me")
-}
-
 // AddShare indicates an expected call of AddShare
 func (mr *MockBeaconMockRecorder) AddShare(shareKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddShare", reflect.TypeOf((*MockBeacon)(nil).AddShare), shareKey)
+}
+
+// RemoveShare mocks base method
+func (m *MockBeacon) RemoveShare(pubKey string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveShare", pubKey)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveShare indicates an expected call of RemoveShare
+func (mr *MockBeaconMockRecorder) RemoveShare(pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveShare", reflect.TypeOf((*MockBeacon)(nil).RemoveShare), pubKey)
 }
 
 // GetDomain mocks base method
@@ -213,18 +222,18 @@ func (m *MockKeyManager) EXPECT() *MockKeyManagerMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockKeyManager) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (m *MockKeyManager) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SignIBFTMessage indicates an expected call of SignIBFTMessage
-func (mr *MockKeyManagerMockRecorder) SignIBFTMessage(message, pk interface{}) *gomock.Call {
+func (mr *MockKeyManagerMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockKeyManager)(nil).SignIBFTMessage), message, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockKeyManager)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method
@@ -257,6 +266,20 @@ func (mr *MockKeyManagerMockRecorder) AddShare(shareKey interface{}) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddShare", reflect.TypeOf((*MockKeyManager)(nil).AddShare), shareKey)
 }
 
+// RemoveShare mocks base method
+func (m *MockKeyManager) RemoveShare(pubKey string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveShare", pubKey)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveShare indicates an expected call of RemoveShare
+func (mr *MockKeyManagerMockRecorder) RemoveShare(pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveShare", reflect.TypeOf((*MockKeyManager)(nil).RemoveShare), pubKey)
+}
+
 // MockSigner is a mock of Signer interface
 type MockSigner struct {
 	ctrl     *gomock.Controller
@@ -281,18 +304,18 @@ func (m *MockSigner) EXPECT() *MockSignerMockRecorder {
 }
 
 // SignIBFTMessage mocks base method
-func (m *MockSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (m *MockSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignIBFTMessage", message, pk)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SignIBFTMessage indicates an expected call of SignIBFTMessage
-func (mr *MockSignerMockRecorder) SignIBFTMessage(message, pk interface{}) *gomock.Call {
+func (mr *MockSignerMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockSigner)(nil).SignIBFTMessage), message, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockSigner)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method

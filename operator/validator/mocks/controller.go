@@ -7,9 +7,9 @@ package mocks
 import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth1 "github.com/bloxapp/ssv/eth1"
-	validator "github.com/bloxapp/ssv/operator/validator"
-	message "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validator0 "github.com/bloxapp/ssv/protocol/v1/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beacon "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	validator "github.com/bloxapp/ssv/protocol/v1/validator"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
 	reflect "reflect"
@@ -77,10 +77,10 @@ func (mr *MockControllerMockRecorder) GetValidatorsIndices() *gomock.Call {
 }
 
 // GetValidator mocks base method
-func (m *MockController) GetValidator(pubKey string) (validator0.IValidator, bool) {
+func (m *MockController) GetValidator(pubKey string) (validator.IValidator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(validator0.IValidator)
+	ret0, _ := ret[0].(validator.IValidator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -103,41 +103,37 @@ func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
 }
 
-// StartNetworkMediators mocks base method
-func (m *MockController) StartNetworkMediators() {
+// StartNetworkHandlers mocks base method
+func (m *MockController) StartNetworkHandlers() {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StartNetworkHandlers")
 }
 
-// StartNetworkMediators indicates an expected call of StartNetworkMediators
-func (mr *MockControllerMockRecorder) StartNetworkMediators() *gomock.Call {
+// StartNetworkHandlers indicates an expected call of StartNetworkHandlers
+func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkMediators))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
 }
 
 // Eth1EventHandler mocks base method
-func (m *MockController) Eth1EventHandler(handlers ...validator.ShareEventHandlerFunc) eth1.SyncEventHandler {
+func (m *MockController) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
-	for _, a := range handlers {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Eth1EventHandler", varargs...)
+	ret := m.ctrl.Call(m, "Eth1EventHandler", ongoingSync)
 	ret0, _ := ret[0].(eth1.SyncEventHandler)
 	return ret0
 }
 
 // Eth1EventHandler indicates an expected call of Eth1EventHandler
-func (mr *MockControllerMockRecorder) Eth1EventHandler(handlers ...interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) Eth1EventHandler(ongoingSync interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Eth1EventHandler", reflect.TypeOf((*MockController)(nil).Eth1EventHandler), handlers...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Eth1EventHandler", reflect.TypeOf((*MockController)(nil).Eth1EventHandler), ongoingSync)
 }
 
 // GetAllValidatorShares mocks base method
-func (m *MockController) GetAllValidatorShares() ([]*message.Share, error) {
+func (m *MockController) GetAllValidatorShares() ([]*beacon.Share, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllValidatorShares")
-	ret0, _ := ret[0].([]*message.Share)
+	ret0, _ := ret[0].([]*beacon.Share)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -146,4 +142,18 @@ func (m *MockController) GetAllValidatorShares() ([]*message.Share, error) {
 func (mr *MockControllerMockRecorder) GetAllValidatorShares() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidatorShares", reflect.TypeOf((*MockController)(nil).GetAllValidatorShares))
+}
+
+// OnFork mocks base method
+func (m *MockController) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "OnFork", forkVersion)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// OnFork indicates an expected call of OnFork
+func (mr *MockControllerMockRecorder) OnFork(forkVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFork", reflect.TypeOf((*MockController)(nil).OnFork), forkVersion)
 }

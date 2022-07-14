@@ -2,10 +2,16 @@ package validator
 
 import (
 	"bytes"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/bloxapp/ssv/utils/logex"
 )
+
+func init() {
+	logex.Build("test", zapcore.DebugLevel, nil)
+}
 
 func TestIdentifierTest(t *testing.T) {
 	node := testingValidator(t, true, 4, []byte{1, 2, 3, 4})

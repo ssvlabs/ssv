@@ -2,16 +2,17 @@ package worker
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/utils/logex"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func init() {

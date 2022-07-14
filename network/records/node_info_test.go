@@ -12,7 +12,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 	netKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
 	ni := &NodeInfo{
-		ForkVersion: forksprotocol.V1ForkVersion,
+		ForkVersion: forksprotocol.GenesisForkVersion,
 		NetworkID:   "testnet",
 		Metadata: &NodeMetadata{
 			NodeVersion:   "v0.1.12",

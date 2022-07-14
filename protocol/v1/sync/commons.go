@@ -1,6 +1,7 @@
 package sync
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -9,8 +10,8 @@ import (
 )
 
 // GetHighest returns the highest message from the given collection
-func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *message.SignedMessage, sender string) {
-	var height message.Height
+func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *specqbft.SignedMessage, sender string) {
+	var height specqbft.Height
 
 	for _, remoteMsg := range remoteMsgs {
 		sm, err := ExtractSyncMsg(remoteMsg.Msg)
@@ -52,8 +53,8 @@ func ExtractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
 
 // GetHighestSignedMessage returns the highest decided among the given set of messages.
 // assuming all messages are of the same identifier
-func GetHighestSignedMessage(signedMsgs ...*message.SignedMessage) *message.SignedMessage {
-	var highest *message.SignedMessage
+func GetHighestSignedMessage(signedMsgs ...*specqbft.SignedMessage) *specqbft.SignedMessage {
+	var highest *specqbft.SignedMessage
 	for _, msg := range signedMsgs {
 		if msg == nil || msg.Message == nil {
 			continue
@@ -63,9 +64,9 @@ func GetHighestSignedMessage(signedMsgs ...*message.SignedMessage) *message.Sign
 			continue
 		}
 		// if higher or (equal + more signers) then update highest
-		if msg.Message.Higher(highest.Message) {
+		if msg.Message.Height > highest.Message.Height {
 			highest = msg
-		} else if msg.Message.Height == highest.Message.Height && msg.HasMoreSigners(highest) {
+		} else if msg.Message.Height == highest.Message.Height && len(msg.GetSigners()) > len(highest.GetSigners()) {
 			highest = msg
 		} else {
 			// older

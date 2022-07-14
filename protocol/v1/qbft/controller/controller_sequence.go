@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
@@ -23,7 +23,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	if ready, err := c.initialized(); !ready {
 		return err
 	}
-	currentInstance := c.getCurrentInstance()
+	currentInstance := c.GetCurrentInstance()
 	if currentInstance != nil {
 		return errors.Errorf("current instance (%d) is still running", currentInstance.State().GetHeight())
 	}
@@ -36,7 +36,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 		return err
 	}
 
-	highestSeqKnown := message.Height(0)
+	highestSeqKnown := specqbft.Height(0)
 	if highestKnown != nil {
 		highestSeqKnown = highestKnown.Message.Height
 	}
@@ -50,11 +50,11 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 
 	if opts.RequireMinPeers {
 		minPeers := 1
-		c.logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := protcolp2p.WaitForMinPeers(c.ctx, c.logger, c.network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
+		if err := protcolp2p.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
 			return err
 		}
-		c.logger.Debug("found enough peers")
+		c.Logger.Debug("found enough peers")
 	}
 
 	return nil
@@ -62,7 +62,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 
 // NextSeqNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (c *Controller) NextSeqNumber() (message.Height, error) {
+func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
 	knownDecided, err := c.highestKnownDecided()
 	if err != nil {
 		return 0, err
@@ -74,7 +74,7 @@ func (c *Controller) NextSeqNumber() (message.Height, error) {
 }
 
 func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
-	leaderSelectionSeed := append(c.fork.Identifier(c.Identifier.GetValidatorPK(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
+	leaderSelectionSeed := append(c.Fork.Identifier(c.Identifier.GetValidatorPK(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err
@@ -83,13 +83,13 @@ func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerSta
 	return &instance.Options{
 		Logger:          opts.Logger,
 		ValidatorShare:  c.ValidatorShare,
-		Network:         c.network,
+		Network:         c.Network,
 		LeaderSelector:  leaderSelc,
-		Config:          c.instanceConfig,
+		Config:          c.InstanceConfig,
 		Identifier:      c.Identifier,
 		Height:          opts.SeqNumber,
-		Fork:            c.fork.InstanceFork(),
+		Fork:            c.Fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
-		Signer:          c.signer,
+		Signer:          c.Signer,
 	}, nil
 }

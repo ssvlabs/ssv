@@ -1,11 +1,15 @@
 package controller
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"go.uber.org/zap"
 )
 
 // IController represents behavior of the IController
@@ -18,22 +22,25 @@ type IController interface {
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() (message.Height, error)
+	NextSeqNumber() (specqbft.Height, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
-	GetIBFTCommittee() map[message.OperatorID]*beaconprotocol.Node
+	GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol.Node
 
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte
 
 	ProcessMsg(msg *message.SSVMessage) error
 
-	// ProcessSignatureMessage aggregate signature messages and broadcasting when quorum achieved
-	ProcessSignatureMessage(msg *message.SignedPostConsensusMessage) error
+	// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
+	ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-	PostConsensusDutyExecution(logger *zap.Logger, height message.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error
+	PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error
 
 	// OnFork called when fork occur.
 	OnFork(forkVersion forksprotocol.ForkVersion) error
+
+	// GetCurrentInstance returns current instance if exist. if not, returns nil TODO for mapping, need to remove once duty runner implemented
+	GetCurrentInstance() instance.Instancer
 }

@@ -2,6 +2,13 @@ package controller
 
 import (
 	"context"
+	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -11,9 +18,6 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"testing"
 )
 
 func init() {
@@ -29,19 +33,19 @@ func TestReadModeChangeRound(t *testing.T) {
 	}
 	db, err := storage.GetStorageFactory(cfg)
 	require.NoError(t, err)
-	changeRoundStorage := qbftStorage.New(db, logger, message.RoleTypeAttester.String(), forksprotocol.V1ForkVersion)
+	changeRoundStorage := qbftStorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion)
 
-	uids := []message.OperatorID{message.OperatorID(1)}
+	uids := []spectypes.OperatorID{spectypes.OperatorID(1)}
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 
 	ctrl := Controller{
-		ctx:    context.Background(),
-		logger: logger,
+		Ctx:    context.Background(),
+		Logger: logger,
 		ValidatorShare: &beacon.Share{
 			NodeID: 1,
 			//PublicKey:    secretKeys[0].GetPublicKey(),
-			Committee: map[message.OperatorID]*beacon.Node{
-				message.OperatorID(1): {
+			Committee: map[spectypes.OperatorID]*beacon.Node{
+				spectypes.OperatorID(1): {
 					IbftID: 1,
 					Pk:     secretKeys[1].GetPublicKey().Serialize(),
 				},
@@ -50,19 +54,19 @@ func TestReadModeChangeRound(t *testing.T) {
 			OwnerAddress: "",
 			Operators:    nil,
 		},
-		changeRoundStorage: changeRoundStorage,
-		Identifier:         message.NewIdentifier([]byte("pk"), message.RoleTypeAttester),
-		fork:               forksfactory.NewFork(forksprotocol.V0ForkVersion),
-		readMode:           true,
+		ChangeRoundStorage: changeRoundStorage,
+		Identifier:         message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester),
+		Fork:               forksfactory.NewFork(forksprotocol.GenesisForkVersion),
+		ReadMode:           true,
 	}
 
 	tests := []struct {
 		name                 string
 		withPrepareValue     bool
 		shouldFailValidation bool
-		expectedHeight       message.Height
-		expectedRound        message.Round
-		signedMsg            *message.SignedMessage
+		expectedHeight       specqbft.Height
+		expectedRound        specqbft.Round
+		signedMsg            *specqbft.SignedMessage
 	}{
 		{
 			"first change round (height 0)",
@@ -70,14 +74,14 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			0,
 			1,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
-					Round:                    1,
-					RoundChangeJustification: []*message.SignedMessage{},
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
+					PreparedRound:            1,
+					RoundChangeJustification: []*specqbft.SignedMessage{},
 				}),
 			}),
 		},
@@ -87,14 +91,14 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			0,
 			2,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      2,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
-					Round:                    2,
-					RoundChangeJustification: []*message.SignedMessage{},
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
+					PreparedRound:            2,
+					RoundChangeJustification: []*specqbft.SignedMessage{},
 				}),
 			}),
 		},
@@ -104,14 +108,14 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			1,
 			2,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
-					Round:                    1,
-					RoundChangeJustification: []*message.SignedMessage{},
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
+					PreparedRound:            1,
+					RoundChangeJustification: []*specqbft.SignedMessage{},
 				}),
 			}),
 		},
@@ -121,14 +125,14 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			1,
 			2, // expecting the last one
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
-					Round:                    2,
-					RoundChangeJustification: []*message.SignedMessage{},
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
+					PreparedRound:            2,
+					RoundChangeJustification: []*specqbft.SignedMessage{},
 				}),
 			}),
 		},
@@ -138,14 +142,14 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			1, // expecting the last one
 			2,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
-					Round:                    2,
-					RoundChangeJustification: []*message.SignedMessage{},
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
+					PreparedRound:            2,
+					RoundChangeJustification: []*specqbft.SignedMessage{},
 				}),
 			}),
 		},
@@ -155,21 +159,21 @@ func TestReadModeChangeRound(t *testing.T) {
 			false,
 			2,
 			2,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     2,
 				Round:      2,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         1,
-					RoundChangeJustification: []*message.SignedMessage{
-						testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-							MsgType:    message.PrepareMsgType,
+					PreparedRound: 1,
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
 							Identifier: ctrl.Identifier,
-							Data:       prepareDataToByte(t, &message.PrepareData{Data: []byte("value")}),
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
 						}),
 					},
 				}),
@@ -181,21 +185,21 @@ func TestReadModeChangeRound(t *testing.T) {
 			true,
 			2,
 			2,
-			testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     3,
 				Round:      1,
 				Identifier: ctrl.Identifier,
-				Data: changeRoundDataToByte(t, &message.RoundChangeData{
+				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         1,
-					RoundChangeJustification: []*message.SignedMessage{
-						testing2.SignMsg(t, secretKeys, []message.OperatorID{message.OperatorID(1)}, &message.ConsensusMessage{
-							MsgType:    message.PrepareMsgType,
+					PreparedRound: 1,
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
 							Identifier: ctrl.Identifier,
-							Data:       prepareDataToByte(t, &message.PrepareData{Data: []byte("value_invalid")}),
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value_invalid")}),
 						}),
 					},
 				}),
@@ -212,7 +216,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			res, err := ctrl.changeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier, test.signedMsg.GetSigners()...)
+			res, err := ctrl.ChangeRoundStorage.GetLastChangeRoundMsg(ctrl.Identifier, test.signedMsg.GetSigners()...)
 			require.Equal(t, 1, len(res))
 			last := res[0]
 			require.NoError(t, err)
@@ -222,19 +226,19 @@ func TestReadModeChangeRound(t *testing.T) {
 			if test.withPrepareValue {
 				crd, err := last.Message.GetRoundChangeData()
 				require.NoError(t, err)
-				require.Equal(t, crd.GetPreparedValue(), []byte("value"))
+				require.Equal(t, crd.PreparedValue, []byte("value"))
 			}
 		})
 	}
 }
 
-func changeRoundDataToByte(t *testing.T, crd *message.RoundChangeData) []byte {
+func changeRoundDataToByte(t *testing.T, crd *specqbft.RoundChangeData) []byte {
 	encoded, err := crd.Encode()
 	require.NoError(t, err)
 	return encoded
 }
 
-func prepareDataToByte(t *testing.T, pd *message.PrepareData) []byte {
+func prepareDataToByte(t *testing.T, pd *specqbft.PrepareData) []byte {
 	encoded, err := pd.Encode()
 	require.NoError(t, err)
 	return encoded

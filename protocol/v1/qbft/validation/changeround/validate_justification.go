@@ -3,29 +3,28 @@ package changeround
 import (
 	"bytes"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // validateJustification validates change round justifications
 type validateJustification struct {
-	share       *beacon.Share
-	forkVersion string
+	share *beacon.Share
 }
 
 // Validate is the constructor of validateJustification
-func Validate(share *beacon.Share, forkVersion string) pipelines.SignedMessagePipeline {
+func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
 	return &validateJustification{
-		share:       share,
-		forkVersion: forkVersion,
+		share: share,
 	}
 }
 
 // Run implements pipeline.Pipeline interface
-func (p *validateJustification) Run(signedMessage *message.SignedMessage) error {
+func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error {
 	if signedMessage.Message.Data == nil {
 		return errors.New("change round justification msg is nil")
 	}
@@ -37,10 +36,10 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if data == nil {
 		return errors.New("change round data is nil")
 	}
-	if data.GetPreparedValue() == nil || len(data.GetPreparedValue()) == 0 { // no justification
+	if data.PreparedValue == nil || len(data.PreparedValue) == 0 { // no justification
 		return nil
 	}
-	roundChangeJust := data.GetRoundChangeJustification()
+	roundChangeJust := data.RoundChangeJustification
 	if roundChangeJust == nil {
 		return errors.New("change round justification is nil")
 	}
@@ -50,7 +49,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if roundChangeJust[0].Message == nil {
 		return errors.New("change round justification msg is nil")
 	}
-	if roundChangeJust[0].Message.MsgType != message.PrepareMsgType {
+	if roundChangeJust[0].Message.MsgType != specqbft.PrepareMsgType {
 		return errors.Errorf("change round justification msg type not Prepare (%d)", roundChangeJust[0].Message.MsgType)
 	}
 	if signedMessage.Message.Height != roundChangeJust[0].Message.Height {
@@ -59,7 +58,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	if signedMessage.Message.Round <= roundChangeJust[0].Message.Round {
 		return errors.New("change round justification round lower or equal to message round")
 	}
-	if data.Round != roundChangeJust[0].Message.Round {
+	if data.PreparedRound != roundChangeJust[0].Message.Round {
 		return errors.New("change round prepared round not equal to justification msg round")
 	}
 	if !bytes.Equal(signedMessage.Message.Identifier, roundChangeJust[0].Message.Identifier) {
@@ -77,7 +76,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	}
 
 	// validateJustification justification signature
-	pksMap, err := p.share.PubKeysByID(data.GetRoundChangeJustification()[0].GetSigners())
+	pksMap, err := p.share.PubKeysByID(data.RoundChangeJustification[0].GetSigners())
 	var pks beacon.PubKeys
 	for _, v := range pksMap {
 		pks = append(pks, v)
@@ -88,7 +87,7 @@ func (p *validateJustification) Run(signedMessage *message.SignedMessage) error 
 	}
 	aggregated := pks.Aggregate()
 	for _, justification := range data.RoundChangeJustification {
-		err = justification.Signature.Verify(justification, message.PrimusTestnet, message.QBFTSigType, aggregated.Serialize(), p.forkVersion)
+		err = justification.Signature.Verify(justification, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, aggregated.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}

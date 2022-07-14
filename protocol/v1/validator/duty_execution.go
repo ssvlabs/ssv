@@ -2,16 +2,18 @@ package validator
 
 import (
 	"encoding/hex"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/pkg/errors"
-
-	"go.uber.org/zap"
 )
 
-func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beaconprotocol.Duty) (controller.IController, int, []byte, message.Height, error) {
+func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beaconprotocol.Duty) (controller.IController, int, []byte, specqbft.Height, error) {
 	var inputByts []byte
 	var err error
 
@@ -21,7 +23,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *beacon
 	}
 
 	switch duty.Type {
-	case message.RoleTypeAttester:
+	case types.BNRoleAttester:
 		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return nil, 0, nil, 0, errors.Wrap(err, "failed to get attestation data")

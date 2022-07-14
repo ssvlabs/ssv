@@ -2,11 +2,13 @@ package worker
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (

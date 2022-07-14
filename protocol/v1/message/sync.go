@@ -2,6 +2,8 @@ package message
 
 import (
 	"encoding/json"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
 
 // StatusCode is the response status code
@@ -50,7 +52,7 @@ func (sc *StatusCode) String() string {
 // SyncParams holds parameters for sync operations
 type SyncParams struct {
 	// Height of the message, it can hold up to 2 items to specify a range or a single item for specific height
-	Height []Height
+	Height []specqbft.Height
 	// Identifier of the message
 	Identifier Identifier
 }
@@ -76,7 +78,7 @@ type SyncMessage struct {
 	// Params holds request parameters
 	Params *SyncParams
 	// Data holds the results
-	Data []*SignedMessage
+	Data []*specqbft.SignedMessage
 	// Status is the status code of the operation
 	Status StatusCode
 }
@@ -92,19 +94,19 @@ func (sm *SyncMessage) Decode(data []byte) error {
 }
 
 // UpdateResults updates the given sync message with results or potential error
-func (sm *SyncMessage) UpdateResults(err error, results ...*SignedMessage) {
+func (sm *SyncMessage) UpdateResults(err error, results ...*specqbft.SignedMessage) {
 	if err != nil {
 		sm.Status = StatusInternalError
 	} else if len(results) == 0 || results[0] == nil {
 		sm.Status = StatusNotFound
 	} else {
-		sm.Data = make([]*SignedMessage, len(results))
+		sm.Data = make([]*specqbft.SignedMessage, len(results))
 		copy(sm.Data, results)
 		nResults := len(sm.Data)
 		// updating params with the actual height of the messages
-		sm.Params.Height = []Height{sm.Data[0].Message.Height}
+		sm.Params.Height = []specqbft.Height{sm.Data[0].Message.Height}
 		if nResults > 1 {
-			sm.Params.Height = []Height{sm.Data[0].Message.Height, sm.Data[nResults-1].Message.Height}
+			sm.Params.Height = []specqbft.Height{sm.Data[0].Message.Height, sm.Data[nResults-1].Message.Height}
 		}
 		sm.Status = StatusSuccess
 	}

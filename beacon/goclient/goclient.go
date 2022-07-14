@@ -13,6 +13,7 @@ import (
 	"github.com/attestantio/go-eth2-client/http"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -92,7 +93,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network)
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, message.PrimusTestnet)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
@@ -132,7 +133,7 @@ func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.Validato
 		var duties []*beaconprotocol.Duty
 		for _, attesterDuty := range attesterDuties {
 			duties = append(duties, &beaconprotocol.Duty{
-				Type:                    message.RoleTypeAttester,
+				Type:                    spectypes.BNRoleAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,
 				ValidatorIndex:          attesterDuty.ValidatorIndex,

@@ -1,11 +1,13 @@
 package message
 
+import spectypes "github.com/bloxapp/ssv-spec/types"
+
 // OperatorID is a unique ID for the node, used to create shares and verify msgs
 type OperatorID uint64
 
 // Operator represents an SSV operator node
 type Operator struct {
-	OperatorID OperatorID
+	OperatorID spectypes.OperatorID
 	PubKey     []byte
 }
 
@@ -15,6 +17,6 @@ func (n *Operator) GetPublicKey() []byte {
 }
 
 // GetID returns the node's ID
-func (n *Operator) GetID() OperatorID {
+func (n *Operator) GetID() spectypes.OperatorID {
 	return n.OperatorID
 }

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSSVMessage_JSONEncoding(t *testing.T) {
@@ -13,7 +15,7 @@ func TestSSVMessage_JSONEncoding(t *testing.T) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	require.Greater(t, len(pk), 0)
-	id := NewIdentifier(pk, RoleTypeAttester)
+	id := NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

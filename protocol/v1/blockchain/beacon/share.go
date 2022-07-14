@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"math"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // PubKeys defines the type for public keys object representation
@@ -33,9 +33,9 @@ type Node struct {
 
 // Share storage model
 type Share struct {
-	NodeID       message.OperatorID
+	NodeID       spectypes.OperatorID
 	PublicKey    *bls.PublicKey
-	Committee    map[message.OperatorID]*Node
+	Committee    map[spectypes.OperatorID]*Node
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -45,9 +45,9 @@ type Share struct {
 
 //  serializedShare struct
 type serializedShare struct {
-	NodeID       message.OperatorID
+	NodeID       spectypes.OperatorID
 	ShareKey     []byte
-	Committee    map[message.OperatorID]*Node
+	Committee    map[spectypes.OperatorID]*Node
 	Metadata     *ValidatorMetadata // pointer in order to support nil
 	OwnerAddress string
 	Operators    [][]byte
@@ -93,9 +93,9 @@ func (s *Share) OperatorSharePubKey() (*bls.PublicKey, error) {
 }
 
 // PubKeysByID returns the public keys with the associated ids
-func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*bls.PublicKey, error) {
+func (s *Share) PubKeysByID(ids []spectypes.OperatorID) (map[spectypes.OperatorID]*bls.PublicKey, error) {
 	//ret := make([]*bls.PublicKey, 0)
-	ret := make(map[message.OperatorID]*bls.PublicKey)
+	ret := make(map[spectypes.OperatorID]*bls.PublicKey)
 	for _, id := range ids {
 		if val, ok := s.Committee[id]; ok {
 			pk := &bls.PublicKey{}
@@ -110,8 +110,12 @@ func (s *Share) PubKeysByID(ids []message.OperatorID) (map[message.OperatorID]*b
 	return ret, nil
 }
 
+// TODO(nkryuchkov): move to a better place
+var domain = spectypes.PrimusTestnet
+var sigType = spectypes.QBFTSignatureType
+
 // VerifySignedMessage returns true of signed message verifies against pks
-func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion string) error {
+func (s *Share) VerifySignedMessage(msg *specqbft.SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
 	if err != nil {
 		return err
@@ -120,16 +124,16 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion stri
 		return errors.New("could not find public key")
 	}
 
-	var operators []*message.Operator
+	var operators []*spectypes.Operator
 	for _, id := range msg.GetSigners() {
 		pk := pks[id]
-		operators = append(operators, &message.Operator{
+		operators = append(operators, &spectypes.Operator{
 			OperatorID: id,
 			PubKey:     pk.Serialize(),
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, message.PrimusTestnet, message.QBFTSigType, operators, forkVersion) // TODO need to check if this is the right verify func
+	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators)
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err
@@ -145,7 +149,7 @@ func (s *Share) VerifySignedMessage(msg *message.SignedMessage, forkVersion stri
 func (s *Share) Serialize() ([]byte, error) {
 	value := serializedShare{
 		NodeID:       s.NodeID,
-		Committee:    map[message.OperatorID]*Node{},
+		Committee:    map[spectypes.OperatorID]*Node{},
 		Metadata:     s.Metadata,
 		OwnerAddress: s.OwnerAddress,
 		Operators:    s.Operators,

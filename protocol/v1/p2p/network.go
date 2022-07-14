@@ -1,6 +1,7 @@
 package protcolp2p
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 
@@ -87,9 +88,9 @@ type Syncer interface {
 	LastDecided(mid message.Identifier) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
 	// it accepts a list of targets for the request
-	GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, message.Height, error)
+	GetHistory(mid message.Identifier, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
 	// LastChangeRound fetches last change round message from a random set of peers
-	LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error)
+	LastChangeRound(mid message.Identifier, height specqbft.Height) ([]SyncResult, error)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme

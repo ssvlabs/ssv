@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -59,25 +61,25 @@ func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	oids := make([]message.OperatorID, 0)
-	keys := make(map[message.OperatorID]*bls.SecretKey)
+	oids := make([]spectypes.OperatorID, 0)
+	keys := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for oid := range share.Committee {
 		keys[oid] = sks[uint64(oid)]
 		oids = append(oids, oid)
 	}
 
-	msgs, err := testing.CreateMultipleSignedMessages(keys, message.Height(0), message.Height(4), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
-		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
+	msgs, err := testing.CreateMultipleSignedMessages(keys, specqbft.Height(0), specqbft.Height(4), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
 			panic(err)
 		}
 
-		return oids, &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
-			Identifier: message.NewIdentifier(share.PublicKey.Serialize(), message.RoleTypeAttester),
+			Identifier: message.NewIdentifier(share.PublicKey.Serialize(), spectypes.BNRoleAttester),
 			Data:       commitDataBytes,
 		}
 	})
@@ -123,7 +125,7 @@ func (r *regularScenario) Execute(_ *runner.ScenarioContext) error {
 }
 
 func (r *regularScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
+	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}

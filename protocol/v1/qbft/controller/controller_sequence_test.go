@@ -5,13 +5,14 @@ import (
 	"sync"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	instance2 "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
@@ -29,22 +30,22 @@ func testIBFTInstance(t *testing.T) *Controller {
 	ret := &Controller{
 		Identifier: []byte("Identifier_11"),
 		// instances: make([]*Instance, 0),
-		currentInstanceLock: currentInstanceLock,
-		forkLock:            &sync.Mutex{},
+		CurrentInstanceLock: currentInstanceLock,
+		ForkLock:            &sync.Mutex{},
 	}
 
-	ret.fork = forksfactory.NewFork(forksprotocol.V0ForkVersion)
+	ret.Fork = forksfactory.NewFork(forksprotocol.GenesisForkVersion)
 	return ret
 }
 
 // TODO: (lint) fix test
 //nolint
 func TestCanStartNewInstance(t *testing.T) {
-	uids := []message.OperatorID{message.OperatorID(1), message.OperatorID(2), message.OperatorID(3), message.OperatorID(4)}
+	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
 	height10 := atomic.Value{}
-	height10.Store(message.Height(10))
+	height10.Store(specqbft.Height(10))
 
 	tests := []struct {
 		name            string
@@ -163,17 +164,17 @@ func TestCanStartNewInstance(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			i := testIBFTInstance(t)
-			i.state = test.initState
+			i.State = test.initState
 			currentInstanceLock := &sync.RWMutex{}
-			i.currentInstanceLock = currentInstanceLock
-			i.forkLock = &sync.Mutex{}
+			i.CurrentInstanceLock = currentInstanceLock
+			i.ForkLock = &sync.Mutex{}
 			if test.currentInstance != nil {
 				i.setCurrentInstance(test.currentInstance)
 			}
 			if test.storage != nil {
-				i.instanceStorage = test.storage
-				i.changeRoundStorage = test.storage
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), test.storage, nil)
+				i.InstanceStorage = test.storage
+				i.ChangeRoundStorage = test.storage
+				i.DecidedFactory = factory.NewDecidedFactory(zap.L(), i.GetNodeMode(), test.storage, nil)
 			} else {
 				options := basedb.Options{
 					Type:   "badger-memory",
@@ -184,15 +185,15 @@ func TestCanStartNewInstance(t *testing.T) {
 				db, err := storage.GetStorageFactory(options)
 				require.NoError(t, err)
 				store := qbftstorage.NewQBFTStore(db, options.Logger, "attestation")
-				i.instanceStorage = store
-				i.changeRoundStorage = store
-				i.decidedFactory = factory.NewDecidedFactory(zap.L(), i.getNodeMode(), store, nil)
+				i.InstanceStorage = store
+				i.ChangeRoundStorage = store
+				i.DecidedFactory = factory.NewDecidedFactory(zap.L(), i.GetNodeMode(), store, nil)
 			}
 
-			i.decidedStrategy = i.decidedFactory.GetStrategy()
+			i.DecidedStrategy = i.DecidedFactory.GetStrategy()
 
 			i.ValidatorShare = test.share
-			i.instanceConfig = qbft.DefaultConsensusParams()
+			i.InstanceConfig = qbft.DefaultConsensusParams()
 			// i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
 			require.NoError(t, err)

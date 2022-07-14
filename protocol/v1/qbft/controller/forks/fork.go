@@ -1,6 +1,8 @@
 package forks
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
@@ -13,5 +15,5 @@ type Fork interface {
 	ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMessagePipeline
 	ValidateChangeRoundMsg(share *beacon.Share, identifier message.Identifier) pipelines.SignedMessagePipeline
 	VersionName() string
-	Identifier(pk []byte, role message.RoleType) []byte
+	Identifier(pk []byte, role spectypes.BeaconRole) []byte
 }

@@ -2,11 +2,13 @@ package msgqueue
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestIndexIterator(t *testing.T) {

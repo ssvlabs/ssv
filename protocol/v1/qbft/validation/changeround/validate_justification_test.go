@@ -3,36 +3,45 @@ package changeround
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[spectypes.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*beacon.Node)
-	sks := make(map[message.OperatorID]*bls.SecretKey)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &beacon.Node{
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[message.OperatorID(i)] = sk
+		sks[spectypes.OperatorID(i)] = sk
 	}
 	return sks, nodes
 }
 
-func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg *message.ConsensusMessage) *bls.Sign {
+func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
+	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
+	if err != nil {
+		return nil, err
+	}
+	return sk.SignByte(root), nil
+}
+
+func aggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, msg *specqbft.Message) *bls.Sign {
 	var aggregatedSig *bls.Sign
 	for _, sk := range sks {
-		sig, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		sig, err := signMessage(msg, sk)
 		require.NoError(t, err)
 		if aggregatedSig == nil {
 			aggregatedSig = sig
@@ -44,16 +53,16 @@ func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg 
 }
 
 // SignMsg signs the given message by the given private key
-func SignMsg(t *testing.T, id message.OperatorID, sk *bls.SecretKey, msg *message.ConsensusMessage) *message.SignedMessage {
+func SignMsg(t *testing.T, id spectypes.OperatorID, sk *bls.SecretKey, msg *specqbft.Message) *specqbft.SignedMessage {
 	bls.Init(bls.BLS12_381)
 
-	signature, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+	signature, err := signMessage(msg, sk)
 	require.NoError(t, err)
 
-	return &message.SignedMessage{
+	return &specqbft.SignedMessage{
 		Message:   msg,
 		Signature: signature.Serialize(),
-		Signers:   []message.OperatorID{id},
+		Signers:   []spectypes.OperatorID{id},
 	}
 }
 
@@ -62,10 +71,10 @@ func TestValidateChangeRound(t *testing.T) {
 	share := &beacon.Share{
 		Committee: nodes,
 	}
-	pip := Validate(share, forksprotocol.V1ForkVersion.String())
+	pip := Validate(share)
 
-	validMessage := &message.ConsensusMessage{
-		MsgType:    message.PrepareMsgType,
+	validMessage := &specqbft.Message{
+		MsgType:    specqbft.PrepareMsgType,
 		Height:     12,
 		Round:      2,
 		Identifier: []byte("Lambda"),
@@ -76,34 +85,34 @@ func TestValidateChangeRound(t *testing.T) {
 	tests := []struct {
 		name string
 		err  string
-		msg  *message.SignedMessage
+		msg  *specqbft.SignedMessage
 	}{
 		{
 			"valid nil prepared change round",
 			"",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			}),
 		},
 		{
 			"valid prepared change round",
 			"",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: validSig.Serialize(),
-							Signers:   []message.OperatorID{0, 1, 2, 3},
+							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
 							Message:   validMessage,
 						},
 					},
@@ -113,18 +122,18 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"invalid prepared change round",
 			"change round could not verify signature: failed to verify signature",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: validSig.Serialize(),
-							Signers:   []message.OperatorID{1, 2, 3},
+							Signers:   []spectypes.OperatorID{1, 2, 3},
 							Message:   validMessage,
 						},
 					},
@@ -134,20 +143,20 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"wrong sequence prepared change round",
 			"change round justification sequence is wrong",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: validSig.Serialize(),
-							Signers:   []message.OperatorID{0, 1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     11,
 								Round:      2,
 								Identifier: []byte("Lambda"),
@@ -161,8 +170,8 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"missing change-round-data",
 			"change round justification msg is nil",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
 				Identifier: []byte("Lambda"),
@@ -171,9 +180,9 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"non-valid change-round-data json",
-			"failed to get round change data: could not decode change round data from message: invalid character 'o' in literal null (expecting 'u')",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			"failed to get round change data: could not decode round change data from message: invalid character 'o' in literal null (expecting 'u')",
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
 				Identifier: []byte("Lambda"),
@@ -183,17 +192,17 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"justification type is not prepared",
 			"change round justification msg type not Prepare (0)",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Message: &message.ConsensusMessage{
-								MsgType: message.ProposalMsgType,
+							Message: &specqbft.Message{
+								MsgType: specqbft.ProposalMsgType,
 							},
 						},
 					},
@@ -203,18 +212,18 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"small justification round",
 			"change round justification round lower or equal to message round",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         0,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 0,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Message: &message.ConsensusMessage{
-								MsgType: message.PrepareMsgType,
+							Message: &specqbft.Message{
+								MsgType: specqbft.PrepareMsgType,
 								Height:  12,
 								Round:   1,
 							},
@@ -226,18 +235,18 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"bad lambda",
 			"change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     12,
 								Round:      2,
 								Identifier: []byte("xxx"),
@@ -250,18 +259,18 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"bad value",
 			"change round prepared value not equal to justification msg value",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     12,
 								Round:      2,
 								Identifier: []byte("Lambda"),
@@ -275,17 +284,17 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"insufficient number of signers",
 			"change round justification does not constitute a quorum",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Signers: []message.OperatorID{1, 2},
+							Signers: []spectypes.OperatorID{1, 2},
 							Message: validMessage,
 						},
 					},
@@ -295,18 +304,18 @@ func TestValidateChangeRound(t *testing.T) {
 		{
 			"duplicated signers",
 			"change round could not verify signature: failed to verify signature",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, 1, sks[1], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
-					Round:         2,
-					RoundChangeJustification: []*message.SignedMessage{
+					PreparedRound: 2,
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: validSig.Serialize(),
-							Signers:   []message.OperatorID{1, 2, 2},
+							Signers:   []spectypes.OperatorID{1, 2, 2},
 							Message:   validMessage,
 						},
 					},
@@ -327,13 +336,13 @@ func TestValidateChangeRound(t *testing.T) {
 }
 
 func encodePrepareData(t *testing.T, data []byte) []byte {
-	result, err := (&message.PrepareData{Data: data}).Encode()
+	result, err := (&specqbft.PrepareData{Data: data}).Encode()
 	require.NoError(t, err)
 
 	return result
 }
 
-func changeRoundDataToBytes(t *testing.T, data *message.RoundChangeData) []byte {
+func changeRoundDataToBytes(t *testing.T, data *specqbft.RoundChangeData) []byte {
 	encoded, err := data.Encode()
 	require.NoError(t, err)
 

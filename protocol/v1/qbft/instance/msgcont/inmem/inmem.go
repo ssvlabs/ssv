@@ -2,18 +2,20 @@ package inmem
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 )
 
 // messagesContainer is a simple container for messagesByRound used to count messagesByRound and decide if quorum was achieved.
 type messagesContainer struct {
-	messagesByRound         map[message.Round][]*message.SignedMessage
-	messagesByRoundAndValue map[message.Round]map[string][]*message.SignedMessage // map[round]map[valueHex]msgs
-	allChangeRoundMessages  []*message.SignedMessage
-	exitingMsgSigners       map[message.Round]map[message.OperatorID]bool
+	messagesByRound         map[specqbft.Round][]*specqbft.SignedMessage
+	messagesByRoundAndValue map[specqbft.Round]map[string][]*specqbft.SignedMessage // map[round]map[valueHex]msgs
+	allChangeRoundMessages  []*specqbft.SignedMessage
+	exitingMsgSigners       map[specqbft.Round]map[spectypes.OperatorID]bool
 	quorumThreshold         uint64
 	partialQuorumThreshold  uint64
 	lock                    sync.RWMutex
@@ -22,23 +24,34 @@ type messagesContainer struct {
 // New is the constructor of MessagesContainer
 func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContainer {
 	return &messagesContainer{
-		messagesByRound:         make(map[message.Round][]*message.SignedMessage),
-		messagesByRoundAndValue: make(map[message.Round]map[string][]*message.SignedMessage),
-		allChangeRoundMessages:  make([]*message.SignedMessage, 0),
-		exitingMsgSigners:       make(map[message.Round]map[message.OperatorID]bool),
+		messagesByRound:         make(map[specqbft.Round][]*specqbft.SignedMessage),
+		messagesByRoundAndValue: make(map[specqbft.Round]map[string][]*specqbft.SignedMessage),
+		allChangeRoundMessages:  make([]*specqbft.SignedMessage, 0),
+		exitingMsgSigners:       make(map[specqbft.Round]map[spectypes.OperatorID]bool),
 		quorumThreshold:         quorumThreshold,
 		partialQuorumThreshold:  partialQuorumThreshold,
 	}
 }
 
+// AllMessaged returns all messages
+func (c *messagesContainer) AllMessaged(iterator func(k specqbft.Round, v *specqbft.SignedMessage)) []*specqbft.SignedMessage {
+	ret := make([]*specqbft.SignedMessage, 0)
+	for round, roundMsgs := range c.messagesByRound {
+		for _, msg := range roundMsgs {
+			iterator(round, msg)
+		}
+	}
+	return ret
+}
+
 // ReadOnlyMessagesByRound returns messagesByRound by the given round
-func (c *messagesContainer) ReadOnlyMessagesByRound(round message.Round) []*message.SignedMessage {
+func (c *messagesContainer) ReadOnlyMessagesByRound(round specqbft.Round) []*specqbft.SignedMessage {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.messagesByRound[round]
 }
 
-func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round message.Round, value []byte) []*message.SignedMessage {
+func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round specqbft.Round, value []byte) []*specqbft.SignedMessage {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	valueHex := hex.EncodeToString(value)
@@ -49,10 +62,10 @@ func (c *messagesContainer) readOnlyMessagesByRoundAndValue(round message.Round,
 	return c.messagesByRoundAndValue[round][valueHex]
 }
 
-func (c *messagesContainer) QuorumAchieved(round message.Round, value []byte) (bool, []*message.SignedMessage) {
+func (c *messagesContainer) QuorumAchieved(round specqbft.Round, value []byte) (bool, []*specqbft.SignedMessage) {
 	if msgs := c.readOnlyMessagesByRoundAndValue(round, value); msgs != nil {
 		signers := 0
-		retMsgs := make([]*message.SignedMessage, 0)
+		retMsgs := make([]*specqbft.SignedMessage, 0)
 		for _, msg := range msgs {
 			signers += len(msg.GetSigners())
 			retMsgs = append(retMsgs, msg)
@@ -66,7 +79,7 @@ func (c *messagesContainer) QuorumAchieved(round message.Round, value []byte) (b
 }
 
 // AddMessage adds the given message to the container
-func (c *messagesContainer) AddMessage(msg *message.SignedMessage, data []byte) {
+func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -84,23 +97,23 @@ func (c *messagesContainer) AddMessage(msg *message.SignedMessage, data []byte) 
 	// add messagesByRound
 	_, found := c.messagesByRound[msg.Message.Round]
 	if !found {
-		c.messagesByRound[msg.Message.Round] = make([]*message.SignedMessage, 0)
+		c.messagesByRound[msg.Message.Round] = make([]*specqbft.SignedMessage, 0)
 	}
 	c.messagesByRound[msg.Message.Round] = append(c.messagesByRound[msg.Message.Round], msg)
 
 	// add messages by round and value
 	_, found = c.messagesByRoundAndValue[msg.Message.Round]
 	if !found {
-		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*message.SignedMessage)
-		c.exitingMsgSigners[msg.Message.Round] = make(map[message.OperatorID]bool)
+		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*specqbft.SignedMessage)
+		c.exitingMsgSigners[msg.Message.Round] = make(map[spectypes.OperatorID]bool)
 	}
 	_, found = c.messagesByRoundAndValue[msg.Message.Round][valueHex]
 	if !found {
-		c.messagesByRoundAndValue[msg.Message.Round][valueHex] = make([]*message.SignedMessage, 0)
+		c.messagesByRoundAndValue[msg.Message.Round][valueHex] = make([]*specqbft.SignedMessage, 0)
 	}
 
 	// add to all change round messages
-	if msg.Message.MsgType == message.RoundChangeMsgType {
+	if msg.Message.MsgType == specqbft.RoundChangeMsgType {
 		c.allChangeRoundMessages = append(c.allChangeRoundMessages, msg)
 	}
 
@@ -111,7 +124,7 @@ func (c *messagesContainer) AddMessage(msg *message.SignedMessage, data []byte) 
 }
 
 // OverrideMessages will override all current msgs in container with the provided msg
-func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage, data []byte) {
+func (c *messagesContainer) OverrideMessages(msg *specqbft.SignedMessage, data []byte) {
 	c.lock.Lock()
 	// reset previous round data
 	delete(c.exitingMsgSigners, msg.Message.Round)
@@ -123,9 +136,9 @@ func (c *messagesContainer) OverrideMessages(msg *message.SignedMessage, data []
 	c.AddMessage(msg, data)
 }
 
-func (c *messagesContainer) PartialChangeRoundQuorum(stateRound message.Round) (found bool, lowestChangeRound message.Round) {
-	lowestChangeRound = message.Round(100000) // just a random really large round number
-	foundMsgs := make(map[message.OperatorID]*message.SignedMessage)
+func (c *messagesContainer) PartialChangeRoundQuorum(stateRound specqbft.Round) (found bool, lowestChangeRound specqbft.Round) {
+	lowestChangeRound = specqbft.Round(100000) // just a random really large round number
+	foundMsgs := make(map[spectypes.OperatorID]*specqbft.SignedMessage)
 	quorumCount := 0
 
 	c.lock.RLock()

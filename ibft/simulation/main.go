@@ -6,6 +6,7 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -95,13 +96,14 @@ func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
 	return km.keys[key.SerializeToHexStr()]
 }
 
-func (km *testSigner) SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error) {
+func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		sig, err := message.Sign(key, "")
+		computedRoot, err := spectypes.ComputeSigningRoot(data, nil) // TODO need to use sigType
 		if err != nil {
-			return nil, errors.Wrap(err, "could not sign ibft msg")
+			return nil, errors.Wrap(err, "could not sign root")
 		}
-		return sig.Serialize(), nil
+
+		return key.SignByte(computedRoot).Serialize(), nil
 	}
 	return nil, errors.New("could not find key for pk")
 }
@@ -125,7 +127,7 @@ func db() qbftstorage.QBFTStore {
 
 func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[uint64]*bls.SecretKey) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*beacon.Node)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
 	sks := make(map[uint64]*bls.SecretKey)
 
 	ret := make(map[uint64]*beacon.Share)
@@ -133,7 +135,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 	for i := uint64(1); i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
-		nodes[message.OperatorID(i)] = &beacon.Node{
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
 			IbftID: i,
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
@@ -145,7 +147,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 	for i := uint64(1); i <= cnt; i++ {
 		ret[i] = &beacon.Share{
-			NodeID:    message.OperatorID(i),
+			NodeID:    spectypes.OperatorID(i),
 			PublicKey: sk.GetPublicKey(),
 			Committee: nodes,
 		}
@@ -156,13 +158,13 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
-	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), message.RoleTypeAttester)
+	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
 	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes
 	nodes := make([]ibft.IController, 0)
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
-		net := networking(forksprotocol.V0ForkVersion)
+		net := networking(forksprotocol.GenesisForkVersion)
 		dbs = append(dbs, db())
 		signer := newTestSigner()
 		_ = signer.AddShare(sks[i])
@@ -172,14 +174,14 @@ func main() {
 
 		nodeOpts := ibft.Options{
 			Context:        context.Background(),
-			Role:           message.RoleTypeAttester,
+			Role:           spectypes.BNRoleAttester,
 			Identifier:     identifier,
 			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
 			Storage:        dbs[i-1],
 			Network:        net,
 			InstanceConfig: qbft.DefaultConsensusParams(),
 			ValidatorShare: shares[i],
-			Version:        forksprotocol.V0ForkVersion,
+			Version:        forksprotocol.GenesisForkVersion,
 			SyncRateLimit:  time.Millisecond * 200,
 			Signer:         signer,
 		}

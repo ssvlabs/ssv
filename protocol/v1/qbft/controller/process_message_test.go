@@ -1,24 +1,25 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/ibft/proto"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
-	//"github.com/bloxapp/ssv/protocol/v1/validator"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/logex"
+	"strings"
+	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
-	"testing"
+
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestProcessLateCommitMsg(t *testing.T) {
@@ -27,8 +28,8 @@ func TestProcessLateCommitMsg(t *testing.T) {
 
 	share := beacon.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
-	share.Committee = make(map[message.OperatorID]*beacon.Node, 4)
-	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), message.RoleTypeAttester.String()) // TODO should using fork to get identifier?
+	share.Committee = make(map[spectypes.OperatorID]*beacon.Node, 4)
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), spectypes.BNRoleAttester.String()) // TODO should using fork to get identifier?
 
 	ctrl := Controller{
 		ValidatorShare: &beacon.Share{
@@ -37,21 +38,21 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Committee: nil,
 		},
 	}
-	ctrl.decidedFactory = factory.NewDecidedFactory(logex.GetLogger(), strategy.ModeFullNode, db, nil)
-	ctrl.decidedStrategy = ctrl.decidedFactory.GetStrategy()
+	ctrl.DecidedFactory = factory.NewDecidedFactory(logex.GetLogger(), strategy.ModeFullNode, db, nil)
+	ctrl.DecidedStrategy = ctrl.DecidedFactory.GetStrategy()
 
-	var sigs []*message.SignedMessage
-	commitData, err := (&message.CommitData{Data: []byte("value")}).Encode()
+	var sigs []*specqbft.SignedMessage
+	commitData, err := (&specqbft.CommitData{Data: []byte("value")}).Encode()
 	require.NoError(t, err)
 
 	for i := 1; i < 4; i++ {
-		sigs = append(sigs, SignMsg(t, uint64(i), sks[message.OperatorID(i)], &message.ConsensusMessage{
+		sigs = append(sigs, SignMsg(t, uint64(i), sks[spectypes.OperatorID(i)], &specqbft.Message{
 			Height:     2,
-			MsgType:    message.CommitMsgType,
+			MsgType:    specqbft.CommitMsgType,
 			Round:      3,
 			Identifier: []byte(identifier),
 			Data:       commitData,
-		}, forksprotocol.V0ForkVersion.String()))
+		}, forksprotocol.GenesisForkVersion.String()))
 	}
 	decided, err := AggregateMessages(sigs)
 	require.NoError(t, err)
@@ -60,32 +61,32 @@ func TestProcessLateCommitMsg(t *testing.T) {
 		name        string
 		expectedErr string
 		updated     interface{}
-		msg         *message.SignedMessage
+		msg         *specqbft.SignedMessage
 	}{
 		{
 			"valid",
 			"",
 			struct{}{},
-			SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-				Height:     message.Height(2),
-				MsgType:    message.CommitMsgType,
+			SignMsg(t, 4, sks[4], &specqbft.Message{
+				Height:     specqbft.Height(2),
+				MsgType:    specqbft.CommitMsgType,
 				Round:      3,
 				Identifier: []byte(identifier),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 		{
 			"invalid",
 			"could not aggregate commit message",
 			nil,
-			func() *message.SignedMessage {
-				msg := SignMsg(t, 4, sks[4], &message.ConsensusMessage{
+			func() *specqbft.SignedMessage {
+				msg := SignMsg(t, 4, sks[4], &specqbft.Message{
 					Height:     2,
-					MsgType:    message.CommitMsgType,
+					MsgType:    specqbft.CommitMsgType,
 					Round:      3,
 					Identifier: []byte(identifier),
 					Data:       commitData,
-				}, forksprotocol.V0ForkVersion.String())
+				}, forksprotocol.GenesisForkVersion.String())
 				msg.Signature = []byte("dummy")
 				return msg
 			}(),
@@ -94,13 +95,13 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			"not found",
 			"",
 			nil,
-			SignMsg(t, 4, sks[4], &message.ConsensusMessage{
-				Height:     message.Height(2),
-				MsgType:    message.CommitMsgType,
+			SignMsg(t, 4, sks[4], &specqbft.Message{
+				Height:     specqbft.Height(2),
+				MsgType:    specqbft.CommitMsgType,
 				Round:      3,
 				Identifier: []byte("xxx_ATTESTER"),
 				Data:       commitData,
-			}, forksprotocol.V0ForkVersion.String()),
+			}, forksprotocol.GenesisForkVersion.String()),
 		},
 	}
 	for _, test := range tests {
@@ -132,24 +133,23 @@ func newInMemDb() basedb.IDb {
 }
 
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
-func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message, forkVersion string) *specqbft.SignedMessage {
+	sigType := spectypes.QBFTSignatureType
+	domain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, sigType)
+	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
-	return &message.SignedMessage{
+	return &specqbft.SignedMessage{
 		Message:   msg,
-		Signers:   []message.OperatorID{message.OperatorID(id)},
+		Signers:   []spectypes.OperatorID{spectypes.OperatorID(id)},
 		Signature: sig.Serialize(),
 	}
 }
 
 // AggregateMessages will aggregate given msgs or return error TODO redundant func from commit_test.go
-func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, error) {
-	var decided *message.SignedMessage
+func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	var decided *specqbft.SignedMessage
 	var err error
 	for _, msg := range sigs {
 		if decided == nil {
@@ -172,19 +172,19 @@ func AggregateMessages(sigs []*message.SignedMessage) (*message.SignedMessage, e
 }
 
 // GenerateNodes generates randomly nodes TODO redundant func from commit_test.go
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*proto.Node) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[spectypes.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*proto.Node)
-	sks := make(map[message.OperatorID]*bls.SecretKey)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for i := 1; i <= cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(i)] = &proto.Node{
-			IbftId: uint64(i),
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
+			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[message.OperatorID(i)] = sk
+		sks[spectypes.OperatorID(i)] = sk
 	}
 	return sks, nodes
 }

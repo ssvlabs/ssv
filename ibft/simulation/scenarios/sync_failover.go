@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -48,9 +48,9 @@ func (sf *syncFailover) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTSt
 	sf.logger.Info("waiting for nodes to init")
 	wg.Wait()
 
-	msgs := map[message.Height]*message.SignedMessage{}
+	msgs := map[specqbft.Height]*specqbft.SignedMessage{}
 	// start several instances one by one
-	seqNumber := message.Height(0)
+	seqNumber := specqbft.Height(0)
 loop:
 	for {
 		sf.logger.Info("started instances")
@@ -70,7 +70,7 @@ loop:
 		seqNumber++
 	}
 
-	dummy := &message.SignedMessage{Message: &message.ConsensusMessage{Identifier: msgs[1].Message.Identifier, Height: 1}}
+	dummy := &specqbft.SignedMessage{Message: &specqbft.Message{Identifier: msgs[1].Message.Identifier, Height: 1}}
 	// overriding highest decided to make the system dirty
 	for i := 0; i < len(dbs)-1; i++ {
 		_ = dbs[i].SaveLastDecided(dummy)
@@ -104,7 +104,7 @@ loop:
 	}
 }
 
-func (sf *syncFailover) startNode(node ibft.IController, index uint64, seqNumber message.Height) *message.SignedMessage {
+func (sf *syncFailover) startNode(node ibft.IController, index uint64, seqNumber specqbft.Height) *specqbft.SignedMessage {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
 		Logger:    sf.logger,
 		SeqNumber: seqNumber,

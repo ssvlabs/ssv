@@ -47,7 +47,7 @@ type KeyManager interface {
 // Signer is an interface responsible for all signing operations
 type Signer interface {
 	// SignIBFTMessage signs a network iBFT msg
-	SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error)
+	SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error)
 	// SignAttestation signs the given attestation
 	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }
