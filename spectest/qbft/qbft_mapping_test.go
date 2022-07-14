@@ -19,7 +19,6 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
-	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -271,9 +270,9 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee: make(map[spectypes.OperatorID]*beaconprotocol.Node),
 	}
 
-	var mappedCommittee []*types.Operator
+	var mappedCommittee []*spectypes.Operator
 	for i := range test.Pre.State.Share.Committee {
-		operatorID := types.OperatorID(i) + 1
+		operatorID := spectypes.OperatorID(i) + 1
 		require.NoError(t, beacon.AddShare(keysSet.Shares[operatorID]))
 
 		pk := keysSet.Shares[operatorID].GetPublicKey().Serialize()
@@ -284,20 +283,20 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 		share.OperatorIds = append(share.OperatorIds, uint64(i)+1)
 
-		mappedCommittee = append(mappedCommittee, &types.Operator{
+		mappedCommittee = append(mappedCommittee, &spectypes.Operator{
 			OperatorID: operatorID,
 			PubKey:     pk,
 		})
 	}
 
-	mappedShare := &types.Share{
+	mappedShare := &spectypes.Share{
 		OperatorID:      share.NodeID,
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     share.Committee[share.NodeID].Pk,
 		Committee:       mappedCommittee,
 		Quorum:          3,
 		PartialQuorum:   2,
-		DomainType:      types.PrimusTestnet,
+		DomainType:      spectypes.PrimusTestnet,
 		Graffiti:        nil,
 	}
 
@@ -328,9 +327,9 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			},
 		}
 
-		domain := types.PrimusTestnet
-		sigType := types.QBFTSignatureType
-		r, err := types.ComputeSigningRoot(modifiedMsg, types.ComputeSignatureDomain(domain, sigType))
+		domain := spectypes.PrimusTestnet
+		sigType := spectypes.QBFTSignatureType
+		r, err := spectypes.ComputeSigningRoot(modifiedMsg, spectypes.ComputeSignatureDomain(domain, sigType))
 		require.NoError(t, err)
 
 		var aggSig *bls.Sign
@@ -538,9 +537,9 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 func specToSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *qbft.SignedMessage) *specqbft.SignedMessage {
 	signers := append([]spectypes.OperatorID{}, msg.GetSigners()...)
 
-	domain := types.PrimusTestnet
-	sigType := types.QBFTSignatureType
-	r, err := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
+	domain := spectypes.PrimusTestnet
+	sigType := spectypes.QBFTSignatureType
+	r, err := spectypes.ComputeSigningRoot(msg, spectypes.ComputeSignatureDomain(domain, sigType))
 	require.NoError(t, err)
 
 	var aggSig *bls.Sign

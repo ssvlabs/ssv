@@ -6,13 +6,12 @@ import (
 	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
 
-func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *types.Duty) (controller.IController, int, []byte, specqbft.Height, error) {
+func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *spectypes.Duty) (controller.IController, int, []byte, specqbft.Height, error) {
 	var inputByts []byte
 	var err error
 
@@ -22,14 +21,14 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *types.
 	}
 
 	switch duty.Type {
-	case types.BNRoleAttester:
+	case spectypes.BNRoleAttester:
 		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return nil, 0, nil, 0, errors.Wrap(err, "failed to get attestation data")
 		}
 		v.logger.Debug("attestation data", zap.Any("attData", attData))
 		// TODO(olegshmuelov): use SSZ encoding
-		input := &types.ConsensusData{
+		input := &spectypes.ConsensusData{
 			Duty:            duty,
 			AttestationData: attData,
 		}
@@ -74,7 +73,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *types.
 }
 
 // StartDuty executes the given duty
-func (v *Validator) StartDuty(duty *types.Duty) {
+func (v *Validator) StartDuty(duty *spectypes.Duty) {
 	logger := v.logger.With(
 		zap.Time("start_time", v.network.GetSlotStartTime(uint64(duty.Slot))),
 		zap.Uint64("committee_index", uint64(duty.CommitteeIndex)),
