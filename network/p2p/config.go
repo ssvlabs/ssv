@@ -48,7 +48,7 @@ type Config struct {
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 	// NetworkID is the network of this node
-	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet" env-description:"Network ID is the network of this node"`
+	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet-v2" env-description:"Network ID is the network of this node"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
