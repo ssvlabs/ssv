@@ -7,6 +7,7 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
 	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	defer mockCtrl.Finish()
 
 	mockExecutor := mocks.NewMockDutyExecutor(mockCtrl)
-	mockExecutor.EXPECT().ExecuteDuty(gomock.Any()).DoAndReturn(func(duty *beacon.Duty) error {
+	mockExecutor.EXPECT().ExecuteDuty(gomock.Any()).DoAndReturn(func(duty *spectypes.Duty) error {
 		require.NotNil(t, duty)
 		require.True(t, duty.Slot > 0)
 		wg.Done()
@@ -32,8 +33,8 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	}).AnyTimes()
 
 	mockFetcher := mocks.NewMockDutyFetcher(mockCtrl)
-	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot uint64) ([]beacon.Duty, error) {
-		return []beacon.Duty{{Slot: spec.Slot(slot), PubKey: spec.BLSPubKey{}}}, nil
+	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot uint64) ([]spectypes.Duty, error) {
+		return []spectypes.Duty{{Slot: spec.Slot(slot), PubKey: spec.BLSPubKey{}}}, nil
 	}).AnyTimes()
 
 	dutyCtrl := &dutyController{
@@ -66,9 +67,9 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 	ctrl := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
-	require.True(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
-	require.False(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot - 1000), PubKey: spec.BLSPubKey{}}))
-	require.False(t, ctrl.shouldExecute(&beacon.Duty{Slot: spec.Slot(currentSlot + 1000), PubKey: spec.BLSPubKey{}}))
+	require.True(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot - 1000), PubKey: spec.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot + 1000), PubKey: spec.BLSPubKey{}}))
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {

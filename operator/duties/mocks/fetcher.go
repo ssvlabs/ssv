@@ -5,11 +5,12 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	beacon "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
-	reflect "reflect"
 )
 
 // MockvalidatorsIndicesFetcher is a mock of validatorsIndicesFetcher interface
@@ -73,10 +74,10 @@ func (m *MockbeaconDutiesClient) EXPECT() *MockbeaconDutiesClientMockRecorder {
 }
 
 // GetDuties mocks base method
-func (m *MockbeaconDutiesClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*beacon.Duty, error) {
+func (m *MockbeaconDutiesClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDuties", epoch, validatorIndices)
-	ret0, _ := ret[0].([]*beacon.Duty)
+	ret0, _ := ret[0].([]*spectypes.Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -125,10 +126,10 @@ func (m *MockDutyFetcher) EXPECT() *MockDutyFetcherMockRecorder {
 }
 
 // GetDuties mocks base method
-func (m *MockDutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
+func (m *MockDutyFetcher) GetDuties(slot uint64) ([]spectypes.Duty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDuties", slot)
-	ret0, _ := ret[0].([]beacon.Duty)
+	ret0, _ := ret[0].([]spectypes.Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
