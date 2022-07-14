@@ -164,7 +164,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	qbftCtrl.State = controller.Ready
 	go qbftCtrl.StartQueueConsumer(qbftCtrl.MessageHandler)
 	require.NoError(t, qbftCtrl.Init())
-	go v.ExecuteDuty(12, convertDuty(test.Duty))
+	go v.StartDuty(test.Duty)
 
 	for _, msg := range test.Messages {
 		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg, attesterRoleType)))
@@ -241,19 +241,6 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 
 	require.NoError(t, v.Close())
 	db.Close()
-}
-
-func convertDuty(duty *spectypes.Duty) *beaconprotocol.Duty {
-	return &beaconprotocol.Duty{
-		Type:                    duty.Type,
-		PubKey:                  duty.PubKey,
-		Slot:                    duty.Slot,
-		ValidatorIndex:          duty.ValidatorIndex,
-		CommitteeIndex:          duty.CommitteeIndex,
-		CommitteeLength:         duty.CommitteeLength,
-		CommitteesAtSlot:        duty.CommitteesAtSlot,
-		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
-	}
 }
 
 func convertSSVMessage(t *testing.T, msg *spectypes.SSVMessage, role spectypes.BeaconRole) *message.SSVMessage {

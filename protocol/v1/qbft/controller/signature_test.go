@@ -219,7 +219,7 @@ func (b *testBeacon) ExtendIndexMap(index spec.ValidatorIndex, pubKey spec.BLSPu
 func (b *testBeacon) StartReceivingBlocks() {
 }
 
-func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (b *testBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
 	return nil, nil
 }
 
@@ -231,7 +231,7 @@ func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return b.refAttestationData, nil
 }
 
-func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
 	return &spec.Attestation{

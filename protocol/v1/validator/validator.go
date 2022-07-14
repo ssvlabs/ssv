@@ -21,7 +21,7 @@ import (
 // IValidator is the interface for validator
 type IValidator interface {
 	Start() error
-	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
+	StartDuty(duty *spectypes.Duty)
 	ProcessMsg(msg *message.SSVMessage) error // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 

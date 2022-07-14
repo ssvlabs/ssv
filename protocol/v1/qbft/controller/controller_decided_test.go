@@ -697,7 +697,7 @@ func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType messa
 	return nil, nil
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 

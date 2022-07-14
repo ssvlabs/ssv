@@ -124,15 +124,15 @@ func (gc *goClient) HealthCheck() []string {
 	return []string{}
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beaconprotocol.Duty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
-		var duties []*beaconprotocol.Duty
+		var duties []*spectypes.Duty
 		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &beaconprotocol.Duty{
+			duties = append(duties, &spectypes.Duty{
 				Type:                    spectypes.BNRoleAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,

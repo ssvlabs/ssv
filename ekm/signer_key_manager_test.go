@@ -88,7 +88,7 @@ func TestSignAttestation(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 	require.NoError(t, km.AddShare(sk1))
 
-	duty := &beacon2.Duty{
+	duty := &spectypes.Duty{
 		Type:                    spectypes.BNRoleAttester,
 		PubKey:                  [48]byte{},
 		Slot:                    30,

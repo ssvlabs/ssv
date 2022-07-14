@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
@@ -302,7 +301,7 @@ func TestConsumeMessages(t *testing.T) {
 			ctrl.setCurrentInstance(test.currentInstance)
 			ctrl.SignatureState = SignatureState{}
 			ctrl.SignatureState.setHeight(test.lastHeight)
-			ctrl.SignatureState.duty = &beacon.Duty{Slot: 1}
+			ctrl.SignatureState.duty = &spectypes.Duty{Slot: 1}
 
 			// populating msg's
 			for _, msg := range test.msgs {

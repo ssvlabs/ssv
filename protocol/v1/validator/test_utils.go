@@ -140,7 +140,7 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
+func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error {
 	// get operator pk for sig
 	pk, err := t.share.OperatorSharePubKey()
 	if err != nil {
@@ -234,7 +234,7 @@ func (b *TestBeacon) StartReceivingBlocks() {
 }
 
 // GetDuties impl
-func (b *TestBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error) {
+func (b *TestBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
 	return nil, nil
 }
 
@@ -249,7 +249,7 @@ func (b *TestBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 }
 
 // SignAttestation impl
-func (b *TestBeacon) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (b *TestBeacon) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	sig := spec.BLSSignature{}
 	copy(sig[:], refAttestationSplitSigs[0])
 	return &spec.Attestation{
@@ -417,6 +417,6 @@ func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType mess
 	return nil, errors.Errorf("could not find key for pk: %x", pk)
 }
 
-func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }

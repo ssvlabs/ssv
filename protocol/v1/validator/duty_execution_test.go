@@ -9,7 +9,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
@@ -80,7 +79,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				node.beacon.(*TestBeacon).refAttestationData = test.overrideAttestationData
 			}
 
-			duty := &beacon.Duty{
+			duty := &spectypes.Duty{
 				Type:                    test.role,
 				PubKey:                  spec.BLSPubKey{},
 				Slot:                    0,
@@ -99,8 +98,10 @@ func TestConsensusOnInputValue(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, 3, signaturesCount)
 			require.NotNil(t, decidedByts)
-
-			require.EqualValues(t, test.expectedAttestationDataByts, decidedByts)
+			consensusData := &spectypes.ConsensusData{}
+			require.NoError(t, consensusData.Decode(decidedByts))
+			// TODO(olegshmuelov): use SSZ decoding
+			//require.EqualValues(t, test.expectedAttestationDataByts, consensusData.AttestationData.MarshalSSZ())
 		})
 	}
 }
@@ -160,7 +161,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
-			duty := &beacon.Duty{
+			duty := &spectypes.Duty{
 				Type:                    spectypes.BNRoleAttester,
 				PubKey:                  spec.BLSPubKey{},
 				Slot:                    0,

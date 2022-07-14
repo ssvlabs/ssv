@@ -4,14 +4,13 @@ import (
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 )
 
 // UpdateShareMetadata will update the given share object w/o involving storage,

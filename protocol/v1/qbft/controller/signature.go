@@ -49,7 +49,7 @@ type SignatureState struct {
 	sigCount                   int
 	root                       []byte
 	valueStruct                *beaconprotocol.DutyData
-	duty                       *beaconprotocol.Duty
+	duty                       *spectypes.Duty
 }
 
 func (s *SignatureState) getHeight() specqbft.Height {
@@ -64,7 +64,7 @@ func (s *SignatureState) setHeight(height specqbft.Height) {
 	s.height.Store(height)
 }
 
-func (s *SignatureState) start(logger *zap.Logger, height specqbft.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
+func (s *SignatureState) start(logger *zap.Logger, height specqbft.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *spectypes.Duty) {
 	// set var's
 	s.setHeight(height)
 	s.sigCount = signaturesCount
@@ -128,7 +128,7 @@ func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftI
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
+func (c *Controller) signDuty(decidedValue []byte, duty *spectypes.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
 	// get operator pk for sig
 	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
@@ -141,13 +141,15 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 	retValueStruct := &beaconprotocol.DutyData{}
 	switch duty.Type {
 	case spectypes.BNRoleAttester:
-		s := &spec.AttestationData{}
-		if err := s.UnmarshalSSZ(decidedValue); err != nil {
-			c.Logger.Warn("failed to unmarshal attestation", zap.Int("len", len(decidedValue)), zap.Error(err))
-			return nil, nil, nil, errors.Wrap(err, "failed to unmarshal attestation")
+		s := &spectypes.ConsensusData{}
+		// TODO(olegshmuelov): use SSZ decoding
+		// TODO(olegshmuelov): validate the consensus data using the spec "BeaconAttestationValueCheck"
+		if err := s.Decode(decidedValue); err != nil {
+			c.Logger.Warn("failed to decode consensus data", zap.Int("len", len(decidedValue)), zap.Error(err))
+			return nil, nil, nil, errors.Wrap(err, "failed to decode consensus data")
 		}
-		c.Logger.Debug("unmarshaled attestation data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
-		signedAttestation, r, err := c.Signer.SignAttestation(s, duty, pk.Serialize())
+		c.Logger.Debug("decoded consensus data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
+		signedAttestation, r, err := c.Signer.SignAttestation(s.AttestationData, duty, pk.Serialize())
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
@@ -166,7 +168,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
+func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *spectypes.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {
