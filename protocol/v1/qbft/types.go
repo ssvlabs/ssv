@@ -2,11 +2,10 @@ package qbft
 
 import (
 	"encoding/json"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/atomic"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // RoundState is the state of the round
@@ -49,7 +48,7 @@ type State struct {
 
 type unsafeState struct {
 	Stage         int32
-	Identifier    message.Identifier
+	Identifier    spectypes.MessageID
 	Height        specqbft.Height
 	InputValue    []byte
 	Round         specqbft.Round
@@ -129,12 +128,12 @@ func (s *State) GetPreparedRound() specqbft.Round {
 }
 
 // GetIdentifier returns the identifier of the state
-func (s *State) GetIdentifier() message.Identifier {
-	if identifier, ok := s.Identifier.Load().(message.Identifier); ok {
+func (s *State) GetIdentifier() spectypes.MessageID {
+	if identifier, ok := s.Identifier.Load().(spectypes.MessageID); ok {
 		return identifier
 	}
 
-	return nil
+	return spectypes.MessageID{}
 }
 
 // GetInputValue returns the input value of the state

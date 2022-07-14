@@ -2,6 +2,7 @@ package sync
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -36,7 +37,7 @@ func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highe
 }
 
 // ExtractSyncMsg extracts message.SyncMessage from message.SSVMessage
-func ExtractSyncMsg(msg *message.SSVMessage) (*message.SyncMessage, error) {
+func ExtractSyncMsg(msg *spectypes.SSVMessage) (*message.SyncMessage, error) {
 	sm := &message.SyncMessage{}
 	err := sm.Decode(msg.Data)
 	if err != nil {

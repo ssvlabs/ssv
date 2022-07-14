@@ -167,13 +167,13 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	go v.StartDuty(test.Duty)
 
 	for _, msg := range test.Messages {
-		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg, attesterRoleType)))
+		require.NoError(t, v.ProcessMsg(msg))
 	}
 
 	time.Sleep(time.Second * 3) // 3s round
 
 	currentInstance := qbftCtrl.GetCurrentInstance()
-	decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
+	decided, err := ibftStorage.GetLastDecided(message.ToMessageID(qbftCtrl.GetIdentifier()))
 	require.NoError(t, err)
 	decidedValue := []byte("")
 	if decided != nil {
@@ -241,29 +241,6 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 
 	require.NoError(t, v.Close())
 	db.Close()
-}
-
-func convertSSVMessage(t *testing.T, msg *spectypes.SSVMessage, role spectypes.BeaconRole) *message.SSVMessage {
-	data := msg.Data
-
-	var msgType message.MsgType
-	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
-		msgType = message.SSVConsensusMsgType
-	case spectypes.SSVDecidedMsgType:
-		msgType = message.SSVDecidedMsgType
-	case spectypes.SSVPartialSignatureMsgType:
-		encoded, err := msg.Encode()
-		require.NoError(t, err)
-		data = encoded
-	case spectypes.DKGMsgType:
-		panic("type not supported yet")
-	}
-	return &message.SSVMessage{
-		MsgType: msgType,
-		ID:      message.NewIdentifier(msg.MsgID.GetPubKey()[:], role),
-		Data:    data,
-	}
 }
 
 func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *qbft.MsgContainer {

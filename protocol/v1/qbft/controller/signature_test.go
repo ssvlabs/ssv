@@ -133,7 +133,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 				},
 			}
 			role := spectypes.BNRoleAttester
-			identifier := message.NewIdentifier(share.PublicKey.Serialize(), role)
+			identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), role)
 			opts := Options{
 				Role:           role,
 				Identifier:     identifier,

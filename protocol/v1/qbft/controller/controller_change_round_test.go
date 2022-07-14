@@ -12,7 +12,6 @@ import (
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
@@ -55,7 +54,7 @@ func TestReadModeChangeRound(t *testing.T) {
 			Operators:    nil,
 		},
 		ChangeRoundStorage: changeRoundStorage,
-		Identifier:         message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester),
+		Identifier:         spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester),
 		Fork:               forksfactory.NewFork(forksprotocol.GenesisForkVersion),
 		ReadMode:           true,
 	}
@@ -78,7 +77,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedRound:            1,
 					RoundChangeJustification: []*specqbft.SignedMessage{},
@@ -95,7 +94,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      2,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedRound:            2,
 					RoundChangeJustification: []*specqbft.SignedMessage{},
@@ -112,7 +111,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedRound:            1,
 					RoundChangeJustification: []*specqbft.SignedMessage{},
@@ -129,7 +128,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedRound:            2,
 					RoundChangeJustification: []*specqbft.SignedMessage{},
@@ -146,7 +145,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedRound:            2,
 					RoundChangeJustification: []*specqbft.SignedMessage{},
@@ -163,7 +162,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     2,
 				Round:      2,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 1,
@@ -172,7 +171,7 @@ func TestReadModeChangeRound(t *testing.T) {
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
-							Identifier: ctrl.Identifier,
+							Identifier: ctrl.Identifier[:],
 							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
 						}),
 					},
@@ -189,7 +188,7 @@ func TestReadModeChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     3,
 				Round:      1,
-				Identifier: ctrl.Identifier,
+				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 1,
@@ -198,7 +197,7 @@ func TestReadModeChangeRound(t *testing.T) {
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
-							Identifier: ctrl.Identifier,
+							Identifier: ctrl.Identifier[:],
 							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value_invalid")}),
 						}),
 					},

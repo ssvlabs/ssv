@@ -8,7 +8,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
 
@@ -30,7 +29,7 @@ type IController interface {
 	// GetIdentifier returns ibft identifier made of public key and role (type)
 	GetIdentifier() []byte
 
-	ProcessMsg(msg *message.SSVMessage) error
+	ProcessMsg(msg *spectypes.SSVMessage) error
 
 	// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
 	ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error

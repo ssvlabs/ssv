@@ -74,7 +74,7 @@ func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
 }
 
 func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
-	leaderSelectionSeed := append(c.Fork.Identifier(c.Identifier.GetValidatorPK(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
+	leaderSelectionSeed := append(c.Fork.Identifier(c.Identifier.GetPubKey(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err

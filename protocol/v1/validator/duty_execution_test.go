@@ -185,9 +185,9 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 				encodedMsg, err := signedMessage.Encode()
 				require.NoError(t, err)
-				ssvMsg := message.SSVMessage{
-					MsgType: message.SSVConsensusMsgType,
-					ID:      identifier,
+				ssvMsg := spectypes.SSVMessage{
+					MsgType: spectypes.SSVConsensusMsgType,
+					MsgID:   message.ToMessageID(identifier),
 					Data:    encodedMsg,
 				}
 

@@ -21,7 +21,6 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
@@ -300,7 +299,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Graffiti:        nil,
 	}
 
-	identifier := message.NewIdentifier(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
 	qbftInstance := newQbftInstance(t, logger, qbftStorage, p2pNet, beacon, share, forkVersion)
 	qbftInstance.Init()
 	require.NoError(t, qbftInstance.Start(test.Pre.StartValue))
@@ -322,7 +321,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 				MsgType:    msg.Message.MsgType,
 				Height:     msg.Message.Height,
 				Round:      msg.Message.Round,
-				Identifier: identifier,
+				Identifier: identifier[:],
 				Data:       msg.Message.Data,
 			},
 		}
@@ -407,7 +406,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	require.Equal(t, test.PostRoot, hex.EncodeToString(mappedRoot))
 
 	type BroadcastMessagesGetter interface {
-		GetBroadcastMessages() []message.SSVMessage
+		GetBroadcastMessages() []spectypes.SSVMessage
 	}
 
 	outputMessages := p2pNet.(BroadcastMessagesGetter).GetBroadcastMessages()
@@ -416,7 +415,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	for i, outputMessage := range outputMessages {
 		signedMessage := test.OutputMessages[i]
-		signedMessage.Message.Identifier = identifier
+		signedMessage.Message.Identifier = identifier[:]
 		require.Equal(t, outputMessage, specToSignedMessage(t, keysSet, signedMessage))
 	}
 
@@ -514,8 +513,8 @@ type signatureAndID struct {
 func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
-	identifier := message.NewIdentifier(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	leaderSelectionSeed := append(fork.Identifier(identifier.GetValidatorPK(), identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(height), 10))...)
+	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	leaderSelectionSeed := append(fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(height), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(share.CommitteeSize()))
 	require.NoError(t, err)
 

@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
@@ -245,7 +244,7 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			pk := msg.ID.GetValidatorPK()
+			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
@@ -253,7 +252,7 @@ func (c *controller) handleRouterMessages() {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
 			} else {
-				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
+				if msg.MsgType != spectypes.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
@@ -266,7 +265,7 @@ func (c *controller) handleRouterMessages() {
 
 // getShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, error) {
+func (c *controller) getShare(pk spectypes.ValidatorPK) (*beaconprotocol.Share, error) {
 	share, found, err := c.collection.GetValidatorShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -277,13 +276,13 @@ func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, er
 	return share, nil
 }
 
-func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
-	share, err := c.getShare(msg.GetIdentifier().GetValidatorPK())
+func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
+	share, err := c.getShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
 	}
 	if share == nil {
-		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetIdentifier().GetValidatorPK()))
+		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 	}
 
 	opts := *c.validatorOptions

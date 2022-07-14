@@ -11,6 +11,6 @@ type Controllers map[spectypes.BeaconRole]IController
 
 // ControllerForIdentifier returns a controller by its identifier.
 func (c Controllers) ControllerForIdentifier(identifier []byte) IController {
-	role := message.Identifier(identifier).GetRoleType()
+	role := message.ToMessageID(identifier).GetRoleType()
 	return c[role]
 }

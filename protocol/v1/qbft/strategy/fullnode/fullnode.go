@@ -2,6 +2,7 @@ package fullnode
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -33,10 +34,10 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 	}
 }
 
-func (f *fullNode) Sync(ctx context.Context, identifier message.Identifier, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+func (f *fullNode) Sync(ctx context.Context, identifier spectypes.MessageID, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
 	logger := f.logger.With(zap.String("identifier", identifier.String()))
 	logger.Debug("syncing decided")
-	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*specqbft.SignedMessage, error) {
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
 		return from, nil
 	})
 	if err != nil {
@@ -109,7 +110,7 @@ func (f *fullNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 }
 
 func (f *fullNode) updateDecidedHistory(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	localMsgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
+	localMsgs, err := f.store.GetDecided(message.ToMessageID(msg.Message.Identifier), msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided")
 	}
@@ -131,13 +132,13 @@ func (f *fullNode) updateDecidedHistory(msg *specqbft.SignedMessage) (*specqbft.
 	return msg, nil
 }
 
-func (f *fullNode) GetDecided(identifier message.Identifier, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (f *fullNode) GetDecided(identifier spectypes.MessageID, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	if len(heightRange) < 2 {
 		return nil, errors.New("missing height range")
 	}
 	return f.store.GetDecided(identifier, heightRange[0], heightRange[1])
 }
 
-func (f *fullNode) GetLastDecided(identifier message.Identifier) (*specqbft.SignedMessage, error) {
+func (f *fullNode) GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error) {
 	return f.store.GetLastDecided(identifier)
 }

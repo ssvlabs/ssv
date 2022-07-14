@@ -1,16 +1,16 @@
 package network
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"io"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(message message.SSVMessage)
+	Route(message spectypes.SSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter

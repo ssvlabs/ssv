@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -30,7 +31,7 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(newInstance.State().GetHeight()))
+	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetPubKey())).Set(float64(newInstance.State().GetHeight()))
 
 	// catch up if we can
 	go c.fastChangeRoundCatchup(newInstance)
@@ -123,7 +124,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.InstanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.GetCurrentInstance().State()); err != nil {
+		if err := c.InstanceStorage.SaveCurrentInstance(message.ToMessageID(c.GetIdentifier()), c.GetCurrentInstance().State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
@@ -137,7 +138,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 			logger.Info("decided current instance",
-				zap.String("identifier", message.Identifier(agg.Message.Identifier).String()),
+				zap.String("identifier", message.ToMessageID(agg.Message.Identifier).String()),
 				zap.Any("signers", agg.GetSigners()),
 				zap.Uint64("height", uint64(agg.Message.Height)),
 				zap.Any("updated", updated))
@@ -200,9 +201,9 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if err != nil {
 			return errors.Wrap(err, "could not encode msg")
 		}
-		c.Q.Add(&message.SSVMessage{
-			MsgType: message.SSVConsensusMsgType, // should be consensus type as it change round msg
-			ID:      c.Identifier,
+		c.Q.Add(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType, // should be consensus type as it change round msg
+			MsgID:   c.Identifier,
 			Data:    encodedMsg,
 		})
 		count++

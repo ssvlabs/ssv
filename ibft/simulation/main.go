@@ -158,7 +158,7 @@ func generateShares(cnt uint64) (map[uint64]*beacon.Share, *bls.SecretKey, map[u
 
 func main() {
 	shares, shareSk, sks := generateShares(uint64(nodeCount))
-	identifier := message.NewIdentifier(shareSk.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(shareSk.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
 	dbs := make([]qbftstorage.QBFTStore, 0)
 	logger.Info("pubkey", zap.String("pk", shareSk.GetPublicKey().SerializeToHexStr()))
 	// generate iBFT nodes

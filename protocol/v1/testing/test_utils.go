@@ -124,13 +124,13 @@ func PopulatedStorage(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey,
 		signers = append(signers, k)
 	}
 
-	identifier := []byte("Identifier_11")
+	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
 	for i := 0; i <= int(highestHeight); i++ {
 		signedMsg := AggregateSign(t, sks, signers, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(i),
 			Round:      round,
-			Identifier: identifier,
+			Identifier: identifier[:],
 			Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 		})
 		require.NoError(t, s.SaveDecided(signedMsg))

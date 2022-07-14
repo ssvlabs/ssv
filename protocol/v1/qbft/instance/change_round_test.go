@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -39,10 +38,11 @@ func (v0 *testFork) Apply(instance Instance) {
 
 // PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
 func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 		preprepare.ValidatePrePrepareMsg(roundLeader),
@@ -51,21 +51,22 @@ func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *
 
 // PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
 func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
+	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
-		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 	)
 }
 
 // CommitMsgValidationPipeline is a msg validation ONLY pipeline
-func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 	)
@@ -82,11 +83,11 @@ func (v0 *testFork) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 // changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
-func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
@@ -751,7 +752,7 @@ func TestHighestPrepared(t *testing.T) {
 
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
-
+	msgID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	tests := []struct {
 		name          string
 		msg           *specqbft.SignedMessage
@@ -763,7 +764,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
+				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
 			"",
@@ -774,7 +775,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
+				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: []byte("ad")}),
 			}),
 			"change round justification is nil",
@@ -785,7 +786,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     2,
 				Round:      1,
-				Identifier: []byte("lambda"),
+				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
 			"invalid message sequence number: expected: 1, actual: 2",
@@ -800,7 +801,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: []byte("lambdaa"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
-			"message Lambda (6c616d62646161) does not equal expected Lambda (6c616d626461)",
+			"message Lambda (6c616d62646161) does not equal expected Lambda (4c616d62646100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)",
 		},
 		{
 			"valid with different round",
@@ -808,7 +809,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      4,
-				Identifier: []byte("lambda"),
+				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
 			"",
@@ -819,7 +820,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				MsgType:    specqbft.CommitMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
+				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
 			"message type is wrong",
@@ -833,7 +834,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	height.Store(specqbft.Height(1))
 
 	identifier := atomic.Value{}
-	identifier.Store(message.Identifier("lambda"))
+	identifier.Store(msgID)
 
 	instance := &Instance{
 		Config: qbft.DefaultConsensusParams(),

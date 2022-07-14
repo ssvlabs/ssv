@@ -9,26 +9,24 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestNewMsgQueue(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	msg1 := &message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      []byte("dummy-id-1"),
+	msg1 := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   spectypes.NewMsgID([]byte("dummy-id-1"), spectypes.BNRoleAttester),
 		Data:    []byte("data"),
 	}
-	msg2 := &message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      []byte("dummy-id-1"),
+	msg2 := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   spectypes.NewMsgID([]byte("dummy-id-1"), spectypes.BNRoleAttester),
 		Data:    []byte("data-1"),
 	}
-	msg3 := &message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      []byte("dummy-id-2"),
+	msg3 := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   spectypes.NewMsgID([]byte("dummy-id-2"), spectypes.BNRoleAttester),
 		Data:    []byte("data"),
 	}
 
@@ -39,7 +37,7 @@ func TestNewMsgQueue(t *testing.T) {
 		q.Add(msg1)
 		q.Add(msg2)
 		q.Add(msg3)
-		idx := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-1"))
+		idx := DefaultMsgIndex(spectypes.SSVConsensusMsgType, spectypes.NewMsgID([]byte("dummy-id-1"), spectypes.BNRoleAttester))
 		require.Equal(t, 2, q.Count(idx))
 		msgs := q.Peek(2, idx)
 		require.Len(t, msgs, 2)
@@ -47,7 +45,7 @@ func TestNewMsgQueue(t *testing.T) {
 		msgs = q.Pop(1, idx)
 		require.Len(t, msgs, 1)
 		require.Equal(t, 1, q.Count(idx))
-		idx2 := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-2"))
+		idx2 := DefaultMsgIndex(spectypes.SSVConsensusMsgType, spectypes.NewMsgID([]byte("dummy-id-2"), spectypes.BNRoleAttester))
 		msgs = q.Pop(5, idx2)
 		require.Len(t, msgs, 1)
 		require.Equal(t, 0, q.Count(idx2))
@@ -59,25 +57,25 @@ func TestNewMsgQueue(t *testing.T) {
 		q.Add(msg1)
 		q.Add(msg2)
 		q.Add(msg3)
-		idx := DefaultMsgIndex(message.SSVConsensusMsgType, []byte("dummy-id-1"))
+		idx := DefaultMsgIndex(spectypes.SSVConsensusMsgType, spectypes.NewMsgID([]byte("dummy-id-1"), spectypes.BNRoleAttester))
 		require.Equal(t, 2, q.Count(idx))
-		require.Equal(t, int64(2), q.Clean(DefaultMsgCleaner([]byte("dummy-id-1"), message.SSVConsensusMsgType)))
+		require.Equal(t, int64(2), q.Clean(DefaultMsgCleaner(spectypes.NewMsgID([]byte("dummy-id-1"), spectypes.BNRoleAttester), spectypes.SSVConsensusMsgType)))
 		require.Equal(t, 0, q.Count(idx))
 	})
 	t.Run("cleanSingedMsg", func(t *testing.T) {
 		q, err := New(logger, WithIndexers(SignedMsgIndexer()))
 		require.NoError(t, err)
-		identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
+		identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
 
 		for i := 0; i <= 2; i++ {
 			height := specqbft.Height(i)
-			idxs := SignedMsgIndex(message.SSVConsensusMsgType, identifier.String(), height, specqbft.CommitMsgType)
+			idxs := SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier.String(), height, specqbft.CommitMsgType)
 			require.Equal(t, len(idxs), 1)
 			idx := idxs[0]
 			require.Equal(t, 1, q.Count(idx))
@@ -89,7 +87,7 @@ func TestNewMsgQueue(t *testing.T) {
 	t.Run("cleanPostConsensusMsg", func(t *testing.T) {
 		q, err := New(logger, WithIndexers(SignedPostConsensusMsgIndexer()))
 		require.NoError(t, err)
-		identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
+		identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 		q.Add(generatePostConsensusMsg(t, 0, identifier))
 		q.Add(generatePostConsensusMsg(t, 1, identifier))
 		q.Add(generatePostConsensusMsg(t, 2, identifier))
@@ -105,10 +103,10 @@ func TestNewMsgQueue(t *testing.T) {
 	})
 }
 
-func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height specqbft.Height, round specqbft.Round, id message.Identifier, consensusType specqbft.MessageType) *message.SSVMessage {
-	ssvMsg := &message.SSVMessage{
+func generateConsensusMsg(t *testing.T, ssvMsgType spectypes.MsgType, height specqbft.Height, round specqbft.Round, id spectypes.MessageID, consensusType specqbft.MessageType) *spectypes.SSVMessage {
+	ssvMsg := &spectypes.SSVMessage{
 		MsgType: ssvMsgType,
-		ID:      id,
+		MsgID:   id,
 	}
 
 	signedMsg := specqbft.SignedMessage{
@@ -128,10 +126,10 @@ func generateConsensusMsg(t *testing.T, ssvMsgType message.MsgType, height specq
 	return ssvMsg
 }
 
-func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id message.Identifier) *message.SSVMessage {
-	ssvMsg := &message.SSVMessage{
-		MsgType: message.SSVPostConsensusMsgType,
-		ID:      id,
+func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id spectypes.MessageID) *spectypes.SSVMessage {
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   id,
 	}
 
 	signedMsg := &ssv.SignedPartialSignatureMessage{

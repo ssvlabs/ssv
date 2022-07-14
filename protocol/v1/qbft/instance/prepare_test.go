@@ -1,6 +1,7 @@
 package instance
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -8,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -98,7 +98,7 @@ func TestPreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(message.Identifier(nil))
+	instance.state.Identifier.Store(spectypes.MessageID{})
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)

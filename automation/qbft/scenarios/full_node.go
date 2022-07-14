@@ -18,7 +18,6 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -123,7 +122,7 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
+	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}

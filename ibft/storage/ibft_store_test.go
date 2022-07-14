@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -24,11 +23,11 @@ func init() {
 }
 
 func TestSaveAndFetchLastChangeRound(t *testing.T) {
-	identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
-	generateMsg := func(id message.Identifier, h specqbft.Height, r specqbft.Round, s spectypes.OperatorID) *specqbft.SignedMessage {
+	generateMsg := func(id spectypes.MessageID, h specqbft.Height, r specqbft.Round, s spectypes.OperatorID) *specqbft.SignedMessage {
 		return &specqbft.SignedMessage{
 			Signature: []byte("sig"),
 			Signers:   []spectypes.OperatorID{s},
@@ -36,7 +35,7 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     h,
 				Round:      r,
-				Identifier: id,
+				Identifier: id[:],
 				Data:       nil,
 			},
 		}
@@ -46,7 +45,7 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 0, 2, 2)))
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 0, 3, 3)))
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 0, 4, 4)))
-	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester), 0, 4, 4))) // different identifier
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester), 0, 4, 4))) // different identifier
 
 	res, err := storage.GetLastChangeRoundMsg(identifier)
 	require.NoError(t, err)
@@ -81,7 +80,7 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 }
 
 func TestSaveAndFetchLastState(t *testing.T) {
-	identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	var identifierAtomic, height, round, preparedRound, preparedValue, iv atomic.Value
 	height.Store(specqbft.Height(10))
 	round.Store(specqbft.Round(2))

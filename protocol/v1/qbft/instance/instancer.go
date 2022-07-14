@@ -2,9 +2,9 @@ package instance
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation"
@@ -37,7 +37,7 @@ type Instancer interface {
 	ForceDecide(msg *specqbft.SignedMessage)
 	GetStageChan() chan qbft.RoundState
 	CommittedAggregatedMsg() (*specqbft.SignedMessage, error)
-	GetCommittedAggSSVMessage() (message.SSVMessage, error)
+	GetCommittedAggSSVMessage() (spectypes.SSVMessage, error)
 	ProcessMsg(msg *specqbft.SignedMessage) (bool, error)
 	ResetRoundTimer()            // TODO temp solution for race condition with message process
 	BroadcastChangeRound() error // TODO temp solution for race condition with message process

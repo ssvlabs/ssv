@@ -2,12 +2,12 @@ package history
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -23,7 +23,7 @@ type DecidedHandler func(*specqbft.SignedMessage) error
 // Syncer takes care for syncing decided history
 type Syncer interface {
 	// SyncRange syncs decided messages for the given identifier and range
-	SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error
+	SyncRange(ctx context.Context, identifier spectypes.MessageID, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error
 }
 
 // syncer implements Syncer
@@ -40,7 +40,7 @@ func NewSyncer(logger *zap.Logger, netSyncer p2pprotocol.Syncer) Syncer {
 	}
 }
 
-func (s syncer) SyncRange(ctx context.Context, identifier message.Identifier, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error {
+func (s syncer) SyncRange(ctx context.Context, identifier spectypes.MessageID, handler DecidedHandler, from, to specqbft.Height, targetPeers ...string) error {
 	s.logger.Debug("fetching range history sync", zap.Int64("from", int64(from)), zap.Int64("to", int64(to)))
 	visited := make(map[specqbft.Height]bool)
 	var msgs []p2pprotocol.SyncResult

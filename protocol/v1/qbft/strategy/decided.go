@@ -2,6 +2,7 @@ package strategy
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -29,13 +30,13 @@ const (
 // in light mode, the node doesn't save history, only last/highest decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier message.Identifier, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error
+	Sync(ctx context.Context, identifier spectypes.MessageID, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error
 	// UpdateDecided updates the given decided message and returns the updated version (could include new signers)
 	UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error)
 	// GetDecided returns historical decided messages
-	GetDecided(identifier message.Identifier, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error)
+	GetDecided(identifier spectypes.MessageID, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// GetLastDecided returns height decided messages
-	GetLastDecided(identifier message.Identifier) (*specqbft.SignedMessage, error)
+	GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error)
 }
 
 // UpdateLastDecided saves last decided message if its height is larger than persisted height
@@ -45,7 +46,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 	if highest == nil {
 		return nil, nil
 	}
-	local, err := store.GetLastDecided(highest.Message.Identifier)
+	local, err := store.GetLastDecided(message.ToMessageID(highest.Message.Identifier))
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +63,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 		highest = msg
 	}
 	logger = logger.With(zap.Int64("height", int64(highest.Message.Height)),
-		zap.String("identifier", message.Identifier(highest.Message.Identifier).String()), zap.Any("signers", highest.Signers))
+		zap.String("identifier", message.ToMessageID(highest.Message.Identifier).String()), zap.Any("signers", highest.Signers))
 	if err := store.SaveLastDecided(highest); err != nil {
 		return highest, errors.Wrap(err, "could not save last decided")
 	}

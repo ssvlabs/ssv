@@ -2,14 +2,10 @@ package api
 
 import (
 	"encoding/hex"
-
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 
-	conversion "github.com/bloxapp/ssv/exporter/api/convertion"
-	"github.com/bloxapp/ssv/exporter/api/proto"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/format"
 )
 
 // Message represents an exporter message
@@ -32,8 +28,8 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 			Data: []string{},
 		}
 	}
-	identifier := message.Identifier(msgs[0].Message.Identifier)
-	pkv := identifier.GetValidatorPK()
+	identifier := message.ToMessageID(msgs[0].Message.Identifier)
+	pkv := identifier.GetPubKey()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
@@ -48,22 +44,11 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-// TODO: avoid converting to v0 once explorer is upgraded
 func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
-	var data []*proto.SignedMessage
-	pkv := message.Identifier(msgs[0].Message.Identifier).GetValidatorPK()
-	for _, msg := range msgs {
-		identifierV0 := format.IdentifierFormat(pkv, message.Identifier(msg.Message.Identifier).GetRoleType().String())
-		v0Msg, err := conversion.ToSignedMessageV0(msg, []byte(identifierV0))
-		if err != nil {
-			return Message{}, err
-		}
-		data = append(data, v0Msg)
-	}
-	return data, nil
+	return msgs, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses

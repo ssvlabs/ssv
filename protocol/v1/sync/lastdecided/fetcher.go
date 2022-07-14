@@ -2,13 +2,13 @@ package lastdecided
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
 )
@@ -20,11 +20,11 @@ const (
 )
 
 // GetLastDecided reads last decided message from store
-type GetLastDecided func(i message.Identifier) (*specqbft.SignedMessage, error)
+type GetLastDecided func(i spectypes.MessageID) (*specqbft.SignedMessage, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error)
+	GetLastDecided(ctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -41,7 +41,7 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error) {
+func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error) {
 	ctx, cancel := context.WithTimeout(pctx, lastDecidedTimeout)
 	defer cancel()
 	var err error

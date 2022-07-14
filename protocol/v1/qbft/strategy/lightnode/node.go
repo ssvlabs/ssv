@@ -2,12 +2,12 @@ package lightnode
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -31,10 +31,10 @@ func NewLightNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore,
 	}
 }
 
-func (ln *lightNode) Sync(ctx context.Context, identifier message.Identifier, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+func (ln *lightNode) Sync(ctx context.Context, identifier spectypes.MessageID, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
 	if to == nil {
 		ln.logger.Debug("syncing decided", zap.String("identifier", identifier.String()))
-		highest, _, _, err := ln.decidedFetcher.GetLastDecided(ctx, identifier, func(i message.Identifier) (*specqbft.SignedMessage, error) {
+		highest, _, _, err := ln.decidedFetcher.GetLastDecided(ctx, identifier, func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
 			return from, nil
 		})
 		if err != nil {
@@ -54,7 +54,7 @@ func (ln *lightNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.Signe
 }
 
 // GetDecided in light node will try to look for last decided and returns it if in the given range
-func (ln *lightNode) GetDecided(identifier message.Identifier, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (ln *lightNode) GetDecided(identifier spectypes.MessageID, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	if len(heightRange) < 2 {
 		return nil, errors.New("missing height range")
 	}
@@ -72,6 +72,6 @@ func (ln *lightNode) GetDecided(identifier message.Identifier, heightRange ...sp
 	return []*specqbft.SignedMessage{ld}, nil
 }
 
-func (ln *lightNode) GetLastDecided(identifier message.Identifier) (*specqbft.SignedMessage, error) {
+func (ln *lightNode) GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error) {
 	return ln.store.GetLastDecided(identifier)
 }
