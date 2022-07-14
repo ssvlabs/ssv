@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,8 +15,7 @@ import (
 
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -160,10 +158,10 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 //}
 
 func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []string, forkVersion forksprotocol.ForkVersion) (*LocalNet, []*dummyRouter, error) {
-	logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
-	//logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
-		return logger.With(zap.String("who", who))
+		//logger := zaptest.NewLogger(t).With(zap.String("who", who))
+		logger := zap.L().With(zap.String("who", who))
+		return logger
 	}
 	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2-1, false)
 	if err != nil {
@@ -173,8 +171,6 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), n)
 	}
 
-	logger.Debug("created local network")
-
 	routers := make([]*dummyRouter, n)
 
 	// for now, skip routers for v0
@@ -183,8 +179,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])
 	}
-
-	logger.Debug("subscribing to topics")
+	//}
 
 	for _, pk := range pks {
 		vpk, err := hex.DecodeString(pk)
@@ -225,10 +220,10 @@ type dummyRouter struct {
 	i      int
 }
 
-func (r *dummyRouter) Route(message spectypes.SSVMessage) {
+func (r *dummyRouter) Route(message message.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	r.logger.Debug("got message",
-		zap.String("identifier", message.GetID().String()),
+		zap.String("identifier", hex.EncodeToString(message.GetIdentifier())),
 		zap.Uint64("count", c))
 }
 

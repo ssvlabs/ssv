@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/bloxapp/ssv/ibft/proto";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+message InstanceConfig{
+  float round_change_duration_seconds       = 1;
+  float leader_preprepare_delay_seconds     = 2; // The time a round leader waits before broadcasting pre-prepare message
+}
+
+message Node{
+  uint64 ibft_id  = 1;
+  bytes pk        = 2 [(gogoproto.nullable) = false];
+}

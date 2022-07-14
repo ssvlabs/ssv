@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"strconv"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -9,6 +10,7 @@ import (
 
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 )
 
 /**
@@ -72,15 +74,22 @@ func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
 }
 
 func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
+	leaderSelectionSeed := append(c.Fork.Identifier(c.Identifier.GetValidatorPK(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
+	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
+	if err != nil {
+		return nil, err
+	}
+
 	return &instance.Options{
 		Logger:          opts.Logger,
 		ValidatorShare:  c.ValidatorShare,
 		Network:         c.Network,
+		LeaderSelector:  leaderSelc,
 		Config:          c.InstanceConfig,
 		Identifier:      c.Identifier,
 		Height:          opts.SeqNumber,
 		Fork:            c.Fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
-		SSVSigner:       c.KeyManager,
+		Signer:          c.Signer,
 	}, nil
 }

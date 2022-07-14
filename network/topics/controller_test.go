@@ -15,6 +15,8 @@ import (
 
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -34,12 +36,14 @@ func TestTopicManager(t *testing.T) {
 		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	f := genesis.New()
-	peers := newPeers(ctx, t, nPeers, false, true, f)
-	baseTest(ctx, t, peers, pks, f, 1, 2)
+	// genesis features includes msg_id, msg validator, subnets, scoring
+	t.Run("features", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f := genesis.New()
+		peers := newPeers(ctx, t, nPeers, true, true, f)
+		baseTest(ctx, t, peers, pks, f, 1, 2)
+	})
 }
 
 func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
@@ -71,11 +75,42 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	// wait for the peers to join topics
-	<-time.After(3 * time.Second)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c, cancel := context.WithTimeout(ctx, time.Second*5)
+		defer cancel()
+	peersLoop:
+		for _, p := range peers {
+			// TODO: modify for subnets
+			for len(p.tm.Topics()) < nValidators {
+				if c.Err() != nil {
+					break peersLoop
+				}
+				time.Sleep(time.Millisecond * 100)
+			}
+		}
+
+		nPeers := len(peers)
+		for _, p := range peers {
+			topics := p.tm.Topics()
+			for _, topic := range topics {
+				topicPeers, err := p.tm.Peers(topic)
+				require.NoError(t, err)
+				// wait for min peers
+				for c.Err() == nil && len(topicPeers) < nPeers-1 {
+					time.Sleep(time.Millisecond * 100)
+					topicPeers, err = p.tm.Peers(topic)
+					require.NoError(t, err)
+				}
+			}
+		}
+		require.NoError(t, c.Err())
+	}()
+	wg.Wait()
 
 	t.Log("broadcasting messages")
-
-	var wg sync.WaitGroup
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
 		for j, p := range peers {
@@ -84,7 +119,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				defer wg.Done()
 				msg, err := dummyMsg(pk, pi%4)
 				require.NoError(t, err)
-				raw, err := msg.Encode()
+				raw, err := msg.MarshalJSON()
 				require.NoError(t, err)
 				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*10))
 				<-time.After(time.Second * 5)
@@ -201,7 +236,8 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 }
 
 func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
-	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+	h, err := libp2p.New(ctx,
+		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, zap.L(), h)
 	require.NoError(t, err)
@@ -211,8 +247,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, logger, fork, 2*time.Minute)
-		go midHandler.Start()
+		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)
 	}
 	cfg := &PububConfig{
 		Logger:       logger,
@@ -260,12 +295,12 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	return p
 }
 
-func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
+func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -277,9 +312,9 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signer_ids": [1,3,4]
 	}`, id, height)
-	return &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   id,
+	return &message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
+		ID:      id,
 		Data:    []byte(msgData),
 	}, nil
 }

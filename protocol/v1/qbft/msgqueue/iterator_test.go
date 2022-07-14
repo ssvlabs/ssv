@@ -2,22 +2,23 @@ package msgqueue
 
 import (
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestIndexIterator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	msgs := make([]*spectypes.SSVMessage, 0)
+	msgs := make([]*message.SSVMessage, 0)
 	for i := 1; i <= 10; i++ {
-		msgs = append(msgs, &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID([]byte(fmt.Sprintf("dummy-id-%d", i)), spectypes.BNRoleAttester),
+		msgs = append(msgs, &message.SSVMessage{
+			MsgType: message.SSVConsensusMsgType,
+			ID:      []byte(fmt.Sprintf("dummy-id-%d", i)),
 			Data:    []byte(fmt.Sprintf("data-%d", i)),
 		})
 	}
@@ -43,17 +44,17 @@ func TestIndexIterator(t *testing.T) {
 	require.Len(t, res, 2)
 }
 
-func dummyIndex(msg *spectypes.SSVMessage) Index {
+func dummyIndex(msg *message.SSVMessage) Index {
 	return Index{
 		Mt:  msg.GetType(),
-		ID:  msg.GetID().String(),
+		ID:  msg.GetIdentifier().String(),
 		H:   -1,
 		Cmt: -1,
 	}
 }
 
 func dummyIndexer(contained string) Indexer {
-	return func(msg *spectypes.SSVMessage) Index {
+	return func(msg *message.SSVMessage) Index {
 		if msg == nil {
 			return Index{}
 		}

@@ -5,10 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/attester"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -27,6 +25,7 @@ import (
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
@@ -40,35 +39,20 @@ func TestSSVMapping(t *testing.T) {
 	// TODO(nkryuchkov): fix
 	t.Skip()
 
-	path, _ := os.Getwd()
-	fileName := "tests.json"
-	filePath := path + "/" + fileName
+	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/ssv/spectest/generate/tests.json")
+	require.NoError(t, err)
 
-	jsonTests, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/ssv/spectest/generate/tests.json")
-		require.NoError(t, err)
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
 
-		defer func() {
-			require.NoError(t, resp.Body.Close())
-		}()
-
-		jsonTests, err = ioutil.ReadAll(resp.Body)
-		require.NoError(t, err)
-
-		require.NoError(t, ioutil.WriteFile(filePath, jsonTests, 0644))
-	}
+	jsonTests, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
 
 	specTests := map[string]*tests.SpecTest{}
 	if err := json.Unmarshal(jsonTests, &specTests); err != nil {
 		require.NoError(t, err)
 	}
-
-	origDomain := types.GetDefaultDomain()
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
-	defer func() {
-		types.SetDefaultDomain(origDomain)
-	}()
 
 	testMap := testsToRun() // TODO: remove
 
@@ -168,6 +152,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		Beacon:                     beacon,
 		Share:                      share,
 		ForkVersion:                forkVersion,
+		Signer:                     beacon,
 		SyncRateLimit:              time.Second * 5,
 		SignatureCollectionTimeout: time.Second * 5,
 		ReadMode:                   false,
@@ -179,10 +164,10 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	qbftCtrl.State = controller.Ready
 	go qbftCtrl.StartQueueConsumer(qbftCtrl.MessageHandler)
 	require.NoError(t, qbftCtrl.Init())
-	go v.StartDuty(test.Duty)
+	go v.ExecuteDuty(12, convertDuty(test.Duty))
 
 	for _, msg := range test.Messages {
-		require.NoError(t, v.ProcessMsg(msg))
+		require.NoError(t, v.ProcessMsg(convertSSVMessage(t, msg, attesterRoleType)))
 	}
 
 	time.Sleep(time.Second * 3) // 3s round
@@ -241,7 +226,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		Signature:       phase0.BLSSignature{},
 	}
 
-	resState := specssv.NewDutyExecutionState(3)
+	resState := ssv.NewDutyExecutionState(3)
 	resState.RunningInstance = mappedInstance
 	resState.DecidedValue = mappedDecidedValue
 	resState.SignedAttestation = mappedSignedAtts
@@ -256,6 +241,42 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 
 	require.NoError(t, v.Close())
 	db.Close()
+}
+
+func convertDuty(duty *spectypes.Duty) *beaconprotocol.Duty {
+	return &beaconprotocol.Duty{
+		Type:                    duty.Type,
+		PubKey:                  duty.PubKey,
+		Slot:                    duty.Slot,
+		ValidatorIndex:          duty.ValidatorIndex,
+		CommitteeIndex:          duty.CommitteeIndex,
+		CommitteeLength:         duty.CommitteeLength,
+		CommitteesAtSlot:        duty.CommitteesAtSlot,
+		ValidatorCommitteeIndex: duty.ValidatorCommitteeIndex,
+	}
+}
+
+func convertSSVMessage(t *testing.T, msg *spectypes.SSVMessage, role spectypes.BeaconRole) *message.SSVMessage {
+	data := msg.Data
+
+	var msgType message.MsgType
+	switch msg.GetType() {
+	case spectypes.SSVConsensusMsgType:
+		msgType = message.SSVConsensusMsgType
+	case spectypes.SSVDecidedMsgType:
+		msgType = message.SSVDecidedMsgType
+	case spectypes.SSVPartialSignatureMsgType:
+		encoded, err := msg.Encode()
+		require.NoError(t, err)
+		data = encoded
+	case spectypes.DKGMsgType:
+		panic("type not supported yet")
+	}
+	return &message.SSVMessage{
+		MsgType: msgType,
+		ID:      message.NewIdentifier(msg.MsgID.GetPubKey()[:], role),
+		Data:    data,
+	}
 }
 
 func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *qbft.MsgContainer {

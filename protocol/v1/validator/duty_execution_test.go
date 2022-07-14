@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
@@ -79,7 +80,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				node.beacon.(*TestBeacon).refAttestationData = test.overrideAttestationData
 			}
 
-			duty := &spectypes.Duty{
+			duty := &beacon.Duty{
 				Type:                    test.role,
 				PubKey:                  spec.BLSPubKey{},
 				Slot:                    0,
@@ -98,10 +99,8 @@ func TestConsensusOnInputValue(t *testing.T) {
 			require.NoError(t, err)
 			require.EqualValues(t, 3, signaturesCount)
 			require.NotNil(t, decidedByts)
-			consensusData := &spectypes.ConsensusData{}
-			require.NoError(t, consensusData.Decode(decidedByts))
-			// TODO(olegshmuelov): use SSZ decoding
-			//require.EqualValues(t, test.expectedAttestationDataByts, consensusData.AttestationData.MarshalSSZ())
+
+			require.EqualValues(t, test.expectedAttestationDataByts, decidedByts)
 		})
 	}
 }
@@ -161,6 +160,17 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
+			duty := &beacon.Duty{
+				Type:                    spectypes.BNRoleAttester,
+				PubKey:                  spec.BLSPubKey{},
+				Slot:                    0,
+				ValidatorIndex:          0,
+				CommitteeIndex:          0,
+				CommitteeLength:         0,
+				CommitteesAtSlot:        0,
+				ValidatorCommitteeIndex: 0,
+			}
+
 			// send sigs
 			for index, sig := range test.sigs {
 				signedMessage := &specqbft.SignedMessage{
@@ -174,9 +184,9 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 				encodedMsg, err := signedMessage.Encode()
 				require.NoError(t, err)
-				ssvMsg := spectypes.SSVMessage{
-					MsgType: spectypes.SSVConsensusMsgType,
-					MsgID:   message.ToMessageID(identifier),
+				ssvMsg := message.SSVMessage{
+					MsgType: message.SSVConsensusMsgType,
+					ID:      identifier,
 					Data:    encodedMsg,
 				}
 
@@ -187,8 +197,8 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			}
 
 			// TODO: do for all ibfts
-			for role, ibft := range validator.Ibfts() {
-				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, role)
+			for _, ibft := range validator.Ibfts() {
+				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
 				if len(test.expectedError) > 0 {
 					require.EqualError(t, err, test.expectedError)
 				} else {

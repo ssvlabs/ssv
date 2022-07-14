@@ -3,7 +3,6 @@ package instance
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"time"
 
@@ -33,14 +32,14 @@ type Options struct {
 	Network        protcolp2p.Network
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
-	Identifier     []byte
+	Identifier     message.Identifier
 	Height         specqbft.Height
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
 	Fork             forks.Fork
-	SSVSigner        spectypes.SSVSigner
+	Signer           beaconprotocol.Signer
 	ChangeRoundStore qbftstorage.ChangeRoundStore
 }
 
@@ -54,7 +53,7 @@ type Instance struct {
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
-	ssvSigner      spectypes.SSVSigner
+	signer         beaconprotocol.Signer
 
 	// messages
 	containersMap map[specqbft.MessageType]msgcont.MessageContainer
@@ -90,8 +89,9 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
-	messageID := message.ToMessageID(opts.Identifier)
-	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateNotStarted))
+	pk := opts.Identifier.GetValidatorPK()
+	role := opts.Identifier.GetRoleType().String()
+	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundStateNotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
@@ -104,7 +104,7 @@ func NewInstance(opts *Options) Instancer {
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
 		Logger:         logger,
-		ssvSigner:      opts.SSVSigner,
+		signer:         opts.Signer,
 
 		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
@@ -167,15 +167,17 @@ func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
 		return errors.New("instance not initialized")
 	}
+	if i.State().GetIdentifier() == nil {
+		return errors.New("invalid Lambda")
+	}
 	if inputValue == nil {
 		return errors.New("input value is nil")
 	}
 
-	messageID := message.ToMessageID(i.State().GetIdentifier())
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().GetIdentifier().String()))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(specqbft.Round(1)) // start from 1
-	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)
+	metricsIBFTRound.WithLabelValues(i.State().GetIdentifier().GetRoleType().String(), hex.EncodeToString(i.State().GetIdentifier().GetValidatorPK())).Set(1)
 
 	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
 	if i.IsLeader() {
@@ -252,27 +254,22 @@ func (i *Instance) Stopped() bool {
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
-	var errPrefix string // TODO(nkryuchkov): make similar in ssv-spec
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		pp = i.PrePrepareMsgPipeline()
-		errPrefix = "proposal invalid"
 	case specqbft.PrepareMsgType:
 		pp = i.PrepareMsgPipeline()
-		errPrefix = "invalid prepare msg"
 	case specqbft.CommitMsgType:
 		pp = i.CommitMsgPipeline()
-		errPrefix = "commit msg invalid"
 	case specqbft.RoundChangeMsgType:
 		pp = i.ChangeRoundMsgPipeline()
-		errPrefix = "round change msg invalid"
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
 	}
 	if err := pp.Run(msg); err != nil {
-		return false, fmt.Errorf("%s: %w", errPrefix, err)
+		return false, err
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
@@ -291,8 +288,9 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.processPrepareQuorumOnce = &sync.Once{}
 	newRound := round
 	i.State().Round.Store(newRound)
-	messageID := message.ToMessageID(i.State().GetIdentifier())
-	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newRound))
+	role := i.State().GetIdentifier().GetRoleType()
+	pk := i.State().GetIdentifier().GetValidatorPK()
+	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
@@ -306,8 +304,9 @@ func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 		return
 	}
 
-	messageID := message.ToMessageID(i.State().GetIdentifier())
-	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(stage))
+	role := i.State().GetIdentifier().GetRoleType().String()
+	pk := i.State().GetIdentifier().GetValidatorPK()
+	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(stage))
 
 	i.State().Stage.Store(int32(stage))
 
@@ -339,7 +338,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
 	}
 
-	sigByts, err := i.ssvSigner.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
 	if err != nil {
 		return err
 	}
@@ -359,9 +358,9 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 	if err != nil {
 		return errors.New("failed to encode consensus message")
 	}
-	ssvMsg := spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
+	ssvMsg := message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
+		ID:      i.State().GetIdentifier(),
 		Data:    encodedMsg,
 	}
 	if i.network != nil {
@@ -391,18 +390,18 @@ func (i *Instance) CommittedAggregatedMsg() (*specqbft.SignedMessage, error) {
 }
 
 // GetCommittedAggSSVMessage returns ssv msg with message.SSVDecidedMsgType and the agg commit signed msg
-func (i *Instance) GetCommittedAggSSVMessage() (spectypes.SSVMessage, error) {
+func (i *Instance) GetCommittedAggSSVMessage() (message.SSVMessage, error) {
 	decidedMsg, err := i.CommittedAggregatedMsg()
 	if err != nil {
-		return spectypes.SSVMessage{}, err
+		return message.SSVMessage{}, err
 	}
 	encodedAgg, err := decidedMsg.Encode()
 	if err != nil {
-		return spectypes.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
+		return message.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
 	}
-	ssvMsg := spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
+	ssvMsg := message.SSVMessage{
+		MsgType: message.SSVDecidedMsgType,
+		ID:      i.State().GetIdentifier(),
 		Data:    encodedAgg,
 	}
 	return ssvMsg, nil
@@ -420,9 +419,9 @@ func generateState(opts *Options) *qbft.State {
 	var identifier, height, round, preparedRound, preparedValue atomic.Value
 	height.Store(opts.Height)
 	round.Store(specqbft.Round(0))
-	identifier.Store(opts.Identifier[:])
+	identifier.Store(opts.Identifier)
 	preparedRound.Store(specqbft.Round(0))
-	preparedValue.Store([]byte(nil))
+	preparedValue.Store([]byte{})
 	iv := atomic.Value{}
 	iv.Store([]byte{})
 	return &qbft.State{

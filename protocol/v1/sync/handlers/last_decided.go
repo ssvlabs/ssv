@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -14,8 +13,8 @@ import (
 // TODO: add msg validation
 func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
-	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))
+	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
+		logger := plogger.With(zap.String("identifier", msg.ID.String()))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
@@ -27,8 +26,7 @@ func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 			// TODO: remove after v0
 			return nil, nil
 		} else {
-			msgID := msg.GetID()
-			res, err := store.GetLastDecided(msgID[:])
+			res, err := store.GetLastDecided(msg.ID)
 			//logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}

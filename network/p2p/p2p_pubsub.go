@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -29,7 +28,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
+func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
@@ -43,7 +42,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg spectypes.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -51,11 +50,11 @@ func (n *p2pNetwork) Broadcast(msg spectypes.SSVMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
 	}
-	vpk := msg.GetID().GetPubKey()
+	vpk := msg.GetIdentifier().GetValidatorPK()
 	topics := n.fork.ValidatorTopicID(vpk)
 	// for decided message, send on decided channel first
 	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
-	if msg.MsgType == spectypes.SSVDecidedMsgType {
+	if msg.MsgType == message.SSVDecidedMsgType {
 		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
 			topics = append([]string{decidedTopic}, topics...)
 		}
@@ -79,7 +78,7 @@ func (n *p2pNetwork) Broadcast(msg spectypes.SSVMessage) error {
 }
 
 // Subscribe subscribes to validator subnet
-func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -96,7 +95,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -118,7 +117,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 }
 
 // subscribe subscribes to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) subscribe(pk message.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if topic == genesisFork.UnknownSubnet {
@@ -204,33 +203,32 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	if ssvMsg == nil {
 		return nil
 	}
-	//logger = withIncomingMsgFields(logger, msg, ssvMsg)
-	//logger.Debug("incoming pubsub message", zap.String("topic", topic),
-	//	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
-	metricsRouterIncoming.WithLabelValues(ssvMsg.GetID().String(), message.MsgTypeToString(ssvMsg.MsgType)).Inc()
+	logger = withIncomingMsgFields(logger, msg, ssvMsg)
+	logger.Debug("incoming pubsub message", zap.String("topic", topic),
+		zap.String("msgType", ssvMsg.MsgType.String()))
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
 
-//// withIncomingMsgFields adds fields to the given logger
-//func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-//	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
-//	if ssvMsg.MsgType == spectypes.SSVDecidedMsgType || ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
-//		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
-//		from, err := peer.IDFromBytes(msg.Message.GetFrom())
-//		if err == nil {
-//			logger = logger.With(zap.String("msgFrom", from.String()))
-//		}
-//		var sm specqbft.SignedMessage
-//		err = sm.Decode(ssvMsg.Data)
-//		if err == nil && sm.Message != nil {
-//			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-//				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-//				zap.Any("signers", sm.GetSigners()))
-//		}
-//	}
-//	return logger
-//}
+// withIncomingMsgFields adds fields to the given logger
+func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *message.SSVMessage) *zap.Logger {
+	logger = logger.With(zap.String("identifier", ssvMsg.ID.String()))
+	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
+		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
+		from, err := peer.IDFromBytes(msg.Message.GetFrom())
+		if err == nil {
+			logger = logger.With(zap.String("msgFrom", from.String()))
+		}
+		var sm specqbft.SignedMessage
+		err = sm.Decode(ssvMsg.Data)
+		if err == nil && sm.Message != nil {
+			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
+				zap.Any("signers", sm.GetSigners()))
+		}
+	}
+	return logger
+}
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets() error {

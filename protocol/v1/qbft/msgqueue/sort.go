@@ -1,18 +1,19 @@
 package msgqueue
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sort"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // By is function to compare messages
-type By func(a, b *spectypes.SSVMessage) bool
+type By func(a, b *message.SSVMessage) bool
 
 // Combine runs current By and if result is negative, tries to run the other By.
 func (by By) Combine(other By) By {
-	return func(a, b *spectypes.SSVMessage) bool {
+	return func(a, b *message.SSVMessage) bool {
 		if !by(a, b) {
 			return other(a, b)
 		}
@@ -43,7 +44,7 @@ func (by By) Add(msgs []*MsgContainer, msg *MsgContainer) []*MsgContainer {
 
 // ByRound implements By for round based priority
 func ByRound() By {
-	return func(a, b *spectypes.SSVMessage) bool {
+	return func(a, b *message.SSVMessage) bool {
 		aRound, ok := getRound(a)
 		if !ok {
 			return false
@@ -63,7 +64,7 @@ func ByConsensusMsgType(messageTypes ...specqbft.MessageType) By {
 	for i, mt := range messageTypes {
 		m[mt] = i + 1
 	}
-	return func(a, b *spectypes.SSVMessage) bool {
+	return func(a, b *message.SSVMessage) bool {
 		aMsgType, ok := getConsensusMsgType(a)
 		if !ok {
 			return false

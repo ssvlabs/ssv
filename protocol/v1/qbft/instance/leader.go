@@ -1,6 +1,6 @@
 package instance
 
-import "github.com/bloxapp/ssv/protocol/v1/message"
+import specqbft "github.com/bloxapp/ssv-spec/qbft"
 
 // IsLeader checks and return true for round leader, false otherwise
 func (i *Instance) IsLeader() bool {
@@ -13,7 +13,7 @@ func (i *Instance) ThisRoundLeader() uint64 {
 }
 
 // RoundLeader checks the round leader
-func (i *Instance) RoundLeader(round message.Round) uint64 {
+func (i *Instance) RoundLeader(round specqbft.Round) uint64 {
 	leaderIndex := i.LeaderSelector.Calculate(uint64(round))
 	return i.ValidatorShare.OperatorIds[leaderIndex]
 }

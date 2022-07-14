@@ -22,8 +22,10 @@ import (
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient/ekm"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 const (
@@ -56,6 +58,7 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
+	keyManager     beaconprotocol.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -90,6 +93,11 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		graffiti:       opt.Graffiti,
 	}
 
+	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, message.PrimusTestnet)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
+	}
+
 	return _client, nil
 }
 
@@ -116,15 +124,15 @@ func (gc *goClient) HealthCheck() []string {
 	return []string{}
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beaconprotocol.Duty, error) {
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
 			return nil, err
 		}
-		var duties []*spectypes.Duty
+		var duties []*beaconprotocol.Duty
 		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &spectypes.Duty{
+			duties = append(duties, &beaconprotocol.Duty{
 				Type:                    spectypes.BNRoleAttester,
 				PubKey:                  attesterDuty.PubKey,
 				Slot:                    attesterDuty.Slot,

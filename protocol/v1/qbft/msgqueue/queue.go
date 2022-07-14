@@ -1,7 +1,6 @@
 package msgqueue
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -24,18 +23,18 @@ func AllIndicesCleaner(k Index) bool {
 
 // Indexer indexes the given message, returns an empty string if not applicable
 // use WithIndexers to inject indexers upon start
-type Indexer func(msg *spectypes.SSVMessage) Index
+type Indexer func(msg *message.SSVMessage) Index
 
 // MsgQueue is a message broker for message.SSVMessage
 type MsgQueue interface {
 	// Add adds a new message to the queue for the matching indices
-	Add(msg *spectypes.SSVMessage)
+	Add(msg *message.SSVMessage)
 	// Peek returns the first n messages for an index
-	Peek(n int, idx Index) []*spectypes.SSVMessage
+	Peek(n int, idx Index) []*message.SSVMessage
 	// Pop clears and returns the first n messages for an index
-	Pop(n int, idx Index) []*spectypes.SSVMessage
+	Pop(n int, idx Index) []*message.SSVMessage
 	// PopIndices clears and returns the first n messages for indices that are created on demand using the iterator
-	PopIndices(n int, generator *IndexIterator) []*spectypes.SSVMessage
+	PopIndices(n int, generator *IndexIterator) []*message.SSVMessage
 	// Purge clears indexed messages for the given index
 	Purge(idx Index) int64
 	// Clean enables to aid in a custom Cleaner to clear any set of indices
@@ -70,14 +69,14 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 
 // MsgContainer is a container for a message
 type MsgContainer struct {
-	msg *spectypes.SSVMessage
+	msg *message.SSVMessage
 }
 
 // Index is a struct representing an index in msg queue
 type Index struct {
 	Name string
 	// Mt is the message type
-	Mt spectypes.MsgType
+	Mt message.MsgType
 	// ID is the identifier
 	ID string
 	// H (optional) is the height, -1 is treated as nil
@@ -97,7 +96,7 @@ type queue struct {
 	items     map[Index][]*MsgContainer
 }
 
-func (q *queue) Add(msg *spectypes.SSVMessage) {
+func (q *queue) Add(msg *message.SSVMessage) {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
@@ -115,7 +114,7 @@ func (q *queue) Add(msg *spectypes.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Inc()
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
@@ -126,7 +125,7 @@ func (q *queue) Purge(idx Index) int64 {
 
 	size := len(q.items[idx])
 	delete(q.items, idx)
-	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
+	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 
 	return int64(size)
 }
@@ -142,7 +141,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 			if cleaner(idx) {
 				size := len(q.items[idx])
 				atomic.AddInt64(&cleaned, int64(size))
-				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
+				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 				return true
 			}
 		}
@@ -158,7 +157,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 	return cleaned
 }
 
-func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
+func (q *queue) Peek(n int, idx Index) []*message.SSVMessage {
 	q.itemsLock.RLock()
 	defer q.itemsLock.RUnlock()
 
@@ -170,7 +169,7 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 		n = len(containers)
 	}
 	containers = containers[:n]
-	msgs := make([]*spectypes.SSVMessage, 0)
+	msgs := make([]*message.SSVMessage, 0)
 	for _, mc := range containers {
 		msgs = append(msgs, mc.msg)
 	}
@@ -180,11 +179,11 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 
 // Pop messages by index with a desired amount of messages to pop,
 // defaults to the all the messages in the index.
-func (q *queue) Pop(n int, idx Index) []*spectypes.SSVMessage {
+func (q *queue) Pop(n int, idx Index) []*message.SSVMessage {
 	q.itemsLock.Lock()
 	defer q.itemsLock.Unlock()
 
-	msgs := make([]*spectypes.SSVMessage, 0)
+	msgs := make([]*message.SSVMessage, 0)
 
 	msgContainers, ok := q.items[idx]
 	if !ok {
@@ -204,13 +203,13 @@ func (q *queue) Pop(n int, idx Index) []*spectypes.SSVMessage {
 		}
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(nMsgs))
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, idx.Mt.String(), strconv.Itoa(int(idx.Cmt))).Sub(float64(nMsgs))
 	}
 	return msgs
 }
 
-func (q *queue) PopIndices(n int, i *IndexIterator) []*spectypes.SSVMessage {
-	var msgs []*spectypes.SSVMessage
+func (q *queue) PopIndices(n int, i *IndexIterator) []*message.SSVMessage {
+	var msgs []*message.SSVMessage
 
 	for len(msgs) < n {
 		genIndex := i.Next()
@@ -249,7 +248,7 @@ func (q *queue) Len() int {
 
 // indexMessage returns indexes for the given message.
 // NOTE: this function is not thread safe
-func (q *queue) indexMessage(msg *spectypes.SSVMessage) []Index {
+func (q *queue) indexMessage(msg *message.SSVMessage) []Index {
 	indexes := make([]Index, 0)
 	for _, f := range q.indexers {
 		idx := f(msg)
@@ -262,7 +261,7 @@ func (q *queue) indexMessage(msg *spectypes.SSVMessage) []Index {
 }
 
 // DefaultMsgCleaner cleans ssv msgs from the queue
-func DefaultMsgCleaner(mid spectypes.MessageID, mts ...spectypes.MsgType) Cleaner {
+func DefaultMsgCleaner(mid message.Identifier, mts ...message.MsgType) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
 		for _, mt := range mts {
@@ -277,16 +276,16 @@ func DefaultMsgCleaner(mid spectypes.MessageID, mts ...spectypes.MsgType) Cleane
 
 // DefaultMsgIndexer returns the default msg indexer to use for message.SSVMessage
 func DefaultMsgIndexer() Indexer {
-	return func(msg *spectypes.SSVMessage) Index {
+	return func(msg *message.SSVMessage) Index {
 		if msg == nil {
 			return Index{}
 		}
-		return DefaultMsgIndex(msg.MsgType, msg.MsgID)
+		return DefaultMsgIndex(msg.MsgType, msg.ID)
 	}
 }
 
 // DefaultMsgIndex is the default msg index
-func DefaultMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
+func DefaultMsgIndex(mt message.MsgType, mid message.Identifier) Index {
 	return Index{
 		Mt:  mt,
 		ID:  mid.String(),

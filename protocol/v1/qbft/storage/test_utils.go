@@ -3,18 +3,16 @@ package qbftstorage
 import (
 	"encoding/binary"
 	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -43,8 +41,8 @@ func NewQBFTStore(db basedb.IDb, logger *zap.Logger, instanceType string) QBFTSt
 }
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
-func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
-	val, found, err := i.get(highestKey, identifier[:])
+func (i *ibftStorage) GetLastDecided(identifier message.Identifier) (*specqbft.SignedMessage, error) {
+	val, found, err := i.get(highestKey, identifier)
 	if !found {
 		return nil, nil
 	}
@@ -74,10 +72,10 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) err
 	return nil
 }
 
-func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetDecided(identifier message.Identifier, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	prefix := make([]byte, len(i.prefix))
 	copy(prefix, i.prefix)
-	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, identifier...)
 
 	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
@@ -111,21 +109,16 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 	})
 }
 
-func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *qbft.State) error {
+func (i *ibftStorage) SaveCurrentInstance(identifier message.Identifier, state *qbft.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, currentKey, identifier[:])
+	return i.save(value, currentKey, identifier)
 }
 
-func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*qbft.State, bool, error) {
-	val, found, err := i.get(currentKey, identifier[:])
+func (i *ibftStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error) {
+	val, found, err := i.get(currentKey, identifier)
 	if !found {
 		return nil, found, nil
 	}
@@ -157,22 +150,26 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error 
 
 // GetLastChangeRoundMsg returns last known change round message
 // TODO
-func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
-	res, err := i.getAll(lastChangeRoundKey, identifier[:])
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier message.Identifier, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
+	res, err := i.getAll(lastChangeRoundKey, identifier)
 	if err != nil {
 		return nil, err
 	}
 	return res, nil
 }
 
-func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
-	prefix := i.prefix
-	prefix = append(prefix, identifier[:]...)
-	prefix = append(prefix, []byte(lastChangeRoundKey)...)
-	if err := i.db.RemoveAllByCollection(prefix); err != nil {
-		return errors.Wrap(err, "failed to remove decided")
+func (i *ibftStorage) CleanLastChangeRound(identifier message.Identifier) {
+	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
+	err := i.delete(lastChangeRoundKey, identifier)
+	if err != nil {
+		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
-	return nil
+	// doing the same for v0
+	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetValidatorPK(), identifier.GetRoleType().String()))
+	err = i.delete(lastChangeRoundKey, oldIdentifier)
+	if err != nil {
+		i.logger.Warn("could not clean last change round message", zap.Error(err))
+	}
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -211,11 +208,11 @@ func (i *ibftStorage) getAll(id string, pk []byte) ([]*specqbft.SignedMessage, e
 	return res, err
 }
 
-/*func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
+func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	return i.db.Delete(prefix, key)
-}*/
+}
 
 func (i *ibftStorage) key(id string, params ...[]byte) []byte {
 	ret := []byte(id)
@@ -229,30 +226,4 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
-}
-
-// PopulatedStorage create new QBFTStore instance, save the highest height and then populated from 0 to highestHeight
-func PopulatedStorage(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, round specqbft.Round, highestHeight specqbft.Height) QBFTStore {
-	s := NewQBFTStore(testing2.NewInMemDb(), zap.L(), "test-qbft-storage")
-
-	signers := make([]spectypes.OperatorID, 0, len(sks))
-	for k := range sks {
-		signers = append(signers, k)
-	}
-
-	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
-	for i := 0; i <= int(highestHeight); i++ {
-		signedMsg := testing2.AggregateSign(t, sks, signers, &specqbft.Message{
-			MsgType:    specqbft.CommitMsgType,
-			Height:     specqbft.Height(i),
-			Round:      round,
-			Identifier: identifier[:],
-			Data:       testing2.CommitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
-		})
-		require.NoError(t, s.SaveDecided(signedMsg))
-		if i == int(highestHeight) {
-			require.NoError(t, s.SaveLastDecided(signedMsg))
-		}
-	}
-	return s
 }

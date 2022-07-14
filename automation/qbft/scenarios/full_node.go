@@ -18,6 +18,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -122,8 +123,7 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(4))
+	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}
@@ -136,15 +136,7 @@ func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	return nil
 }
 
-func createShareAndValidators(
-	ctx context.Context,
-	logger *zap.Logger,
-	net *p2pv1.LocalNet,
-	kms []spectypes.KeyManager,
-	stores []qbftstorage.QBFTStore,
-	regularNodes,
-	committeeNodes int,
-) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore, regularNodes, committeeNodes int) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
 	for i := 0; i < len(net.NodeKeys) && i < committeeNodes; i++ {
@@ -184,6 +176,7 @@ func createShareAndValidators(
 			},
 			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
+			Signer:                     km,
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   i >= committeeNodes,

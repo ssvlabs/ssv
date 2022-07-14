@@ -2,7 +2,6 @@ package genesis
 
 import (
 	"bytes"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,9 +10,9 @@ import (
 )
 
 func TestForkV1_Encoding(t *testing.T) {
-	msg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   message.ToMessageID([]byte("xxxxxxxxxxx_ATTESTER")),
+	msg := &message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
+		ID:      []byte("xxxxxxxxxxx_ATTESTER"),
 		Data:    []byte("data"),
 	}
 	f := &ForkGenesis{}

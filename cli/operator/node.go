@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"log"
 	"net/http"
 	"time"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
-	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -106,15 +104,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
-		if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-			cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
-		} else {
-			// we have some custom network id, overriding default domain
-			types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
-		}
-		Logger.Info("using ssv network", zap.String("domain", string(types.GetDefaultDomain())),
-			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
-
 		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
@@ -129,11 +118,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
-		}
-
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, types.GetDefaultDomain())
-		if err != nil {
-			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
 		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
@@ -185,8 +169,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
-		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
+		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey

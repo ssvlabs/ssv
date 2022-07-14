@@ -5,13 +5,12 @@
 package beacon
 
 import (
-	reflect "reflect"
-
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	message "github.com/bloxapp/ssv/protocol/v1/message"
 	gomock "github.com/golang/mock/gomock"
 	bls "github.com/herumi/bls-eth-go-binary/bls"
+	reflect "reflect"
 )
 
 // MockBeacon is a mock of Beacon interface
@@ -37,26 +36,26 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 	return m.recorder
 }
 
-// SignRoot mocks base method
-func (m *MockBeacon) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+// SignIBFTMessage mocks base method
+func (m *MockBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignRoot", data, sigType, pk)
-	ret0, _ := ret[0].(spectypes.Signature)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SignRoot indicates an expected call of SignRoot
-func (mr *MockBeaconMockRecorder) SignRoot(data, sigType, pk interface{}) *gomock.Call {
+// SignIBFTMessage indicates an expected call of SignIBFTMessage
+func (mr *MockBeaconMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignRoot", reflect.TypeOf((*MockBeacon)(nil).SignRoot), data, sigType, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockBeacon)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method
-func (m *MockBeacon) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (m *MockBeacon) SignAttestation(data *phase0.AttestationData, duty *Duty, pk []byte) (*phase0.Attestation, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignAttestation", data, duty, pk)
-	ret0, _ := ret[0].(*spec.Attestation)
+	ret0, _ := ret[0].(*phase0.Attestation)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -97,7 +96,7 @@ func (mr *MockBeaconMockRecorder) RemoveShare(pubKey interface{}) *gomock.Call {
 }
 
 // GetDomain mocks base method
-func (m *MockBeacon) GetDomain(data *spec.AttestationData) ([]byte, error) {
+func (m *MockBeacon) GetDomain(data *phase0.AttestationData) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDomain", data)
 	ret0, _ := ret[0].([]byte)
@@ -127,10 +126,10 @@ func (mr *MockBeaconMockRecorder) ComputeSigningRoot(object, domain interface{})
 }
 
 // GetDuties mocks base method
-func (m *MockBeacon) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (m *MockBeacon) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*Duty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDuties", epoch, validatorIndices)
-	ret0, _ := ret[0].([]*spectypes.Duty)
+	ret0, _ := ret[0].([]*Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -142,10 +141,10 @@ func (mr *MockBeaconMockRecorder) GetDuties(epoch, validatorIndices interface{})
 }
 
 // GetValidatorData mocks base method
-func (m *MockBeacon) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*v1.Validator, error) {
+func (m *MockBeacon) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidatorData", validatorPubKeys)
-	ret0, _ := ret[0].(map[spec.ValidatorIndex]*v1.Validator)
+	ret0, _ := ret[0].(map[phase0.ValidatorIndex]*v1.Validator)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -157,10 +156,10 @@ func (mr *MockBeaconMockRecorder) GetValidatorData(validatorPubKeys interface{})
 }
 
 // GetAttestationData mocks base method
-func (m *MockBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+func (m *MockBeacon) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAttestationData", slot, committeeIndex)
-	ret0, _ := ret[0].(*spec.AttestationData)
+	ret0, _ := ret[0].(*phase0.AttestationData)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -172,7 +171,7 @@ func (mr *MockBeaconMockRecorder) GetAttestationData(slot, committeeIndex interf
 }
 
 // SubmitAttestation mocks base method
-func (m *MockBeacon) SubmitAttestation(attestation *spec.Attestation) error {
+func (m *MockBeacon) SubmitAttestation(attestation *phase0.Attestation) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitAttestation", attestation)
 	ret0, _ := ret[0].(error)
@@ -222,26 +221,26 @@ func (m *MockKeyManager) EXPECT() *MockKeyManagerMockRecorder {
 	return m.recorder
 }
 
-// SignRoot mocks base method
-func (m *MockKeyManager) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+// SignIBFTMessage mocks base method
+func (m *MockKeyManager) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignRoot", data, sigType, pk)
-	ret0, _ := ret[0].(spectypes.Signature)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SignRoot indicates an expected call of SignRoot
-func (mr *MockKeyManagerMockRecorder) SignRoot(data, sigType, pk interface{}) *gomock.Call {
+// SignIBFTMessage indicates an expected call of SignIBFTMessage
+func (mr *MockKeyManagerMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignRoot", reflect.TypeOf((*MockKeyManager)(nil).SignRoot), data, sigType, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockKeyManager)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method
-func (m *MockKeyManager) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (m *MockKeyManager) SignAttestation(data *phase0.AttestationData, duty *Duty, pk []byte) (*phase0.Attestation, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignAttestation", data, duty, pk)
-	ret0, _ := ret[0].(*spec.Attestation)
+	ret0, _ := ret[0].(*phase0.Attestation)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -281,7 +280,7 @@ func (mr *MockKeyManagerMockRecorder) RemoveShare(pubKey interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveShare", reflect.TypeOf((*MockKeyManager)(nil).RemoveShare), pubKey)
 }
 
-// MockSigner is a mock of KeyManager interface
+// MockSigner is a mock of Signer interface
 type MockSigner struct {
 	ctrl     *gomock.Controller
 	recorder *MockSignerMockRecorder
@@ -304,26 +303,26 @@ func (m *MockSigner) EXPECT() *MockSignerMockRecorder {
 	return m.recorder
 }
 
-// SignRoot mocks base method
-func (m *MockSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+// SignIBFTMessage mocks base method
+func (m *MockSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SignRoot", data, sigType, pk)
-	ret0, _ := ret[0].(spectypes.Signature)
+	ret := m.ctrl.Call(m, "SignIBFTMessage", data, pk, sigType)
+	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// SignRoot indicates an expected call of SignRoot
-func (mr *MockSignerMockRecorder) SignRoot(data, sigType, pk interface{}) *gomock.Call {
+// SignIBFTMessage indicates an expected call of SignIBFTMessage
+func (mr *MockSignerMockRecorder) SignIBFTMessage(data, pk, sigType interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignRoot", reflect.TypeOf((*MockSigner)(nil).SignRoot), data, sigType, pk)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SignIBFTMessage", reflect.TypeOf((*MockSigner)(nil).SignIBFTMessage), data, pk, sigType)
 }
 
 // SignAttestation mocks base method
-func (m *MockSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (m *MockSigner) SignAttestation(data *phase0.AttestationData, duty *Duty, pk []byte) (*phase0.Attestation, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SignAttestation", data, duty, pk)
-	ret0, _ := ret[0].(*spec.Attestation)
+	ret0, _ := ret[0].(*phase0.Attestation)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -359,7 +358,7 @@ func (m *MockSigningUtil) EXPECT() *MockSigningUtilMockRecorder {
 }
 
 // GetDomain mocks base method
-func (m *MockSigningUtil) GetDomain(data *spec.AttestationData) ([]byte, error) {
+func (m *MockSigningUtil) GetDomain(data *phase0.AttestationData) ([]byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDomain", data)
 	ret0, _ := ret[0].([]byte)

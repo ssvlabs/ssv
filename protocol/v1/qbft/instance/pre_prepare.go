@@ -2,7 +2,6 @@ package instance
 
 import (
 	"bytes"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -24,7 +23,7 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			proposalData, err := signedMessage.Message.GetProposalData()
 			if err != nil {
-				return fmt.Errorf("could not get proposal data: %w", err)
+				return err
 			}
 			i.containersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
 			return nil
@@ -114,12 +113,12 @@ func (i *Instance) generatePrePrepareMessage(value []byte) (specqbft.Message, er
 	if err != nil {
 		return specqbft.Message{}, errors.Wrap(err, "failed to encoded proposal message")
 	}
-	identifier := i.State().GetIdentifier()
+
 	return specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: identifier[:],
+		Identifier: i.State().GetIdentifier(),
 		Data:       proposalEncodedMsg,
 	}, nil
 }

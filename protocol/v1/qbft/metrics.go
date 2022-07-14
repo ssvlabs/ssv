@@ -1,13 +1,14 @@
 package qbft
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"strconv"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
@@ -26,7 +27,6 @@ func init() {
 // ReportDecided reports on a decided message
 func ReportDecided(pk string, msg *specqbft.SignedMessage) {
 	for _, nodeID := range msg.Signers {
-		msgID := message.ToMessageID(msg.Message.Identifier)
-		metricsDecidedSigners.WithLabelValues(msgID.GetRoleType().String(), pk, strconv.FormatUint(uint64(nodeID), 10)).Set(float64(msg.Message.Height))
+		metricsDecidedSigners.WithLabelValues(message.Identifier(msg.Message.Identifier).GetRoleType().String(), pk, strconv.FormatUint(uint64(nodeID), 10)).Set(float64(msg.Message.Height))
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
@@ -20,8 +21,8 @@ import (
 // IValidator is the interface for validator
 type IValidator interface {
 	Start() error
-	StartDuty(duty *spectypes.Duty)
-	ProcessMsg(msg *spectypes.SSVMessage) error // TODO need to be as separate interface?
+	ExecuteDuty(slot uint64, duty *beaconprotocol.Duty)
+	ProcessMsg(msg *message.SSVMessage) error // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 
 	forksprotocol.ForkHandler
@@ -38,7 +39,7 @@ type Options struct {
 	Beacon                     beaconprotocol.Beacon
 	Share                      *beaconprotocol.Share
 	ForkVersion                forksprotocol.ForkVersion
-	KeyManager                 spectypes.KeyManager
+	Signer                     beaconprotocol.Signer
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
@@ -49,14 +50,14 @@ type Options struct {
 
 // Validator represents the validator
 type Validator struct {
-	ctx          context.Context
-	cancelCtx    context.CancelFunc
-	logger       *zap.Logger
-	network      beaconprotocol.Network
-	p2pNetwork   p2pprotocol.Network
-	beacon       beaconprotocol.Beacon
-	beaconSigner spectypes.BeaconSigner
-	Share        *beaconprotocol.Share // var is exported to validator ctrl tests reasons
+	ctx        context.Context
+	cancelCtx  context.CancelFunc
+	logger     *zap.Logger
+	network    beaconprotocol.Network
+	p2pNetwork p2pprotocol.Network
+	beacon     beaconprotocol.Beacon
+	Share      *beaconprotocol.Share // var is exported to validator ctrl tests reasons
+	signer     beaconprotocol.Signer
 
 	ibfts controller.Controllers
 
@@ -92,6 +93,7 @@ func NewValidator(opt *Options) IValidator {
 		p2pNetwork:  opt.P2pNetwork,
 		beacon:      opt.Beacon,
 		Share:       opt.Share,
+		signer:      opt.Signer,
 		ibfts:       ibfts,
 		readMode:    opt.ReadMode,
 		saveHistory: opt.FullNode,
@@ -133,9 +135,8 @@ func (v *Validator) GetShare() *beaconprotocol.Share {
 }
 
 // ProcessMsg processes a new msg
-func (v *Validator) ProcessMsg(msg *spectypes.SSVMessage) error {
-	identifier := msg.GetID()
-	ibftController := v.ibfts.ControllerForIdentifier(identifier[:])
+func (v *Validator) ProcessMsg(msg *message.SSVMessage) error {
+	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
 	// synchronize process
 	return ibftController.ProcessMsg(msg)
 }
@@ -160,11 +161,11 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[spectypes.BeaconRole]contr
 }
 
 func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Options) controller.IController {
-	identifier := spectypes.NewMsgID(opt.Share.PublicKey.Serialize(), role)
+	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
 	opts := controller.Options{
 		Context:           opt.Context,
 		Role:              role,
-		Identifier:        identifier[:],
+		Identifier:        identifier,
 		Logger:            logger,
 		Storage:           opt.IbftStorage,
 		Network:           opt.P2pNetwork,
@@ -172,7 +173,7 @@ func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Opt
 		ValidatorShare:    opt.Share,
 		Version:           opt.ForkVersion,
 		Beacon:            opt.Beacon,
-		KeyManager:        opt.KeyManager,
+		Signer:            opt.Signer,
 		SyncRateLimit:     opt.SyncRateLimit,
 		SigTimeout:        opt.SignatureCollectionTimeout,
 		ReadMode:          opt.ReadMode,

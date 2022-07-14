@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
@@ -30,34 +29,34 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg *spectypes.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg *message.SSVMessage) error {
 		wg.Done()
 		return nil
 	})
 
 	wg.Add(2)
 
-	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
-	ctr.messageRouter.Route(spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   identifier,
+	identifier := message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester)
+	ctr.messageRouter.Route(message.SSVMessage{
+		MsgType: message.SSVDecidedMsgType,
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   identifier,
+	ctr.messageRouter.Route(message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
+		ID:      identifier,
 		Data:    generateChangeRoundMsg(t, identifier),
 	})
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
+	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
 		MsgType: message.SSVSyncMsgType,
-		MsgID:   identifier,
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
-	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   identifier,
+	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
+		MsgType: message.SSVPostConsensusMsgType,
+		ID:      identifier,
 		Data:    []byte("data"),
 	})
 	go func() {
@@ -147,7 +146,7 @@ func setupController(logger *zap.Logger, validators map[string]validator.IValida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger, genesis.New().MsgID()),
+		messageRouter:          newMessageRouter(logger),
 		messageWorker: worker.NewWorker(&worker.Config{
 			Ctx:          context.Background(),
 			Logger:       logger,
@@ -166,10 +165,11 @@ func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {
 	}}
 }
 
-func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
+func generateChangeRoundMsg(t *testing.T, identifier message.Identifier) []byte {
 	crd := specqbft.RoundChangeData{
 		PreparedValue:            nil,
 		PreparedRound:            0,
+		NextProposalData:         nil,
 		RoundChangeJustification: nil,
 	}
 	encoded, err := crd.Encode()
@@ -181,7 +181,7 @@ func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte
 			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     0,
 			Round:      1,
-			Identifier: identifier[:],
+			Identifier: identifier,
 			Data:       encoded,
 		},
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -102,7 +103,7 @@ func (r *syncFailoverScenario) PreExecution(ctx *runner.ScenarioContext) error {
 func (r *syncFailoverScenario) Execute(ctx *runner.ScenarioContext) error {
 	var wg sync.WaitGroup
 
-	msgs := map[specqbft.Height]*specqbft.Message{}
+	msgs := map[specqbft.Height]*specqbft.SignedMessage{}
 	// start several instances one by one
 	seqNumber := specqbft.Height(0)
 loop:
@@ -114,7 +115,7 @@ loop:
 				if msg, err := r.startNode(node, seqNumber); err != nil {
 					r.logger.Error("could not start node", zap.Error(err))
 				} else {
-					msgs[seqNumber] = msg.Message
+					msgs[seqNumber] = msg
 				}
 				wg.Done()
 			}(r.validators[i-1], i, seqNumber)
@@ -145,7 +146,7 @@ loop:
 	}
 	r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 
-	decides, err := ctx.Stores[3].GetDecided(msgs[1].Identifier, 0, nextSeq)
+	decides, err := ctx.Stores[3].GetDecided(msgs[1].Message.Identifier, 0, nextSeq)
 	if err != nil {
 		r.logger.Error("node #4 could not get decided in range", zap.Error(err))
 		return errors.New("node #4 could not get decided in range")
@@ -160,8 +161,7 @@ loop:
 
 func (r *syncFailoverScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(11))
+	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(11))
 	if err != nil {
 		return err
 	}
@@ -215,6 +215,6 @@ type badNetwork struct {
 	network.P2PNetwork
 }
 
-func (b *badNetwork) Subscribe(spectypes.ValidatorPK) error {
+func (b *badNetwork) Subscribe(message.ValidatorPK) error {
 	return errors.New("bad network")
 }

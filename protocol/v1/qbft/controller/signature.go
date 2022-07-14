@@ -49,7 +49,7 @@ type SignatureState struct {
 	sigCount                   int
 	root                       []byte
 	valueStruct                *beaconprotocol.DutyData
-	duty                       *spectypes.Duty
+	duty                       *beaconprotocol.Duty
 }
 
 func (s *SignatureState) getHeight() specqbft.Height {
@@ -64,7 +64,7 @@ func (s *SignatureState) setHeight(height specqbft.Height) {
 	s.height.Store(height)
 }
 
-func (s *SignatureState) start(logger *zap.Logger, height specqbft.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *spectypes.Duty) {
+func (s *SignatureState) start(logger *zap.Logger, height specqbft.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *beaconprotocol.Duty) {
 	// set var's
 	s.setHeight(height)
 	s.sigCount = signaturesCount
@@ -128,32 +128,28 @@ func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftI
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (c *Controller) signDuty(logger *zap.Logger, decidedValue []byte, role spectypes.BeaconRole) ([]byte, []byte, *beaconprotocol.DutyData, *spectypes.Duty, error) {
+func (c *Controller) signDuty(decidedValue []byte, duty *beaconprotocol.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
 	// get operator pk for sig
 	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
-		return nil, nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
+		return nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
 	}
 
 	// sign input value
 	var sig []byte
 	var root []byte
 	retValueStruct := &beaconprotocol.DutyData{}
-	var duty *spectypes.Duty
-	switch role {
+	switch duty.Type {
 	case spectypes.BNRoleAttester:
-		s := &spectypes.ConsensusData{}
-		// TODO(olegshmuelov): use SSZ decoding
-		// TODO(olegshmuelov): validate the consensus data using the spec "BeaconAttestationValueCheck"
-		if err := s.Decode(decidedValue); err != nil {
-			logger.Warn("failed to decode consensus data", zap.Int("len", len(decidedValue)), zap.Error(err))
-			return nil, nil, nil, nil, errors.Wrap(err, "failed to decode consensus data")
+		s := &spec.AttestationData{}
+		if err := s.UnmarshalSSZ(decidedValue); err != nil {
+			c.Logger.Warn("failed to unmarshal attestation", zap.Int("len", len(decidedValue)), zap.Error(err))
+			return nil, nil, nil, errors.Wrap(err, "failed to unmarshal attestation")
 		}
-		logger.Debug("decoded consensus data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
-		duty = s.Duty
-		signedAttestation, r, err := c.KeyManager.SignAttestation(s.AttestationData, duty, pk.Serialize())
+		c.Logger.Debug("unmarshaled attestation data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
+		signedAttestation, r, err := c.Signer.SignAttestation(s, duty, pk.Serialize())
 		if err != nil {
-			return nil, nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
+			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
 
 		sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
@@ -163,14 +159,14 @@ func (c *Controller) signDuty(logger *zap.Logger, decidedValue []byte, role spec
 		sig = signedAttestation.Signature[:]
 		root = ensureRoot(r)
 	default:
-		return nil, nil, nil, nil, errors.New("unsupported role, can't sign")
+		return nil, nil, nil, errors.New("unsupported role, can't sign")
 	}
-	return sig, root, retValueStruct, duty, err
+	return sig, root, retValueStruct, err
 }
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
 // nodes and broadcasts the reconstructed signature to the beacon-chain
-func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *spectypes.Duty) error {
+func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.OperatorID][]byte, root []byte, inputValue *beaconprotocol.DutyData, duty *beaconprotocol.Duty) error {
 	// Reconstruct signatures
 	signature, err := threshold.ReconstructSignatures(signatures)
 	if err != nil {

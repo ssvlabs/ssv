@@ -2,7 +2,7 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -17,35 +17,41 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 		zap.Any("sender", signedMessage.GetSigners()))
 	if c.ReadMode {
 		switch signedMessage.Message.MsgType {
-		case specqbft.RoundChangeMsgType:
-			return c.ProcessChangeRound(signedMessage)
-		case specqbft.CommitMsgType:
+		case specqbft.RoundChangeMsgType, specqbft.CommitMsgType:
 		default: // other types not supported in read mode
 			return nil
 		}
 	}
-
 	logger.Debug("process consensus message")
-	if signedMessage.Message.MsgType == specqbft.CommitMsgType {
+	switch signedMessage.Message.MsgType {
+	case specqbft.RoundChangeMsgType: // supporting read-mode
+		if c.ReadMode {
+			return c.ProcessChangeRound(signedMessage)
+		}
+		fallthrough // not in read mode, need to process regular way
+	case specqbft.CommitMsgType:
 		if processed, err := c.processCommitMsg(signedMessage); err != nil {
 			return errors.Wrap(err, "failed to process late commit")
 		} else if processed {
 			return nil
 		}
+		fallthrough // not processed, need to process as regular consensus commit msg
+	case specqbft.ProposalMsgType, specqbft.PrepareMsgType:
+		if c.GetCurrentInstance() == nil {
+			return errors.New("current instance is nil")
+		}
+		decided, err := c.GetCurrentInstance().ProcessMsg(signedMessage)
+		if err != nil {
+			return errors.Wrap(err, "failed to process message")
+		}
+		logger.Debug("current instance processed message", zap.Bool("decided", decided))
+	default:
+		return errors.Errorf("message type is not suported")
 	}
-
-	if c.GetCurrentInstance() == nil {
-		return errors.New("current instance is nil")
-	}
-	decided, err := c.GetCurrentInstance().ProcessMsg(signedMessage)
-	if err != nil {
-		return errors.Wrap(err, "failed to process message")
-	}
-	logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	return nil
 }
 
-func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *specssv.SignedPartialSignatureMessage) error {
+func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *ssv.SignedPartialSignatureMessage) error {
 	return c.ProcessPostConsensusMessage(signedPostConsensusMessage)
 }
 
@@ -66,7 +72,7 @@ func (c *Controller) processCommitMsg(signedMessage *specqbft.SignedMessage) (bo
 
 	logger := c.Logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
-		zap.String("identifier", message.ToMessageID(signedMessage.Message.Identifier).String()),
+		zap.String("identifier", message.Identifier(signedMessage.Message.Identifier).String()),
 		zap.Any("signers", signedMessage.GetSigners()))
 
 	if agg, err := c.ProcessLateCommitMsg(logger, signedMessage); err != nil {
@@ -109,7 +115,7 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *specqbft.Sign
 		return nil, nil
 	}
 	// aggregate message with stored decided
-	if err := message.Aggregate(decidedMsg, msg); err != nil {
+	if err := decidedMsg.Aggregate(msg); err != nil {
 		// TODO(nkryuchkov): declare the error in spec, use errors.Is
 		if err.Error() == "can't aggregate 2 signed messages with mutual signers" {
 			logger.Debug("duplicated signer")

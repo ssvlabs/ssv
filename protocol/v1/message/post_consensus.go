@@ -2,20 +2,19 @@ package message
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
 
 // ValidatePartialSigMsg validates the signed partial signature message | NOTE: using this code and not from spec until duty runner is implemented
-func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, committee []*spectypes.Operator, slot spec.Slot) error {
+func ValidatePartialSigMsg(signedMsg *ssv.SignedPartialSignatureMessage, committee []*types.Operator, slot spec.Slot) error {
 	if err := signedMsg.Validate(); err != nil {
 		return errors.Wrap(err, "could not validate SignedPartialSignatureMessage")
 	}
 
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, types.GetDefaultDomain(), spectypes.PartialSignatureType, committee); err != nil {
+	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, types.PrimusTestnet, types.PartialSignatureType, committee); err != nil {
 		return errors.Wrap(err, "could not verify PartialSignature by the provided operators")
 	}
 
@@ -32,7 +31,7 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 	return nil
 }
 
-func verifyBeaconPartialSignature(msg *specssv.PartialSignatureMessage, committee []*spectypes.Operator) error {
+func verifyBeaconPartialSignature(msg *ssv.PartialSignatureMessage, committee []*types.Operator) error {
 	if len(msg.Signers) != 1 {
 		return errors.New("PartialSignatureMessage allows 1 signer")
 	}

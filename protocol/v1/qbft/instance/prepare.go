@@ -3,8 +3,6 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -26,7 +24,7 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			prepareMsg, err := signedMessage.Message.GetPrepareData()
 			if err != nil {
-				return fmt.Errorf("could not get prepare data: %w", err)
+				return err
 			}
 			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
@@ -63,7 +61,7 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 		if ret == nil {
 			ret = msg.DeepCopy()
 		} else {
-			if err := message.Aggregate(ret, msg); err != nil {
+			if err := ret.Aggregate(msg); err != nil {
 				return nil, err
 			}
 		}
@@ -91,7 +89,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
+					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Any("round", i.State().GetRound()))
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
@@ -120,12 +118,11 @@ func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, erro
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode prepare data")
 	}
-	identifier := i.State().GetIdentifier()
 	return &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: identifier[:],
+		Identifier: i.State().GetIdentifier(),
 		Data:       encodedPrepare,
 	}, nil
 }

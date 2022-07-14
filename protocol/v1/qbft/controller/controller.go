@@ -7,7 +7,7 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -37,7 +37,7 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 type Options struct {
 	Context           context.Context
 	Role              spectypes.BeaconRole
-	Identifier        []byte
+	Identifier        message.Identifier
 	Logger            *zap.Logger
 	Storage           qbftstorage.QBFTStore
 	Network           p2pprotocol.Network
@@ -45,7 +45,7 @@ type Options struct {
 	ValidatorShare    *beaconprotocol.Share
 	Version           forksprotocol.ForkVersion
 	Beacon            beaconprotocol.Beacon
-	KeyManager        spectypes.KeyManager
+	Signer            beaconprotocol.Signer
 	SyncRateLimit     time.Duration
 	SigTimeout        time.Duration
 	ReadMode          bool
@@ -57,14 +57,13 @@ type Options struct {
 const (
 	NotStarted uint32 = iota
 	InitiatedHandlers
-	SyncedChangeRound
 	WaitingForPeers
 	FoundPeers
 	Ready
 	Forking
 )
 
-// Controller implements IController interface
+// Controller implements Controller interface
 type Controller struct {
 	Ctx context.Context
 
@@ -75,10 +74,10 @@ type Controller struct {
 	Network            p2pprotocol.Network
 	InstanceConfig     *qbft.InstanceConfig
 	ValidatorShare     *beaconprotocol.Share
-	Identifier         []byte
+	Identifier         message.Identifier
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
-	KeyManager         spectypes.KeyManager
+	Signer             beaconprotocol.Signer
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -120,7 +119,7 @@ func New(opts Options) IController {
 		Identifier:         opts.Identifier,
 		Fork:               fork,
 		Beacon:             opts.Beacon,
-		KeyManager:         opts.KeyManager,
+		Signer:             opts.Signer,
 		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
 		SyncRateLimit: opts.SyncRateLimit,
@@ -211,18 +210,13 @@ func (c *Controller) Init() error {
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
-	// checks if InitiatedHandlers. if so, load change round to queue and then set state to new SyncedChangeRound
-	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, SyncedChangeRound) {
-		c.loadLastChangeRound()
-	}
-
 	// if already waiting for peers no need to redundant waiting
 	if atomic.LoadUint32(&c.State) == WaitingForPeers {
 		return ErrAlreadyRunning
 	}
 
 	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
+	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
@@ -247,7 +241,7 @@ func (c *Controller) Init() error {
 			}
 			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, InitiatedHandlers) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
@@ -286,12 +280,9 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
-	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
-	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
-		c.Logger.Warn("could not clean change round", zap.Error(err))
-	}
-
+	c.SignatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
+	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage             // in order to set the last change round msg
+	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
 		done()
@@ -312,11 +303,11 @@ func (c *Controller) GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (c *Controller) GetIdentifier() []byte {
-	return c.Identifier[:] // TODO should use mutex to lock var?
+	return c.Identifier // TODO should use mutex to lock var?
 }
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
-func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
+func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	if c.ReadMode {
 		return c.MessageHandler(msg)
 	}
@@ -330,7 +321,7 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 	}
 	fields = append(fields,
 		zap.Int("queue_len", c.Q.Len()),
-		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+		zap.String("msgType", msg.MsgType.String()),
 	)
 	c.Logger.Debug("got message, add to queue", fields...)
 	c.Q.Add(msg)
@@ -338,22 +329,22 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 }
 
 // MessageHandler process message from queue,
-func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
+func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
+	case message.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
 		return c.processConsensusMsg(signedMsg)
 
-	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg := &specssv.SignedPartialSignatureMessage{}
+	case message.SSVPostConsensusMsgType:
+		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
-	case spectypes.SSVDecidedMsgType:
+	case message.SSVDecidedMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")

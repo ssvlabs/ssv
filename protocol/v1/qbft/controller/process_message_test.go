@@ -1,9 +1,6 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"strings"
 	"testing"
 
@@ -16,10 +13,12 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -30,7 +29,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	share := beacon.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[spectypes.OperatorID]*beacon.Node, 4)
-	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester) // TODO should using fork to get identifier?
+	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), spectypes.BNRoleAttester.String()) // TODO should using fork to get identifier?
 
 	ctrl := Controller{
 		ValidatorShare: &beacon.Share{
@@ -51,7 +50,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Height:     2,
 			MsgType:    specqbft.CommitMsgType,
 			Round:      3,
-			Identifier: identifier[:],
+			Identifier: []byte(identifier),
 			Data:       commitData,
 		}, forksprotocol.GenesisForkVersion.String()))
 	}
@@ -72,7 +71,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Height:     specqbft.Height(2),
 				MsgType:    specqbft.CommitMsgType,
 				Round:      3,
-				Identifier: identifier[:],
+				Identifier: []byte(identifier),
 				Data:       commitData,
 			}, forksprotocol.GenesisForkVersion.String()),
 		},
@@ -85,7 +84,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					Height:     2,
 					MsgType:    specqbft.CommitMsgType,
 					Round:      3,
-					Identifier: identifier[:],
+					Identifier: []byte(identifier),
 					Data:       commitData,
 				}, forksprotocol.GenesisForkVersion.String())
 				msg.Signature = []byte("dummy")
@@ -136,7 +135,7 @@ func newInMemDb() basedb.IDb {
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message, forkVersion string) *specqbft.SignedMessage {
 	sigType := spectypes.QBFTSignatureType
-	domain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), sigType)
+	domain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, sigType)
 	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
@@ -159,7 +158,7 @@ func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage,
 				return nil, errors.Wrap(err, "could not copy message")
 			}
 		} else {
-			if err := message.Aggregate(decided, msg); err != nil {
+			if err := decided.Aggregate(msg); err != nil {
 				return nil, errors.Wrap(err, "could not aggregate message")
 			}
 		}

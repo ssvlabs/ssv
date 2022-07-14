@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -31,7 +32,7 @@ func TestMsgValidator(t *testing.T) {
 		pkHex := pks[0]
 		msg, err := dummySSVConsensusMsg(pkHex, 15160)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
@@ -45,7 +46,7 @@ func TestMsgValidator(t *testing.T) {
 		pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
 		msg, err := dummySSVConsensusMsg(pkHex, 15160)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
 		require.NoError(t, err)
@@ -64,7 +65,7 @@ func TestMsgValidator(t *testing.T) {
 	t.Run("invalid validator public key", func(t *testing.T) {
 		msg, err := dummySSVConsensusMsg("10101011", 1)
 		require.NoError(t, err)
-		raw, err := msg.Encode()
+		raw, err := msg.MarshalJSON()
 		require.NoError(t, err)
 		pmsg := newPBMsg(raw, "xxx", []byte{})
 		res := mv(context.Background(), "xxxx", pmsg)
@@ -96,12 +97,12 @@ func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
 	return pmsg
 }
 
-func dummySSVConsensusMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
+func dummySSVConsensusMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -113,9 +114,9 @@ func dummySSVConsensusMsg(pkHex string, height int) (*spectypes.SSVMessage, erro
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signer_ids": [1,3,4]
 	}`, id, height)
-	return &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   id,
+	return &message.SSVMessage{
+		MsgType: message.SSVConsensusMsgType,
+		ID:      id,
 		Data:    []byte(msgData),
 	}, nil
 }

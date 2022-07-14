@@ -3,8 +3,6 @@ package handlers
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -17,8 +15,8 @@ import (
 // TODO: add msg validation
 func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	//plogger = plogger.With(zap.String("who", "last decided handler"))
-	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
+	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
+		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
@@ -29,7 +27,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 			// TODO: remove after v0
 			return nil, nil
 		} else {
-			res, err := store.GetLastChangeRoundMsg(msg.MsgID[:])
+			res, err := store.GetLastChangeRoundMsg(msg.ID)
 			if err != nil {
 				logger.Warn("change round sync msg error", zap.Error(err))
 			}

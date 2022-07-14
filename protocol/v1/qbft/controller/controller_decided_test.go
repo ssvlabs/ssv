@@ -2,11 +2,9 @@ package controller
 
 import (
 	"context"
-	"crypto/rsa"
 	"testing"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -375,11 +373,11 @@ func TestForceDecided(t *testing.T) {
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
-	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
-	s1 := qbftstorage.PopulatedStorage(t, sks, 3, 3)
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
+	identifier := []byte("Identifier_11")
+	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 	// test before sync
-	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, highest.Message.Height)
@@ -397,7 +395,7 @@ func TestForceDecided(t *testing.T) {
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(4),
 			Round:      specqbft.Round(1),
-			Identifier: identifier[:],
+			Identifier: identifier,
 			Data:       encodedCommit,
 		})
 
@@ -412,7 +410,7 @@ func TestForceDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
-	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -424,33 +422,33 @@ func TestSyncAfterDecided(t *testing.T) {
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
 
-	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
+	identifier := []byte("Identifier_11")
 
 	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Height:     specqbft.Height(10),
 		Round:      specqbft.Round(3),
-		Identifier: identifier[:],
+		Identifier: identifier,
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	})
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
-	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier[:], decidedMsg))
-	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier[:], 4, 10))
+	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier, decidedMsg))
+	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier, 4, 10))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	network.Start(ctx)
-	network.AddPeers(identifier.GetPubKey(), network)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
 
-	s1 := qbftstorage.PopulatedStorage(t, sks, 3, 4)
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
+	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
-	_ = populatedIbft(2, identifier[:], network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	// test before sync
-	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
@@ -458,7 +456,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
+	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, specqbft.Height(10), highest.Message.Height)
@@ -475,34 +473,34 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
 
-	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
+	identifier := []byte("Identifier_11")
 	decidedMsg := testingprotocol.AggregateSign(t, sks, uids, &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Height:     specqbft.Height(10),
 		Round:      specqbft.Round(3),
-		Identifier: identifier[:],
+		Identifier: identifier,
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	})
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
-	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier[:], decidedMsg))
-	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier[:], 0, 10))
+	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier, decidedMsg))
+	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier, 0, 10))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	network.Start(ctx)
-	network.AddPeers(identifier.GetPubKey(), network)
+	network.AddPeers(message.Identifier(identifier).GetValidatorPK(), network)
 
 	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
+	i1 := populatedIbft(1, identifier, network, s1, sks, nodes, newTestSigner())
 
-	_ = populatedIbft(2, identifier[:], network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	_ = populatedIbft(2, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
-	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
+	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
 	require.NoError(t, err)
 	require.EqualValues(t, 10, highest.Message.Height)
@@ -516,7 +514,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	identifier := []byte("Identifier_11")
-	ibft := populatedIbft(1, identifier, network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
 
 	tests := []struct {
 		name          string
@@ -653,7 +651,7 @@ func populatedIbft(
 	ibftStorage qbftstorage.QBFTStore,
 	sks map[spectypes.OperatorID]*bls.SecretKey,
 	nodes map[spectypes.OperatorID]*beaconprotocol.Node,
-	keyManager spectypes.KeyManager,
+	signer beaconprotocol.Signer,
 ) IController {
 	share := &beaconprotocol.Share{
 		NodeID:      nodeID,
@@ -673,7 +671,7 @@ func populatedIbft(
 		ValidatorShare: share,
 		Version:        forksprotocol.GenesisForkVersion, // TODO need to check v1 fork too? (:Niv)
 		Beacon:         nil,                              // ?
-		KeyManager:     keyManager,
+		Signer:         signer,
 		SyncRateLimit:  time.Millisecond * 100,
 		SigTimeout:     time.Second * 5,
 		ReadMode:       false,
@@ -684,71 +682,23 @@ func populatedIbft(
 	return ret
 }
 
-type testKeyManager struct {
+type testSigner struct {
 }
 
-func newTestKeyManager() spectypes.KeyManager {
-	return &testKeyManager{}
+func newTestSigner() beaconprotocol.Signer {
+	return &testSigner{}
 }
 
-func (s *testKeyManager) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
-	return nil, nil
-}
-
-func (s *testKeyManager) AddShare(shareKey *bls.SecretKey) error {
+func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (s *testKeyManager) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	panic("implement me")
+func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+	return nil, nil
 }
 
-func (s *testKeyManager) IsAttestationSlashable(data *spec.AttestationData) error {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
-	panic("implement me")
-}
-
-func (s *testKeyManager) RemoveShare(pubKey string) error {
-	panic("implement me")
+func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	return nil, nil, nil
 }
 
 func commitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
@@ -758,7 +708,7 @@ func commitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
 }
 
 func generateGetHistoryHandler(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, uids []spectypes.OperatorID, identifier []byte, from, to int) protocolp2p.EventHandler {
-	return func(e protocolp2p.MockMessageEvent) *spectypes.SSVMessage {
+	return func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
 		decidedMsgs := make([]*specqbft.SignedMessage, 0)
 		heights := make([]specqbft.Height, 0)
 		for i := from; i <= to; i++ {
@@ -776,7 +726,7 @@ func generateGetHistoryHandler(t *testing.T, sks map[spectypes.OperatorID]*bls.S
 			Protocol: message.LastDecidedType,
 			Params: &message.SyncParams{
 				Height:     heights,
-				Identifier: message.ToMessageID(identifier),
+				Identifier: identifier,
 			},
 			Data:   decidedMsgs,
 			Status: message.StatusSuccess,
@@ -784,9 +734,9 @@ func generateGetHistoryHandler(t *testing.T, sks map[spectypes.OperatorID]*bls.S
 		em, err := sm.Encode()
 		require.NoError(t, err)
 
-		msg := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVDecidedMsgType,
-			MsgID:   message.ToMessageID(identifier),
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
 			Data:    em,
 		}
 
@@ -795,12 +745,12 @@ func generateGetHistoryHandler(t *testing.T, sks map[spectypes.OperatorID]*bls.S
 }
 
 func generateLastDecidedHandler(t *testing.T, identifier []byte, decidedMsg *specqbft.SignedMessage) protocolp2p.EventHandler {
-	return func(e protocolp2p.MockMessageEvent) *spectypes.SSVMessage {
+	return func(e protocolp2p.MockMessageEvent) *message.SSVMessage {
 		sm := &message.SyncMessage{
 			Protocol: message.LastDecidedType,
 			Params: &message.SyncParams{
 				Height:     []specqbft.Height{specqbft.Height(9), specqbft.Height(10)},
-				Identifier: message.ToMessageID(identifier),
+				Identifier: identifier,
 			},
 			Data:   []*specqbft.SignedMessage{decidedMsg},
 			Status: message.StatusSuccess,
@@ -808,9 +758,9 @@ func generateLastDecidedHandler(t *testing.T, identifier []byte, decidedMsg *spe
 		em, err := sm.Encode()
 		require.NoError(t, err)
 
-		msg := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVDecidedMsgType,
-			MsgID:   message.ToMessageID(identifier),
+		msg := &message.SSVMessage{
+			MsgType: message.SSVDecidedMsgType,
+			ID:      identifier,
 			Data:    em,
 		}
 

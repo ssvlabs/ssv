@@ -17,12 +17,11 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -59,7 +58,7 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
-	KeyManager                 spectypes.KeyManager
+	KeyManager                 beaconprotocol.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
@@ -67,7 +66,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"1024" env-description:"Number of goroutines to use for message workers"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
 }
 
@@ -87,13 +86,12 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context     context.Context
-	collection  validator.ICollection
-	storage     registrystorage.OperatorsCollection
-	ibftStorage qbftstorage.QBFTStore
-	logger      *zap.Logger
-	beacon      beaconprotocol.Beacon
-	keyManager  spectypes.KeyManager
+	context    context.Context
+	collection validator.ICollection
+	storage    registrystorage.OperatorsCollection
+	logger     *zap.Logger
+	beacon     beaconprotocol.Beacon
+	keyManager beaconprotocol.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -158,8 +156,6 @@ func NewController(options ControllerOptions) Controller {
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
-	msgID := forksfactory.NewFork(options.ForkVersion).MsgID()
-
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
 		Logger:       options.Logger,
@@ -173,8 +169,8 @@ func NewController(options ControllerOptions) Controller {
 		Network:                    options.ETHNetwork,
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
-		KeyManager:                 options.KeyManager,
 		ForkVersion:                options.ForkVersion,
+		Signer:                     options.Beacon,
 		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
@@ -186,7 +182,6 @@ func NewController(options ControllerOptions) Controller {
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
-		ibftStorage:                qbftStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
@@ -204,7 +199,7 @@ func NewController(options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter: newMessageRouter(options.Logger, msgID),
+		messageRouter: newMessageRouter(options.Logger),
 		messageWorker: worker.NewWorker(workerCfg),
 	}
 
@@ -250,7 +245,7 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			pk := msg.GetID().GetPubKey()
+			pk := msg.ID.GetValidatorPK()
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
@@ -258,7 +253,7 @@ func (c *controller) handleRouterMessages() {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
 			} else {
-				if msg.MsgType != spectypes.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
+				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
@@ -271,7 +266,7 @@ func (c *controller) handleRouterMessages() {
 
 // getShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*beaconprotocol.Share, error) {
+func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, error) {
 	share, found, err := c.collection.GetValidatorShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -282,13 +277,13 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*beaconprotocol.Share, 
 	return share, nil
 }
 
-func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
-	share, err := c.getShare(msg.GetID().GetPubKey())
+func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
+	share, err := c.getShare(msg.GetIdentifier().GetValidatorPK())
 	if err != nil {
 		return err
 	}
 	if share == nil {
-		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
+		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetIdentifier().GetValidatorPK()))
 	}
 
 	opts := *c.validatorOptions

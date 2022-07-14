@@ -2,12 +2,13 @@ package worker
 
 import (
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
@@ -24,12 +25,12 @@ func init() {
 }
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(msg *spectypes.SSVMessage) error
+type MsgHandler func(msg *message.SSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
-type ErrorHandler func(msg *spectypes.SSVMessage, err error) error
+type ErrorHandler func(msg *message.SSVMessage, err error) error
 
-func defaultErrHandler(msg *spectypes.SSVMessage, err error) error {
+func defaultErrHandler(msg *message.SSVMessage, err error) error {
 	return err
 }
 
@@ -48,7 +49,7 @@ type Worker struct {
 	cancel        context.CancelFunc
 	logger        *zap.Logger
 	workersCount  int
-	queue         chan *spectypes.SSVMessage
+	queue         chan *message.SSVMessage
 	handler       MsgHandler
 	errHandler    ErrorHandler
 	metricsPrefix string
@@ -64,7 +65,7 @@ func NewWorker(cfg *Config) *Worker {
 		cancel:        cancel,
 		logger:        logger,
 		workersCount:  cfg.WorkersCount,
-		queue:         make(chan *spectypes.SSVMessage, cfg.Buffer),
+		queue:         make(chan *message.SSVMessage, cfg.Buffer),
 		errHandler:    defaultErrHandler,
 		metricsPrefix: cfg.MetrixPrefix,
 	}
@@ -82,7 +83,7 @@ func (w *Worker) init() {
 }
 
 // startWorker process functionality
-func (w *Worker) startWorker(ch <-chan *spectypes.SSVMessage) {
+func (w *Worker) startWorker(ch <-chan *message.SSVMessage) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer cancel()
 	for {
@@ -108,7 +109,7 @@ func (w *Worker) UseErrorHandler(errHandler ErrorHandler) {
 // TryEnqueue tries to enqueue a job to the given job channel. Returns true if
 // the operation was successful, and false if enqueuing would not have been
 // possible without blocking. Job is not enqueued in the latter case.
-func (w *Worker) TryEnqueue(msg *spectypes.SSVMessage) bool {
+func (w *Worker) TryEnqueue(msg *message.SSVMessage) bool {
 	select {
 	case w.queue <- msg:
 		return true
@@ -129,7 +130,7 @@ func (w *Worker) Size() int {
 }
 
 // process the msg's from queue
-func (w *Worker) process(msg *spectypes.SSVMessage) {
+func (w *Worker) process(msg *message.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
 	}

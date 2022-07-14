@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -62,10 +62,10 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 	return container.HashTreeRoot()
 }
 
-func testKeyManager(t *testing.T) spectypes.KeyManager {
+func testKeyManager(t *testing.T) beacon2.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), types.GetDefaultDomain())
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), message.PrimusTestnet)
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 
@@ -88,7 +88,7 @@ func TestSignAttestation(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 	require.NoError(t, km.AddShare(sk1))
 
-	duty := &spectypes.Duty{
+	duty := &beacon2.Duty{
 		Type:                    spectypes.BNRoleAttester,
 		PubKey:                  [48]byte{},
 		Slot:                    30,
@@ -120,12 +120,12 @@ func TestSignAttestation(t *testing.T) {
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		attestationData.BeaconBlockRoot = [32]byte{2, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2}
 		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
-		require.EqualError(t, err, "could not sign attestation: slashable attestation (HighestAttestationVote), not signing")
+		require.EqualError(t, err, "failed to sign attestation: slashable attestation (HighestAttestationVote), not signing")
 		require.Nil(t, sig)
 	})
 }
 
-func TestSignRoot(t *testing.T) {
+func TestSignIBFTMessage(t *testing.T) {
 	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
@@ -148,7 +148,7 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
 		require.NoError(t, err)
 
 		// verify
@@ -158,7 +158,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -180,7 +180,7 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
 		require.NoError(t, err)
 
 		// verify
@@ -190,7 +190,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)

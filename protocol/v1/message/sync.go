@@ -2,7 +2,6 @@ package message
 
 import (
 	"encoding/json"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
@@ -55,7 +54,7 @@ type SyncParams struct {
 	// Height of the message, it can hold up to 2 items to specify a range or a single item for specific height
 	Height []specqbft.Height
 	// Identifier of the message
-	Identifier spectypes.MessageID
+	Identifier Identifier
 }
 
 // SyncMsgType represent the type of sync messages

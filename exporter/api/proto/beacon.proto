@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/bloxapp/ssv/ibft/proto";
+
+import "eth/v1alpha1/attestation.proto";
+import "eth/v1alpha1/beacon_block.proto";
+
+message InputValue {
+  oneof data {
+    ethereum.eth.v1alpha1.AttestationData attestation_data = 2;
+    ethereum.eth.v1alpha1.AggregateAttestationAndProof aggregation_data = 3;
+    ethereum.eth.v1alpha1.BeaconBlock beacon_block = 4;
+  }
+
+  oneof signed_data {
+    ethereum.eth.v1alpha1.Attestation attestation = 5;
+    ethereum.eth.v1alpha1.SignedAggregateAttestationAndProof aggregation = 6;
+    ethereum.eth.v1alpha1.SignedBeaconBlock block = 7;
+  }
+}
