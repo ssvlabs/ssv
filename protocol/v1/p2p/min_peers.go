@@ -2,13 +2,13 @@ package protcolp2p
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 	"time"
 )
 
 // WaitForMinPeers waits until there are minPeers conntected for the given validator
-func WaitForMinPeers(pctx context.Context, logger *zap.Logger, subscriber Subscriber, vpk message.ValidatorPK, minPeers int, interval time.Duration) error {
+func WaitForMinPeers(pctx context.Context, logger *zap.Logger, subscriber Subscriber, vpk spectypes.ValidatorPK, minPeers int, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 

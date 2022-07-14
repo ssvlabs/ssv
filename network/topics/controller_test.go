@@ -15,8 +15,6 @@ import (
 
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -119,7 +117,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 				defer wg.Done()
 				msg, err := dummyMsg(pk, pi%4)
 				require.NoError(t, err)
-				raw, err := msg.MarshalJSON()
+				raw, err := msg.Encode()
 				require.NoError(t, err)
 				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*10))
 				<-time.After(time.Second * 5)
@@ -295,12 +293,12 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	return p
 }
 
-func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
+func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,
@@ -312,9 +310,9 @@ func dummyMsg(pkHex string, height int) (*message.SSVMessage, error) {
 	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
 	  "signer_ids": [1,3,4]
 	}`, id, height)
-	return &message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      id,
+	return &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   id,
 		Data:    []byte(msgData),
 	}, nil
 }

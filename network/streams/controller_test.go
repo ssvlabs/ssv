@@ -3,8 +3,8 @@ package streams
 import (
 	"bytes"
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	ssv_protocol "github.com/bloxapp/ssv/protocol/v1/message"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/stretchr/testify/require"
@@ -31,11 +31,11 @@ func TestStreamCtrl(t *testing.T) {
 			defer done()
 			require.NoError(t, err)
 			require.NotNil(t, msg)
-			resp, err := dummyMsg().MarshalJSON()
+			resp, err := dummyMsg().Encode()
 			require.NoError(t, err)
 			require.NoError(t, res(resp))
 		})
-		d, err := dummyMsg().MarshalJSON()
+		d, err := dummyMsg().Encode()
 		require.NoError(t, err)
 		res, err := ctrl1.Request(hosts[0].ID(), prot, d)
 		require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestStreamCtrl(t *testing.T) {
 			require.NotNil(t, s)
 			<-time.After(timeout + time.Millisecond)
 		})
-		d, err := dummyMsg().MarshalJSON()
+		d, err := dummyMsg().Encode()
 		require.NoError(t, err)
 		res, err := ctrl0.Request(hosts[0].ID(), prot, d)
 		require.Error(t, err)
@@ -63,6 +63,6 @@ func TestStreamCtrl(t *testing.T) {
 
 }
 
-func dummyMsg() *ssv_protocol.SSVMessage {
-	return &ssv_protocol.SSVMessage{Data: []byte("dummy")}
+func dummyMsg() *spectypes.SSVMessage {
+	return &spectypes.SSVMessage{Data: []byte("dummy")}
 }

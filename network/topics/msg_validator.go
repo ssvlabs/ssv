@@ -3,6 +3,7 @@ package topics
 import (
 	"bytes"
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -38,7 +39,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		}
 		// check decided topic
 		currentTopic := pmsg.GetTopic()
-		if msg.MsgType == message.SSVDecidedMsgType {
+		if msg.MsgType == spectypes.SSVDecidedMsgType {
 			if decidedTopic := fork.DecidedTopic(); len(decidedTopic) > 0 {
 				if fork.GetTopicFullName(decidedTopic) == currentTopic {
 					reportValidationResult(validationResultValid)
@@ -46,7 +47,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 				}
 			}
 		}
-		topics := fork.ValidatorTopicID(msg.GetIdentifier().GetValidatorPK())
+		topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
 		// check wrong topic
 		if fork.GetTopicFullName(topics[0]) != currentTopic {
 			// check second topic
@@ -54,9 +55,9 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			if len(topics) == 1 || fork.GetTopicFullName(topics[1]) != currentTopic {
 				logger.Debug("invalid: wrong topic",
 					zap.Strings("actual", topics),
-					zap.String("type", msg.MsgType.String()),
+					zap.String("type", message.MsgTypeToString(msg.MsgType)),
 					zap.String("expected", fork.GetTopicBaseName(currentTopic)),
-					zap.ByteString("smsg.ID", msg.GetIdentifier()))
+					zap.Any("smsg.ID", msg.GetID()))
 				reportValidationResult(validationResultTopic)
 				return pubsub.ValidationReject
 			}

@@ -37,7 +37,7 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 type Options struct {
 	Context           context.Context
 	Role              spectypes.BeaconRole
-	Identifier        message.Identifier
+	Identifier        spectypes.MessageID
 	Logger            *zap.Logger
 	Storage           qbftstorage.QBFTStore
 	Network           p2pprotocol.Network
@@ -74,7 +74,7 @@ type Controller struct {
 	Network            p2pprotocol.Network
 	InstanceConfig     *qbft.InstanceConfig
 	ValidatorShare     *beaconprotocol.Share
-	Identifier         message.Identifier
+	Identifier         spectypes.MessageID
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
 	Signer             beaconprotocol.Signer
@@ -303,11 +303,11 @@ func (c *Controller) GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol
 
 // GetIdentifier returns ibft identifier made of public key and role (type)
 func (c *Controller) GetIdentifier() []byte {
-	return c.Identifier // TODO should use mutex to lock var?
+	return c.Identifier[:] // TODO should use mutex to lock var?
 }
 
 // ProcessMsg takes an incoming message, and adds it to the message queue or handle it on read mode
-func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
+func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 	if c.ReadMode {
 		return c.MessageHandler(msg)
 	}
@@ -321,7 +321,7 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 	}
 	fields = append(fields,
 		zap.Int("queue_len", c.Q.Len()),
-		zap.String("msgType", msg.MsgType.String()),
+		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
 	)
 	c.Logger.Debug("got message, add to queue", fields...)
 	c.Q.Add(msg)
@@ -329,22 +329,22 @@ func (c *Controller) ProcessMsg(msg *message.SSVMessage) error {
 }
 
 // MessageHandler process message from queue,
-func (c *Controller) MessageHandler(msg *message.SSVMessage) error {
+func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 	switch msg.GetType() {
-	case message.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
 		return c.processConsensusMsg(signedMsg)
 
-	case message.SSVPostConsensusMsgType:
+	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
-	case message.SSVDecidedMsgType:
+	case spectypes.SSVDecidedMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")

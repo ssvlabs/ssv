@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -96,7 +97,7 @@ loop:
 		sf.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 	}
 
-	decides, err := dbs[3].GetDecided(msgs[1].Message.Identifier, 0, 10)
+	decides, err := dbs[3].GetDecided(message.ToMessageID(msgs[1].Message.Identifier), 0, 10)
 	if err != nil {
 		sf.logger.Error("node #4 could not get decided in range", zap.Error(err))
 	} else {

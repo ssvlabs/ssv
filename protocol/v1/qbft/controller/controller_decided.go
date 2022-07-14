@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -14,7 +15,7 @@ import (
 // onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
 // in read mode, we don't broadcast the message in the network
 func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
-	qbft.ReportDecided(hex.EncodeToString(message.Identifier(msg.Message.Identifier).GetValidatorPK()), msg)
+	qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), msg)
 	// encode the message first to avoid sharing msg with 2 goroutines
 	data, err := msg.Encode()
 	if err != nil {
@@ -26,9 +27,9 @@ func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
 	if c.ReadMode {
 		return nil
 	}
-	if err := c.Network.Broadcast(message.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
-		ID:      c.Identifier,
+	if err := c.Network.Broadcast(spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   c.Identifier,
 		Data:    data,
 	}); err != nil {
 		return errors.Wrap(err, "could not broadcast decided message")
@@ -78,7 +79,7 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 			return err
 		}
 		if updated != nil {
-			qbft.ReportDecided(hex.EncodeToString(message.Identifier(msg.Message.Identifier).GetValidatorPK()), updated)
+			qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 			if c.newDecidedHandler != nil {
 				go c.newDecidedHandler(msg)
 			}
@@ -93,7 +94,7 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 	if updated, err := c.DecidedStrategy.UpdateDecided(msg); err != nil {
 		logger.Warn("could not update decided")
 	} else if updated != nil {
-		qbft.ReportDecided(hex.EncodeToString(message.Identifier(msg.Message.Identifier).GetValidatorPK()), updated)
+		qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 		if c.newDecidedHandler != nil {
 			go c.newDecidedHandler(msg)
 		}
@@ -103,7 +104,7 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*specqbft.SignedMessage, error) {
-	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(message.ToMessageID(c.GetIdentifier()))
 	if err != nil {
 		return nil, err
 	}

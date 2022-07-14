@@ -146,7 +146,7 @@ loop:
 	}
 	r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 
-	decides, err := ctx.Stores[3].GetDecided(msgs[1].Message.Identifier, 0, nextSeq)
+	decides, err := ctx.Stores[3].GetDecided(message.ToMessageID(msgs[1].Message.Identifier), 0, nextSeq)
 	if err != nil {
 		r.logger.Error("node #4 could not get decided in range", zap.Error(err))
 		return errors.New("node #4 could not get decided in range")
@@ -161,7 +161,7 @@ loop:
 
 func (r *syncFailoverScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(11))
+	msgs, err := ctx.Stores[i].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(11))
 	if err != nil {
 		return err
 	}
@@ -215,6 +215,6 @@ type badNetwork struct {
 	network.P2PNetwork
 }
 
-func (b *badNetwork) Subscribe(message.ValidatorPK) error {
+func (b *badNetwork) Subscribe(spectypes.ValidatorPK) error {
 	return errors.New("bad network")
 }

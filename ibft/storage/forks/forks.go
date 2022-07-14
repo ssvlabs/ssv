@@ -9,5 +9,5 @@ import (
 type Fork interface {
 	EncodeSignedMsg(msg *specqbft.SignedMessage) ([]byte, error)
 	DecodeSignedMsg(data []byte) (*specqbft.SignedMessage, error)
-	Identifier(pk []byte, role spectypes.BeaconRole) []byte
+	Identifier(pk []byte, role spectypes.BeaconRole) [52]byte
 }

@@ -11,7 +11,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
@@ -22,7 +21,7 @@ import (
 type IValidator interface {
 	Start() error
 	StartDuty(duty *spectypes.Duty)
-	ProcessMsg(msg *message.SSVMessage) error // TODO need to be as separate interface?
+	ProcessMsg(msg *spectypes.SSVMessage) error // TODO need to be as separate interface?
 	GetShare() *beaconprotocol.Share
 
 	forksprotocol.ForkHandler
@@ -135,8 +134,9 @@ func (v *Validator) GetShare() *beaconprotocol.Share {
 }
 
 // ProcessMsg processes a new msg
-func (v *Validator) ProcessMsg(msg *message.SSVMessage) error {
-	ibftController := v.ibfts.ControllerForIdentifier(msg.GetIdentifier())
+func (v *Validator) ProcessMsg(msg *spectypes.SSVMessage) error {
+	identifier := msg.GetID()
+	ibftController := v.ibfts.ControllerForIdentifier(identifier[:])
 	// synchronize process
 	return ibftController.ProcessMsg(msg)
 }
@@ -161,7 +161,7 @@ func setupIbfts(opt *Options, logger *zap.Logger) map[spectypes.BeaconRole]contr
 }
 
 func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Options) controller.IController {
-	identifier := message.NewIdentifier(opt.Share.PublicKey.Serialize(), role)
+	identifier := spectypes.NewMsgID(opt.Share.PublicKey.Serialize(), role)
 	opts := controller.Options{
 		Context:           opt.Context,
 		Role:              role,

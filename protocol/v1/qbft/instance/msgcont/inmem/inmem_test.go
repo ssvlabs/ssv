@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -18,11 +17,12 @@ func init() {
 }
 
 func generateConsensusMsg(r specqbft.Round) *specqbft.Message {
+	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	return &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     1,
 		Round:      r,
-		Identifier: message.NewIdentifier([]byte("pk"), spectypes.BNRoleAttester),
+		Identifier: identifier[:],
 		Data:       nil,
 	}
 }

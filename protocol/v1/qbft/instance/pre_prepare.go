@@ -113,12 +113,12 @@ func (i *Instance) generatePrePrepareMessage(value []byte) (specqbft.Message, er
 	if err != nil {
 		return specqbft.Message{}, errors.Wrap(err, "failed to encoded proposal message")
 	}
-
+	identifier := i.State().GetIdentifier()
 	return specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Identifier: identifier[:],
 		Data:       proposalEncodedMsg,
 	}, nil
 }
