@@ -2,6 +2,7 @@ package duties
 
 import (
 	"errors"
+	"github.com/bloxapp/ssv-spec/types"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -29,7 +30,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 	})
 
 	t.Run("serves duties for the given slot", func(t *testing.T) {
-		beaconDuties := []*beacon.Duty{
+		beaconDuties := []*types.Duty{
 			{
 				Slot:   893108,
 				PubKey: spec.BLSPubKey{},
@@ -45,7 +46,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 	})
 
 	t.Run("cache duties", func(t *testing.T) {
-		fetchedDuties := []*beacon.Duty{
+		fetchedDuties := []*types.Duty{
 			{
 				Slot:   893108,
 				PubKey: spec.BLSPubKey{},
@@ -71,7 +72,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 	})
 
 	t.Run("handles no indices", func(t *testing.T) {
-		fetchedDuties := []*beacon.Duty{
+		fetchedDuties := []*types.Duty{
 			{
 				Slot:   893108,
 				PubKey: spec.BLSPubKey{},
@@ -104,7 +105,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			entries := map[spec.Slot]cacheEntry{}
-			entries[test.slot] = cacheEntry{[]beacon.Duty{}}
+			entries[test.slot] = cacheEntry{[]types.Duty{}}
 			df.addMissingSlots(entries)
 			// require.Equal(t, len(entries), 32)
 			_, firstExist := entries[spec.Slot(950112)]
@@ -122,7 +123,7 @@ func createIndexFetcher(ctrl *gomock.Controller, result []spec.ValidatorIndex) *
 	return indexFetcher
 }
 
-func createBeaconDutiesClient(ctrl *gomock.Controller, result []*beacon.Duty, err error) *mocks.MockbeaconDutiesClient {
+func createBeaconDutiesClient(ctrl *gomock.Controller, result []*types.Duty, err error) *mocks.MockbeaconDutiesClient {
 	client := mocks.NewMockbeaconDutiesClient(ctrl)
 	client.EXPECT().GetDuties(gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
 	client.EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).MaxTimes(1)

@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 )
@@ -80,7 +79,7 @@ func (c *Controller) broadcastSignature() error {
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *beaconprotocol.Duty) error {
+func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, err := c.signDuty(decidedValue, duty)
 	if err != nil {

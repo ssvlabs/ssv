@@ -57,6 +57,6 @@ func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType mess
 	return nil, errors.Errorf("could not find key for pk: %x", pk)
 }
 
-func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *beacon.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *types.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
