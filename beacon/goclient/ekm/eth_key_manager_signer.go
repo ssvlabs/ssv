@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
@@ -131,7 +132,7 @@ func (km *ethKeyManagerSigner) SignIBFTMessage(data messageprotocol.Root, pk []b
 	return sig, nil
 }
 
-func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	domain, err := km.signingUtils.GetDomain(data)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to get domain for signing")

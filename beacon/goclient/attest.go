@@ -3,7 +3,7 @@ package goclient
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -19,7 +19,7 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 	return nil, errors.New("client does not support AttestationDataProvider")
 }
 
-func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *beaconprotocol.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (gc *goClient) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return gc.keyManager.SignAttestation(data, duty, pk)
 }
 

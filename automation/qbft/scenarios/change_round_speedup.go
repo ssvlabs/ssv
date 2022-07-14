@@ -6,7 +6,7 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -117,7 +117,7 @@ func (r *changeRoundSpeedupScenario) PostExecution(ctx *runner.ScenarioContext) 
 	<-time.After(time.Second * 2)
 
 	for i := range ctx.Stores[:len(ctx.Stores)-1] {
-		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), types.BNRoleAttester), specqbft.Height(1), specqbft.Height(1))
+		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(1), specqbft.Height(1))
 		if err != nil {
 			return err
 		}

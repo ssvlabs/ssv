@@ -7,6 +7,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
@@ -19,7 +20,7 @@ import (
 
 // cacheEntry
 type cacheEntry struct {
-	Duties []beacon.Duty
+	Duties []spectypes.Duty
 }
 
 // validatorsIndicesFetcher represents the interface for retrieving indices.
@@ -31,14 +32,14 @@ type validatorsIndicesFetcher interface {
 // beaconDutiesClient interface of the needed client for managing duties
 type beaconDutiesClient interface {
 	// GetDuties returns duties for the passed validators indices
-	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*beacon.Duty, error)
+	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error)
 	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
 	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 }
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
-	GetDuties(slot uint64) ([]beacon.Duty, error)
+	GetDuties(slot uint64) ([]spectypes.Duty, error)
 }
 
 // newDutyFetcher creates a new instance
@@ -65,8 +66,8 @@ type dutyFetcher struct {
 
 // GetDuties tries to get slot's duties from cache, if not available in cache it fetches them from beacon
 // the relevant subnets will be subscribed once duties are fetched
-func (df *dutyFetcher) GetDuties(slot uint64) ([]beacon.Duty, error) {
-	var duties []beacon.Duty
+func (df *dutyFetcher) GetDuties(slot uint64) ([]spectypes.Duty, error) {
+	var duties []spectypes.Duty
 
 	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
 	epoch := spec.Epoch(esEpoch)
@@ -118,7 +119,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 }
 
 // fetchDuties fetches duties for the epoch of the given slot
-func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
+func (df *dutyFetcher) fetchDuties(slot uint64) ([]*spectypes.Duty, error) {
 	if indices := df.indicesFetcher.GetValidatorsIndices(); len(indices) > 0 {
 		df.logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
@@ -128,11 +129,11 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*beacon.Duty, error) {
 		return results, err
 	}
 	df.logger.Debug("no indices, duties won't be fetched")
-	return []*beacon.Duty{}, nil
+	return []*spectypes.Duty{}, nil
 }
 
 // processFetchedDuties loop over fetched duties and process them
-func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*beacon.Duty) error {
+func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
 		// entries holds all the new duties to add
@@ -150,10 +151,10 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*beacon.Duty) error 
 }
 
 // fillEntry adds the given duty on the relevant slot
-func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *beacon.Duty) {
+func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *spectypes.Duty) {
 	entry, slotExist := entries[duty.Slot]
 	if !slotExist {
-		entry = cacheEntry{[]beacon.Duty{}}
+		entry = cacheEntry{[]spectypes.Duty{}}
 	}
 	entry.Duties = append(entry.Duties, *duty)
 	entries[duty.Slot] = entry
@@ -165,7 +166,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 	for s, e := range entriesToAdd {
 		slot := uint64(s)
 		if raw, exist := df.cache.Get(getDutyCacheKey(slot)); exist {
-			var dutiesToAdd []beacon.Duty
+			var dutiesToAdd []spectypes.Duty
 			existingEntry := raw.(cacheEntry)
 			for _, newDuty := range e.Duties {
 				exist := false
@@ -201,7 +202,7 @@ func (df *dutyFetcher) addMissingSlots(entries map[spec.Slot]cacheEntry) {
 	for i := 0; i < int(df.ethNetwork.SlotsPerEpoch()); i++ {
 		s := spec.Slot(epochFirstSlot + uint64(i))
 		if _, exist := entries[s]; !exist {
-			entries[s] = cacheEntry{[]beacon.Duty{}}
+			entries[s] = cacheEntry{[]spectypes.Duty{}}
 		}
 	}
 }
@@ -217,7 +218,7 @@ func getDutyCacheKey(slot uint64) string {
 }
 
 // toSubscription creates a subscription from the given duty
-func toSubscription(duty *beacon.Duty) *eth2apiv1.BeaconCommitteeSubscription {
+func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription {
 	return &eth2apiv1.BeaconCommitteeSubscription{
 		ValidatorIndex:   duty.ValidatorIndex,
 		Slot:             duty.Slot,
@@ -238,7 +239,7 @@ type serializedDuty struct {
 	ValidatorCommitteeIndex uint64
 }
 
-func toSerialized(d *beacon.Duty) serializedDuty {
+func toSerialized(d *spectypes.Duty) serializedDuty {
 	return serializedDuty{
 		PubKey:                  hex.EncodeToString(d.PubKey[:]),
 		Type:                    d.Type.String(),
