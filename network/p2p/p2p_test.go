@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ import (
 
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -220,10 +220,10 @@ type dummyRouter struct {
 	i      int
 }
 
-func (r *dummyRouter) Route(message message.SSVMessage) {
+func (r *dummyRouter) Route(message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	r.logger.Debug("got message",
-		zap.String("identifier", hex.EncodeToString(message.GetIdentifier())),
+		zap.String("identifier", message.GetID().String()),
 		zap.Uint64("count", c))
 }
 

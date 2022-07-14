@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 )
@@ -75,11 +74,12 @@ func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
 			panic(err)
 		}
 
+		id := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
-			Identifier: message.NewIdentifier(share.PublicKey.Serialize(), spectypes.BNRoleAttester),
+			Identifier: id[:],
 			Data:       commitDataBytes,
 		}
 	})
@@ -125,7 +125,7 @@ func (r *regularScenario) Execute(_ *runner.ScenarioContext) error {
 }
 
 func (r *regularScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[0].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
+	msgs, err := ctx.Stores[0].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}

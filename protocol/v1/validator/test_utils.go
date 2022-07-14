@@ -192,7 +192,7 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbf
 	return t.beacon.SubmitAttestation(retValueStruct.GetAttestation())
 }
 
-func (t *testIBFT) ProcessMsg(msg *message.SSVMessage) error {
+func (t *testIBFT) ProcessMsg(msg *spectypes.SSVMessage) error {
 	signedMsg := &specqbft.SignedMessage{}
 	if err := signedMsg.Decode(msg.GetData()); err != nil {
 		return errors.Wrap(err, "could not decode consensus signed message")

@@ -1,15 +1,17 @@
 package genesis
 
-import "github.com/bloxapp/ssv/protocol/v1/message"
+import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
+)
 
 // EncodeNetworkMsg encodes network message
-func (g *ForkGenesis) EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error) {
+func (g *ForkGenesis) EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error) {
 	return msg.Encode()
 }
 
 // DecodeNetworkMsg decodes network message
-func (g *ForkGenesis) DecodeNetworkMsg(data []byte) (*message.SSVMessage, error) {
-	msg := message.SSVMessage{}
+func (g *ForkGenesis) DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error) {
+	msg := spectypes.SSVMessage{}
 	err := msg.Decode(data)
 	if err != nil {
 		return nil, err

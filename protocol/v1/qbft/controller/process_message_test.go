@@ -18,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -29,7 +28,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 	share := beacon.Share{}
 	share.PublicKey = sks[1].GetPublicKey()
 	share.Committee = make(map[spectypes.OperatorID]*beacon.Node, 4)
-	identifier := format.IdentifierFormat(share.PublicKey.Serialize(), spectypes.BNRoleAttester.String()) // TODO should using fork to get identifier?
+	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester) // TODO should using fork to get identifier?
 
 	ctrl := Controller{
 		ValidatorShare: &beacon.Share{
@@ -50,7 +49,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 			Height:     2,
 			MsgType:    specqbft.CommitMsgType,
 			Round:      3,
-			Identifier: []byte(identifier),
+			Identifier: identifier[:],
 			Data:       commitData,
 		}, forksprotocol.GenesisForkVersion.String()))
 	}
@@ -71,7 +70,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 				Height:     specqbft.Height(2),
 				MsgType:    specqbft.CommitMsgType,
 				Round:      3,
-				Identifier: []byte(identifier),
+				Identifier: identifier[:],
 				Data:       commitData,
 			}, forksprotocol.GenesisForkVersion.String()),
 		},
@@ -84,7 +83,7 @@ func TestProcessLateCommitMsg(t *testing.T) {
 					Height:     2,
 					MsgType:    specqbft.CommitMsgType,
 					Round:      3,
-					Identifier: []byte(identifier),
+					Identifier: identifier[:],
 					Data:       commitData,
 				}, forksprotocol.GenesisForkVersion.String())
 				msg.Signature = []byte("dummy")

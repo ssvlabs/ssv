@@ -32,7 +32,7 @@ type Options struct {
 	Network        protcolp2p.Network
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
-	Identifier     message.Identifier
+	Identifier     spectypes.MessageID
 	Height         specqbft.Height
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
@@ -89,7 +89,7 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
-	pk := opts.Identifier.GetValidatorPK()
+	pk := opts.Identifier.GetPubKey()
 	role := opts.Identifier.GetRoleType().String()
 	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundStateNotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
@@ -167,9 +167,6 @@ func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
 		return errors.New("instance not initialized")
 	}
-	if i.State().GetIdentifier() == nil {
-		return errors.New("invalid Lambda")
-	}
 	if inputValue == nil {
 		return errors.New("input value is nil")
 	}
@@ -177,7 +174,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().GetIdentifier().String()))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(specqbft.Round(1)) // start from 1
-	metricsIBFTRound.WithLabelValues(i.State().GetIdentifier().GetRoleType().String(), hex.EncodeToString(i.State().GetIdentifier().GetValidatorPK())).Set(1)
+	metricsIBFTRound.WithLabelValues(i.State().GetIdentifier().GetRoleType().String(), hex.EncodeToString(i.State().GetIdentifier().GetPubKey())).Set(1)
 
 	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
 	if i.IsLeader() {
@@ -289,7 +286,7 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 	newRound := round
 	i.State().Round.Store(newRound)
 	role := i.State().GetIdentifier().GetRoleType()
-	pk := i.State().GetIdentifier().GetValidatorPK()
+	pk := i.State().GetIdentifier().GetPubKey()
 	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
 }
 
@@ -305,7 +302,7 @@ func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 	}
 
 	role := i.State().GetIdentifier().GetRoleType().String()
-	pk := i.State().GetIdentifier().GetValidatorPK()
+	pk := i.State().GetIdentifier().GetPubKey()
 	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(stage))
 
 	i.State().Stage.Store(int32(stage))
@@ -358,9 +355,9 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 	if err != nil {
 		return errors.New("failed to encode consensus message")
 	}
-	ssvMsg := message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      i.State().GetIdentifier(),
+	ssvMsg := spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   i.State().GetIdentifier(),
 		Data:    encodedMsg,
 	}
 	if i.network != nil {
@@ -390,18 +387,18 @@ func (i *Instance) CommittedAggregatedMsg() (*specqbft.SignedMessage, error) {
 }
 
 // GetCommittedAggSSVMessage returns ssv msg with message.SSVDecidedMsgType and the agg commit signed msg
-func (i *Instance) GetCommittedAggSSVMessage() (message.SSVMessage, error) {
+func (i *Instance) GetCommittedAggSSVMessage() (spectypes.SSVMessage, error) {
 	decidedMsg, err := i.CommittedAggregatedMsg()
 	if err != nil {
-		return message.SSVMessage{}, err
+		return spectypes.SSVMessage{}, err
 	}
 	encodedAgg, err := decidedMsg.Encode()
 	if err != nil {
-		return message.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
+		return spectypes.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
 	}
-	ssvMsg := message.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
-		ID:      i.State().GetIdentifier(),
+	ssvMsg := spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   i.State().GetIdentifier(),
 		Data:    encodedAgg,
 	}
 	return ssvMsg, nil

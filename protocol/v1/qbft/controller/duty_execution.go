@@ -120,9 +120,9 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to encode signed message")
 	}
-	ssvMsg := message.SSVMessage{
-		MsgType: message.SSVPostConsensusMsgType,
-		ID:      c.GetIdentifier(),
+	ssvMsg := spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   message.ToMessageID(c.GetIdentifier()),
 		Data:    encodedSignedMsg,
 	}
 

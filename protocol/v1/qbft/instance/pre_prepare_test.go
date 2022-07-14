@@ -45,7 +45,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(message.Identifier("Lambda"))
+	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -116,7 +116,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(message.Identifier("Lambda"))
+	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -168,7 +168,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
-
+	identifier := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	instance := &Instance{
 		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.ProposalMsgType: inmem.New(3, 2),
@@ -189,7 +189,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(message.Identifier("Lambda"))
+	instance.state.Identifier.Store(identifier)
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 	instance.state.Height.Store(specqbft.Height(0))
@@ -201,7 +201,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	msg := SignMsg(t, operatorIds[:1], secretKeys[operatorIds[0]], &specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
 		Round:      1,
-		Identifier: []byte("Lambda"),
+		Identifier: identifier[:],
 		Data:       proposalDataToBytes(t, &specqbft.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	})
 	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
@@ -305,7 +305,7 @@ func TestPrePreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(message.Identifier("Lambda"))
+	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)

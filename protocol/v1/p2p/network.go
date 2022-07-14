@@ -2,10 +2,9 @@ package protcolp2p
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
@@ -16,25 +15,25 @@ var (
 // Subscriber manages topics subscription
 type Subscriber interface {
 	// Subscribe subscribes to validator subnet
-	Subscribe(pk message.ValidatorPK) error
+	Subscribe(pk spectypes.ValidatorPK) error
 	// Unsubscribe unsubscribes from the validator subnet
-	Unsubscribe(pk message.ValidatorPK) error
+	Unsubscribe(pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
-	Peers(pk message.ValidatorPK) ([]peer.ID, error)
+	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 }
 
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	// Broadcast broadcasts the given message to the corresponding subnet
-	Broadcast(msg message.SSVMessage) error
+	Broadcast(msg spectypes.SSVMessage) error
 }
 
 // RequestHandler handles p2p requests
-type RequestHandler func(*message.SSVMessage) (*message.SSVMessage, error)
+type RequestHandler func(*spectypes.SSVMessage) (*spectypes.SSVMessage, error)
 
 // CombineRequestHandlers combines multiple handlers into a single handler
 func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
-	return func(ssvMessage *message.SSVMessage) (res *message.SSVMessage, err error) {
+	return func(ssvMessage *spectypes.SSVMessage) (res *spectypes.SSVMessage, err error) {
 		for _, handler := range handlers {
 			res, err = handler(ssvMessage)
 			if err != nil {
@@ -50,7 +49,7 @@ func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
 
 // SyncResult holds the result of a sync request, including the actual message and the sender
 type SyncResult struct {
-	Msg    *message.SSVMessage
+	Msg    *spectypes.SSVMessage
 	Sender string
 }
 
@@ -85,12 +84,12 @@ type Syncer interface {
 	// RegisterHandlers registers handler for the given protocol
 	RegisterHandlers(handlers ...*SyncHandler)
 	// LastDecided fetches last decided from a random set of peers
-	LastDecided(mid message.Identifier) ([]SyncResult, error)
+	LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
 	// it accepts a list of targets for the request
-	GetHistory(mid message.Identifier, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
+	GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
 	// LastChangeRound fetches last change round message from a random set of peers
-	LastChangeRound(mid message.Identifier, height specqbft.Height) ([]SyncResult, error)
+	LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]SyncResult, error)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
@@ -112,7 +111,7 @@ const (
 // ValidationReporting is the interface for reporting on message validation results
 type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(message *message.SSVMessage, res MsgValidationResult)
+	ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult)
 }
 
 // Network holds the networking layer used to complement the underlying protocols

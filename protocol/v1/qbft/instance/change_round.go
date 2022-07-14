@@ -273,12 +273,12 @@ func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create round change data for round")
 	}
-
+	identifier := i.State().GetIdentifier()
 	return &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Identifier: identifier[:],
 		Data:       roundChange,
 	}, nil
 }

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -15,12 +16,12 @@ import (
 )
 
 // LastDecided fetches last decided from a random set of peers
-func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
+	peers, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -33,7 +34,7 @@ func (n *p2pNetwork) LastDecided(mid message.Identifier) ([]p2pprotocol.SyncResu
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error) {
+func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error) {
 	if from >= to {
 		return nil, 0, nil
 	}
@@ -52,7 +53,7 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to specqbft.Height
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
+		random, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
@@ -80,12 +81,12 @@ func (n *p2pNetwork) GetHistory(mid message.Identifier, from, to specqbft.Height
 }
 
 // LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid message.Identifier, height specqbft.Height) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastChangeRoundProtocol)
-	peers, err := n.getSubsetOfPeers(mid.GetValidatorPK(), peerCount, allPeersFilter)
+	peers, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -148,7 +149,7 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
@@ -180,15 +181,15 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk message.ValidatorPK, peerCount int, fi
 	return peers[:i], nil
 }
 
-func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid message.Identifier, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
 	var results []p2pprotocol.SyncResult
 	data, err := syncMsg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode sync message")
 	}
-	msg := &message.SSVMessage{
+	msg := &spectypes.SSVMessage{
 		MsgType: message.SSVSyncMsgType,
-		ID:      mid,
+		MsgID:   mid,
 		Data:    data,
 	}
 	encoded, err := n.fork.EncodeNetworkMsg(msg)

@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync/atomic"
 	"time"
 
@@ -9,13 +10,12 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(msg *message.SSVMessage) error
+type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (c *Controller) StartQueueConsumer(handler MessageHandler) {
@@ -104,7 +104,7 @@ func (c *Controller) processNoRunningInstance(
 	}, func() msgqueue.Index {
 		return msgqueue.DecidedMsgIndex(identifier)
 	}, func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, lastHeight, specqbft.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight, specqbft.CommitMsgType)
 		if len(indices) == 0 {
 			return msgqueue.Index{}
 		}
@@ -131,7 +131,7 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 		return false
 	}
 
-	var msg *message.SSVMessage
+	var msg *spectypes.SSVMessage
 
 	currentState := currentInstance.State()
 	msg = c.getNextMsgForState(currentState, identifier)
@@ -156,13 +156,13 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 func (c *Controller) processDefault(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	iterator := msgqueue.NewIndexIterator().
 		Add(func() msgqueue.Index {
-			indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
+			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
 			if len(indices) == 0 {
 				return msgqueue.Index{}
 			}
 			return indices[0]
 		}).Add(func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(spectypes.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
 		if len(indices) == 0 {
 			return msgqueue.Index{}
 		}
@@ -181,7 +181,7 @@ func (c *Controller) processDefault(handler MessageHandler, identifier string, l
 }
 
 // getNextMsgForState return msgs depended on the current instance stage
-func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *message.SSVMessage {
+func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *spectypes.SSVMessage {
 	height := state.GetHeight()
 	stage := qbft.RoundState(state.Stage.Load())
 
@@ -193,7 +193,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *m
 			return msgqueue.DecidedMsgIndex(identifier)
 		}).
 		Add(func() msgqueue.Index {
-			indices := msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
+			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
 			if len(indices) == 0 {
 				return msgqueue.Index{}
 			}
@@ -223,15 +223,15 @@ func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height
 	var res []msgqueue.Index
 	switch stage {
 	case qbft.RoundStateNotStarted:
-		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType)
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType)
 	case qbft.RoundStatePrePrepare:
-		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType) // looking for propose in case is leader
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType) // looking for propose in case is leader
 	case qbft.RoundStatePrepare:
-		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
 	case qbft.RoundStateCommit:
 		return msgqueue.Index{} // qbft.RoundStateCommit stage is NEVER set
 	case qbft.RoundStateChangeRound:
-		res = msgqueue.SignedMsgIndex(message.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
 		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
 	if len(res) == 0 {

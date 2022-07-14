@@ -5,7 +5,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	controcllerfork "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks"
 	instancefork "github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks/genesis"
@@ -44,11 +43,11 @@ func (g *ForkGenesis) ValidateDecidedMsg(share *beacon.Share) pipelines.SignedMe
 }
 
 // ValidateChangeRoundMsg impl
-func (g *ForkGenesis) ValidateChangeRoundMsg(share *beacon.Share, identifier message.Identifier) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) ValidateChangeRoundMsg(share *beacon.Share, identifier spectypes.MessageID) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
 	)
@@ -56,5 +55,6 @@ func (g *ForkGenesis) ValidateChangeRoundMsg(share *beacon.Share, identifier mes
 
 // Identifier return the proper identifier
 func (g *ForkGenesis) Identifier(pk []byte, role spectypes.BeaconRole) []byte {
-	return message.NewIdentifier(pk, role)
+	id := spectypes.NewMsgID(pk, role)
+	return id[:]
 }

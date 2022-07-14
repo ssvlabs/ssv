@@ -12,9 +12,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/exporter/api/proto"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -101,11 +99,12 @@ func TestHandleDecidedQuery(t *testing.T) {
 			panic(err)
 		}
 
+		id := spectypes.NewMsgID(pk.Serialize(), spectypes.BNRoleAttester)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
-			Identifier: message.NewIdentifier(pk.Serialize(), spectypes.BNRoleAttester),
+			Identifier: id[:],
 			Data:       commitDataBytes,
 		}
 	})
@@ -120,7 +119,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
-		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
+		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
 		require.True(t, ok)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})
