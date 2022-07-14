@@ -28,7 +28,7 @@ import (
 func testIBFTInstance(t *testing.T) *Controller {
 	currentInstanceLock := &sync.RWMutex{}
 	ret := &Controller{
-		Identifier: []byte("Identifier_11"),
+		Identifier: spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester),
 		// instances: make([]*Instance, 0),
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
