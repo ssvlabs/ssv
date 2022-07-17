@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"sync"
 	"testing"
 	"time"
@@ -146,7 +147,7 @@ func setupController(logger *zap.Logger, validators map[string]validator.IValida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger),
+		messageRouter:          newMessageRouter(logger, genesis.New().MsgID()),
 		messageWorker: worker.NewWorker(&worker.Config{
 			Ctx:          context.Background(),
 			Logger:       logger,

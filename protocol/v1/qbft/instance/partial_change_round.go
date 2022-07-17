@@ -1,11 +1,10 @@
 package instance
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
@@ -29,7 +28,7 @@ func (i *Instance) uponChangeRoundPartialQuorum() pipelines.SignedMessagePipelin
 
 			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", uint64(i.State().GetRound())))
 			i.ResetRoundTimer()
-			i.ProcessStageChange(qbft.RoundStateChangeRound)
+			//i.ProcessStageChange(qbft.RoundStateChangeRound)
 
 			if err := i.BroadcastChangeRound(); err != nil {
 				return errors.Wrap(err, "failed finding partial change round quorum")
