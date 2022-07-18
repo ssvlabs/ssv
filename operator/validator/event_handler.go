@@ -56,7 +56,7 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) {
+	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -111,7 +111,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(od.PublicKey, c.operatorPubKey) {
+	if strings.EqualFold(od.PublicKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -155,12 +155,16 @@ func (c *controller) handleValidatorRegistrationEvent(
 		if ongoingSync {
 			c.onShareStart(validatorShare)
 		}
+	}
+
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
 			zap.Uint32s("operatorIds", validatorRegistrationEvent.OperatorIds),
 		)
 	}
+
 	return logFields, nil
 }
 
@@ -193,6 +197,9 @@ func (c *controller) handleValidatorRemovalEvent(
 				return nil, err
 			}
 		}
+	}
+
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", validatorShare.PublicKey.SerializeToHexStr()),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
@@ -215,8 +222,11 @@ func (c *controller) handleAccountLiquidationEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		if share.IsOperatorShare(c.operatorPubKey) {
+		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
+		}
+		if isOperatorShare {
 			share.Liquidated = true
 
 			// save validator data
@@ -259,8 +269,11 @@ func (c *controller) handleAccountEnableEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		if share.IsOperatorShare(c.operatorPubKey) {
+		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
+		}
+		if share.IsOperatorShare(c.operatorPubKey) {
 			share.Liquidated = false
 
 			// save validator data
