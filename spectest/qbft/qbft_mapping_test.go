@@ -83,7 +83,7 @@ func testsToRun() map[string]struct{} {
 		spectests.HappyFlow(),
 		spectests.SevenOperators(),
 		spectests.TenOperators(),
-		spectests.ThirteenOperators(), // TODO(nkryuchkov): failure
+		spectests.ThirteenOperators(),
 
 		proposal.HappyFlow(),
 		proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure
