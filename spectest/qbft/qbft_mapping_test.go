@@ -135,9 +135,9 @@ func testsToRun() map[string]struct{} {
 		commit.FutureRound(), // TODO(nkryuchkov): failure
 		commit.PastRound(),   // TODO(nkryuchkov): failure
 		commit.DuplicateMsg(),
-		commit.HappyFlow(),              // TODO(nkryuchkov): failure
-		commit.InvalidCommitData(),      // TODO(nkryuchkov): failure
-		commit.PostDecided(),            // TODO(nkryuchkov): failure
+		commit.HappyFlow(),         // TODO(nkryuchkov): failure
+		commit.InvalidCommitData(), // TODO(nkryuchkov): failure
+		commit.PostDecided(),
 		commit.WrongData1(),             // TODO(nkryuchkov): failure
 		commit.WrongData2(),             // TODO(nkryuchkov): failure
 		commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure
@@ -148,13 +148,13 @@ func testsToRun() map[string]struct{} {
 		commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure
 		commit.WrongSignature(),         // TODO(nkryuchkov): failure
 
-		roundchange.HappyFlow(),                       // TODO(nkryuchkov): failure
-		roundchange.F1Speedup(),                       // TODO(nkryuchkov): failure
-		roundchange.F1SpeedupPrepared(),               // TODO(nkryuchkov): failure
-		roundchange.WrongHeight(),                     // TODO(nkryuchkov): failure
-		roundchange.WrongSig(),                        // TODO(nkryuchkov): failure
-		roundchange.MultiSigner(),                     // TODO(nkryuchkov): failure
-		roundchange.NotPrepared(),                     // TODO(nkryuchkov): failure
+		roundchange.HappyFlow(),         // TODO(nkryuchkov): failure
+		roundchange.F1Speedup(),         // TODO(nkryuchkov): failure
+		roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure
+		roundchange.WrongHeight(),       // TODO(nkryuchkov): failure
+		roundchange.WrongSig(),          // TODO(nkryuchkov): failure
+		roundchange.MultiSigner(),       // TODO(nkryuchkov): failure
+		roundchange.NotPrepared(),
 		roundchange.Prepared(),                        // TODO(nkryuchkov): failure
 		roundchange.PeerPrepared(),                    // TODO(nkryuchkov): failure
 		roundchange.JustificationWrongValue(),         // TODO(nkryuchkov): failure
@@ -347,7 +347,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	qbftInstance := newQbftInstance(t, logger, qbftStorage, p2pNet, beacon, share, forkVersion)
 	qbftInstance.Init()
 	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
-	qbftInstance.State().Round.Store(specqbft.Round(1)) // start from 1
+	qbftInstance.State().Round.Store(test.Pre.State.Round)
+	qbftInstance.State().Height.Store(test.Pre.State.Height)
 	//time.Sleep(time.Second * 3) // 3s round
 
 	signatureMapping := make(map[string]signatureAndID)
