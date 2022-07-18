@@ -2,9 +2,9 @@ package controller
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -27,6 +27,7 @@ func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
 	if c.ReadMode {
 		return nil
 	}
+
 	if err := c.Network.Broadcast(spectypes.SSVMessage{
 		MsgType: spectypes.SSVDecidedMsgType,
 		MsgID:   c.Identifier,
