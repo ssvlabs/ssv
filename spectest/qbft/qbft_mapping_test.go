@@ -91,7 +91,7 @@ func testsToRun() map[string]struct{} {
 		proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure
 		proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure
 		proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure
-		proposal.DuplicateMsg(),
+		proposal.DuplicateMsg(),                       // TODO(nkryuchkov): failure
 		proposal.FirstRoundJustification(),
 		proposal.FutureRoundNoAcceptedProposal(),                  // TODO(nkryuchkov): failure
 		proposal.FutureRoundAcceptedProposal(),                    // TODO(nkryuchkov): failure
@@ -118,9 +118,9 @@ func testsToRun() map[string]struct{} {
 		proposal.WrongSignature(),         // TODO(nkryuchkov): failure
 
 		commit.CurrentRound(),
-		commit.FutureRound(),            // TODO(nkryuchkov): failure
-		commit.PastRound(),              // TODO(nkryuchkov): failure
-		commit.DuplicateMsg(),           // TODO(nkryuchkov): failure
+		commit.FutureRound(), // TODO(nkryuchkov): failure
+		commit.PastRound(),   // TODO(nkryuchkov): failure
+		commit.DuplicateMsg(),
 		commit.HappyFlow(),              // TODO(nkryuchkov): failure
 		commit.InvalidCommitData(),      // TODO(nkryuchkov): failure
 		commit.PostDecided(),            // TODO(nkryuchkov): failure
