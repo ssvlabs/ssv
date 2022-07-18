@@ -18,6 +18,7 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/prepare"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposal"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/roundchange"
@@ -117,6 +118,19 @@ func testsToRun() map[string]struct{} {
 		proposal.WrongProposer(),          // TODO(nkryuchkov): failure
 		proposal.WrongSignature(),         // TODO(nkryuchkov): failure
 
+		prepare.DuplicateMsg(),
+		prepare.HappyFlow(),              // TODO(nkryuchkov): failure
+		prepare.ImparsableProposalData(), // TODO(nkryuchkov): failure
+		prepare.InvalidPrepareData(),     // TODO(nkryuchkov): failure
+		prepare.MultiSigner(),            // TODO(nkryuchkov): failure
+		prepare.NoPreviousProposal(),     // TODO(nkryuchkov): failure
+		prepare.OldRound(),               // TODO(nkryuchkov): failure
+		prepare.FutureRound(),            // TODO(nkryuchkov): failure
+		prepare.PostDecided(),            // TODO(nkryuchkov): failure
+		prepare.WrongData(),              // TODO(nkryuchkov): failure
+		prepare.WrongHeight(),            // TODO(nkryuchkov): failure
+		prepare.WrongSignature(),         // TODO(nkryuchkov): failure
+
 		commit.CurrentRound(),
 		commit.FutureRound(), // TODO(nkryuchkov): failure
 		commit.PastRound(),   // TODO(nkryuchkov): failure
@@ -134,10 +148,32 @@ func testsToRun() map[string]struct{} {
 		commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure
 		commit.WrongSignature(),         // TODO(nkryuchkov): failure
 
-		roundchange.HappyFlow(),          // TODO(nkryuchkov): failure
-		roundchange.PreviouslyPrepared(), // TODO(nkryuchkov): failure
-		roundchange.F1Speedup(),          // TODO(nkryuchkov): failure
-		roundchange.F1SpeedupPrepared(),  // TODO(nkryuchkov): failure
+		roundchange.HappyFlow(),                       // TODO(nkryuchkov): failure
+		roundchange.F1Speedup(),                       // TODO(nkryuchkov): failure
+		roundchange.F1SpeedupPrepared(),               // TODO(nkryuchkov): failure
+		roundchange.WrongHeight(),                     // TODO(nkryuchkov): failure
+		roundchange.WrongSig(),                        // TODO(nkryuchkov): failure
+		roundchange.MultiSigner(),                     // TODO(nkryuchkov): failure
+		roundchange.NotPrepared(),                     // TODO(nkryuchkov): failure
+		roundchange.Prepared(),                        // TODO(nkryuchkov): failure
+		roundchange.PeerPrepared(),                    // TODO(nkryuchkov): failure
+		roundchange.JustificationWrongValue(),         // TODO(nkryuchkov): failure
+		roundchange.NextProposalValueWrong(),          // TODO(nkryuchkov): failure
+		roundchange.JustificationWrongRound(),         // TODO(nkryuchkov): failure
+		roundchange.JustificationNoQuorum(),           // TODO(nkryuchkov): failure
+		roundchange.JustificationMultiSigners(),       // TODO(nkryuchkov): failure
+		roundchange.JustificationInvalidSig(),         // TODO(nkryuchkov): failure
+		roundchange.JustificationInvalidRound(),       // TODO(nkryuchkov): failure
+		roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure
+		roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure
+		roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure
+		roundchange.FutureRound(),                     // TODO(nkryuchkov): failure
+		roundchange.PastRound(),                       // TODO(nkryuchkov): failure
+		roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure
+		roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure
+		roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure
+		roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure
+		roundchange.ImparsableRoundChangeData(),       // TODO(nkryuchkov): failure
 	}
 
 	result := make(map[string]struct{})
