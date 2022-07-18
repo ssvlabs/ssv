@@ -10,13 +10,17 @@ import (
 	"net/http"
 	"os"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposal"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/roundchange"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -31,7 +35,6 @@ import (
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -77,68 +80,64 @@ func testsToRun() map[string]struct{} {
 		messages.CreateRoundChangePreviouslyPrepared(),
 		messages.RoundChangeDataEncoding(),
 
-		// TODO(nkryuchkov): failure
-		//spectests.HappyFlow(),
-		//spectests.SevenOperators(),
-		//spectests.TenOperators(),
-		//spectests.ThirteenOperators(),
-		//
-		// TODO(nkryuchkov): failure
-		//proposal.HappyFlow(),
-		//proposal.NotPreparedPreviouslyJustification(),
-		//proposal.PreparedPreviouslyJustification(),
-		//proposal.DifferentJustifications(),
-		//proposal.JustificationsNotHeighest(),
-		//proposal.JustificationsValueNotJustified(),
-		//proposal.DuplicateMsg(),
-		//proposal.FirstRoundJustification(),
-		//proposal.FutureRoundNoAcceptedProposal(),
-		//proposal.FutureRoundAcceptedProposal(),
-		//proposal.PastRound(),
-		//proposal.ImparsableProposalData(),
-		//proposal.InvalidRoundChangeJustificationPrepared(),
-		//proposal.InvalidRoundChangeJustification(),
-		//proposal.PreparedPreviouslyNoRCJustificationQuorum(),
-		//proposal.NoRCJustification(),
-		//proposal.PreparedPreviouslyNoPrepareJustificationQuorum(),
-		//proposal.PreparedPreviouslyDuplicatePrepareMsg(),
-		//proposal.PreparedPreviouslyDuplicateRCMsg(),
-		//proposal.DuplicateRCMsg(),
-		//proposal.InvalidPrepareJustificationValue(),
-		//proposal.InvalidPrepareJustificationRound(),
-		//proposal.InvalidProposalData(),
-		//proposal.InvalidValueCheck(),
-		//proposal.MultiSigner(),
-		//proposal.PostDecided(),
-		//proposal.PostPrepared(),
-		//proposal.SecondProposalForRound(),
-		//proposal.WrongHeight(),
-		//proposal.WrongProposer(),
-		//proposal.WrongSignature(),
-		//
-		// TODO(nkryuchkov): failure
-		//commit.CurrentRound(),
-		//commit.FutureRound(),
-		//commit.PastRound(),
-		//commit.DuplicateMsg(),
-		//commit.HappyFlow(),
-		//commit.InvalidCommitData(),
-		//commit.PostDecided(),
-		//commit.WrongData1(),
-		//commit.WrongData2(),
-		//commit.MultiSignerWithOverlap(),
-		//commit.MultiSignerNoOverlap(),
-		//commit.Decided(),
-		//commit.NoPrevAcceptedProposal(),
-		//commit.WrongHeight(),
-		//commit.ImparsableCommitData(),
-		//commit.WrongSignature(),
-		//
-		// TODO(nkryuchkov): failure
-		//roundchange.HappyFlow(),
-		//roundchange.PreviouslyPrepared(),
-		//roundchange.F1Speedup(),
-		//roundchange.F1SpeedupPrepared(),
+		spectests.HappyFlow(),
+		spectests.SevenOperators(),
+		spectests.TenOperators(),
+		spectests.ThirteenOperators(), // TODO(nkryuchkov): failure
+
+		proposal.HappyFlow(),
+		proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure
+		proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure
+		proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure
+		proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure
+		proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure
+		proposal.DuplicateMsg(),
+		proposal.FirstRoundJustification(),
+		proposal.FutureRoundNoAcceptedProposal(),                  // TODO(nkryuchkov): failure
+		proposal.FutureRoundAcceptedProposal(),                    // TODO(nkryuchkov): failure
+		proposal.PastRound(),                                      // TODO(nkryuchkov): failure
+		proposal.ImparsableProposalData(),                         // TODO(nkryuchkov): failure
+		proposal.InvalidRoundChangeJustificationPrepared(),        // TODO(nkryuchkov): failure
+		proposal.InvalidRoundChangeJustification(),                // TODO(nkryuchkov): failure
+		proposal.PreparedPreviouslyNoRCJustificationQuorum(),      // TODO(nkryuchkov): failure
+		proposal.NoRCJustification(),                              // TODO(nkryuchkov): failure
+		proposal.PreparedPreviouslyNoPrepareJustificationQuorum(), // TODO(nkryuchkov): failure
+		proposal.PreparedPreviouslyDuplicatePrepareMsg(),          // TODO(nkryuchkov): failure
+		proposal.PreparedPreviouslyDuplicateRCMsg(),               // TODO(nkryuchkov): failure
+		proposal.DuplicateRCMsg(),                                 // TODO(nkryuchkov): failure
+		proposal.InvalidPrepareJustificationValue(),               // TODO(nkryuchkov): failure
+		proposal.InvalidPrepareJustificationRound(),               // TODO(nkryuchkov): failure
+		proposal.InvalidProposalData(),                            // TODO(nkryuchkov): failure
+		proposal.InvalidValueCheck(),                              // TODO(nkryuchkov): failure
+		proposal.MultiSigner(),                                    // TODO(nkryuchkov): failure
+		proposal.PostDecided(),
+		proposal.PostPrepared(),           // TODO(nkryuchkov): failure
+		proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure
+		proposal.WrongHeight(),            // TODO(nkryuchkov): failure
+		proposal.WrongProposer(),          // TODO(nkryuchkov): failure
+		proposal.WrongSignature(),         // TODO(nkryuchkov): failure
+
+		commit.CurrentRound(),
+		commit.FutureRound(),            // TODO(nkryuchkov): failure
+		commit.PastRound(),              // TODO(nkryuchkov): failure
+		commit.DuplicateMsg(),           // TODO(nkryuchkov): failure
+		commit.HappyFlow(),              // TODO(nkryuchkov): failure
+		commit.InvalidCommitData(),      // TODO(nkryuchkov): failure
+		commit.PostDecided(),            // TODO(nkryuchkov): failure
+		commit.WrongData1(),             // TODO(nkryuchkov): failure
+		commit.WrongData2(),             // TODO(nkryuchkov): failure
+		commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure
+		commit.MultiSignerNoOverlap(),   // TODO(nkryuchkov): failure
+		commit.Decided(),                // TODO(nkryuchkov): failure
+		commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure
+		commit.WrongHeight(),            // TODO(nkryuchkov): failure
+		commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure
+		commit.WrongSignature(),         // TODO(nkryuchkov): failure
+
+		roundchange.HappyFlow(),          // TODO(nkryuchkov): failure
+		roundchange.PreviouslyPrepared(), // TODO(nkryuchkov): failure
+		roundchange.F1Speedup(),          // TODO(nkryuchkov): failure
+		roundchange.F1SpeedupPrepared(),  // TODO(nkryuchkov): failure
 	}
 
 	result := make(map[string]struct{})
@@ -302,8 +301,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     share.Committee[share.NodeID].Pk,
 		Committee:       mappedCommittee,
-		Quorum:          3,
-		PartialQuorum:   2,
+		Quorum:          keysSet.Threshold,
+		PartialQuorum:   keysSet.PartialThreshold,
 		DomainType:      spectypes.PrimusTestnet,
 		Graffiti:        nil,
 	}
@@ -332,7 +331,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 				Height:     msg.Message.Height,
 				Round:      msg.Message.Round,
 				Identifier: identifier[:],
-				Data:       msg.Message.Data,
+				//Identifier: msg.Message.Identifier,
+				Data: msg.Message.Data,
 			},
 		}
 
@@ -406,7 +406,9 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
+		// TODO(nkryuchkov): review mapErrors function
+		//require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -551,19 +553,24 @@ type signatureAndID struct {
 	Identifier []byte
 }
 
+type mockLeaderSelector struct {
+	committeeSize uint64
+}
+
+func (m mockLeaderSelector) Calculate(round uint64) uint64 {
+	return (round - 1) % m.committeeSize
+}
+
 func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
 	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	leaderSelectionSeed := append(fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(height), 10))...)
-	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(share.CommitteeSize()))
-	require.NoError(t, err)
 
 	return instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
 		Network:          net,
-		LeaderSelector:   leaderSelc,
+		LeaderSelector:   mockLeaderSelector{uint64(share.CommitteeSize())},
 		Config:           qbftprotocol.DefaultConsensusParams(),
 		Identifier:       identifier,
 		Height:           height,
