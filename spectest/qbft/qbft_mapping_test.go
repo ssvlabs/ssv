@@ -111,12 +111,12 @@ func testsToRun() map[string]struct{} {
 		proposal.InvalidProposalData(),                            // TODO(nkryuchkov): failure
 		proposal.InvalidValueCheck(),                              // TODO(nkryuchkov): failure
 		proposal.MultiSigner(),                                    // TODO(nkryuchkov): failure
-		proposal.PostDecided(),
-		proposal.PostPrepared(),           // TODO(nkryuchkov): failure
-		proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure
-		proposal.WrongHeight(),            // TODO(nkryuchkov): failure
-		proposal.WrongProposer(),          // TODO(nkryuchkov): failure
-		proposal.WrongSignature(),         // TODO(nkryuchkov): failure
+		proposal.PostDecided(),                                    // TODO(nkryuchkov): failure
+		proposal.PostPrepared(),                                   // TODO(nkryuchkov): failure
+		proposal.SecondProposalForRound(),                         // TODO(nkryuchkov): failure
+		proposal.WrongHeight(),                                    // TODO(nkryuchkov): failure
+		proposal.WrongProposer(),                                  // TODO(nkryuchkov): failure
+		proposal.WrongSignature(),                                 // TODO(nkryuchkov): failure
 
 		prepare.DuplicateMsg(),
 		prepare.HappyFlow(),              // TODO(nkryuchkov): failure
@@ -344,7 +344,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	qbftInstance := newQbftInstance(t, logger, qbftStorage, p2pNet, beacon, share, forkVersion)
+	qbftInstance := newQbftInstance(logger, qbftStorage, p2pNet, beacon, share, mappedShare, forkVersion)
 	qbftInstance.Init()
 	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
 	qbftInstance.State().Round.Store(test.Pre.State.Round)
@@ -590,24 +590,36 @@ type signatureAndID struct {
 	Identifier []byte
 }
 
-type mockLeaderSelector struct {
-	committeeSize uint64
+type roundRobinLeaderSelector struct {
+	state       *qbftprotocol.State
+	mappedShare *spectypes.Share
 }
 
-func (m mockLeaderSelector) Calculate(round uint64) uint64 {
-	return (round - 1) % m.committeeSize
+func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
+	specState := &specqbft.State{
+		Share:  m.mappedShare,
+		Height: m.state.GetHeight(),
+	}
+	// RoundRobinProposer returns OperatorID which starts with 1.
+	// As the result will be used to index OperatorIds which starts from 0,
+	// the result of Calculate should be decremented.
+	return uint64(specqbft.RoundRobinProposer(specState, specqbft.Round(round))) - 1
 }
 
-func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
+type mockLeaderSelector struct{}
+
+func (m mockLeaderSelector) Calculate(uint64) uint64 {
+	return 0
+}
+
+func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
 	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-
-	return instance.NewInstance(&instance.Options{
+	newInstance := instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
 		Network:          net,
-		LeaderSelector:   mockLeaderSelector{uint64(share.CommitteeSize())},
 		Config:           qbftprotocol.DefaultConsensusParams(),
 		Identifier:       identifier,
 		Height:           height,
@@ -616,6 +628,8 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 		Signer:           beacon,
 		ChangeRoundStore: qbftStorage,
 	})
+	newInstance.(*instance.Instance).LeaderSelector = roundRobinLeaderSelector{newInstance.State(), mappedShare}
+	return newInstance
 }
 
 func convertSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *specqbft.SignedMessage) *specqbft.SignedMessage {
