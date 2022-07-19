@@ -606,12 +606,6 @@ func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
 	return uint64(specqbft.RoundRobinProposer(specState, specqbft.Round(round))) - 1
 }
 
-type mockLeaderSelector struct{}
-
-func (m mockLeaderSelector) Calculate(uint64) uint64 {
-	return 0
-}
-
 func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
