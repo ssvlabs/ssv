@@ -38,7 +38,7 @@ type Options struct {
 	Beacon                     beaconprotocol.Beacon
 	Share                      *beaconprotocol.Share
 	ForkVersion                forksprotocol.ForkVersion
-	Signer                     beaconprotocol.Signer
+	SSVSigner                  spectypes.SSVSigner
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
@@ -49,14 +49,14 @@ type Options struct {
 
 // Validator represents the validator
 type Validator struct {
-	ctx        context.Context
-	cancelCtx  context.CancelFunc
-	logger     *zap.Logger
-	network    beaconprotocol.Network
-	p2pNetwork p2pprotocol.Network
-	beacon     beaconprotocol.Beacon
-	Share      *beaconprotocol.Share // var is exported to validator ctrl tests reasons
-	signer     beaconprotocol.Signer
+	ctx          context.Context
+	cancelCtx    context.CancelFunc
+	logger       *zap.Logger
+	network      beaconprotocol.Network
+	p2pNetwork   p2pprotocol.Network
+	beacon       beaconprotocol.Beacon
+	beaconSigner spectypes.BeaconSigner
+	Share        *beaconprotocol.Share // var is exported to validator ctrl tests reasons
 
 	ibfts controller.Controllers
 
@@ -92,7 +92,6 @@ func NewValidator(opt *Options) IValidator {
 		p2pNetwork:  opt.P2pNetwork,
 		beacon:      opt.Beacon,
 		Share:       opt.Share,
-		signer:      opt.Signer,
 		ibfts:       ibfts,
 		readMode:    opt.ReadMode,
 		saveHistory: opt.FullNode,
@@ -173,7 +172,7 @@ func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Opt
 		ValidatorShare:    opt.Share,
 		Version:           opt.ForkVersion,
 		Beacon:            opt.Beacon,
-		Signer:            opt.Signer,
+		SSVSigner:         opt.SSVSigner,
 		SyncRateLimit:     opt.SyncRateLimit,
 		SigTimeout:        opt.SignatureCollectionTimeout,
 		ReadMode:          opt.ReadMode,

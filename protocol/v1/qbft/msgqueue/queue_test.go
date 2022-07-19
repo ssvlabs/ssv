@@ -5,7 +5,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -132,10 +132,10 @@ func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id spectypes.Message
 		MsgID:   id,
 	}
 
-	signedMsg := &ssv.SignedPartialSignatureMessage{
-		Type: ssv.PostConsensusPartialSig,
-		Messages: ssv.PartialSignatureMessages{
-			&ssv.PartialSignatureMessage{
+	signedMsg := &specssv.SignedPartialSignatureMessage{
+		Type: specssv.PostConsensusPartialSig,
+		Messages: specssv.PartialSignatureMessages{
+			&specssv.PartialSignatureMessage{
 				Slot:             slot,
 				PartialSignature: make([]byte, 96),
 				SigningRoot:      make([]byte, 32),

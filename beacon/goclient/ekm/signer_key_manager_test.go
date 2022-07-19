@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -62,10 +61,10 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 	return container.HashTreeRoot()
 }
 
-func testKeyManager(t *testing.T) beacon2.KeyManager {
+func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), message.PrimusTestnet)
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), spectypes.PrimusTestnet)
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 
@@ -120,7 +119,7 @@ func TestSignAttestation(t *testing.T) {
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		attestationData.BeaconBlockRoot = [32]byte{2, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2}
 		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
-		require.EqualError(t, err, "failed to sign attestation: slashable attestation (HighestAttestationVote), not signing")
+		require.EqualError(t, err, "could not sign attestation: slashable attestation (HighestAttestationVote), not signing")
 		require.Nil(t, sig)
 	})
 }
@@ -148,7 +147,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
+		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
@@ -180,7 +179,7 @@ func TestSignIBFTMessage(t *testing.T) {
 		}
 
 		// sign
-		sig, err := km.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
+		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify

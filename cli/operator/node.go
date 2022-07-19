@@ -170,7 +170,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
-		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey

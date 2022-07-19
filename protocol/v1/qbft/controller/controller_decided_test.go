@@ -2,10 +2,10 @@ package controller
 
 import (
 	"context"
+	"crypto/rsa"
 	"testing"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -651,7 +651,7 @@ func populatedIbft(
 	ibftStorage qbftstorage.QBFTStore,
 	sks map[spectypes.OperatorID]*bls.SecretKey,
 	nodes map[spectypes.OperatorID]*beaconprotocol.Node,
-	signer beaconprotocol.Signer,
+	SSVSigner spectypes.SSVSigner,
 ) IController {
 	share := &beaconprotocol.Share{
 		NodeID:      nodeID,
@@ -671,7 +671,7 @@ func populatedIbft(
 		ValidatorShare: share,
 		Version:        forksprotocol.GenesisForkVersion, // TODO need to check v1 fork too? (:Niv)
 		Beacon:         nil,                              // ?
-		Signer:         signer,
+		SSVSigner:      SSVSigner,
 		SyncRateLimit:  time.Millisecond * 100,
 		SigTimeout:     time.Second * 5,
 		ReadMode:       false,
@@ -682,23 +682,27 @@ func populatedIbft(
 	return ret
 }
 
-type testSigner struct {
+type testSSVSigner struct {
 }
 
-func newTestSigner() beaconprotocol.Signer {
-	return &testSigner{}
+func newTestSigner() spectypes.SSVSigner {
+	return &testSSVSigner{}
 }
 
-func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
-	return nil
+func (s *testSSVSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
 }
 
-func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+func (s *testSSVSigner) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (s *testSSVSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	return nil, nil
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	return nil, nil, nil
+func (s *testSSVSigner) AddShare(shareKey *bls.SecretKey) error {
+	return nil
 }
 
 func commitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {

@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
+	"github.com/attestantio/go-eth2-client/spec/altair"
+	"github.com/pkg/errors"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -17,7 +19,6 @@ import (
 	p2p "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -72,35 +73,63 @@ func networking(forkVersion forksprotocol.ForkVersion) network.P2PNetwork {
 	return net
 }
 
-type testSigner struct {
+type testKeyManager struct {
 	keys map[string]*bls.SecretKey
 }
 
-func newTestSigner() beacon.KeyManager {
-	return &testSigner{make(map[string]*bls.SecretKey)}
+func newTestKeyManager() spectypes.KeyManager {
+	return &testKeyManager{make(map[string]*bls.SecretKey)}
 }
 
-func (km *testSigner) AddShare(shareKey *bls.SecretKey) error {
-	if km.getKey(shareKey.GetPublicKey()) == nil {
-		km.keys[shareKey.GetPublicKey().SerializeToHexStr()] = shareKey
-	}
-	return nil
+func (km *testKeyManager) IsAttestationSlashable(data *spec.AttestationData) error {
+	panic("implement me")
 }
 
-func (km *testSigner) RemoveShare(pubKey string) error {
-	// TODO: implement
-	return nil
+func (km *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
 }
 
-func (km *testSigner) getKey(key *bls.PublicKey) *bls.SecretKey {
-	return km.keys[key.SerializeToHexStr()]
+func (km *testKeyManager) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+	panic("implement me")
 }
 
-func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+func (km *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
 		computedRoot, err := spectypes.ComputeSigningRoot(data, nil) // TODO need to use sigType
 		if err != nil {
-			return nil, errors.Wrap(err, "could not sign root")
+			return nil, errors.Wrap(err, "could not compute signing root")
 		}
 
 		return key.SignByte(computedRoot).Serialize(), nil
@@ -108,7 +137,22 @@ func (km *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType mess
 	return nil, errors.New("could not find key for pk")
 }
 
-func (km *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (km *testKeyManager) AddShare(shareKey *bls.SecretKey) error {
+	if km.getKey(shareKey.GetPublicKey()) == nil {
+		km.keys[shareKey.GetPublicKey().SerializeToHexStr()] = shareKey
+	}
+	return nil
+}
+
+func (km *testKeyManager) RemoveShare(pubKey string) error {
+	return nil
+}
+
+func (km *testKeyManager) getKey(key *bls.PublicKey) *bls.SecretKey {
+	return km.keys[key.SerializeToHexStr()]
+}
+
+func (km *testKeyManager) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	return nil, nil, nil
 }
 
@@ -166,7 +210,7 @@ func main() {
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking(forksprotocol.GenesisForkVersion)
 		dbs = append(dbs, db())
-		signer := newTestSigner()
+		signer := newTestKeyManager()
 		_ = signer.AddShare(sks[i])
 		if err := net.Subscribe(shareSk.GetPublicKey().Serialize()); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
@@ -183,7 +227,7 @@ func main() {
 			ValidatorShare: shares[i],
 			Version:        forksprotocol.GenesisForkVersion,
 			SyncRateLimit:  time.Millisecond * 200,
-			Signer:         signer,
+			SSVSigner:      signer,
 		}
 
 		nodes = append(nodes, ibft.New(nodeOpts))

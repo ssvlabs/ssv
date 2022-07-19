@@ -528,7 +528,7 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 		Height:           height,
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),
-		Signer:           beacon,
+		SSVSigner:        beacon.KeyManager,
 		ChangeRoundStore: qbftStorage,
 	})
 }

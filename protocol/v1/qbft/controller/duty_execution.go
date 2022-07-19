@@ -5,7 +5,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -15,7 +15,7 @@ import (
 )
 
 // ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
-func (c *Controller) ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error {
+func (c *Controller) ProcessPostConsensusMessage(msg *specssv.SignedPartialSignatureMessage) error {
 	if c.SignatureState.getState() != StateRunning {
 		c.Logger.Warn(
 			"trying to process post consensus signature message but timer state is not running. can't process message.",
@@ -99,18 +99,18 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specq
 }
 
 // signAndBroadcast checks and adds the signed message to the appropriate round state type
-func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
+func (c *Controller) signAndBroadcast(psm specssv.PartialSignatureMessages) error {
 	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator share pubkey")
 	}
-	signature, err := c.Signer.SignIBFTMessage(psm, pk.Serialize(), message.PostConsensusSigType)
+	signature, err := c.SSVSigner.SignRoot(psm, spectypes.PartialSignatureType, pk.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "failed to sign message")
 	}
 
-	signedMsg := &ssv.SignedPartialSignatureMessage{
-		Type:      ssv.PostConsensusPartialSig,
+	signedMsg := &specssv.SignedPartialSignatureMessage{
+		Type:      specssv.PostConsensusPartialSig,
 		Messages:  psm,
 		Signature: signature,
 		Signers:   []spectypes.OperatorID{c.ValidatorShare.NodeID},
@@ -134,10 +134,10 @@ func (c *Controller) signAndBroadcast(psm ssv.PartialSignatureMessages) error {
 }
 
 // generatePartialSignatureMessage returns a PartialSignatureMessage struct
-func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (ssv.PartialSignatureMessages, error) {
+func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (specssv.PartialSignatureMessages, error) {
 	signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
-	return ssv.PartialSignatureMessages{
-		&ssv.PartialSignatureMessage{
+	return specssv.PartialSignatureMessages{
+		&specssv.PartialSignatureMessage{
 			Slot:             slot,
 			PartialSignature: sig,
 			SigningRoot:      root,

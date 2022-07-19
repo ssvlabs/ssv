@@ -58,7 +58,7 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
-	KeyManager                 beaconprotocol.KeyManager
+	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
@@ -91,7 +91,7 @@ type controller struct {
 	storage    registrystorage.OperatorsCollection
 	logger     *zap.Logger
 	beacon     beaconprotocol.Beacon
-	keyManager beaconprotocol.KeyManager
+	keyManager spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -172,7 +172,6 @@ func NewController(options ControllerOptions) Controller {
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
 		ForkVersion:                options.ForkVersion,
-		Signer:                     options.Beacon,
 		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
