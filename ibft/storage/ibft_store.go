@@ -81,8 +81,7 @@ func (i *ibftStorage) GetLastDecided(identifier spectypes.MessageID) (*specqbft.
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	fIdentifier := i.fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType())
-	val, found, err := i.get(highestKey, fIdentifier[:])
+	val, found, err := i.get(highestKey, identifier[:])
 	if err != nil {
 		return nil, err
 	}
@@ -98,13 +97,11 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) err
 	defer i.forkLock.RUnlock()
 
 	for _, signedMsg := range signedMsgs {
-		msgID := message.ToMessageID(signedMsg.Message.Identifier)
-		fIdentifier := i.fork.Identifier(msgID.GetPubKey(), msgID.GetRoleType())
 		value, err := i.fork.EncodeSignedMsg(signedMsg)
 		if err != nil {
 			return errors.Wrap(err, "could not encode signed message")
 		}
-		if err = i.save(value, highestKey, fIdentifier[:]); err != nil {
+		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
 			return err
 		}
 		reportHighestDecided(signedMsg)
@@ -149,11 +146,25 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 		if err != nil {
 			return basedb.Obj{}, err
 		}
-		msgID := message.ToMessageID(msg.Message.Identifier)
-		identifier := i.fork.Identifier(msgID.GetPubKey(), msgID.GetRoleType())
-		key := append(identifier[:], k...)
+		key := append(msg.Message.Identifier, k...)
 		return basedb.Obj{Key: key, Value: value}, nil
 	})
+}
+
+func (i *ibftStorage) CleanAllDecided(msgID spectypes.MessageID) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	prefix := i.prefix
+	prefix = append(prefix, msgID[:]...)
+	prefix = append(prefix, []byte(decidedKey)...)
+	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+		return errors.Wrap(err, "failed to remove decided")
+	}
+	if err := i.delete(highestKey, msgID[:]); err != nil {
+		return errors.Wrap(err, "failed to remove last decided")
+	}
+	return nil
 }
 
 func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state *qbft.State) error {
@@ -188,13 +199,11 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error 
 	for _, s := range msg.GetSigners() {
 		signers = append(signers, uInt64ToByteSlice(uint64(s)))
 	}
-	msgID := message.ToMessageID(msg.Message.Identifier)
-	identifier := i.fork.Identifier(msgID.GetPubKey(), msgID.GetRoleType())
 	signedMsg, err := i.fork.EncodeSignedMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not encode signed message")
 	}
-	return i.save(signedMsg, lastChangeRoundKey, identifier[:], signers...)
+	return i.save(signedMsg, lastChangeRoundKey, msg.Message.Identifier, signers...)
 }
 
 // GetLastChangeRoundMsg returns last known change round message
@@ -203,8 +212,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, sign
 	defer i.forkLock.RUnlock()
 
 	if len(signers) == 0 {
-		forkedIdentifier := i.fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType())
-		res, err := i.getAll(lastChangeRoundKey, forkedIdentifier[:])
+		res, err := i.getAll(lastChangeRoundKey, identifier[:])
 
 		if err != nil {
 			return nil, err
@@ -214,8 +222,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, sign
 
 	var res []*specqbft.SignedMessage
 	for _, s := range signers {
-		fIdentifier := i.fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType())
-		msg, found, err := i.get(lastChangeRoundKey, fIdentifier[:], uInt64ToByteSlice(uint64(s)))
+		msg, found, err := i.get(lastChangeRoundKey, identifier[:], uInt64ToByteSlice(uint64(s)))
 		if err != nil {
 			return res, err
 		}
@@ -236,8 +243,7 @@ func (i *ibftStorage) CleanLastChangeRound(identifier spectypes.MessageID) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	forkIdentifier := i.fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType())
-	err := i.delete(lastChangeRoundKey, forkIdentifier[:])
+	err := i.delete(lastChangeRoundKey, identifier[:])
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}

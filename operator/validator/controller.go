@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"sync"
 	"time"
 
@@ -85,12 +87,13 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context    context.Context
-	collection validator.ICollection
-	storage    registrystorage.OperatorsCollection
-	logger     *zap.Logger
-	beacon     beaconprotocol.Beacon
-	keyManager beaconprotocol.KeyManager
+	context     context.Context
+	collection  validator.ICollection
+	storage     registrystorage.OperatorsCollection
+	ibftStorage qbftstorage.QBFTStore
+	logger      *zap.Logger
+	beacon      beaconprotocol.Beacon
+	keyManager  beaconprotocol.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -155,6 +158,8 @@ func NewController(options ControllerOptions) Controller {
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 
+	msgID := forksfactory.NewFork(options.ForkVersion).MsgID()
+
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
 		Logger:       options.Logger,
@@ -181,6 +186,7 @@ func NewController(options ControllerOptions) Controller {
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
+		ibftStorage:                qbftStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
@@ -198,7 +204,7 @@ func NewController(options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter: newMessageRouter(options.Logger),
+		messageRouter: newMessageRouter(options.Logger, msgID),
 		messageWorker: worker.NewWorker(workerCfg),
 	}
 

@@ -22,6 +22,65 @@ func init() {
 	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 }
 
+func TestCleanDecided(t *testing.T) {
+	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
+	require.NoError(t, err)
+
+	generateMsg := func(id spectypes.MessageID, h specqbft.Height) *specqbft.SignedMessage {
+		return &specqbft.SignedMessage{
+			Signature: []byte("sig"),
+			Signers:   []spectypes.OperatorID{1},
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     h,
+				Round:      1,
+				Identifier: id[:],
+				Data:       nil,
+			},
+		}
+	}
+
+	msgsCount := 10
+	for i := 0; i < msgsCount; i++ {
+		require.NoError(t, storage.SaveDecided(generateMsg(msgID, specqbft.Height(i))))
+	}
+	require.NoError(t, storage.SaveLastDecided(generateMsg(msgID, specqbft.Height(msgsCount))))
+
+	// add different msgID
+	differMsgID := spectypes.NewMsgID([]byte("differ_pk"), spectypes.BNRoleAttester)
+	require.NoError(t, storage.SaveDecided(generateMsg(differMsgID, specqbft.Height(1))))
+	require.NoError(t, storage.SaveLastDecided(generateMsg(differMsgID, specqbft.Height(msgsCount))))
+
+	res, err := storage.GetDecided(msgID, 0, specqbft.Height(msgsCount))
+	require.NoError(t, err)
+	require.Equal(t, msgsCount, len(res))
+
+	last, err := storage.GetLastDecided(msgID)
+	require.NoError(t, err)
+	require.NotNil(t, last)
+	require.Equal(t, specqbft.Height(msgsCount), last.Message.Height)
+
+	// remove all decided
+	require.NoError(t, storage.CleanAllDecided(msgID))
+	res, err = storage.GetDecided(msgID, 0, specqbft.Height(msgsCount))
+	require.NoError(t, err)
+	require.Equal(t, 0, len(res))
+
+	last, err = storage.GetLastDecided(msgID)
+	require.NoError(t, err)
+	require.Nil(t, last)
+
+	// check other msgID
+	res, err = storage.GetDecided(differMsgID, 0, specqbft.Height(msgsCount))
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+
+	last, err = storage.GetLastDecided(differMsgID)
+	require.NoError(t, err)
+	require.NotNil(t, last)
+}
+
 func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)

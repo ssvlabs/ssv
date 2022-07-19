@@ -108,6 +108,11 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 	})
 }
 
+func (i *ibftStorage) CleanAllDecided(msgID spectypes.MessageID) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state *qbft.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
