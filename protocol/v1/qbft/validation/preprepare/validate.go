@@ -10,7 +10,7 @@ import (
 )
 
 // ErrInvalidSignersNum represents an error when the number of signers is invalid.
-var ErrInvalidSignersNum = errors.New("invalid number of signers for pre-prepare message")
+var ErrInvalidSignersNum = errors.New("proposal msg allows 1 signer")
 
 // LeaderResolver resolves round's leader
 type LeaderResolver func(round specqbft.Round) uint64
