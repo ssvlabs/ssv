@@ -12,7 +12,7 @@ import (
 func ValidateSequenceNumber(height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("sequence", func(signedMessage *specqbft.SignedMessage) error {
 		if signedMessage.Message.Height != height {
-			return fmt.Errorf("proposal Height is wrong")
+			return fmt.Errorf("msg Height wrong")
 		}
 		return nil
 	})

@@ -57,10 +57,10 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return errors.New("change round justification sequence is wrong")
 	}
 	if signedMessage.Message.Round <= roundChangeJust[0].Message.Round {
-		return errors.New("change round justification round lower or equal to message round")
+		return errors.New("round change justification invalid: msg round wrong")
 	}
 	if data.PreparedRound != roundChangeJust[0].Message.Round {
-		return errors.New("change round prepared round not equal to justification msg round")
+		return errors.New("round change justification invalid: msg round wrong")
 	}
 	if !bytes.Equal(signedMessage.Message.Identifier, roundChangeJust[0].Message.Identifier) {
 		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
