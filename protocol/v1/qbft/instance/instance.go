@@ -252,27 +252,27 @@ func (i *Instance) Stopped() bool {
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
-	var msgType string
+	var errPrefix string // TODO(nkryuchkov): make similar in ssv-spec
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		pp = i.PrePrepareMsgPipeline()
-		msgType = "proposal"
+		errPrefix = "proposal invalid"
 	case specqbft.PrepareMsgType:
 		pp = i.PrepareMsgPipeline()
-		msgType = "prepare"
+		errPrefix = "invalid prepare msg"
 	case specqbft.CommitMsgType:
 		pp = i.CommitMsgPipeline()
-		msgType = "commit"
+		errPrefix = "commit msg invalid"
 	case specqbft.RoundChangeMsgType:
 		pp = i.ChangeRoundMsgPipeline()
-		msgType = "round change"
+		errPrefix = "round change msg invalid"
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
 	}
 	if err := pp.Run(msg); err != nil {
-		return false, fmt.Errorf("%s invalid: %w", msgType, err)
+		return false, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)

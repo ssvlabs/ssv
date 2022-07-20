@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -24,7 +25,7 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			prepareMsg, err := signedMessage.Message.GetPrepareData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get prepare data: %w", err)
 			}
 			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil

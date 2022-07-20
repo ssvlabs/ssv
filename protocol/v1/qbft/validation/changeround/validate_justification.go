@@ -2,6 +2,7 @@ package changeround
 
 import (
 	"bytes"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -31,7 +32,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	// TODO - change to normal prepare pipeline
 	data, err := signedMessage.Message.GetRoundChangeData()
 	if err != nil {
-		return errors.Wrap(err, "failed to get round change data")
+		return fmt.Errorf("could not get roundChange data : %w", err) // TODO(nkryuchkov): remove whitespace in ssv-spec
 	}
 	if data == nil {
 		return errors.New("change round data is nil")

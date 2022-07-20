@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 
 	"github.com/pkg/errors"
@@ -23,7 +25,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 
 			commitData, err := signedMessage.Message.GetCommitData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get msg commit data: %w", err)
 			}
 			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
