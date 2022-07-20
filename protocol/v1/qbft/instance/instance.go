@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
@@ -251,22 +252,27 @@ func (i *Instance) Stopped() bool {
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
+	var msgType string
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		pp = i.PrePrepareMsgPipeline()
+		msgType = "proposal"
 	case specqbft.PrepareMsgType:
 		pp = i.PrepareMsgPipeline()
+		msgType = "prepare"
 	case specqbft.CommitMsgType:
 		pp = i.CommitMsgPipeline()
+		msgType = "commit"
 	case specqbft.RoundChangeMsgType:
 		pp = i.ChangeRoundMsgPipeline()
+		msgType = "round change"
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
 	}
 	if err := pp.Run(msg); err != nil {
-		return false, err
+		return false, fmt.Errorf("%s invalid: %w", msgType, err)
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
