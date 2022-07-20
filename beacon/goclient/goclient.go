@@ -22,7 +22,6 @@ import (
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient/ekm"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
@@ -57,14 +56,13 @@ type goClient struct {
 	client         client.Service
 	indicesMapLock sync.Mutex
 	graffiti       []byte
-	keyManager     spectypes.KeyManager
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, spectypes.KeyManager, error) {
+func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
@@ -76,7 +74,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, spectypes.KeyManage
 		http.WithTimeout(time.Second*5),
 	)
 	if err != nil {
-		return nil, nil, errors.WithMessage(err, "failed to create http client")
+		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
 	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
@@ -92,12 +90,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, spectypes.KeyManage
 		graffiti:       opt.Graffiti,
 	}
 
-	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, spectypes.PrimusTestnet)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not create new eth-key-manager signer")
-	}
-
-	return _client, _client.keyManager, nil
+	return _client, nil
 }
 
 // HealthCheck provides health status of beacon node

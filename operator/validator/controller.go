@@ -171,6 +171,7 @@ func NewController(options ControllerOptions) Controller {
 		Network:                    options.ETHNetwork,
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
+		KeyManager:                 options.KeyManager,
 		ForkVersion:                options.ForkVersion,
 		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,

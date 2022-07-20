@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -114,10 +115,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 		cfg.ETH2Options.DB = db
-		beaconClient, keyManager, err := goclient.New(cfg.ETH2Options)
+		beaconClient, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
+		}
+
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, spectypes.PrimusTestnet)
+		if err != nil {
+			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
 		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
