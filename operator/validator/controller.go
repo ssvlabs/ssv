@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"sync"
 	"time"
 
@@ -18,10 +17,12 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -86,12 +87,13 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context    context.Context
-	collection validator.ICollection
-	storage    registrystorage.OperatorsCollection
-	logger     *zap.Logger
-	beacon     beaconprotocol.Beacon
-	keyManager spectypes.KeyManager
+	context     context.Context
+	collection  validator.ICollection
+	storage     registrystorage.OperatorsCollection
+	ibftStorage qbftstorage.QBFTStore
+	logger      *zap.Logger
+	beacon      beaconprotocol.Beacon
+	keyManager  spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -184,6 +186,7 @@ func NewController(options ControllerOptions) Controller {
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
+		ibftStorage:                qbftStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,

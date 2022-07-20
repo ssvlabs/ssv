@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/exporter"
 	"strings"
 
@@ -85,7 +86,7 @@ func (c *controller) handleOperatorRemovalEvent(
 
 	if od.OwnerAddress != event.OwnerAddress {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match operator data owner address and index with provided event"),
+			Err: errors.New("could not match operator owner address with provided event owner address"),
 		}
 	}
 
@@ -183,6 +184,19 @@ func (c *controller) handleValidatorRemovalEvent(
 			Err: errors.New("could not find validator share"),
 		}
 	}
+
+	if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+		return nil, &abiparser.MalformedEventError{
+			Err: errors.New("could not match validator owner address with provided event owner address"),
+		}
+	}
+
+	// remove decided messages
+	if err := c.ibftStorage.CleanAllDecided(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)); err != nil { // TODO need to delete for multi duty as well
+		return nil, errors.Wrap(err, "could not clean all decided messages")
+	}
+	// remove change round messages
+	c.ibftStorage.CleanLastChangeRound(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)) // TODO need to delete for multi duty as well
 
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
