@@ -3,7 +3,6 @@ package ekm
 import (
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/prysmaticlabs/go-bitfield"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -17,6 +16,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"

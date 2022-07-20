@@ -684,70 +684,70 @@ func populatedIbft(
 	return ret
 }
 
-type testSSVSigner struct {
+type testKeyManager struct {
 }
 
 func newTestKeyManager() spectypes.KeyManager {
-	return &testSSVSigner{}
+	return &testKeyManager{}
 }
 
-func (s *testSSVSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+func (s *testKeyManager) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+func (s *testKeyManager) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+func (s *testKeyManager) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	return nil, nil
 }
 
-func (s *testSSVSigner) AddShare(shareKey *bls.SecretKey) error {
+func (s *testKeyManager) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (s *testSSVSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+func (s *testKeyManager) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) IsAttestationSlashable(data *spec.AttestationData) error {
+func (s *testKeyManager) IsAttestationSlashable(data *spec.AttestationData) error {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
+func (s *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+func (s *testKeyManager) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
+func (s *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
+func (s *testKeyManager) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
+func (s *testKeyManager) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
+func (s *testKeyManager) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
+func (s *testKeyManager) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
+func (s *testKeyManager) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
 	panic("implement me")
 }
 
-func (s *testSSVSigner) RemoveShare(pubKey string) error {
+func (s *testKeyManager) RemoveShare(pubKey string) error {
 	panic("implement me")
 }
 
