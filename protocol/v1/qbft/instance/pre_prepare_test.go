@@ -9,7 +9,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -330,10 +329,6 @@ func (s *testSSVSigner) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) 
 
 func (s *testSSVSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	return nil, nil
-}
-
-func (s *testSSVSigner) AddShare(shareKey *bls.SecretKey) error {
-	return nil
 }
 
 func proposalDataToBytes(t *testing.T, input *specqbft.ProposalData) []byte {

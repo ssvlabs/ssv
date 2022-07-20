@@ -149,7 +149,7 @@ func (c *Controller) signDuty(decidedValue []byte, duty *spectypes.Duty) ([]byte
 			return nil, nil, nil, errors.Wrap(err, "failed to decode consensus data")
 		}
 		c.Logger.Debug("decoded consensus data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
-		signedAttestation, r, err := c.BeaconSigner.SignAttestation(s.AttestationData, duty, pk.Serialize())
+		signedAttestation, r, err := c.KeyManager.SignAttestation(s.AttestationData, duty, pk.Serialize())
 		if err != nil {
 			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}

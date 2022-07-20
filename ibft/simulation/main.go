@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/pkg/errors"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
@@ -210,8 +210,8 @@ func main() {
 	for i := uint64(1); i <= uint64(nodeCount); i++ {
 		net := networking(forksprotocol.GenesisForkVersion)
 		dbs = append(dbs, db())
-		signer := newTestKeyManager()
-		_ = signer.AddShare(sks[i])
+		km := newTestKeyManager()
+		_ = km.AddShare(sks[i])
 		if err := net.Subscribe(shareSk.GetPublicKey().Serialize()); err != nil {
 			logger.Fatal("could not register validator pubsub", zap.Error(err))
 		}
@@ -227,7 +227,7 @@ func main() {
 			ValidatorShare: shares[i],
 			Version:        forksprotocol.GenesisForkVersion,
 			SyncRateLimit:  time.Millisecond * 200,
-			SSVSigner:      signer,
+			KeyManager:     km,
 		}
 
 		nodes = append(nodes, ibft.New(nodeOpts))

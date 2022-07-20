@@ -104,7 +104,7 @@ func (c *Controller) signAndBroadcast(psm specssv.PartialSignatureMessages) erro
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator share pubkey")
 	}
-	signature, err := c.SSVSigner.SignRoot(psm, spectypes.PartialSignatureType, pk.Serialize())
+	signature, err := c.KeyManager.SignRoot(psm, spectypes.PartialSignatureType, pk.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "failed to sign message")
 	}

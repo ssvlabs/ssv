@@ -39,7 +39,6 @@ type Options struct {
 	// Fork sets the current fork to apply on instance
 	Fork             forks.Fork
 	SSVSigner        spectypes.SSVSigner
-	BeaconSigner     spectypes.BeaconSigner
 	ChangeRoundStore qbftstorage.ChangeRoundStore
 }
 

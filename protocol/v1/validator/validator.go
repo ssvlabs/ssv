@@ -38,7 +38,7 @@ type Options struct {
 	Beacon                     beaconprotocol.Beacon
 	Share                      *beaconprotocol.Share
 	ForkVersion                forksprotocol.ForkVersion
-	SSVSigner                  spectypes.SSVSigner
+	KeyManager                 spectypes.KeyManager
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
 	ReadMode                   bool
@@ -172,7 +172,7 @@ func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Opt
 		ValidatorShare:    opt.Share,
 		Version:           opt.ForkVersion,
 		Beacon:            opt.Beacon,
-		SSVSigner:         opt.SSVSigner,
+		KeyManager:        opt.KeyManager,
 		SyncRateLimit:     opt.SyncRateLimit,
 		SigTimeout:        opt.SignatureCollectionTimeout,
 		ReadMode:          opt.ReadMode,

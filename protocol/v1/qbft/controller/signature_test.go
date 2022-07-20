@@ -141,7 +141,6 @@ func TestVerifyPartialSignature(t *testing.T) {
 				InstanceConfig: qbft.DefaultConsensusParams(),
 				ValidatorShare: share,
 				Beacon:         b,
-				SSVSigner:      b,
 				SigTimeout:     time.Second * 2,
 				Version:        forksprotocol.GenesisForkVersion,
 			}

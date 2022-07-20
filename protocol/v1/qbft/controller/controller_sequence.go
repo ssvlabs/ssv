@@ -90,7 +90,6 @@ func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerSta
 		Height:          opts.SeqNumber,
 		Fork:            c.Fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
-		SSVSigner:       c.SSVSigner,
-		BeaconSigner:    c.BeaconSigner,
+		SSVSigner:       c.KeyManager,
 	}, nil
 }

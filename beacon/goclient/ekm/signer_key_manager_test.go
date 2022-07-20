@@ -124,7 +124,7 @@ func TestSignAttestation(t *testing.T) {
 	})
 }
 
-func TestSignIBFTMessage(t *testing.T) {
+func TestSignRoot(t *testing.T) {
 	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 
 	require.NoError(t, bls.Init(bls.BLS12_381))

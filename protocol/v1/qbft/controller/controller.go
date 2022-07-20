@@ -45,7 +45,7 @@ type Options struct {
 	ValidatorShare    *beaconprotocol.Share
 	Version           forksprotocol.ForkVersion
 	Beacon            beaconprotocol.Beacon
-	SSVSigner         spectypes.SSVSigner
+	KeyManager        spectypes.KeyManager
 	SyncRateLimit     time.Duration
 	SigTimeout        time.Duration
 	ReadMode          bool
@@ -77,8 +77,7 @@ type Controller struct {
 	Identifier         spectypes.MessageID
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
-	SSVSigner          spectypes.SSVSigner
-	BeaconSigner       spectypes.BeaconSigner
+	KeyManager         spectypes.KeyManager
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -120,7 +119,7 @@ func New(opts Options) IController {
 		Identifier:         opts.Identifier,
 		Fork:               fork,
 		Beacon:             opts.Beacon,
-		SSVSigner:          opts.SSVSigner,
+		KeyManager:         opts.KeyManager,
 		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
 		SyncRateLimit: opts.SyncRateLimit,
