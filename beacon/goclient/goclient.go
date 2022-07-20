@@ -64,7 +64,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
+func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, spectypes.KeyManager, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 
@@ -76,7 +76,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		http.WithTimeout(time.Second*5),
 	)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create http client")
+		return nil, nil, errors.WithMessage(err, "failed to create http client")
 	}
 
 	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
@@ -94,10 +94,10 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 
 	_client.keyManager, err = ekm.NewETHKeyManagerSigner(opt.DB, _client, network, spectypes.PrimusTestnet)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not create new eth-key-manager signer")
+		return nil, nil, errors.Wrap(err, "could not create new eth-key-manager signer")
 	}
 
-	return _client, nil
+	return _client, _client.keyManager, nil
 }
 
 // HealthCheck provides health status of beacon node

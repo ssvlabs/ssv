@@ -114,7 +114,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Logger = Logger
 		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 		cfg.ETH2Options.DB = db
-		beaconClient, err := goclient.New(cfg.ETH2Options)
+		beaconClient, keyManager, err := goclient.New(cfg.ETH2Options)
 		if err != nil {
 			Logger.Fatal("failed to create beacon go-client", zap.Error(err),
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
@@ -169,6 +169,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
+		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
