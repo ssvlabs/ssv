@@ -88,93 +88,93 @@ func testsToRun() map[string]struct{} {
 		spectests.ThirteenOperators(),
 
 		proposal.HappyFlow(),
-		proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure
-		proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure
-		proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure
-		proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure
-		proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure
-		proposal.DuplicateMsg(),                       // TODO(nkryuchkov): failure
+		proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; need to handle proposal justifications
+		proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure; handle PJ (proposal justifications) & substitute identifier in justifications in mapping
+		proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure; handle PJ
+		proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure; handle PJ
+		proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure; handle PJ
+		proposal.DuplicateMsg(),                       // TODO(nkryuchkov): failure; need to check if proposal was already accepted
 		proposal.FirstRoundJustification(),
-		proposal.FutureRoundNoAcceptedProposal(),                  // TODO(nkryuchkov): failure
-		proposal.FutureRoundAcceptedProposal(),                    // TODO(nkryuchkov): failure
-		proposal.PastRound(),                                      // TODO(nkryuchkov): failure
-		proposal.ImparsableProposalData(),                         // TODO(nkryuchkov): failure
-		proposal.InvalidRoundChangeJustificationPrepared(),        // TODO(nkryuchkov): failure
-		proposal.InvalidRoundChangeJustification(),                // TODO(nkryuchkov): failure
-		proposal.PreparedPreviouslyNoRCJustificationQuorum(),      // TODO(nkryuchkov): failure
-		proposal.NoRCJustification(),                              // TODO(nkryuchkov): failure
-		proposal.PreparedPreviouslyNoPrepareJustificationQuorum(), // TODO(nkryuchkov): failure
-		proposal.PreparedPreviouslyDuplicatePrepareMsg(),          // TODO(nkryuchkov): failure
-		proposal.PreparedPreviouslyDuplicateRCMsg(),               // TODO(nkryuchkov): failure
-		proposal.DuplicateRCMsg(),                                 // TODO(nkryuchkov): failure
-		proposal.InvalidPrepareJustificationValue(),               // TODO(nkryuchkov): failure
-		proposal.InvalidPrepareJustificationRound(),               // TODO(nkryuchkov): failure
-		proposal.InvalidProposalData(),                            // TODO(nkryuchkov): failure
-		proposal.InvalidValueCheck(),                              // TODO(nkryuchkov): failure
-		proposal.MultiSigner(),                                    // TODO(nkryuchkov): failure
-		proposal.PostDecided(),                                    // TODO(nkryuchkov): failure
-		proposal.PostPrepared(),                                   // TODO(nkryuchkov): failure
-		proposal.SecondProposalForRound(),                         // TODO(nkryuchkov): failure
-		proposal.WrongHeight(),                                    // TODO(nkryuchkov): failure
-		proposal.WrongProposer(),                                  // TODO(nkryuchkov): failure
-		proposal.WrongSignature(),                                 // TODO(nkryuchkov): failure
+		proposal.FutureRoundNoAcceptedProposal(), // TODO(nkryuchkov): failure; need to decline proposals from future rounds if no proposal was accepted for current round
+		proposal.FutureRoundAcceptedProposal(),   // TODO(nkryuchkov): failure; need to accept proposals from future rounds if already accepted proposal for current round
+		proposal.PastRound(),                     // TODO(nkryuchkov): failure; need to decline proposals from past rounds
+		proposal.ImparsableProposalData(),
+		proposal.InvalidRoundChangeJustificationPrepared(),        // TODO(nkryuchkov): failure; need to handle invalid rc justification
+		proposal.InvalidRoundChangeJustification(),                // TODO(nkryuchkov): failure; need to handle invalid rc justification
+		proposal.PreparedPreviouslyNoRCJustificationQuorum(),      // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.NoRCJustification(),                              // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.PreparedPreviouslyNoPrepareJustificationQuorum(), // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.PreparedPreviouslyDuplicatePrepareMsg(),          // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.PreparedPreviouslyDuplicateRCMsg(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.DuplicateRCMsg(),                                 // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		proposal.InvalidPrepareJustificationValue(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
+		proposal.InvalidPrepareJustificationRound(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
+		proposal.InvalidProposalData(),
+		proposal.InvalidValueCheck(), // TODO(nkryuchkov): failure; need to check message data
+		proposal.MultiSigner(),
+		proposal.PostDecided(),            // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
+		proposal.PostPrepared(),           // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
+		proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure; need to forbid second proposal for round
+		proposal.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		proposal.WrongProposer(),
+		proposal.WrongSignature(), // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
 
 		prepare.DuplicateMsg(),
-		prepare.HappyFlow(),              // TODO(nkryuchkov): failure
-		prepare.ImparsableProposalData(), // TODO(nkryuchkov): failure
-		prepare.InvalidPrepareData(),     // TODO(nkryuchkov): failure
-		prepare.MultiSigner(),            // TODO(nkryuchkov): failure
-		prepare.NoPreviousProposal(),     // TODO(nkryuchkov): failure
-		prepare.OldRound(),               // TODO(nkryuchkov): failure
-		prepare.FutureRound(),            // TODO(nkryuchkov): failure
-		prepare.PostDecided(),            // TODO(nkryuchkov): failure
-		prepare.WrongData(),              // TODO(nkryuchkov): failure
-		prepare.WrongHeight(),            // TODO(nkryuchkov): failure
-		prepare.WrongSignature(),         // TODO(nkryuchkov): failure
+		prepare.HappyFlow(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		prepare.ImparsableProposalData(),
+		prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
+		prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+		prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
+		prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		prepare.PostDecided(),        // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
+		prepare.WrongData(),          // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		prepare.WrongHeight(),        // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		prepare.WrongSignature(),     // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
 
 		commit.CurrentRound(),
-		commit.FutureRound(), // TODO(nkryuchkov): failure
-		commit.PastRound(),   // TODO(nkryuchkov): failure
+		commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		commit.DuplicateMsg(),
-		commit.HappyFlow(),         // TODO(nkryuchkov): failure
-		commit.InvalidCommitData(), // TODO(nkryuchkov): failure
+		commit.HappyFlow(),         // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
+		commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
 		commit.PostDecided(),
-		commit.WrongData1(),             // TODO(nkryuchkov): failure
-		commit.WrongData2(),             // TODO(nkryuchkov): failure
-		commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure
-		commit.MultiSignerNoOverlap(),   // TODO(nkryuchkov): failure
-		commit.Decided(),                // TODO(nkryuchkov): failure
-		commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure
-		commit.WrongHeight(),            // TODO(nkryuchkov): failure
-		commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure
-		commit.WrongSignature(),         // TODO(nkryuchkov): failure
+		commit.WrongData1(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		commit.WrongData2(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		commit.MultiSignerNoOverlap(),   // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
+		commit.Decided(),                // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
+		commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
+		commit.WrongSignature(),         // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
 
-		roundchange.HappyFlow(),         // TODO(nkryuchkov): failure
+		roundchange.HappyFlow(),         // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
 		roundchange.F1Speedup(),         // TODO(nkryuchkov): failure
-		roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure
-		roundchange.WrongHeight(),       // TODO(nkryuchkov): failure
-		roundchange.WrongSig(),          // TODO(nkryuchkov): failure
-		roundchange.MultiSigner(),       // TODO(nkryuchkov): failure
+		roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.WrongHeight(),       // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		roundchange.WrongSig(),          // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
+		roundchange.MultiSigner(),       // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		roundchange.NotPrepared(),
-		roundchange.Prepared(),                        // TODO(nkryuchkov): failure
-		roundchange.PeerPrepared(),                    // TODO(nkryuchkov): failure
-		roundchange.JustificationWrongValue(),         // TODO(nkryuchkov): failure
-		roundchange.NextProposalValueWrong(),          // TODO(nkryuchkov): failure
-		roundchange.JustificationWrongRound(),         // TODO(nkryuchkov): failure
-		roundchange.JustificationNoQuorum(),           // TODO(nkryuchkov): failure
-		roundchange.JustificationMultiSigners(),       // TODO(nkryuchkov): failure
-		roundchange.JustificationInvalidSig(),         // TODO(nkryuchkov): failure
-		roundchange.JustificationInvalidRound(),       // TODO(nkryuchkov): failure
-		roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure
-		roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure
-		roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure
-		roundchange.FutureRound(),                     // TODO(nkryuchkov): failure
-		roundchange.PastRound(),                       // TODO(nkryuchkov): failure
-		roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure
-		roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure
-		roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure
-		roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure
-		roundchange.ImparsableRoundChangeData(),       // TODO(nkryuchkov): failure
+		roundchange.Prepared(),                // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.PeerPrepared(),            // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationWrongValue(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.NextProposalValueWrong(),  // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationWrongRound(),
+		roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationInvalidRound(),
+		roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure; need to check message data
+		roundchange.FutureRound(),                     // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.PastRound(),                       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.ImparsableRoundChangeData(),
 	}
 
 	result := make(map[string]struct{})
@@ -370,7 +370,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 				Round:      msg.Message.Round,
 				Identifier: identifier[:],
 				//Identifier: msg.Message.Identifier,
-				Data: msg.Message.Data,
+				Data: msg.Message.Data, // TODO(nkryuchkov): substitute identifier in justifications
 			},
 		}
 
