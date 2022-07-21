@@ -105,7 +105,7 @@ func (n *p2pNetwork) SetupHost() error {
 	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 
-	host, err := libp2p.New(n.ctx, opts...)
+	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
 	}

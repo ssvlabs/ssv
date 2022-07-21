@@ -240,8 +240,7 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 }
 
 func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
-	h, err := libp2p.New(ctx,
-		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, zap.L(), h)
 	require.NoError(t, err)
