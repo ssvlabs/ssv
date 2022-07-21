@@ -36,6 +36,7 @@ import (
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -622,7 +623,9 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 		Signer:           beacon,
 		ChangeRoundStore: qbftStorage,
 	})
-	newInstance.(*instance.Instance).LeaderSelector = roundRobinLeaderSelector{newInstance.State(), mappedShare}
+	//newInstance.(*instance.Instance).LeaderSelector = roundRobinLeaderSelector{newInstance.State(), mappedShare}
+	// TODO(nkryuchkov): replace when ready
+	newInstance.(*instance.Instance).LeaderSelector = &constant.Constant{LeaderIndex: 0}
 	return newInstance
 }
 
