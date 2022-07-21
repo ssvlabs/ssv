@@ -1,6 +1,6 @@
 module github.com/bloxapp/ssv
 
-go 1.15
+go 1.17
 
 require (
 	github.com/attestantio/go-eth2-client v0.11.3
