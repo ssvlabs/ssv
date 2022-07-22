@@ -246,34 +246,6 @@ func TestQBFTMapping(t *testing.T) {
 	}
 }
 
-func mapErrors(err string) string {
-	switch err {
-	// TODO(nkryuchkov): ensure that cases below are not bugs
-	case "proposal invalid: proposal not justified: prepares has no quorum",
-		"proposal invalid: proposal not justified: change round has not quorum",
-		"proposal invalid: proposal not justified: change round msg not valid: basic round Change validation failed: round change msg signature invalid: failed to verify signature",
-		"proposal invalid: proposal not justified: proposed data doesn't match highest prepared",
-		"proposal invalid: proposal not justified: signed prepare not valid",
-		"proposal invalid: proposal is not valid with current state",
-		"invalid prepare msg: msg round wrong":
-		return "pre-prepare message sender (id 1) is not the round's leader (expected 2)"
-	case "invalid signed message: message data is invalid":
-		return "could not decode commit data from message: unexpected end of JSON input"
-	case "invalid prepare msg: msg Height wrong":
-		return "invalid message sequence number: expected: 0, actual: 2"
-	case "commit msg invalid: could not get msg commit data: could not decode commit data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode commit data from message: invalid character '\\x01' looking for beginning of value"
-	case "proposal invalid: could not get proposal data: could not decode proposal data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode proposal data from message: invalid character '\\x01' looking for beginning of value"
-	case "invalid prepare msg: could not get prepare data: could not decode prepare data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode prepare data from message: invalid character '\\x01' looking for beginning of value"
-	case "commit msg invalid: commit Height is wrong":
-		return "invalid message sequence number: expected: 0, actual: 10"
-	}
-
-	return err
-}
-
 func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	ctx := context.TODO()
 	logger := logex.Build(test.Name, zapcore.DebugLevel, nil)
@@ -444,8 +416,6 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	if len(test.ExpectedError) != 0 {
-		// TODO(nkryuchkov): review mapErrors function
-		//require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
