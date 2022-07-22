@@ -180,6 +180,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		ConnIdx:         n.idx,
 		SubnetsIdx:      n.idx,
 		IDService:       ids,
+		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())

@@ -59,7 +59,8 @@ type handshaker struct {
 	states      peers.NodeStates
 	connIdx     peers.ConnectionIndex
 	subnetsIdx  peers.SubnetsIndex
-	ids         *identify.IDService
+	ids         identify.IDService
+	net         libp2pnetwork.Network
 
 	pending *sync.Map
 
@@ -69,12 +70,13 @@ type handshaker struct {
 // HandshakerCfg is the configuration for creating an handshaker instance
 type HandshakerCfg struct {
 	Logger          *zap.Logger
+	Network         libp2pnetwork.Network
 	Streams         streams.StreamController
 	NodeInfoIdx     peers.NodeInfoIndex
 	States          peers.NodeStates
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
-	IDService       *identify.IDService
+	IDService       identify.IDService
 	SubnetsProvider SubnetsProvider
 }
 
@@ -234,7 +236,7 @@ func (h *handshaker) updateNodeSubnets(pid peer.ID, ni *records.NodeInfo) {
 }
 
 func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
-	res, err := h.ids.Host.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
+	res, err := h.net.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
@@ -260,7 +262,7 @@ func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeI
 
 func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
 	pid := conn.RemotePeer()
-	uaRaw, err := h.ids.Host.Peerstore().Get(pid, userAgentKey)
+	uaRaw, err := h.net.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
 		if err == peerstore.ErrNotFound {
 			// if user agent wasn't found, retry libp2p identify after 100ms
@@ -268,7 +270,7 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 			if err := h.preHandshake(conn); err != nil {
 				return nil, err
 			}
-			uaRaw, err = h.ids.Host.Peerstore().Get(pid, userAgentKey)
+			uaRaw, err = h.net.Peerstore().Get(pid, userAgentKey)
 			if err != nil {
 				return nil, err
 			}
