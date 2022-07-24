@@ -16,7 +16,7 @@ func ConvertFromInterfacePrivKey(privkey crypto.PrivKey) (*ecdsa.PrivateKey, err
 	secpKey := (privkey.(*crypto.Secp256k1PrivateKey))
 	rawKey, err := secpKey.Raw()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could mot convert ecdsa.PrivateKey")
 	}
 	privKey := new(ecdsa.PrivateKey)
 	k := new(big.Int).SetBytes(rawKey)
