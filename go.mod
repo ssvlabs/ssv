@@ -24,7 +24,6 @@ require (
 	github.com/libp2p/go-libp2p-core v0.16.1
 	github.com/libp2p/go-libp2p-discovery v0.6.0
 	github.com/libp2p/go-libp2p-kad-dht v0.15.0
-	github.com/libp2p/go-libp2p-noise v0.5.0
 	github.com/libp2p/go-libp2p-pubsub v0.7.1
 	github.com/libp2p/go-tcp-transport v0.5.0
 	github.com/multiformats/go-multiaddr v0.5.0

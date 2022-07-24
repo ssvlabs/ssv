@@ -12,7 +12,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
-	noise "github.com/libp2p/go-libp2p-noise"
+	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
