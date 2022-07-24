@@ -147,7 +147,10 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	libPrivKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(n.cfg.NetworkPrivateKey))
+	libPrivKey, err := commons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	if err != nil {
+		return err
+	}
 
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
