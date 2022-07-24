@@ -21,7 +21,7 @@ import (
 )
 
 // CreateShareAndValidators creates a share and the corresponding validators objects
-func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []spectypes.KeyManager, stores []qbftstorage.QBFTStore) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
 	for _, k := range net.NodeKeys {
@@ -58,7 +58,6 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			},
 			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
-			Signer:                     km,
 			DutyRoles:                  []spectypes.BeaconRole{spectypes.BNRoleAttester}, // TODO when implemented, need to add more types
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,

@@ -1,21 +1,19 @@
 package instance
 
 import (
+	"crypto/rsa"
 	"encoding/json"
 	"strconv"
 	"testing"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
@@ -185,7 +183,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Logger:         zaptest.NewLogger(t),
 		network:        network,
 		LeaderSelector: leader,
-		signer:         newTestSigner(),
+		ssvSigner:      newTestSSVSigner(),
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
@@ -314,23 +312,23 @@ func TestPrePreparePipeline(t *testing.T) {
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
 }
 
-type testSigner struct {
+type testSSVSigner struct {
 }
 
-func newTestSigner() beacon.Signer {
-	return &testSigner{}
+func newTestSSVSigner() spectypes.SSVSigner {
+	return &testSSVSigner{}
 }
 
-func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
-	return nil
+func (s *testSSVSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
 }
 
-func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+func (s *testSSVSigner) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (s *testSSVSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	return nil, nil
-}
-
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	return nil, nil, nil
 }
 
 func proposalDataToBytes(t *testing.T, input *specqbft.ProposalData) []byte {

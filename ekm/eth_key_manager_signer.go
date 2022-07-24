@@ -1,9 +1,11 @@
 package ekm
 
 import (
+	"crypto/rsa"
 	"encoding/hex"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	messageprotocol "github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -29,11 +30,11 @@ type ethKeyManagerSigner struct {
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
 	signingUtils beacon.SigningUtil
-	domain       messageprotocol.DomainType
+	domain       spectypes.DomainType
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain messageprotocol.DomainType) (beaconprotocol.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -74,6 +75,97 @@ func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network beaco
 	return signer.NewSimpleSigner(wallet, slashingProtection, network.Network), nil
 }
 
+func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	domain, err := km.signingUtils.GetDomain(data)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not get domain for signing")
+	}
+	root, err := km.signingUtils.ComputeSigningRoot(data, domain[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not compute signing root")
+	}
+	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not sign attestation")
+	}
+
+	aggregationBitfield := bitfield.NewBitlist(duty.CommitteeLength)
+	aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
+	blsSig := spec.BLSSignature{}
+	copy(blsSig[:], sig)
+	return &spec.Attestation{
+		AggregationBits: aggregationBitfield,
+		Data:            data,
+		Signature:       blsSig,
+	}, root[:], nil
+}
+
+func (km *ethKeyManagerSigner) IsAttestationSlashable(data *spec.AttestationData) error {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+	km.walletLock.RLock()
+	defer km.walletLock.RUnlock()
+
+	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get signing account")
+	}
+
+	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not compute signing root")
+	}
+
+	sig, err := account.ValidationKeySign(root)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not sign message")
+	}
+
+	return sig, nil
+}
+
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -107,57 +199,6 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 		}
 	}
 	return nil
-}
-
-func (km *ethKeyManagerSigner) SignIBFTMessage(data messageprotocol.Root, pk []byte, sigType messageprotocol.SignatureType) ([]byte, error) {
-	km.walletLock.RLock()
-	defer km.walletLock.RUnlock()
-
-	signatureDomain := messageprotocol.ComputeSignatureDomain(km.domain, sigType)
-	root, err := messageprotocol.ComputeSigningRoot(data, signatureDomain)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get message signing root")
-	}
-
-	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get signing account")
-	}
-
-	sig, err := account.ValidationKeySign(root)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign message")
-	}
-
-	return sig, nil
-}
-
-func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	domain, err := km.signingUtils.GetDomain(data)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get domain for signing")
-	}
-	root, err := km.signingUtils.ComputeSigningRoot(data, domain[:])
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to get root for signing")
-	}
-	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to sign attestation")
-	}
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not sign attestation")
-	}
-
-	aggregationBitfield := bitfield.NewBitlist(duty.CommitteeLength)
-	aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
-	blsSig := spec.BLSSignature{}
-	copy(blsSig[:], sig)
-	return &spec.Attestation{
-		AggregationBits: aggregationBitfield,
-		Data:            data,
-		Signature:       blsSig,
-	}, root[:], nil
 }
 
 func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {

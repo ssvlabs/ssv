@@ -8,7 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
@@ -332,10 +332,10 @@ func TestConsumeMessages(t *testing.T) {
 
 					switch expectedMsg.MsgType {
 					case spectypes.SSVPartialSignatureMsgType:
-						testSignedMsg := new(ssv.PartialSignatureMessage)
+						testSignedMsg := new(specssv.PartialSignatureMessage)
 						require.NoError(t, testSignedMsg.Decode(expectedMsg.Data))
 
-						signedMsg := new(ssv.PartialSignatureMessage)
+						signedMsg := new(specssv.PartialSignatureMessage)
 						require.NoError(t, signedMsg.Decode(msg.Data))
 
 						require.Equal(t, testSignedMsg.Slot, signedMsg.Slot)
@@ -392,8 +392,8 @@ func generatePartialSignatureMsg(t *testing.T, msgType spectypes.MsgType, slot p
 		MsgID:   id,
 	}
 
-	psms := ssv.PartialSignatureMessages{
-		&ssv.PartialSignatureMessage{
+	psms := specssv.PartialSignatureMessages{
+		&specssv.PartialSignatureMessage{
 			Slot:             slot,
 			PartialSignature: []byte("sig"),
 			SigningRoot:      []byte("root"),
@@ -402,8 +402,8 @@ func generatePartialSignatureMsg(t *testing.T, msgType spectypes.MsgType, slot p
 		},
 	}
 
-	signedMsg := ssv.SignedPartialSignatureMessage{
-		Type:      ssv.PostConsensusPartialSig,
+	signedMsg := specssv.SignedPartialSignatureMessage{
+		Type:      specssv.PostConsensusPartialSig,
 		Messages:  psms,
 		Signature: []byte("sig"),
 		Signers:   nil,

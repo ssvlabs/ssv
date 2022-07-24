@@ -14,7 +14,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/consensus/attester"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -152,7 +152,6 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		Beacon:                     beacon,
 		Share:                      share,
 		ForkVersion:                forkVersion,
-		Signer:                     beacon,
 		SyncRateLimit:              time.Second * 5,
 		SignatureCollectionTimeout: time.Second * 5,
 		ReadMode:                   false,
@@ -226,7 +225,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		Signature:       phase0.BLSSignature{},
 	}
 
-	resState := ssv.NewDutyExecutionState(3)
+	resState := specssv.NewDutyExecutionState(3)
 	resState.RunningInstance = mappedInstance
 	resState.DecidedValue = mappedDecidedValue
 	resState.SignedAttestation = mappedSignedAtts
