@@ -7,16 +7,18 @@ import (
 
 var (
 	// gsD topic stable mesh target count
-	gsD = 6
+	gsD = 5
 	// gsDlo topic stable mesh low watermark
-	gsDlo = 3
+	gsDlo = 2
 	// gsDhi topic stable mesh high watermark
-	gsDhi = 9
+	gsDhi = 8
 
-	// gsMaxIHaveLength is max number fo ihave messages to send
-	// lower the maximum (default is 5000) to avoid ihave floods
+	// gsMaxIHaveLength is max number for ihave messages to send
+	// decreased the default (5000) to avoid ihave floods
 	gsMaxIHaveLength = 1000
-
+	// gsMaxIHaveMessages is the max number for ihave message to accept from a peer within a heartbeat
+	// increased default (10) to avoid multiple ihave messages
+	gsMaxIHaveMessages = 32
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
 	gsMcacheLen = 80
 	// gsMcacheGossip number of windows to gossip about
@@ -36,6 +38,7 @@ func gossipSubParam() pubsub.GossipSubParams {
 	params.HistoryLength = gsMcacheLen
 	params.HistoryGossip = gsMcacheGossip
 	params.MaxIHaveLength = gsMaxIHaveLength
+	params.MaxIHaveMessages = gsMaxIHaveMessages
 
 	return params
 }
