@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
+	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -120,6 +121,11 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, spectypes.PrimusTestnet)
+		if err != nil {
+			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+		}
+
 		nodeStorage := operatorstorage.NewNodeStorage(db, Logger)
 		if err := nodeStorage.SetupPrivateKey(cfg.GenerateOperatorPrivateKey, cfg.OperatorPrivateKey); err != nil {
 			Logger.Fatal("failed to setup operator private key", zap.Error(err))
@@ -169,8 +175,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNet
 		cfg.SSVOptions.ValidatorOptions.Beacon = beaconClient
+		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
-		cfg.SSVOptions.ValidatorOptions.KeyManager = beaconClient
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey

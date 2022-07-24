@@ -2,7 +2,7 @@ package msgqueue
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
@@ -33,7 +33,7 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 			return Index{}
 		}
-		sm := ssv.SignedPartialSignatureMessage{}
+		sm := specssv.SignedPartialSignatureMessage{}
 		if err := sm.Decode(msg.Data); err != nil {
 			return Index{}
 		}
