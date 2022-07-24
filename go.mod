@@ -25,7 +25,6 @@ require (
 	github.com/libp2p/go-libp2p-discovery v0.6.0
 	github.com/libp2p/go-libp2p-kad-dht v0.15.0
 	github.com/libp2p/go-libp2p-pubsub v0.7.1
-	github.com/libp2p/go-tcp-transport v0.6.1
 	github.com/multiformats/go-multiaddr v0.5.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
@@ -116,6 +115,7 @@ require (
 	github.com/libp2p/go-netroute v0.2.0 // indirect
 	github.com/libp2p/go-openssl v0.0.7 // indirect
 	github.com/libp2p/go-reuseport v0.2.0 // indirect
+	github.com/libp2p/go-tcp-transport v0.6.1 // indirect
 	github.com/libp2p/go-yamux/v3 v3.1.2 // indirect
 	github.com/libp2p/zeroconf/v2 v2.1.1 // indirect
 	github.com/lucas-clemente/quic-go v0.27.1 // indirect
