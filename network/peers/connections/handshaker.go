@@ -94,6 +94,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 		pending:         &sync.Map{},
 		states:          cfg.States,
 		subnetsProvider: cfg.SubnetsProvider,
+		net:             cfg.Network,
 	}
 	return h
 }
