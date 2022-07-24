@@ -3,7 +3,6 @@ package peers
 import (
 	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -13,7 +12,9 @@ func TestScoresIndex(t *testing.T) {
 	nks, err := nettesting.CreateKeys(1)
 	require.NoError(t, err)
 
-	pid, err := peer.IDFromPrivateKey(crypto.PrivKey((*crypto.Secp256k1PrivateKey)(nks[0].NetKey)))
+	sk, err := commons.ConvertToInterfacePrivkey(nks[0].NetKey)
+	require.NoError(t, err)
+	pid, err := peer.IDFromPrivateKey(sk)
 	require.NoError(t, err)
 
 	si := newScoreIndex()
@@ -49,7 +50,7 @@ func createPeerIDs(n int) []peer.ID {
 	var res []peer.ID
 	for len(res) < n {
 		sk, _ := commons.GenNetworkKey()
-		isk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(sk))
+		isk, _ := commons.ConvertToInterfacePrivkey(sk)
 		pid, _ := peer.IDFromPrivateKey(isk)
 		res = append(res, pid)
 	}

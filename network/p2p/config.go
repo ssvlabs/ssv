@@ -12,7 +12,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	noise "github.com/libp2p/go-libp2p-noise"
 	libp2ptcp "github.com/libp2p/go-tcp-transport"
 	ma "github.com/multiformats/go-multiaddr"
@@ -74,7 +73,10 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
-	sk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(c.NetworkPrivateKey))
+	sk, err := commons.ConvertToInterfacePrivkey(c.NetworkPrivateKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not convert to interface priv key")
+	}
 
 	opts := []libp2p.Option{
 		libp2p.Identity(sk),
@@ -82,7 +84,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	}
 
-	opts, err := c.configureAddrs(opts)
+	opts, err = c.configureAddrs(opts)
 	if err != nil {
 		return opts, errors.Wrap(err, "could not setup addresses")
 	}
