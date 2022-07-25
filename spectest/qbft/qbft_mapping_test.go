@@ -150,7 +150,7 @@ func testsToRun() map[string]struct{} {
 		commit.WrongSignature(),         // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
 
 		roundchange.HappyFlow(),         // TODO(nkryuchkov): failure; substitution of message signature messages works incorrectly
-		roundchange.F1Speedup(),         // TODO(nkryuchkov): failure
+		roundchange.F1Speedup(),         // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
 		roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
 		roundchange.WrongHeight(),       // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
 		roundchange.WrongSig(),          // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
@@ -328,44 +328,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		origSignAndID := signatureAndID{
-			Signature:  msg.Signature,
-			Identifier: msg.Message.Identifier,
-		}
-
-		modifiedMsg := &specqbft.SignedMessage{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message: &specqbft.Message{
-				MsgType:    msg.Message.MsgType,
-				Height:     msg.Message.Height,
-				Round:      msg.Message.Round,
-				Identifier: identifier[:],
-				//Identifier: msg.Message.Identifier,
-				Data: msg.Message.Data, // TODO(nkryuchkov): substitute identifier in justifications
-			},
-		}
-
-		domain := spectypes.PrimusTestnet
-		sigType := spectypes.QBFTSignatureType
-		r, err := spectypes.ComputeSigningRoot(modifiedMsg, spectypes.ComputeSignatureDomain(domain, sigType))
-		require.NoError(t, err)
-
-		var aggSig *bls.Sign
-		for _, signer := range modifiedMsg.Signers {
-			sig := keysSet.Shares[signer].SignByte(r)
-			if aggSig == nil {
-				aggSig = sig
-			} else {
-				aggSig.Add(sig)
-			}
-		}
-
-		serializedSig := aggSig.Serialize()
-
-		signatureMapping[hex.EncodeToString(serializedSig)] = origSignAndID
-		signedMessage := convertSignedMessage(t, keysSet, modifiedMsg)
-		signedMessage.Signature = serializedSig
+		signedMessage := substituteMessageData(t, msg, identifier, keysSet, signatureMapping)
 
 		if _, err := qbftInstance.ProcessMsg(signedMessage); err != nil {
 			lastErr = err
@@ -453,6 +416,88 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	db.Close()
+}
+
+func substituteMessageData(t *testing.T, msg *specqbft.SignedMessage, identifier spectypes.MessageID, keysSet *testingutils.TestKeySet, signatureMapping map[string]signatureAndID) *specqbft.SignedMessage {
+	origSignAndID := signatureAndID{
+		Signature:  msg.Signature,
+		Identifier: msg.Message.Identifier,
+	}
+
+	switch msg.Message.MsgType {
+	case specqbft.ProposalMsgType:
+		proposalData, err := msg.Message.GetProposalData()
+		require.NoError(t, err)
+
+		for i, innerMsg := range proposalData.RoundChangeJustification {
+			proposalData.RoundChangeJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
+		}
+
+		for i, innerMsg := range proposalData.PrepareJustification {
+			proposalData.PrepareJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
+		}
+
+		msg.Message.Data, err = proposalData.Encode()
+		require.NoError(t, err)
+
+	case specqbft.PrepareMsgType:
+		prepareData, err := msg.Message.GetPrepareData()
+		require.NoError(t, err)
+
+		_ = prepareData // TODO(nkryuchkov): probably need to parse and substitute
+
+	case specqbft.CommitMsgType:
+		commitData, err := msg.Message.GetCommitData()
+		require.NoError(t, err)
+
+		_ = commitData // TODO(nkryuchkov): probably need to parse and substitute
+
+	case specqbft.RoundChangeMsgType:
+		roundChangeData, err := msg.Message.GetRoundChangeData()
+		require.NoError(t, err)
+
+		for i, innerMsg := range roundChangeData.RoundChangeJustification {
+			roundChangeData.RoundChangeJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
+		}
+
+		msg.Message.Data, err = roundChangeData.Encode()
+		require.NoError(t, err)
+	}
+
+	modifiedMsg := &specqbft.SignedMessage{
+		Signature: msg.Signature,
+		Signers:   msg.Signers,
+		Message: &specqbft.Message{
+			MsgType:    msg.Message.MsgType,
+			Height:     msg.Message.Height,
+			Round:      msg.Message.Round,
+			Identifier: identifier[:],
+			//Identifier: msg.Message.Identifier,
+			Data: msg.Message.Data, // TODO(nkryuchkov): substitute identifier in justifications
+		},
+	}
+
+	domain := spectypes.PrimusTestnet
+	sigType := spectypes.QBFTSignatureType
+	r, err := spectypes.ComputeSigningRoot(modifiedMsg, spectypes.ComputeSignatureDomain(domain, sigType))
+	require.NoError(t, err)
+
+	var aggSig *bls.Sign
+	for _, signer := range modifiedMsg.Signers {
+		sig := keysSet.Shares[signer].SignByte(r)
+		if aggSig == nil {
+			aggSig = sig
+		} else {
+			aggSig.Add(sig)
+		}
+	}
+
+	serializedSig := aggSig.Serialize()
+
+	signatureMapping[hex.EncodeToString(serializedSig)] = origSignAndID
+	signedMessage := convertSignedMessage(t, keysSet, modifiedMsg)
+	signedMessage.Signature = serializedSig
+	return signedMessage
 }
 
 func findCommonIdentifier(t *testing.T, messages []*specqbft.SignedMessage) []byte {
