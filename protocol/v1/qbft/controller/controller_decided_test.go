@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
+	"crypto/rsa"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -375,7 +377,7 @@ func TestForceDecided(t *testing.T) {
 
 	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestSigner())
+	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 	// test before sync
 	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
 	require.NotNil(t, highest)
@@ -443,9 +445,9 @@ func TestSyncAfterDecided(t *testing.T) {
 	network.AddPeers(identifier.GetPubKey(), network)
 
 	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestSigner())
+	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 
-	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
+	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	// test before sync
 	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier)
@@ -493,9 +495,9 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	network.AddPeers(identifier.GetPubKey(), network)
 
 	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
-	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestSigner())
+	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 
-	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
+	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
@@ -514,7 +516,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	identifier := []byte("Identifier_11")
-	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestSigner())
+	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	tests := []struct {
 		name          string
@@ -651,7 +653,7 @@ func populatedIbft(
 	ibftStorage qbftstorage.QBFTStore,
 	sks map[spectypes.OperatorID]*bls.SecretKey,
 	nodes map[spectypes.OperatorID]*beaconprotocol.Node,
-	signer beaconprotocol.Signer,
+	keyManager spectypes.KeyManager,
 ) IController {
 	share := &beaconprotocol.Share{
 		NodeID:      nodeID,
@@ -671,7 +673,7 @@ func populatedIbft(
 		ValidatorShare: share,
 		Version:        forksprotocol.GenesisForkVersion, // TODO need to check v1 fork too? (:Niv)
 		Beacon:         nil,                              // ?
-		Signer:         signer,
+		KeyManager:     keyManager,
 		SyncRateLimit:  time.Millisecond * 100,
 		SigTimeout:     time.Second * 5,
 		ReadMode:       false,
@@ -682,23 +684,71 @@ func populatedIbft(
 	return ret
 }
 
-type testSigner struct {
+type testKeyManager struct {
 }
 
-func newTestSigner() beaconprotocol.Signer {
-	return &testSigner{}
+func newTestKeyManager() spectypes.KeyManager {
+	return &testKeyManager{}
 }
 
-func (s *testSigner) AddShare(shareKey *bls.SecretKey) error {
-	return nil
+func (s *testKeyManager) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
 }
 
-func (s *testSigner) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
+func (s *testKeyManager) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
 	return nil, nil
 }
 
-func (s *testSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	return nil, nil, nil
+func (s *testKeyManager) AddShare(shareKey *bls.SecretKey) error {
+	return nil
+}
+
+func (s *testKeyManager) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) IsAttestationSlashable(data *spec.AttestationData) error {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignSlotWithSelectionProof(slot spec.Slot, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignAggregateAndProof(msg *spec.AggregateAndProof, duty *spectypes.Duty, pk []byte) (*spec.SignedAggregateAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignSyncCommitteeBlockRoot(slot spec.Slot, root spec.Root, validatorIndex spec.ValidatorIndex, pk []byte) (*altair.SyncCommitteeMessage, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignContributionProof(slot spec.Slot, index uint64, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) SignContribution(contribution *altair.ContributionAndProof, pk []byte) (*altair.SignedContributionAndProof, []byte, error) {
+	panic("implement me")
+}
+
+func (s *testKeyManager) RemoveShare(pubKey string) error {
+	panic("implement me")
 }
 
 func commitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {

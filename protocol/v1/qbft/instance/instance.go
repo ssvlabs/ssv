@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
@@ -39,7 +38,7 @@ type Options struct {
 	RequireMinPeers bool
 	// Fork sets the current fork to apply on instance
 	Fork             forks.Fork
-	Signer           beaconprotocol.Signer
+	SSVSigner        spectypes.SSVSigner
 	ChangeRoundStore qbftstorage.ChangeRoundStore
 }
 
@@ -53,7 +52,7 @@ type Instance struct {
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
-	signer         beaconprotocol.Signer
+	ssvSigner      spectypes.SSVSigner
 
 	// messages
 	containersMap map[specqbft.MessageType]msgcont.MessageContainer
@@ -104,7 +103,7 @@ func NewInstance(opts *Options) Instancer {
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
 		Logger:         logger,
-		signer:         opts.Signer,
+		ssvSigner:      opts.SSVSigner,
 
 		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
@@ -335,7 +334,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
 	}
 
-	sigByts, err := i.signer.SignIBFTMessage(msg, pk.Serialize(), message.QBFTSigType)
+	sigByts, err := i.ssvSigner.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
 	if err != nil {
 		return err
 	}

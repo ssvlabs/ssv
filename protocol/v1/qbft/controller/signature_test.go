@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"crypto/rsa"
 	"encoding/hex"
 	"testing"
 	"time"
@@ -14,7 +15,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
@@ -141,7 +141,6 @@ func TestVerifyPartialSignature(t *testing.T) {
 				InstanceConfig: qbft.DefaultConsensusParams(),
 				ValidatorShare: share,
 				Beacon:         b,
-				Signer:         b,
 				SigTimeout:     time.Second * 2,
 				Version:        forksprotocol.GenesisForkVersion,
 			}
@@ -178,6 +177,7 @@ var (
 		_byteArray("85dd2d89a3e320995507c46320f371dc85eb16f349d1c56d71b58663b5b6a5fd390fcf41cf9098471eb5437fd95be1ac"),
 	}
 
+	//nolint
 	refAttestationSplitSigs = [][]byte{
 		_byteArray("90d44ba2e926c07a71086d3edd04d433746a80335c828f415c0dcb505a1357a454e94338a2139b201d031e4aa6294f3110caa5f2f9ecdd3727fcc9b3ea733e1819993ba06d175cfc55525515d46ef035d1c8bf5c9dab7536b51d936708aeaa22"),
 		_byteArray("8edac629489ceda10b88d4241615cbf5fc8727daba4978276af62fd93069b5d4a8264f3881e0151d364ecef292fd8930114f59c98b1794b546399e48882573024d6237092807a21a45afd2baa1e43c81690997cb0b38f6bc10a74b7e18ed1ff5"),
@@ -188,7 +188,8 @@ var (
 	// TODO: (lint) fix test
 	//nolint
 	refAttestationSig = _byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776")
-	refSigRoot        = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
+	//nolint
+	refSigRoot = _byteArray("ae1f95e7f59eb99862ba7b3666a71a01facf4524e5922c6cb8f3b964a5041962")
 )
 
 func _byteArray(input string) []byte {
@@ -231,19 +232,21 @@ func (b *testBeacon) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return b.refAttestationData, nil
 }
 
-func (b *testBeacon) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	sig := spec.BLSSignature{}
-	copy(sig[:], refAttestationSplitSigs[0])
-	return &spec.Attestation{
-		AggregationBits: nil,
-		Data:            data,
-		Signature:       sig,
-	}, refSigRoot, nil
-}
-
 func (b *testBeacon) SubmitAttestation(attestation *spec.Attestation) error {
 	b.LastSubmittedAttestation = attestation
 	return nil
+}
+
+func (b *testBeacon) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (b *testBeacon) Encrypt(pk *rsa.PublicKey, data []byte) ([]byte, error) {
+	panic("implement me")
+}
+
+func (b *testBeacon) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+	panic("implement me")
 }
 
 func (b *testBeacon) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error {
@@ -255,10 +258,6 @@ func (b *testBeacon) AddShare(shareKey *bls.SecretKey) error {
 }
 
 func (b *testBeacon) RemoveShare(pubKey string) error {
-	panic("implement me")
-}
-
-func (b *testBeacon) SignIBFTMessage(data message.Root, pk []byte, sigType message.SignatureType) ([]byte, error) {
 	panic("implement me")
 }
 
