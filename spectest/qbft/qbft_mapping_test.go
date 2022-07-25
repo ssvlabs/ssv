@@ -635,7 +635,7 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 		Height:           height,
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),
-		Signer:           beacon,
+		SSVSigner:        beacon.KeyManager,
 		ChangeRoundStore: qbftStorage,
 	})
 	//newInstance.(*instance.Instance).LeaderSelector = roundRobinLeaderSelector{newInstance.State(), mappedShare}

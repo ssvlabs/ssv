@@ -4,11 +4,10 @@ import (
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -81,7 +80,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 					zap.Int("got_votes", len(sigs)))
 
 				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)
-				var msgSig []message.MsgSignature
+				var msgSig []spectypes.MessageSignature
 				for _, s := range sigs {
 					msgSig = append(msgSig, s)
 				}

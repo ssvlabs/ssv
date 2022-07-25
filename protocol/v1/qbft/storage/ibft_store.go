@@ -16,6 +16,8 @@ type DecidedMsgStore interface {
 	GetDecided(identifier spectypes.MessageID, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// SaveDecided saves historical decided messages
 	SaveDecided(signedMsg ...*specqbft.SignedMessage) error
+	// CleanAllDecided removes all decided & last decided for msgId
+	CleanAllDecided(msgID spectypes.MessageID) error
 }
 
 // InstanceStore manages instance data

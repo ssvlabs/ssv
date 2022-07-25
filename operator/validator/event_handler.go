@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/exporter"
 	"strings"
 
@@ -56,7 +57,7 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) {
+	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -85,7 +86,7 @@ func (c *controller) handleOperatorRemovalEvent(
 
 	if od.OwnerAddress != event.OwnerAddress {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match operator data owner address and index with provided event"),
+			Err: errors.New("could not match operator owner address with provided event owner address"),
 		}
 	}
 
@@ -111,7 +112,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(od.PublicKey, c.operatorPubKey) {
+	if strings.EqualFold(od.PublicKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -155,12 +156,16 @@ func (c *controller) handleValidatorRegistrationEvent(
 		if ongoingSync {
 			c.onShareStart(validatorShare)
 		}
+	}
+
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
 			zap.Uint32s("operatorIds", validatorRegistrationEvent.OperatorIds),
 		)
 	}
+
 	return logFields, nil
 }
 
@@ -180,6 +185,19 @@ func (c *controller) handleValidatorRemovalEvent(
 		}
 	}
 
+	if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+		return nil, &abiparser.MalformedEventError{
+			Err: errors.New("could not match validator owner address with provided event owner address"),
+		}
+	}
+
+	// remove decided messages
+	if err := c.ibftStorage.CleanAllDecided(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)); err != nil { // TODO need to delete for multi duty as well
+		return nil, errors.Wrap(err, "could not clean all decided messages")
+	}
+	// remove change round messages
+	c.ibftStorage.CleanLastChangeRound(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)) // TODO need to delete for multi duty as well
+
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
@@ -193,6 +211,9 @@ func (c *controller) handleValidatorRemovalEvent(
 				return nil, err
 			}
 		}
+	}
+
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", validatorShare.PublicKey.SerializeToHexStr()),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
@@ -215,8 +236,11 @@ func (c *controller) handleAccountLiquidationEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		if share.IsOperatorShare(c.operatorPubKey) {
+		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
+		}
+		if isOperatorShare {
 			share.Liquidated = true
 
 			// save validator data
@@ -259,8 +283,11 @@ func (c *controller) handleAccountEnableEvent(
 	operatorSharePubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		if share.IsOperatorShare(c.operatorPubKey) {
+		isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, share.PublicKey.SerializeToHexStr())
+		}
+		if share.IsOperatorShare(c.operatorPubKey) {
 			share.Liquidated = false
 
 			// save validator data

@@ -3,10 +3,10 @@ package runner
 import (
 	"context"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -26,7 +26,7 @@ type ScenarioContext struct {
 	Ctx         context.Context
 	LocalNet    *p2pv1.LocalNet
 	Stores      []qbftstorageprotocol.QBFTStore
-	KeyManagers []beacon.KeyManager
+	KeyManagers []spectypes.KeyManager
 	DBs         []basedb.IDb
 }
 
