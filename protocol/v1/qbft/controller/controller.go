@@ -7,7 +7,7 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -45,7 +45,7 @@ type Options struct {
 	ValidatorShare    *beaconprotocol.Share
 	Version           forksprotocol.ForkVersion
 	Beacon            beaconprotocol.Beacon
-	Signer            beaconprotocol.Signer
+	KeyManager        spectypes.KeyManager
 	SyncRateLimit     time.Duration
 	SigTimeout        time.Duration
 	ReadMode          bool
@@ -77,7 +77,7 @@ type Controller struct {
 	Identifier         spectypes.MessageID
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
-	Signer             beaconprotocol.Signer
+	KeyManager         spectypes.KeyManager
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -119,7 +119,7 @@ func New(opts Options) IController {
 		Identifier:         opts.Identifier,
 		Fork:               fork,
 		Beacon:             opts.Beacon,
-		Signer:             opts.Signer,
+		KeyManager:         opts.KeyManager,
 		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
 
 		SyncRateLimit: opts.SyncRateLimit,
@@ -339,7 +339,7 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 		return c.processConsensusMsg(signedMsg)
 
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg := &ssv.SignedPartialSignatureMessage{}
+		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}

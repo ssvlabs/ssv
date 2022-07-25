@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"sync"
 	"time"
 
@@ -19,10 +17,12 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -59,7 +59,7 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
-	KeyManager                 beaconprotocol.KeyManager
+	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
@@ -93,7 +93,7 @@ type controller struct {
 	ibftStorage qbftstorage.QBFTStore
 	logger      *zap.Logger
 	beacon      beaconprotocol.Beacon
-	keyManager  beaconprotocol.KeyManager
+	keyManager  spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -173,8 +173,8 @@ func NewController(options ControllerOptions) Controller {
 		Network:                    options.ETHNetwork,
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
+		KeyManager:                 options.KeyManager,
 		ForkVersion:                options.ForkVersion,
-		Signer:                     options.Beacon,
 		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
