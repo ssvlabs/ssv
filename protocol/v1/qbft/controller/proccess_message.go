@@ -2,7 +2,7 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -51,7 +51,7 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 	return nil
 }
 
-func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *ssv.SignedPartialSignatureMessage) error {
+func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *specssv.SignedPartialSignatureMessage) error {
 	return c.ProcessPostConsensusMessage(signedPostConsensusMessage)
 }
 

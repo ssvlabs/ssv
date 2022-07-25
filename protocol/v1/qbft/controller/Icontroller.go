@@ -2,7 +2,7 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -32,7 +32,7 @@ type IController interface {
 	ProcessMsg(msg *spectypes.SSVMessage) error
 
 	// ProcessPostConsensusMessage aggregates partial signature messages and broadcasting when quorum achieved
-	ProcessPostConsensusMessage(msg *ssv.SignedPartialSignatureMessage) error
+	ProcessPostConsensusMessage(msg *specssv.SignedPartialSignatureMessage) error
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
 	PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error

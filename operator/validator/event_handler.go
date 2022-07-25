@@ -86,7 +86,7 @@ func (c *controller) handleOperatorRemovalEvent(
 
 	if od.OwnerAddress != event.OwnerAddress {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match operator data owner address and index with provided event"),
+			Err: errors.New("could not match operator owner address with provided event owner address"),
 		}
 	}
 
@@ -182,6 +182,12 @@ func (c *controller) handleValidatorRemovalEvent(
 	if !found {
 		return nil, &abiparser.MalformedEventError{
 			Err: errors.New("could not find validator share"),
+		}
+	}
+
+	if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+		return nil, &abiparser.MalformedEventError{
+			Err: errors.New("could not match validator owner address with provided event owner address"),
 		}
 	}
 
