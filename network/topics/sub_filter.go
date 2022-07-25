@@ -6,6 +6,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"go.uber.org/zap"
+	"sync"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
@@ -20,25 +21,29 @@ type SubFilter interface {
 type subFilter struct {
 	logger    *zap.Logger
 	fork      forks.Fork
+	whitelist *dynamicWhitelist
 	subsLimit int
 }
 
 func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter {
 	return &subFilter{
-		logger: logger,
-		fork:   fork,
-		//whitelist: NewWhitelist(),
+		logger:    logger.With(zap.String("who", "subFilter")),
+		fork:      fork,
+		whitelist: newWhitelist(),
 		subsLimit: subsLimit,
 	}
 }
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	//if sf.Whitelisted(topic) {
-	//	return true
-	//}
-	// checks that we know this topic
-	return sf.fork.GetTopicBaseName(topic) != topic
+	var res bool
+	if sf.Whitelisted(topic) {
+		res = true
+	} else if sf.fork.GetTopicBaseName(topic) != topic {
+		res = true
+	}
+	sf.logger.Debug("CanSubscribe", zap.String("topic", topic), zap.Bool("res", res))
+	return res
 }
 
 // FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.
@@ -51,66 +56,60 @@ func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_S
 
 	res := pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
 
-	if len(res) == 0 {
-		sf.logger.Debug("no relevant subscriptions", zap.Any("res", res))
-	}
+	sf.logger.Debug("FilterIncomingSubscriptions", zap.Any("res", res))
 
 	return res, nil
 }
 
-//
-//// Register adds the given topic to the whitelist
-//func (sf *subFilter) Register(topic string) {
-//	sf.whitelist.Register(topic)
-//}
-//
-//// Deregister removes the given topic from the whitelist
-//func (sf *subFilter) Deregister(topic string) {
-//	sf.whitelist.Deregister(topic)
-//}
-//
-//// Whitelisted implements Whitelist
-//func (sf *subFilter) Whitelisted(topic string) bool {
-//	return sf.whitelist.Whitelisted(topic)
-//}
+// Register adds the given topic to the whitelist
+func (sf *subFilter) Register(topic string) {
+	sf.whitelist.Register(topic)
+}
 
-//// Whitelist is an interface to maintain dynamic whitelists
-//type Whitelist interface {
-//	// Register adds the given name to the whitelist
-//	Register(name string)
-//	// Deregister removes the given name from the whitelist
-//	Deregister(name string)
-//	// Whitelisted checks if the given name was whitelisted
-//	Whitelisted(name string) bool
-//}
-//
-//// dynamicWhitelist helps to maintain a filter based on some whitelist
-//type dynamicWhitelist struct {
-//	whitelist *sync.Map
-//}
-//
-//// NewWhitelist creates a new whitelist
-//func NewWhitelist() *dynamicWhitelist {
-//	return &dynamicWhitelist{
-//		whitelist: &sync.Map{},
-//	}
-//}
-//
-//// Register adds the given topic to the whitelist
-//func (wl *dynamicWhitelist) Register(name string) {
-//	wl.whitelist.Store(name, true)
-//}
-//
-//// Deregister removes the given topic from the whitelist
-//func (wl *dynamicWhitelist) Deregister(name string) {
-//	wl.whitelist.Delete(name)
-//}
-//
-//// Whitelisted checks if the given name was whitelisted
-//func (wl *dynamicWhitelist) Whitelisted(name string) bool {
-//	_, ok := wl.whitelist.Load(name)
-//	if ok {
-//		return true
-//	}
-//	return false
-//}
+// Deregister removes the given topic from the whitelist
+func (sf *subFilter) Deregister(topic string) {
+	sf.whitelist.Deregister(topic)
+}
+
+// Whitelisted implements Whitelist
+func (sf *subFilter) Whitelisted(topic string) bool {
+	return sf.whitelist.Whitelisted(topic)
+}
+
+// Whitelist is an interface to maintain dynamic whitelists
+type Whitelist interface {
+	// Register adds the given name to the whitelist
+	Register(name string)
+	// Deregister removes the given name from the whitelist
+	Deregister(name string)
+	// Whitelisted checks if the given name was whitelisted
+	Whitelisted(name string) bool
+}
+
+// dynamicWhitelist helps to maintain a filter based on some whitelist
+type dynamicWhitelist struct {
+	whitelist *sync.Map
+}
+
+// newWhitelist creates a new whitelist
+func newWhitelist() *dynamicWhitelist {
+	return &dynamicWhitelist{
+		whitelist: &sync.Map{},
+	}
+}
+
+// Register adds the given topic to the whitelist
+func (wl *dynamicWhitelist) Register(name string) {
+	wl.whitelist.Store(name, true)
+}
+
+// Deregister removes the given topic from the whitelist
+func (wl *dynamicWhitelist) Deregister(name string) {
+	wl.whitelist.Delete(name)
+}
+
+// Whitelisted checks if the given name was whitelisted
+func (wl *dynamicWhitelist) Whitelisted(name string) bool {
+	_, ok := wl.whitelist.Load(name)
+	return ok
+}

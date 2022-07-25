@@ -16,7 +16,7 @@ import (
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to
-	subscriptionRequestLimit = 2128
+	subscriptionRequestLimit = 128 * 2
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
