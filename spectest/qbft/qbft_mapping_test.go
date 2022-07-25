@@ -31,7 +31,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
@@ -406,7 +405,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		pk, err := share.OperatorSharePubKey()
 		require.NoError(t, err)
 
-		sig, err := beacon.SignIBFTMessage(signedMessage, pk.Serialize(), message.QBFTSigType)
+		sig, err := beacon.SignRoot(signedMessage, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		signedMessage.Signature = sig
