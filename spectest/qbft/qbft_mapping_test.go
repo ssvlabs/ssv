@@ -89,7 +89,7 @@ func testsToRun() map[string]struct{} {
 
 		proposal.HappyFlow(),
 		proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; need to handle proposal justifications
-		proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure; handle PJ (proposal justifications) & substitute identifier in justifications in mapping
+		proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure; handle PJ (proposal justifications) & fix "change round justification does not constitute a quorum"
 		proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure; handle PJ
 		proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure; handle PJ
 		proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure; handle PJ
@@ -156,24 +156,24 @@ func testsToRun() map[string]struct{} {
 		roundchange.WrongSig(),          // TODO(nkryuchkov): failure; need to check why there's no error if message is signed secret key different from signer ID's key
 		roundchange.MultiSigner(),       // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		roundchange.NotPrepared(),
-		roundchange.Prepared(),                // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.PeerPrepared(),            // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.JustificationWrongValue(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.NextProposalValueWrong(),  // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.Prepared(),     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.PeerPrepared(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationWrongValue(),
+		roundchange.NextProposalValueWrong(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
 		roundchange.JustificationWrongRound(),
-		roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
 		roundchange.JustificationInvalidRound(),
-		roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
 		roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure; need to check message data
-		roundchange.FutureRound(),                     // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.PastRound(),                       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		roundchange.FutureRound(),                     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.PastRound(),                       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
 		roundchange.ImparsableRoundChangeData(),
 	}
 

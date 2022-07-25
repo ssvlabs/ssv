@@ -70,7 +70,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return errors.Wrap(err, "failed to get prepare data")
 	}
 	if !bytes.Equal(data.PreparedValue, prepareMsg.Data) {
-		return errors.New("change round prepared value not equal to justification msg value")
+		return errors.New("round change justification invalid: prepare data != proposed data")
 	}
 	if len(roundChangeJust[0].GetSigners()) < p.share.ThresholdSize() {
 		return errors.New("change round justification does not constitute a quorum")
