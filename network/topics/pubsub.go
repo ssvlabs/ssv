@@ -30,7 +30,7 @@ var (
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen
-	msgIDCacheTTL = 10 * time.Minute
+	msgIDCacheTTL = gsHeartbeatInterval * 550
 )
 
 // PububConfig is the needed config to instantiate pubsub
