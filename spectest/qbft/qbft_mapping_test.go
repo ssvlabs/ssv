@@ -283,8 +283,6 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee: make(map[spectypes.OperatorID]*beaconprotocol.Node),
 	}
 
-	commonIdentifier := findCommonIdentifier(t, test.InputMessages)
-
 	var mappedCommittee []*spectypes.Operator
 	for i := range test.Pre.State.Share.Committee {
 		operatorID := spectypes.OperatorID(i) + 1
@@ -315,26 +313,18 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Graffiti:        nil,
 	}
 
-	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	qbftInstance := newQbftInstance(logger, qbftStorage, p2pNet, beacon, share, mappedShare, forkVersion)
+	qbftInstance := newQbftInstance(logger, qbftStorage, p2pNet, beacon, share, mappedShare, test.Pre.StartValue, forkVersion)
 	qbftInstance.Init()
 	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
 	qbftInstance.State().Round.Store(test.Pre.State.Round)
 	qbftInstance.State().Height.Store(test.Pre.State.Height)
-	//time.Sleep(time.Second * 3) // 3s round
-
-	signatureMapping := make(map[string]signatureAndID)
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		signedMessage := substituteMessageData(t, msg, identifier, keysSet, signatureMapping)
-
-		if _, err := qbftInstance.ProcessMsg(signedMessage); err != nil {
+		if _, err := qbftInstance.ProcessMsg(msg); err != nil {
 			lastErr = err
 		}
 	}
-
-	//time.Sleep(time.Second * 3) // 3s round
 
 	mappedInstance := new(specqbft.Instance)
 	if qbftInstance != nil {
@@ -343,9 +333,6 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			preparedValue = nil
 		}
 		round := qbftInstance.State().GetRound()
-		//if round == 0 {
-		//	round = 1
-		//}
 
 		_, decidedErr := qbftInstance.CommittedAggregatedMsg()
 		var decidedValue []byte
@@ -363,15 +350,15 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			ProposalAcceptedForCurrentRound: test.Pre.State.ProposalAcceptedForCurrentRound,
 			Decided:                         decidedErr == nil,
 			DecidedValue:                    decidedValue,
-			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType], signatureMapping),
-			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType], signatureMapping),
-			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType], signatureMapping),
-			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType], signatureMapping),
+			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType]),
+			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType]),
+			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType]),
+			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType]),
 		}
 
 		allMessages := mappedInstance.State.ProposeContainer.AllMessaged()
 		if len(allMessages) != 0 {
-			mappedInstance.State.ProposalAcceptedForCurrentRound = allMessages[0]
+			mappedInstance.State.ProposalAcceptedForCurrentRound = allMessages[len(allMessages)-1]
 		}
 
 		mappedInstance.StartValue = qbftInstance.State().GetInputValue()
@@ -399,122 +386,11 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		signedMessage := &specqbft.SignedMessage{}
 		require.NoError(t, signedMessage.Decode(outputMessage.Data))
 
-		signedMessage.Message.Identifier = commonIdentifier
-		signedMessage.Signature = nil
-
-		pk, err := share.OperatorSharePubKey()
-		require.NoError(t, err)
-
-		sig, err := beacon.SignRoot(signedMessage, spectypes.QBFTSignatureType, pk.Serialize())
-		require.NoError(t, err)
-
-		signedMessage.Signature = sig
-
 		convertedMessage := convertSignedMessage(t, keysSet, signedMessage)
 		require.Equal(t, test.OutputMessages[i], convertedMessage)
 	}
 
 	db.Close()
-}
-
-func substituteMessageData(t *testing.T, msg *specqbft.SignedMessage, identifier spectypes.MessageID, keysSet *testingutils.TestKeySet, signatureMapping map[string]signatureAndID) *specqbft.SignedMessage {
-	origSignAndID := signatureAndID{
-		Signature:  msg.Signature,
-		Identifier: msg.Message.Identifier,
-	}
-
-	switch msg.Message.MsgType {
-	case specqbft.ProposalMsgType:
-		proposalData, err := msg.Message.GetProposalData()
-		require.NoError(t, err)
-
-		for i, innerMsg := range proposalData.RoundChangeJustification {
-			proposalData.RoundChangeJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
-		}
-
-		for i, innerMsg := range proposalData.PrepareJustification {
-			proposalData.PrepareJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
-		}
-
-		msg.Message.Data, err = proposalData.Encode()
-		require.NoError(t, err)
-
-	case specqbft.PrepareMsgType:
-		prepareData, err := msg.Message.GetPrepareData()
-		require.NoError(t, err)
-
-		_ = prepareData // TODO(nkryuchkov): probably need to parse and substitute
-
-	case specqbft.CommitMsgType:
-		commitData, err := msg.Message.GetCommitData()
-		require.NoError(t, err)
-
-		_ = commitData // TODO(nkryuchkov): probably need to parse and substitute
-
-	case specqbft.RoundChangeMsgType:
-		roundChangeData, err := msg.Message.GetRoundChangeData()
-		require.NoError(t, err)
-
-		for i, innerMsg := range roundChangeData.RoundChangeJustification {
-			roundChangeData.RoundChangeJustification[i] = substituteMessageData(t, innerMsg, identifier, keysSet, signatureMapping)
-		}
-
-		msg.Message.Data, err = roundChangeData.Encode()
-		require.NoError(t, err)
-	}
-
-	modifiedMsg := &specqbft.SignedMessage{
-		Signature: msg.Signature,
-		Signers:   msg.Signers,
-		Message: &specqbft.Message{
-			MsgType:    msg.Message.MsgType,
-			Height:     msg.Message.Height,
-			Round:      msg.Message.Round,
-			Identifier: identifier[:],
-			//Identifier: msg.Message.Identifier,
-			Data: msg.Message.Data, // TODO(nkryuchkov): substitute identifier in justifications
-		},
-	}
-
-	domain := spectypes.PrimusTestnet
-	sigType := spectypes.QBFTSignatureType
-	r, err := spectypes.ComputeSigningRoot(modifiedMsg, spectypes.ComputeSignatureDomain(domain, sigType))
-	require.NoError(t, err)
-
-	var aggSig *bls.Sign
-	for _, signer := range modifiedMsg.Signers {
-		sig := keysSet.Shares[signer].SignByte(r)
-		if aggSig == nil {
-			aggSig = sig
-		} else {
-			aggSig.Add(sig)
-		}
-	}
-
-	serializedSig := aggSig.Serialize()
-
-	signatureMapping[hex.EncodeToString(serializedSig)] = origSignAndID
-	signedMessage := convertSignedMessage(t, keysSet, modifiedMsg)
-	signedMessage.Signature = serializedSig
-	return signedMessage
-}
-
-func findCommonIdentifier(t *testing.T, messages []*specqbft.SignedMessage) []byte {
-	seen := make(map[string]struct{})
-	for _, msg := range messages {
-		if len(msg.Message.Identifier) == 0 {
-			continue
-		}
-		if _, ok := seen[string(msg.Message.Identifier)]; !ok {
-			seen[string(msg.Message.Identifier)] = struct{}{}
-		}
-	}
-
-	if len(seen) != 1 {
-		t.Fatal("test implementation doesn't support different identifiers")
-	}
-
-	return messages[0].Message.Identifier
 }
 
 func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
@@ -600,16 +476,13 @@ func isRoundChangeDataPrepared(d specqbft.RoundChangeData) bool {
 	return d.PreparedRound != 0 || len(d.PreparedValue) != 0
 }
 
-type signatureAndID struct {
-	Signature  []byte
-	Identifier []byte
-}
-
+// nolint:unused
 type roundRobinLeaderSelector struct {
 	state       *qbftprotocol.State
 	mappedShare *spectypes.Share
 }
 
+// nolint:unused
 func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
 	specState := &specqbft.State{
 		Share:  m.mappedShare,
@@ -621,10 +494,9 @@ func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
 	return uint64(specqbft.RoundRobinProposer(specState, specqbft.Round(round))) - 1
 }
 
-func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
+func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, identifier []byte, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
-	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
 	newInstance := instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
@@ -644,8 +516,6 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 }
 
 func convertSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *specqbft.SignedMessage) *specqbft.SignedMessage {
-	signers := append([]spectypes.OperatorID{}, msg.GetSigners()...)
-
 	domain := spectypes.PrimusTestnet
 	sigType := spectypes.QBFTSignatureType
 	r, err := spectypes.ComputeSigningRoot(msg, spectypes.ComputeSignatureDomain(domain, sigType))
@@ -661,17 +531,17 @@ func convertSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *s
 		}
 	}
 
+	// TODO(nkryuchkov): investigate why msg.Signature fails but aggSig.Serialize() doesn't
 	return &specqbft.SignedMessage{
 		Signature: aggSig.Serialize(),
-		//Signature: []byte(msg.Signature),
-		Signers: signers,
+		//Signature: msg.Signature,
+		Signers: msg.Signers,
 		Message: &specqbft.Message{
 			MsgType:    msg.Message.MsgType,
 			Height:     msg.Message.Height,
 			Round:      msg.Message.Round,
 			Identifier: msg.Message.Identifier,
-			//Identifier: msg.Message.Identifier,
-			Data: msg.Message.Data,
+			Data:       msg.Message.Data,
 		},
 	}
 }
@@ -690,22 +560,17 @@ func specToRoundChangeData(t *testing.T, keysSet *testingutils.TestKeySet, spec 
 	}
 }
 
-func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer, signatureToSpecSignatureAndID map[string]signatureAndID) *specqbft.MsgContainer {
+func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *specqbft.MsgContainer {
 	c := specqbft.NewMsgContainer()
 	container.AllMessaged(func(round specqbft.Round, msg *specqbft.SignedMessage) {
-		signers := append([]spectypes.OperatorID{}, msg.GetSigners()...)
-
-		originalSignatureAndID := signatureToSpecSignatureAndID[hex.EncodeToString(msg.Signature)]
-
-		// TODO need to use one of the message type (spec/protocol)
 		ok, err := c.AddIfDoesntExist(&specqbft.SignedMessage{
-			Signature: originalSignatureAndID.Signature,
-			Signers:   signers,
+			Signature: msg.Signature,
+			Signers:   msg.Signers,
 			Message: &specqbft.Message{
 				MsgType:    msg.Message.MsgType,
 				Height:     msg.Message.Height,
 				Round:      msg.Message.Round,
-				Identifier: originalSignatureAndID.Identifier,
+				Identifier: msg.Message.Identifier,
 				Data:       msg.Message.Data,
 			},
 		})
