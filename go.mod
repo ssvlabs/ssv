@@ -21,7 +21,7 @@ require (
 	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-libp2p v0.20.3
 	github.com/libp2p/go-libp2p-connmgr v0.2.4
-	github.com/libp2p/go-libp2p-core v0.16.1
+	github.com/libp2p/go-libp2p-core v0.17.0
 	github.com/libp2p/go-libp2p-discovery v0.6.0
 	github.com/libp2p/go-libp2p-kad-dht v0.15.0
 	github.com/libp2p/go-libp2p-pubsub v0.7.1
@@ -202,3 +202,5 @@ replace github.com/prysmaticlabs/prysm => github.com/prysmaticlabs/prysm v1.4.2-
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+replace github.com/libp2p/go-libp2p-pubsub => github.com/bloxapp/libp2p_pubsub v0.7.7
