@@ -64,7 +64,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}{
 		{
 			"no signers",
-			"invalid number of signers for pre-prepare message",
+			"proposal msg allows 1 signer",
 			&specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
@@ -78,7 +78,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		{
 			"only 2 signers",
-			"invalid number of signers for pre-prepare message",
+			"proposal msg allows 1 signer",
 			&specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
@@ -92,7 +92,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		{
 			"non-leader sender",
-			"pre-prepare message sender (id 2) is not the round's leader (expected 1)",
+			"proposal leader invalid",
 			SignMsg(t, 2, sks[2], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,

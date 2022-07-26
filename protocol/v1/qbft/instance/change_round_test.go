@@ -390,7 +390,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round justification round lower or equal to message round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid prepared and justification round",
@@ -419,7 +419,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round prepared round not equal to justification msg round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid justification instance",
@@ -506,7 +506,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round prepared value not equal to justification msg value",
+			expectedError: "round change justification invalid: prepare data != proposed data",
 		},
 		{
 			name:                "invalid justification sig",
@@ -789,7 +789,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
-			"invalid message sequence number: expected: 1, actual: 2",
+			"msg Height wrong",
 		},
 
 		{
