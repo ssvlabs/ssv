@@ -275,10 +275,11 @@ func (n *p2pNetwork) setupPubsub() error {
 	}
 
 	if n.fork.MsgID() != nil {
-		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
-			n.fork, time.Minute*2)
+		midHandler := topics.NewMsgIDHandler(n.ctx,
+			n.logger.With(zap.String("who", "msgIDHandler")), n.fork, time.Minute*2)
 		n.msgResolver = midHandler
 		cfg.MsgIDHandler = midHandler
+		go cfg.MsgIDHandler.Start()
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}

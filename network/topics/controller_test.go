@@ -250,7 +250,8 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(logger, fork, 2*time.Minute)
+		midHandler = NewMsgIDHandler(ctx, logger, fork, 2*time.Minute)
+		go midHandler.Start()
 	}
 	cfg := &PububConfig{
 		Logger:       logger,
