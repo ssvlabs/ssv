@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
@@ -74,7 +75,8 @@ func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
 }
 
 func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerStartInstanceOptions) (*instance.Options, error) {
-	leaderSelectionSeed := append(c.Fork.Identifier(c.Identifier.GetPubKey(), c.Identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
+	messageID := message.ToMessageID(c.Identifier)
+	leaderSelectionSeed := append(c.Fork.Identifier(messageID.GetPubKey(), messageID.GetRoleType()), []byte(strconv.FormatUint(uint64(opts.SeqNumber), 10))...)
 	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(c.ValidatorShare.CommitteeSize()))
 	if err != nil {
 		return nil, err

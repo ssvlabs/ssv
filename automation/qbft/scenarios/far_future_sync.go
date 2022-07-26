@@ -140,7 +140,8 @@ func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *farFutureSyncScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(26))
+	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(26))
 	if err != nil {
 		return err
 	}

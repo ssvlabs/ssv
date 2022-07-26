@@ -58,7 +58,7 @@ func (c *Controller) ProcessPostConsensusMessage(msg *specssv.SignedPartialSigna
 
 		// clean queue consensus & default messages that is <= c.signatureState.duty.Slot, we don't need them anymore
 		c.Q.Clean(
-			msgqueue.SignedPostConsensusMsgCleaner(c.Identifier, c.SignatureState.duty.Slot),
+			msgqueue.SignedPostConsensusMsgCleaner(message.ToMessageID(c.Identifier), c.SignatureState.duty.Slot),
 		)
 
 		err := c.broadcastSignature()

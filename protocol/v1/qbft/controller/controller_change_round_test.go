@@ -37,6 +37,7 @@ func TestReadModeChangeRound(t *testing.T) {
 	uids := []spectypes.OperatorID{spectypes.OperatorID(1)}
 	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 
+	messageID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	ctrl := Controller{
 		Ctx:    context.Background(),
 		Logger: logger,
@@ -54,7 +55,7 @@ func TestReadModeChangeRound(t *testing.T) {
 			Operators:    nil,
 		},
 		ChangeRoundStorage: changeRoundStorage,
-		Identifier:         spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester),
+		Identifier:         messageID[:],
 		Fork:               forksfactory.NewFork(forksprotocol.GenesisForkVersion),
 		ReadMode:           true,
 	}

@@ -21,13 +21,14 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
-	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -524,7 +525,7 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 		Network:          net,
 		LeaderSelector:   leaderSelc,
 		Config:           qbftprotocol.DefaultConsensusParams(),
-		Identifier:       identifier,
+		Identifier:       identifier[:],
 		Height:           height,
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),

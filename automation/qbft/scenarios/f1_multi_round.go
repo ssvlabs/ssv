@@ -112,7 +112,8 @@ func (r *f1MultiRoundScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *f1MultiRoundScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores[:len(ctx.Stores)-1] {
-		msgs, err := ctx.Stores[i].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(1), specqbft.Height(4))
+		messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+		msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(1), specqbft.Height(4))
 		if err != nil {
 			return err
 		}

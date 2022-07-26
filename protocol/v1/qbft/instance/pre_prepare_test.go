@@ -42,8 +42,9 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -113,8 +114,9 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -187,7 +189,7 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(identifier)
+	instance.state.Identifier.Store(identifier[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 	instance.state.Height.Store(specqbft.Height(0))
@@ -303,7 +305,8 @@ func TestPrePreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)
