@@ -18,7 +18,10 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // TODO: remove logs, break into smaller validators?
 func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-		logger := plogger.With(zap.String("topic", pmsg.GetTopic()), zap.String("peer", p.String()))
+		topic := pmsg.GetTopic()
+		logger := plogger.With(zap.String("topic", topic), zap.String("peer", p.String()))
+		metricsPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
+		defer metricsPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
 		//logger.Debug("validating msg")
 		if len(pmsg.GetData()) == 0 {
 			//logger.Debug("invalid: no data")
