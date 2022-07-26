@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -76,7 +77,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Uint64("round", uint64(i.State().GetRound())),
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())),
+					zap.Uint64("round", uint64(i.State().GetRound())),
 					zap.Int("got_votes", len(sigs)))
 
 				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)

@@ -147,7 +147,8 @@ func (r *f1SpeedupScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *f1SpeedupScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores[:2] {
-		msgs, err := ctx.Stores[i].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
+		messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+		msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(4))
 		if err != nil {
 			return err
 		}

@@ -90,7 +90,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Any("round", i.State().GetRound()))
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)

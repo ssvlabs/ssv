@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
@@ -32,7 +33,7 @@ type Options struct {
 	Network        protcolp2p.Network
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
-	Identifier     spectypes.MessageID
+	Identifier     []byte
 	Height         specqbft.Height
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
@@ -89,9 +90,8 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 
 // NewInstance is the constructor of Instance
 func NewInstance(opts *Options) Instancer {
-	pk := opts.Identifier.GetPubKey()
-	role := opts.Identifier.GetRoleType().String()
-	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(qbft.RoundStateNotStarted))
+	messageID := message.ToMessageID(opts.Identifier)
+	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateNotStarted))
 	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
@@ -171,10 +171,11 @@ func (i *Instance) Start(inputValue []byte) error {
 		return errors.New("input value is nil")
 	}
 
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", i.State().GetIdentifier().String()))
+	messageID := message.ToMessageID(i.State().GetIdentifier())
+	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(specqbft.Round(1)) // start from 1
-	metricsIBFTRound.WithLabelValues(i.State().GetIdentifier().GetRoleType().String(), hex.EncodeToString(i.State().GetIdentifier().GetPubKey())).Set(1)
+	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)
 
 	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
 	if i.IsLeader() {
@@ -290,9 +291,8 @@ func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.processPrepareQuorumOnce = &sync.Once{}
 	newRound := round
 	i.State().Round.Store(newRound)
-	role := i.State().GetIdentifier().GetRoleType()
-	pk := i.State().GetIdentifier().GetPubKey()
-	metricsIBFTRound.WithLabelValues(role.String(), hex.EncodeToString(pk)).Set(float64(newRound))
+	messageID := message.ToMessageID(i.State().GetIdentifier())
+	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
@@ -306,9 +306,8 @@ func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 		return
 	}
 
-	role := i.State().GetIdentifier().GetRoleType().String()
-	pk := i.State().GetIdentifier().GetPubKey()
-	metricsIBFTStage.WithLabelValues(role, hex.EncodeToString(pk)).Set(float64(stage))
+	messageID := message.ToMessageID(i.State().GetIdentifier())
+	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(stage))
 
 	i.State().Stage.Store(int32(stage))
 
@@ -362,7 +361,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   i.State().GetIdentifier(),
+		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
 		Data:    encodedMsg,
 	}
 	if i.network != nil {
@@ -403,7 +402,7 @@ func (i *Instance) GetCommittedAggSSVMessage() (spectypes.SSVMessage, error) {
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   i.State().GetIdentifier(),
+		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
 		Data:    encodedAgg,
 	}
 	return ssvMsg, nil
@@ -421,7 +420,7 @@ func generateState(opts *Options) *qbft.State {
 	var identifier, height, round, preparedRound, preparedValue atomic.Value
 	height.Store(opts.Height)
 	round.Store(specqbft.Round(0))
-	identifier.Store(opts.Identifier)
+	identifier.Store(opts.Identifier[:])
 	preparedRound.Store(specqbft.Round(0))
 	preparedValue.Store([]byte{})
 	iv := atomic.Value{}

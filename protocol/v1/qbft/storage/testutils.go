@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/format"
@@ -40,7 +41,7 @@ func NewQBFTStore(db basedb.IDb, logger *zap.Logger, instanceType string) QBFTSt
 }
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
-func (i *ibftStorage) GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	val, found, err := i.get(highestKey, identifier[:])
 	if !found {
 		return nil, nil
@@ -71,7 +72,7 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) err
 	return nil
 }
 
-func (i *ibftStorage) GetDecided(identifier spectypes.MessageID, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	prefix := make([]byte, len(i.prefix))
 	copy(prefix, i.prefix)
 	prefix = append(prefix, identifier[:]...)
@@ -108,12 +109,12 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 	})
 }
 
-func (i *ibftStorage) CleanAllDecided(msgID spectypes.MessageID) error {
+func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state *qbft.State) error {
+func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *qbft.State) error {
 	value, err := json.Marshal(state)
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
@@ -121,7 +122,7 @@ func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state 
 	return i.save(value, currentKey, identifier[:])
 }
 
-func (i *ibftStorage) GetCurrentInstance(identifier spectypes.MessageID) (*qbft.State, bool, error) {
+func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*qbft.State, bool, error) {
 	val, found, err := i.get(currentKey, identifier[:])
 	if !found {
 		return nil, found, nil
@@ -154,7 +155,7 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error 
 
 // GetLastChangeRoundMsg returns last known change round message
 // TODO
-func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
 	res, err := i.getAll(lastChangeRoundKey, identifier[:])
 	if err != nil {
 		return nil, err
@@ -162,14 +163,15 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, sign
 	return res, nil
 }
 
-func (i *ibftStorage) CleanLastChangeRound(identifier spectypes.MessageID) {
+func (i *ibftStorage) CleanLastChangeRound(identifier []byte) {
 	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
 	err := i.delete(lastChangeRoundKey, identifier[:])
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
 	// doing the same for v0
-	oldIdentifier := []byte(format.IdentifierFormat(identifier.GetPubKey(), identifier.GetRoleType().String()))
+	messageID := message.ToMessageID(identifier)
+	oldIdentifier := []byte(format.IdentifierFormat(messageID.GetPubKey(), messageID.GetRoleType().String()))
 	err = i.delete(lastChangeRoundKey, oldIdentifier)
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))

@@ -4,6 +4,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // ProcessChangeRound check basic pipeline validation than check if height or round is higher than the last one. if so, update
@@ -51,5 +53,5 @@ func (c *Controller) ProcessChangeRound(msg *specqbft.SignedMessage) error {
 // validating -
 // basic validation, signature, changeRound data
 func (c *Controller) ValidateChangeRoundMsg(msg *specqbft.SignedMessage) error {
-	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, c.Identifier).Run(msg)
+	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, message.ToMessageID(c.Identifier)).Run(msg)
 }

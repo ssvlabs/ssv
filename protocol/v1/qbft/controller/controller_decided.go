@@ -30,7 +30,7 @@ func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
 
 	if err := c.Network.Broadcast(spectypes.SSVMessage{
 		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   c.Identifier,
+		MsgID:   message.ToMessageID(c.Identifier),
 		Data:    data,
 	}); err != nil {
 		return errors.Wrap(err, "could not broadcast decided message")
@@ -105,7 +105,7 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*specqbft.SignedMessage, error) {
-	highestKnown, err := c.DecidedStrategy.GetLastDecided(message.ToMessageID(c.GetIdentifier()))
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
