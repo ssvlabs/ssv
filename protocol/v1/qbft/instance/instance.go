@@ -422,7 +422,7 @@ func generateState(opts *Options) *qbft.State {
 	round.Store(specqbft.Round(0))
 	identifier.Store(opts.Identifier[:])
 	preparedRound.Store(specqbft.Round(0))
-	preparedValue.Store([]byte{})
+	preparedValue.Store([]byte(nil))
 	iv := atomic.Value{}
 	iv.Store([]byte{})
 	return &qbft.State{
