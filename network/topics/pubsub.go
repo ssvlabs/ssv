@@ -119,7 +119,6 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
 		pubsub.WithValidateQueueSize(cfg.ValidationQueueSize),
-		//pubsub.WithFloodPublish(true),
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
@@ -143,8 +142,6 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	if cfg.MsgIDHandler != nil {
 		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID()))
 	}
-
-	//setGlobalPubSubParams()
 
 	if len(cfg.StaticPeers) > 0 {
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))
