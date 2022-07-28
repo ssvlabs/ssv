@@ -203,6 +203,7 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	//logger = withIncomingMsgFields(logger, msg, ssvMsg)
 	//logger.Debug("incoming pubsub message", zap.String("topic", topic),
 	//	zap.String("msgType", ssvMsg.MsgType.String()))
+	metricsRouterIncoming.WithLabelValues(ssvMsg.ID.String(), ssvMsg.MsgType.String()).Inc()
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }

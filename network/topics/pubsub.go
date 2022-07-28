@@ -24,13 +24,13 @@ var (
 	// validationQueueSize is the size that we assign to the validation queue
 	validationQueueSize = 256
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 128
+	outboundQueueSize = 256
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
-	validateThrottle = 1024
+	validateThrottle = 2048
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
-	// msgIDCacheTTL specifies how long a message ID will be remembered as seen
-	msgIDCacheTTL = gsHeartbeatInterval * 550 // 6.4min
+	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
+	msgIDCacheTTL = gsHeartbeatInterval * 550
 )
 
 // PububConfig is the needed config to instantiate pubsub
