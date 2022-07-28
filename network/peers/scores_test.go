@@ -1,10 +1,11 @@
 package peers
 
 import (
+	crand "crypto/rand"
 	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
+	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -51,13 +52,9 @@ func TestPeersTopScores(t *testing.T) {
 func createPeerIDs(n int) ([]peer.ID, error) {
 	var res []peer.ID
 	for len(res) < n {
-		sk, err := commons.GenNetworkKey()
+		isk, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 		if err != nil {
 			return nil, err
-		}
-		isk, err := commons.ConvertToInterfacePrivkey(sk)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not convert to interface key")
 		}
 		pid, err := peer.IDFromPrivateKey(isk)
 		if err != nil {
