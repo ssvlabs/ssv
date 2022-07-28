@@ -45,7 +45,7 @@ func TestSSVMapping(t *testing.T) {
 
 	jsonTests, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/ssv/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/ssv/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
