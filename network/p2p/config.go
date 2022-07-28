@@ -43,7 +43,7 @@ type Config struct {
 	// PubSubScoring is a flag to turn on/off pubsub scoring
 	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
 	// P2pLog is a flag to turn on/off network logs
-	P2pLog bool `yaml:"P2pLog" env:"P2P_LOG" env-description:"Flag to turn on/off network logs"`
+	P2pLog bool `yaml:"P2pLog" env:"P2P_LOG" env-description:"Flag to turn on/off network debug logs"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
