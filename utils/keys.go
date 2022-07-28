@@ -4,7 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
-	gcrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,18 +22,26 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to unmarshal passed privKey")
 		}
-		privKey = (*ecdsa.PrivateKey)(unmarshalledKey.(*crypto.Secp256k1PrivateKey))
+		privKey, err = commons.ConvertFromInterfacePrivKey(unmarshalledKey)
+		if err != nil {
+			return nil, err
+		}
 	} else {
+		logger.Warn("No private key was provided. Using default/random private key")
 		privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to generate 256k1 key")
 		}
-		privKey = (*ecdsa.PrivateKey)(privInterfaceKey.(*crypto.Secp256k1PrivateKey))
-		logger.Warn("No private key was provided. Using default/random private key")
+		privKey, err = commons.ConvertFromInterfacePrivKey(privInterfaceKey)
+		if err != nil {
+			return nil, err
+		}
 	}
-	privKey.Curve = gcrypto.S256()
+	interfacePriv, err := commons.ConvertToInterfacePrivkey(privKey)
+	if err != nil {
+		return nil, err
+	}
 
-	interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privKey))
 	b, err := interfacePriv.Raw()
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to convert private key to interface")

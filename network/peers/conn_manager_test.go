@@ -21,7 +21,8 @@ func TestTagBestPeers(t *testing.T) {
 
 	cm := NewConnManager(l, connMgrMock, si).(*connManager)
 
-	pids := createPeerIDs(50)
+	pids, err := createPeerIDs(50)
+	require.NoError(t, err)
 
 	for _, pid := range pids {
 		r := rand.Intn(len(allSubs) / 3)

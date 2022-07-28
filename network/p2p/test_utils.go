@@ -13,7 +13,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"go.uber.org/zap"
@@ -44,8 +43,11 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(bnSk))
-	b, err := interfacePriv.Raw()
+	isk, err := commons.ConvertToInterfacePrivkey(bnSk)
+	if err != nil {
+		return err
+	}
+	b, err := isk.Raw()
 	if err != nil {
 		return err
 	}
@@ -91,7 +93,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 					return
 				}
-				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+				//logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 			}(node, logger)
 		}(node, i)
 	}

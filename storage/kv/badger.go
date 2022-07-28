@@ -34,7 +34,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		opt.ValueDir = ""
 	}
 
-	if options.Logger != nil {
+	if options.Logger != nil && options.Reporting {
 		opt.Logger = newLogger(options.Logger)
 	}
 
