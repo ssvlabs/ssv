@@ -111,6 +111,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 // it will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = ctrl.fork.GetTopicFullName(name)
+	ctrl.subFilter.(Whitelist).Register(name)
 	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
 	tc, err := ctrl.joinTopic(name)
 	if err == nil && tc != nil {
@@ -132,7 +133,6 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	defer done()
 
 	//ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
-
 	err = tc.Publish(ctx, data)
 	if err == nil {
 		metricsPubsubOutbound.WithLabelValues(ctrl.fork.GetTopicBaseName(tc.topic.String())).Inc()
@@ -172,7 +172,8 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
-	//ctrl.subFilter.Deregister(name)
+	ctrl.subFilter.(Whitelist).Deregister(name)
+
 	return nil
 }
 
@@ -291,7 +292,6 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		if ctrl.fork.GetTopicBaseName(name) == ctrl.fork.DecidedTopic() {
 			opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 		}
-		opts = append(opts, pubsub.WithValidatorConcurrency(32))
 		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name), opts...)
 		if err != nil {
 			return errors.Wrap(err, "could not register topic validator")

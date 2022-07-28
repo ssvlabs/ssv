@@ -35,10 +35,11 @@ const (
 )
 
 const (
-	connManagerGCInterval = time.Minute
-	connManagerGCTimeout  = time.Minute
-	peerIndexGCInterval   = 15 * time.Minute
-	reportingInterval     = 30 * time.Second
+	connManagerGCInterval   = time.Minute
+	connManagerGCTimeout    = time.Minute
+	peerIndexGCInterval     = 15 * time.Minute
+	peersReportingInterval  = 60 * time.Second
+	topicsReportingInterval = 180 * time.Second
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -128,10 +129,9 @@ func (n *p2pNetwork) Start() error {
 
 	async.Interval(n.ctx, peerIndexGCInterval, n.idx.GC)
 
-	async.Interval(n.ctx, reportingInterval, func() {
-		go n.reportAllPeers()
-		n.reportTopics()
-	})
+	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers)
+
+	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics)
 
 	if err := n.registerInitialTopics(); err != nil {
 		return err

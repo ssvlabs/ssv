@@ -18,7 +18,8 @@ import (
 func Test_ENR_NodeTypeEntry(t *testing.T) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
-	sk := fromInterfacePrivKey(priv)
+	sk, err := commons.ConvertFromInterfacePrivKey(priv)
+	require.NoError(t, err)
 	ip, err := commons.IPAddr()
 	require.NoError(t, err)
 	node, err := CreateLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)
@@ -39,7 +40,8 @@ func Test_ENR_NodeTypeEntry(t *testing.T) {
 func Test_ENR_OperatorIDEntry(t *testing.T) {
 	priv, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
-	sk := fromInterfacePrivKey(priv)
+	sk, err := commons.ConvertFromInterfacePrivKey(priv)
+	require.NoError(t, err)
 	ip, err := commons.IPAddr()
 	pubkey := genPublicKey()
 	require.NoError(t, err)

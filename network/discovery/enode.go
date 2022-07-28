@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"fmt"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
@@ -68,7 +68,10 @@ func ToPeer(node *enode.Node) (*peer.AddrInfo, error) {
 
 // PeerID returns the peer id of the node
 func PeerID(node *enode.Node) (peer.ID, error) {
-	pk := crypto.PubKey((*crypto.Secp256k1PublicKey)(node.Pubkey()))
+	pk, err := commons.ConvertToInterfacePubkey(node.Pubkey())
+	if err != nil {
+		return "", err
+	}
 	return peer.IDFromPublicKey(pk)
 }
 
