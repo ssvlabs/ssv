@@ -257,7 +257,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	defer cancel()
 	topicName := sub.Topic()
 	logger := ctrl.logger.With(zap.String("topic", topicName))
-	logger.Info("start listening to topic")
+	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
 		if err != nil {

@@ -11,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -156,10 +158,10 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 //}
 
 func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []string, forkVersion forksprotocol.ForkVersion) (*LocalNet, []*dummyRouter, error) {
+	logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
+	//logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
-		//logger := zaptest.NewLogger(t).With(zap.String("who", who))
-		logger := zap.L().With(zap.String("who", who))
-		return logger
+		return logger.With(zap.String("who", who))
 	}
 	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2-1, false)
 	if err != nil {
@@ -169,15 +171,16 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), n)
 	}
 
+	logger.Debug("created local network")
+
 	routers := make([]*dummyRouter, n)
 
-	// for now, skip routers for v0
-	//if forkVersion != forksprotocol.V0ForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])
 	}
-	//}
+
+	logger.Debug("subscribing to topics")
 
 	for _, pk := range pks {
 		vpk, err := hex.DecodeString(pk)

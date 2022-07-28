@@ -65,7 +65,7 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p services were configured")
+	n.logger.Info("p2p services were configured")
 
 	return nil
 }
@@ -166,6 +166,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}
+
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
