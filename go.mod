@@ -5,7 +5,7 @@ go 1.16
 require (
 	github.com/attestantio/go-eth2-client v0.11.3
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
-	github.com/bloxapp/ssv-spec v0.1.2-0.20220719134225-f49e942ed4ee
+	github.com/bloxapp/ssv-spec v0.1.2-0.20220726075239-75fdec56196d
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.10.18
 	github.com/ferranbt/fastssz v0.0.0-20220103083642-bc5fefefa28b
@@ -50,3 +50,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/btcsuite/btcd => github.com/btcsuite/btcd v0.22.1
+
+//replace github.com/bloxapp/ssv-spec => ../ssv-spec
