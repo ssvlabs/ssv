@@ -122,9 +122,9 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	name = ctrl.fork.GetTopicFullName(name)
+	topicFullName := ctrl.fork.GetTopicFullName(name)
 
-	tc, err := ctrl.joinTopic(name)
+	tc, err := ctrl.joinTopic(topicFullName)
 	if err != nil {
 		return err
 	}
@@ -132,10 +132,9 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
-	//ctrl.logger.Debug("broadcasting message on topic", zap.String("topic", name))
 	err = tc.Publish(ctx, data)
 	if err == nil {
-		metricsPubsubOutbound.WithLabelValues(ctrl.fork.GetTopicBaseName(tc.topic.String())).Inc()
+		metricsPubsubOutbound.WithLabelValues(name).Inc()
 	}
 	return err
 }
@@ -257,7 +256,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	defer cancel()
 	topicName := sub.Topic()
 	logger := ctrl.logger.With(zap.String("topic", topicName))
-	logger.Info("start listening to topic")
+	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
 		if err != nil {

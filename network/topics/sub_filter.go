@@ -52,8 +52,6 @@ func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_S
 
 	res := pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
 
-	sf.logger.Debug("FilterIncomingSubscriptions", zap.Any("res", res))
-
 	return res, nil
 }
 

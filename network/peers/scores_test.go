@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
 	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -56,7 +57,7 @@ func createPeerIDs(n int) ([]peer.ID, error) {
 		}
 		isk, err := commons.ConvertToInterfacePrivkey(sk)
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "could not convert to interface key")
 		}
 		pid, err := peer.IDFromPrivateKey(isk)
 		if err != nil {

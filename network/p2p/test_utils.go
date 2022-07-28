@@ -93,7 +93,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 					return
 				}
-				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+				//logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 			}(node, logger)
 		}(node, i)
 	}
