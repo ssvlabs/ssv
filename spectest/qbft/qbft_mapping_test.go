@@ -151,7 +151,7 @@ func testsToRun() map[string]struct{} {
 }
 
 func TestQBFTMapping(t *testing.T) {
-	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/qbft/spectest/generate/tests.json")
+	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/v0.1.1/qbft/spectest/generate/tests.json")
 	require.NoError(t, err)
 
 	defer func() {
