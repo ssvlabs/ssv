@@ -10,7 +10,6 @@ import (
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
-// TODO: enable black/whitelisting
 type SubFilter interface {
 	// SubscriptionFilter allows controlling what topics the node will subscribe to
 	// otherwise it might subscribe to irrelevant topics that were suggested by other peers
@@ -36,14 +35,11 @@ func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter 
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	var res bool
-	if sf.Whitelisted(topic) {
-		res = true
-	} else if sf.fork.GetTopicBaseName(topic) != topic {
-		res = true
+	if sf.fork.GetTopicBaseName(topic) == topic {
+		// not of the same fork
+		return false
 	}
-	sf.logger.Debug("CanSubscribe", zap.String("topic", topic), zap.Bool("res", res))
-	return res
+	return sf.Whitelisted(topic)
 }
 
 // FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.

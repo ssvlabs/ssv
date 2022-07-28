@@ -16,5 +16,7 @@ func TestSubFilter(t *testing.T) {
 
 	require.False(t, sf.CanSubscribe("xxx"))
 	require.False(t, sf.CanSubscribe(forksv0.New().GetTopicFullName("xxx")))
+	sf.(Whitelist).Register(f.GetTopicFullName("1"))
 	require.True(t, sf.CanSubscribe(f.GetTopicFullName("1")))
+	require.False(t, sf.CanSubscribe(f.GetTopicFullName("2")))
 }
