@@ -90,6 +90,22 @@ func (c *controller) handleOperatorRemovalEvent(
 		}
 	}
 
+	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
+	logFields := make([]zap.Field, 0)
+	if isOperatorEvent || c.validatorOptions.FullNode {
+		logFields = append(logFields,
+			zap.String("operatorName", od.Name),
+			zap.Uint64("operatorId", od.Index),
+			zap.String("operatorPubKey", od.PublicKey),
+			zap.String("ownerAddress", od.OwnerAddress.String()),
+		)
+	}
+
+	if !isOperatorEvent {
+		// TODO: remove this check when we will support operator removal for non-operator (mark as inactive)
+		return logFields, nil
+	}
+
 	shares, err := c.collection.GetOperatorValidatorShares(od.PublicKey, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
@@ -111,15 +127,6 @@ func (c *controller) handleOperatorRemovalEvent(
 		return nil, errors.Wrap(err, "could not delete operator data")
 	}
 
-	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(od.PublicKey, c.operatorPubKey) || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.String("operatorName", od.Name),
-			zap.Uint64("operatorId", od.Index),
-			zap.String("operatorPubKey", od.PublicKey),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
 	return logFields, nil
 }
 
