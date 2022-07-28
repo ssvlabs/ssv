@@ -86,12 +86,12 @@ func testsToRun() map[string]struct{} {
 		spectests.ThirteenOperators(),
 
 		proposal.HappyFlow(),
-		//proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; need to handle proposal justifications
-		//proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure; handle PJ (proposal justifications) & fix "change round justification does not constitute a quorum"
-		//proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure; handle PJ
-		//proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure; handle PJ
-		//proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure; handle PJ
-		//proposal.DuplicateMsg(),                       // TODO(nkryuchkov): failure; need to check if proposal was already accepted
+		proposal.NotPreparedPreviouslyJustification(),
+		//proposal.PreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; fix wrong output message signatures
+		//proposal.DifferentJustifications(),         // TODO(nkryuchkov): failure; fix wrong output message signatures
+		//proposal.JustificationsNotHeighest(),       // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
+		//proposal.JustificationsValueNotJustified(), // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
+		//proposal.DuplicateMsg(),                    // TODO(nkryuchkov): failure; need to check if proposal was already accepted
 		proposal.FirstRoundJustification(),
 		//proposal.FutureRoundNoAcceptedProposal(), // TODO(nkryuchkov): failure; need to decline proposals from future rounds if no proposal was accepted for current round
 		//proposal.FutureRoundAcceptedProposal(),   // TODO(nkryuchkov): failure; need to accept proposals from future rounds if already accepted proposal for current round
@@ -116,62 +116,62 @@ func testsToRun() map[string]struct{} {
 		//proposal.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
 		proposal.WrongProposer(),
 		//proposal.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
-		//
+
 		prepare.DuplicateMsg(),
-		//prepare.HappyFlow(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//prepare.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
 		prepare.ImparsableProposalData(),
 		//prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
-		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+		//prepare.MultiSigner(), // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//prepare.PostDecided(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//prepare.PostDecided(),        // TODO(nkryuchkov): failure; fix wrong output message signatures
 		//prepare.WrongData(),          // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		//prepare.WrongHeight(),        // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
-		//prepare.WrongSignature(),     // TODO(nkryuchkov): failure; fix expected errors in spec
-		//
+		prepare.WrongHeight(),
+		//prepare.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
+
 		commit.CurrentRound(),
 		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		commit.DuplicateMsg(),
-		//commit.HappyFlow(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//commit.HappyFlow(),         // TODO(nkryuchkov): failure; fix wrong output message signatures
 		//commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
 		commit.PostDecided(),
 		//commit.WrongData1(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		//commit.WrongData2(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		//commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
-		//commit.MultiSignerNoOverlap(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//commit.MultiSignerNoOverlap(),   // TODO(nkryuchkov): failure; fix wrong output message signatures
 		//commit.Decided(),                // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
 		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
-		//commit.ImparsableCommitData(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure; fix wrong output message signatures
 		//commit.WrongSignature(),         // TODO(nkryuchkov): failure; fix expected errors in spec
-		//
-		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
-		//roundchange.F1Speedup(),         // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
-		//roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
-		//roundchange.WrongHeight(),       // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
-		//roundchange.WrongSig(),          // TODO(nkryuchkov): failure; fix expected errors in spec
-		//roundchange.MultiSigner(),       // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+
+		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
+		//roundchange.F1Speedup(), // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
+		roundchange.F1SpeedupPrepared(),
+		//roundchange.WrongHeight(), // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		//roundchange.WrongSig(),    // TODO(nkryuchkov): failure; fix expected errors in spec
+		roundchange.MultiSigner(),
 		roundchange.NotPrepared(),
-		//roundchange.Prepared(),     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.PeerPrepared(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.PeerPreparedDifferentHeights(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.Prepared(),
+		roundchange.PeerPrepared(),
+		roundchange.PeerPreparedDifferentHeights(),
 		roundchange.JustificationWrongValue(),
 		roundchange.JustificationWrongRound(),
-		//roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; need to fail if justification has no quorum
+		//roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		//roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix expected errors in spec
 		roundchange.JustificationInvalidRound(),
-		//roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		//roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; actual root is different from expected
 		//roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure; need to check message data
-		//roundchange.FutureRound(),                     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.PastRound(),                       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
-		//roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.FutureRound(),
+		roundchange.PastRound(),
+		roundchange.F1SpeedupDifferentRounds(),
+		//roundchange.DuplicateMsgQuorum(),        // TODO(nkryuchkov): failure; actual root is different from expected
+		//roundchange.DuplicateMsgPartialQuorum(), // TODO(nkryuchkov): failure; actual root is different from expected
+		//roundchange.DuplicateMsgPrepared(),      // TODO(nkryuchkov): failure; actual root is different from expected
 		roundchange.ImparsableRoundChangeData(),
 	}
 

@@ -64,7 +64,8 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
-		quorum, msgsCount, committeeSize := i.changeRoundQuorum(signedMessage.Message.Round)
+		msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(signedMessage.Message.Round)
+		quorum, msgsCount, committeeSize := i.changeRoundQuorum(msgs)
 
 		// change round if quorum reached
 		if !quorum {
@@ -101,18 +102,25 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				return
 			}
 
-			var value []byte
+			var proposalData *specqbft.ProposalData
+
 			if notPrepared {
-				value = i.State().GetInputValue()
-				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", value)))
+				proposalData = &specqbft.ProposalData{
+					Data: i.State().GetInputValue(),
+				}
+				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
-				value = highest.PreparedValue
-				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", value)))
+				proposalData = &specqbft.ProposalData{
+					Data:                     highest.PreparedValue,
+					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
+					PrepareJustification:     highest.RoundChangeJustification,
+				}
+				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
 			// send pre-prepare msg
 			var broadcastMsg specqbft.Message
-			broadcastMsg, err = i.generatePrePrepareMessage(value)
+			broadcastMsg, err = i.generatePrePrepareMessage(proposalData)
 			if err != nil {
 				return
 			}
@@ -139,9 +147,7 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage
 	return i.UponPrePrepareMsg().Run(msg)
 }
 
-func (i *Instance) changeRoundQuorum(round specqbft.Round) (quorum bool, t int, n int) {
-	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
+func (i *Instance) changeRoundQuorum(msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
 	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
 	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
 }
