@@ -180,9 +180,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
 	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSigners(), 0)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add votes
 	msg := &specqbft.Message{
@@ -207,9 +205,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
 	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSigners(), 0)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add more votes
 	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKey[operatorIds[2]], msg), prepareData.Data)
