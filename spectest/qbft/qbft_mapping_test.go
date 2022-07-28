@@ -169,11 +169,13 @@ func testsToRun() map[string]struct{} {
 		roundchange.FutureRound(),
 		roundchange.PastRound(),
 		roundchange.F1SpeedupDifferentRounds(),
-		//roundchange.DuplicateMsgQuorum(),        // TODO(nkryuchkov): failure; actual root is different from expected
-		//roundchange.DuplicateMsgPartialQuorum(), // TODO(nkryuchkov): failure; actual root is different from expected
-		//roundchange.DuplicateMsgPrepared(),      // TODO(nkryuchkov): failure; actual root is different from expected
+		//roundchange.DuplicateMsgQuorum(),        // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
+		//roundchange.DuplicateMsgPartialQuorum(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
+		//roundchange.DuplicateMsgPrepared(),      // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
 		roundchange.ImparsableRoundChangeData(),
 	}
+
+	//testList = []spectest.SpecTest{}
 
 	result := make(map[string]struct{})
 	for _, test := range testList {
