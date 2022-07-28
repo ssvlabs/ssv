@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
-	forksv0 "github.com/bloxapp/ssv/network/forks/v0"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
+	forksv2 "github.com/bloxapp/ssv/network/forks/v2"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/host"
@@ -32,22 +31,12 @@ func TestTopicManager(t *testing.T) {
 		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
 		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
 		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
-	t.Run("v0 features", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		f := forksv0.New()
-		peers := newPeers(ctx, t, nPeers, false, false, f)
-		baseTest(ctx, t, peers, pks, f, 1, len(pks)+2)
-	})
 
-	// v1 features includes msg_id, msg validator, subnets, scoring
-	t.Run("v1 features", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-		f := forksv1.New()
-		peers := newPeers(ctx, t, nPeers, true, true, f)
-		baseTest(ctx, t, peers, pks, f, 1, 2)
-	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	f := forksv2.New()
+	peers := newPeers(ctx, t, nPeers, false, true, f)
+	baseTest(ctx, t, peers, pks, f, 1, 2)
 }
 
 func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
@@ -79,42 +68,11 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	}
 
 	// wait for the peers to join topics
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		c, cancel := context.WithTimeout(ctx, time.Second*5)
-		defer cancel()
-	peersLoop:
-		for _, p := range peers {
-			// TODO: modify for subnets
-			for len(p.tm.Topics()) < nValidators {
-				if c.Err() != nil {
-					break peersLoop
-				}
-				time.Sleep(time.Millisecond * 100)
-			}
-		}
-
-		nPeers := len(peers)
-		for _, p := range peers {
-			topics := p.tm.Topics()
-			for _, topic := range topics {
-				topicPeers, err := p.tm.Peers(topic)
-				require.NoError(t, err)
-				// wait for min peers
-				for c.Err() == nil && len(topicPeers) < nPeers-1 {
-					time.Sleep(time.Millisecond * 100)
-					topicPeers, err = p.tm.Peers(topic)
-					require.NoError(t, err)
-				}
-			}
-		}
-		require.NoError(t, c.Err())
-	}()
-	wg.Wait()
+	<-time.After(3 * time.Second)
 
 	t.Log("broadcasting messages")
+
+	var wg sync.WaitGroup
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
 		for j, p := range peers {
