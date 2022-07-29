@@ -89,7 +89,7 @@ func testsToRun() map[string]struct{} {
 		proposal.HappyFlow(),
 		proposal.NotPreparedPreviouslyJustification(),
 		//proposal.PreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; fix wrong output message signatures
-		//proposal.DifferentJustifications(),         // TODO(nkryuchkov): failure; fix wrong output message signatures
+		proposal.DifferentJustifications(),
 		//proposal.JustificationsNotHeighest(),       // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
 		//proposal.JustificationsValueNotJustified(), // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
 		//proposal.DuplicateMsg(),                    // TODO(nkryuchkov): failure; need to check if proposal was already accepted
@@ -122,12 +122,12 @@ func testsToRun() map[string]struct{} {
 		prepare.HappyFlow(),
 		prepare.ImparsableProposalData(),
 		//prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
-		//prepare.MultiSigner(), // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		prepare.PostDecided(),
-		//prepare.WrongData(),          // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		//prepare.WrongData(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		prepare.WrongHeight(),
 		//prepare.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
@@ -146,7 +146,7 @@ func testsToRun() map[string]struct{} {
 		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
 		commit.ImparsableCommitData(),
-		//commit.WrongSignature(),         // TODO(nkryuchkov): failure; fix expected errors in spec
+		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
 		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
 		//roundchange.F1Speedup(), // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
