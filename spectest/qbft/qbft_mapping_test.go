@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -118,14 +119,14 @@ func testsToRun() map[string]struct{} {
 		//proposal.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
 		prepare.DuplicateMsg(),
-		//prepare.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
+		prepare.HappyFlow(),
 		prepare.ImparsableProposalData(),
 		//prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
 		//prepare.MultiSigner(), // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//prepare.PostDecided(),        // TODO(nkryuchkov): failure; fix wrong output message signatures
+		prepare.PostDecided(),
 		//prepare.WrongData(),          // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		prepare.WrongHeight(),
 		//prepare.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
@@ -134,17 +135,17 @@ func testsToRun() map[string]struct{} {
 		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		commit.DuplicateMsg(),
-		//commit.HappyFlow(),         // TODO(nkryuchkov): failure; fix wrong output message signatures
+		commit.HappyFlow(),
 		//commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
 		commit.PostDecided(),
 		//commit.WrongData1(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		//commit.WrongData2(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		//commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
-		//commit.MultiSignerNoOverlap(),   // TODO(nkryuchkov): failure; fix wrong output message signatures
+		commit.MultiSignerNoOverlap(),
 		//commit.Decided(),                // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
 		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
-		//commit.ImparsableCommitData(),   // TODO(nkryuchkov): failure; fix wrong output message signatures
+		commit.ImparsableCommitData(),
 		//commit.WrongSignature(),         // TODO(nkryuchkov): failure; fix expected errors in spec
 
 		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
@@ -394,10 +395,13 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	require.Equal(t, len(test.OutputMessages), len(outputMessages))
 
 	for i, outputMessage := range outputMessages {
-		signedMessage := &specqbft.SignedMessage{}
-		require.NoError(t, signedMessage.Decode(outputMessage.Data))
+		r1, _ := test.OutputMessages[i].GetRoot()
 
-		require.Equal(t, test.OutputMessages[i], signedMessage)
+		msg2 := &specqbft.SignedMessage{}
+		require.NoError(t, msg2.Decode(outputMessage.Data))
+
+		r2, _ := msg2.GetRoot()
+		require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 	}
 
 	db.Close()
