@@ -88,7 +88,7 @@ func testsToRun() map[string]struct{} {
 
 		proposal.HappyFlow(),
 		proposal.NotPreparedPreviouslyJustification(),
-		//proposal.PreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; fix wrong output message signatures
+		//proposal.PreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
 		proposal.DifferentJustifications(),
 		//proposal.JustificationsNotHeighest(),       // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
 		//proposal.JustificationsValueNotJustified(), // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
@@ -148,7 +148,7 @@ func testsToRun() map[string]struct{} {
 		commit.ImparsableCommitData(),
 		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
-		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; fix wrong output message signatures
+		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
 		//roundchange.F1Speedup(), // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
 		roundchange.F1SpeedupPrepared(),
 		//roundchange.WrongHeight(), // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
