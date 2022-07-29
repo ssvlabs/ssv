@@ -7,15 +7,12 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // ChangeRoundMsgPipeline - the main change round msg pipeline
@@ -154,44 +151,17 @@ func (i *Instance) changeRoundQuorum(msgs []*specqbft.SignedMessage) (quorum boo
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
-	var justificationMsg *specqbft.Message
-	var aggSig []byte
-	var roundChangeJustification []*specqbft.SignedMessage
-	ids := make([]spectypes.OperatorID, 0)
+	data := &specqbft.RoundChangeData{
+		PreparedValue: i.State().GetPreparedValue(),
+		PreparedRound: i.State().GetPreparedRound(),
+	}
 	if i.isPrepared() {
 		quorum, msgs := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
-		var aggregatedSig *bls.Sign
-		justificationMsg = msgs[0].Message
-		for _, msg := range msgs {
-			// add sig to aggregate
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(msg.Signature); err != nil {
-				return nil, err
-			}
-			if aggregatedSig == nil {
-				aggregatedSig = sig
-			} else {
-				aggregatedSig.Add(sig)
-			}
 
-			// add id to list
-			ids = append(ids, msg.GetSigners()...)
-		}
-		aggSig = aggregatedSig.Serialize()
-
-		roundChangeJustification = []*specqbft.SignedMessage{{
-			Signature: aggSig,
-			Signers:   ids,
-			Message:   justificationMsg,
-		}}
+		data.RoundChangeJustification = msgs
 	}
 
-	data := &specqbft.RoundChangeData{
-		PreparedValue:            i.State().GetPreparedValue(),
-		PreparedRound:            i.State().GetPreparedRound(),
-		RoundChangeJustification: roundChangeJustification,
-	}
 	return json.Marshal(data)
 }
 

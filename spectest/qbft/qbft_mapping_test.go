@@ -88,7 +88,7 @@ func testsToRun() map[string]struct{} {
 
 		proposal.HappyFlow(),
 		proposal.NotPreparedPreviouslyJustification(),
-		//proposal.PreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
+		proposal.PreparedPreviouslyJustification(),
 		proposal.DifferentJustifications(),
 		//proposal.JustificationsNotHeighest(),       // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
 		//proposal.JustificationsValueNotJustified(), // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
