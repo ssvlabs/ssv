@@ -190,9 +190,7 @@ func TestQBFTMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := ioutil.ReadFile(filePath)
 	if err != nil {
-		// TODO(nkryuckov): Update link when fixed in spec.
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/fix-test-13-operators-on-V0.2/qbft/spectest/generate/tests.json")
-		//resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
