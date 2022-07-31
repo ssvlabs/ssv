@@ -65,7 +65,7 @@ func (n *p2pNetwork) Setup() error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("p2p services were configured")
+	n.logger.Info("p2p services were configured")
 
 	return nil
 }
@@ -104,8 +104,13 @@ func (n *p2pNetwork) SetupHost() error {
 	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
 	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
-
-	host, err := libp2p.New(n.ctx, opts...)
+	// TODO: enable and extract resource manager params as config
+	//rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
+	//if err != nil {
+	//	return errors.Wrap(err, "could not create resource manager")
+	//}
+	//opts = append(opts, libp2p.ResourceManager(rmgr))
+	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
 	}
@@ -147,7 +152,10 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	libPrivKey := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(n.cfg.NetworkPrivateKey))
+	libPrivKey, err := commons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	if err != nil {
+		return err
+	}
 
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
@@ -158,6 +166,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}
+
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
@@ -180,6 +189,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		ConnIdx:         n.idx,
 		SubnetsIdx:      n.idx,
 		IDService:       ids,
+		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
 	}, filters...)
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
@@ -248,16 +258,17 @@ func (n *p2pNetwork) setupPubsub() error {
 		Logger:   n.logger,
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
-		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := n.logger.With(zap.String("who", "MsgValidator"))
-			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
-		},
+		//MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
+		//	logger := n.logger.With(zap.String("who", "MsgValidator"))
+		//	return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
+		//},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
+		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
 	}
 
 	if !n.cfg.PubSubScoring {
@@ -265,10 +276,11 @@ func (n *p2pNetwork) setupPubsub() error {
 	}
 
 	if n.fork.MsgID() != nil {
-		midHandler := topics.NewMsgIDHandler(n.logger.With(zap.String("who", "msgIDHandler")),
-			n.fork, time.Minute*2)
+		midHandler := topics.NewMsgIDHandler(n.ctx,
+			n.logger.With(zap.String("who", "msgIDHandler")), n.fork, time.Minute*2)
 		n.msgResolver = midHandler
 		cfg.MsgIDHandler = midHandler
+		go cfg.MsgIDHandler.Start()
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}

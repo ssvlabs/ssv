@@ -62,8 +62,8 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 			return false
 		}
 		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
-		dvs.logger.Debug("shared subnets", zap.Ints("shared", shared),
-			zap.String("node", node.String()))
+		//dvs.logger.Debug("shared subnets", zap.Ints("shared", shared),
+		//	zap.String("node", node.String()))
 
 		return len(shared) >= n
 	}

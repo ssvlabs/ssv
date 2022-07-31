@@ -24,11 +24,10 @@ var (
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
 	}, []string{"pubKey", "v", "pid", "type"})
-	// MetricsPeerLastMsg tracks last message
-	//MetricsPeerLastMsg = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	//	Name: "ssv:network:peer_last_msg",
-	//	Help: "Timestamps of last messages",
-	//}, []string{"pid"})
+	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:router:in",
+		Help: "Counts incoming messages",
+	}, []string{"identifier", "mt"})
 )
 
 func init() {
@@ -38,10 +37,10 @@ func init() {
 	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	//if err := prometheus.Register(MetricsPeerLastMsg); err != nil {
-	//	log.Println("could not register prometheus collector")
-	//}
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsRouterIncoming); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

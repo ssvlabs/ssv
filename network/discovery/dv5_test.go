@@ -16,8 +16,7 @@ package discovery
 //	var wg sync.WaitGroup
 //	peers := make([]host.Host, n)
 //	for i := 0; i < n; i++ {
-//		h, err := libp2p.New(ctx,
-//			libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+//		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 //		require.NoError(t, err)
 //		<-time.After(time.Millisecond * 10)
 //		peers[i] = h

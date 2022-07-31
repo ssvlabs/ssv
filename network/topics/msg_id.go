@@ -2,6 +2,7 @@ package topics
 
 import (
 	"bytes"
+	"context"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -21,6 +22,10 @@ const (
 	MsgIDBadPeerID = "invalid:peer_id_error"
 )
 
+const (
+	msgIDHandlerBufferSize = 32
+)
+
 // MsgPeersResolver will resolve the sending peers of the given message
 type MsgPeersResolver interface {
 	GetPeers(msg []byte) []peer.ID
@@ -31,8 +36,9 @@ type MsgPeersResolver interface {
 // this uses to identify msg senders after validation
 type MsgIDHandler interface {
 	MsgPeersResolver
-
 	MsgID() func(pmsg *ps_pb.Message) string
+
+	Start()
 	GC()
 }
 
@@ -44,25 +50,48 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
+	ctx    context.Context
 	logger *zap.Logger
 	fork   forks.Fork
+	added  chan addedEvent
 	ids    map[string]*msgIDEntry
 	locker sync.Locker
 	ttl    time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(logger *zap.Logger, fork forks.Fork, ttl time.Duration) MsgIDHandler {
-	return &msgIDHandler{
+func NewMsgIDHandler(ctx context.Context, logger *zap.Logger, fork forks.Fork, ttl time.Duration) MsgIDHandler {
+	handler := &msgIDHandler{
+		ctx:    ctx,
 		logger: logger,
 		fork:   fork,
+		added:  make(chan addedEvent, msgIDHandlerBufferSize),
 		ids:    make(map[string]*msgIDEntry),
 		locker: &sync.Mutex{},
 		ttl:    ttl,
 	}
+	return handler
 }
 
-// MsgID returns the msg_id function that calculates msg_id based on it's content
+type addedEvent struct {
+	mid string
+	pid peer.ID
+}
+
+func (handler *msgIDHandler) Start() {
+	lctx, cancel := context.WithCancel(handler.ctx)
+	defer cancel()
+	for {
+		select {
+		case e := <-handler.added:
+			handler.add(e.mid, e.pid)
+		case <-lctx.Done():
+			return
+		}
+	}
+}
+
+// MsgID returns the msg_id function that calculates msg_id based on it's content.
 func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 	return func(pmsg *ps_pb.Message) string {
 		if pmsg == nil {
@@ -77,18 +106,12 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 			return MsgIDBadPeerID
 		}
 		logger = logger.With(zap.String("from", pid.String()))
-		//ssvMsg, err := handler.fork.DecodeNetworkMsg(pmsg.GetData())
-		//if err != nil {
-		//	logger.Warn("invalid encoding", zap.Error(err))
-		//	return MsgIDBadEncodedMessage
-		//}
 		mid := handler.fork.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
 			logger.Warn("could not create msg_id")
 			return MsgIDError
 		}
-		handler.add(mid, pid)
-		//logger.Debug("msg_id created", zap.String("value", mid))
+		handler.Add(mid, pid)
 		return mid
 	}
 }
@@ -109,6 +132,18 @@ func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
 	return []peer.ID{}
 }
 
+// Add adds the given pair of msg id + peer id
+// it uses channel to avoid blocking
+func (handler *msgIDHandler) Add(msgID string, pi peer.ID) {
+	select {
+	case handler.added <- addedEvent{
+		mid: msgID,
+		pid: pi,
+	}:
+	default:
+	}
+}
+
 // add the pair of msg id and peer id
 func (handler *msgIDHandler) add(msgID string, pi peer.ID) {
 	handler.locker.Lock()
@@ -120,9 +155,8 @@ func (handler *msgIDHandler) add(msgID string, pi peer.ID) {
 			peers: []peer.ID{},
 		}
 	}
-	// extend expiration
+	// update entry
 	entry.t = time.Now()
-	// add the peer
 	b := []byte(pi)
 	for _, p := range entry.peers {
 		if bytes.Equal([]byte(p), b) {
@@ -130,6 +164,7 @@ func (handler *msgIDHandler) add(msgID string, pi peer.ID) {
 		}
 	}
 	entry.peers = append(entry.peers, pi)
+	handler.ids[msgID] = entry
 }
 
 // GC performs garbage collection on the given map

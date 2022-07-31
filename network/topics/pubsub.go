@@ -16,7 +16,7 @@ import (
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to
-	subscriptionRequestLimit = 2128
+	subscriptionRequestLimit = 128 * 2
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
@@ -24,11 +24,13 @@ var (
 	// validationQueueSize is the size that we assign to the validation queue
 	validationQueueSize = 256
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 128
+	outboundQueueSize = 256
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
-	validateThrottle = 1024
+	validateThrottle = 2048
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
+	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
+	msgIDCacheTTL = gsHeartbeatInterval * 550
 )
 
 // PububConfig is the needed config to instantiate pubsub
@@ -50,6 +52,7 @@ type PububConfig struct {
 	ValidateThrottle    int
 	ValidationQueueSize int
 	OutboundQueueSize   int
+	MsgIDCacheTTL       time.Duration
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -92,6 +95,9 @@ func (cfg *PububConfig) init() error {
 	if cfg.ValidateThrottle == 0 {
 		cfg.ValidateThrottle = validateThrottle
 	}
+	if cfg.MsgIDCacheTTL == 0 {
+		cfg.MsgIDCacheTTL = msgIDCacheTTL
+	}
 	return nil
 }
 
@@ -110,9 +116,9 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 
 	sf := newSubFilter(cfg.Logger, fork, subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
+		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
 		pubsub.WithValidateQueueSize(cfg.ValidationQueueSize),
-		//pubsub.WithFloodPublish(true),
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(gossipSubParam()),
@@ -136,8 +142,6 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	if cfg.MsgIDHandler != nil {
 		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID()))
 	}
-
-	//setGlobalPubSubParams()
 
 	if len(cfg.StaticPeers) > 0 {
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))

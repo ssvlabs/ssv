@@ -1,8 +1,8 @@
 package peers
 
 import (
+	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -15,7 +15,9 @@ func TestNodeStates(t *testing.T) {
 
 	var pids []peer.ID
 	for _, nk := range nks {
-		pid, err := peer.IDFromPrivateKey(crypto.PrivKey((*crypto.Secp256k1PrivateKey)(nk.NetKey)))
+		sk, err := commons.ConvertToInterfacePrivkey(nk.NetKey)
+		require.NoError(t, err)
+		pid, err := peer.IDFromPrivateKey(sk)
 		require.NoError(t, err)
 		pids = append(pids, pid)
 	}
