@@ -13,6 +13,7 @@ import (
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
+	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -170,9 +171,14 @@ func (n *p2pNetwork) setupPeerServices() error {
 	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
 	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
-	ids, err := identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
-	if err != nil {
-		return errors.Wrap(err, "could not create ID service")
+	var ids identify.IDService
+	if bh, ok := n.host.(*basichost.BasicHost); ok {
+		ids = bh.IDService()
+	} else {
+		ids, err = identify.NewIDService(n.host, identify.UserAgent(userAgent(n.cfg.UserAgent)))
+		if err != nil {
+			return errors.Wrap(err, "could not create ID service")
+		}
 	}
 
 	subnetsProvider := func() records.Subnets {
