@@ -25,10 +25,6 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
-	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
-
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
