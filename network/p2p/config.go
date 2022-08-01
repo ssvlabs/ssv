@@ -27,7 +27,7 @@ const (
 // Config holds the configuration options for p2p network
 type Config struct {
 	// prod enr
-	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g"`
+	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-Li4QDoAEulf-vRy3KKLIBx1J3tnG7GdfsqMIymhDM4MLnqeFW88nrNhou3O-W6dhz20L-4gPnm2R40I_5M-NswuG3mGAYI0_dpah2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQILgansIBqIrQQQfKqMkFBvmGPIb7Nc4GPTIxKV-3HxaIN0Y3CCE4iDdWRwgg-g"`
 
 	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
 	UDPPort     int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"12001" env-description:"UDP port for discovery"`
@@ -50,7 +50,7 @@ type Config struct {
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 	// NetworkID is the network of this node
-	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"ssv-testnet-v2" env-description:"Network ID is the network of this node"`
+	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"shifu" env-description:"Network ID is the network of this node"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
