@@ -148,7 +148,7 @@ func testsToRun() map[string]struct{} {
 		commit.ImparsableCommitData(),
 		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
-		//roundchange.HappyFlow(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
+		roundchange.HappyFlow(),
 		//roundchange.F1Speedup(), // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
 		roundchange.F1SpeedupPrepared(),
 		//roundchange.WrongHeight(), // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong

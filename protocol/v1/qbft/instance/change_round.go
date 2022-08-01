@@ -103,7 +103,8 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 
 			if notPrepared {
 				proposalData = &specqbft.ProposalData{
-					Data: i.State().GetInputValue(),
+					Data:                     i.State().GetInputValue(),
+					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
 				}
 				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
