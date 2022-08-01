@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -21,9 +20,6 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
-	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -32,7 +28,10 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
+	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -514,15 +513,11 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
 	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	leaderSelectionSeed := append(fork.Identifier(identifier.GetPubKey(), identifier.GetRoleType()), []byte(strconv.FormatUint(uint64(height), 10))...)
-	leaderSelc, err := deterministic.New(leaderSelectionSeed, uint64(share.CommitteeSize()))
-	require.NoError(t, err)
 
-	return instance.NewInstance(&instance.Options{
+	newInstance := instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
 		Network:          net,
-		LeaderSelector:   leaderSelc,
 		Config:           qbftprotocol.DefaultConsensusParams(),
 		Identifier:       identifier,
 		Height:           height,
@@ -531,6 +526,10 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 		SSVSigner:        beacon.KeyManager,
 		ChangeRoundStore: qbftStorage,
 	})
+
+	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(share, newInstance.(*instance.Instance).State())
+
+	return newInstance
 }
 
 func specToSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *qbft.SignedMessage) *specqbft.SignedMessage {
