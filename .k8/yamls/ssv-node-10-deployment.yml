@@ -85,6 +85,14 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
+        - name: LOG_LEVEL
+          value: "info"
+        - name: DB_REPORTING
+          value: "false"
+        - name: PUBSUB_TRACE
+          value: "false"
+        - name: P2P_LOG
+          value: "false"
         - name: REGISTRY_CONTRACT_ADDR_KEY
           value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
         - name: ABI_VERSION
@@ -93,8 +101,6 @@ spec:
           value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
         - name: NETWORK_ID
           value: "ssv-testnet-v2-prod"
-        - name: LOG_LEVEL
-          value: "debug"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
         - name: NETWORK
@@ -107,12 +113,8 @@ spec:
           value: ""
         - name: GENESIS_EPOCH
           value: "1"
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
           value: "./data/db"
-        - name: DB_REPORTING
-          value: "true"
         - name: METRICS_API_PORT
           value: "15012"
         - name: ENABLE_PROFILE
