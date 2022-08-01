@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to
-	subscriptionRequestLimit = 128 * 2
+	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to.
+	// 128 subnets + decided topic
+	subscriptionRequestLimit = 128 + 1
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
@@ -26,7 +27,7 @@ var (
 	// outboundQueueSize is the size that we assign to the outbound message queue
 	outboundQueueSize = 256
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
-	validateThrottle = 2048
+	validateThrottle = 4096
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
