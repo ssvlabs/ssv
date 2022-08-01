@@ -106,7 +106,7 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: PUBSUB_TRACE
-          value: "true"
+          value: "false"
         - name: P2P_LOG
           value: "false"
         - name: DISCOVERY_TYPE_KEY
