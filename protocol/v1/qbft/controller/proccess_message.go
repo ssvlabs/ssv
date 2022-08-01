@@ -95,7 +95,7 @@ func (c *Controller) processCommitMsg(signedMessage *specqbft.SignedMessage) (bo
 
 // ProcessLateCommitMsg tries to aggregate the late commit message to the corresponding decided message
 func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	decidedMessages, err := c.DecidedStrategy.GetDecided(message.ToMessageID(msg.Message.Identifier), msg.Message.Height, msg.Message.Height)
+	decidedMessages, err := c.DecidedStrategy.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided for late commit")

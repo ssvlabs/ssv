@@ -219,7 +219,7 @@ func main() {
 		nodeOpts := ibft.Options{
 			Context:        context.Background(),
 			Role:           spectypes.BNRoleAttester,
-			Identifier:     identifier,
+			Identifier:     identifier[:],
 			Logger:         logger.With(zap.Uint64("simulation_node_id", i)),
 			Storage:        dbs[i-1],
 			Network:        net,

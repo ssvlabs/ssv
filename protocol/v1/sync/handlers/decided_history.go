@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -34,7 +35,8 @@ func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, repo
 			if items > maxBatchSize {
 				sm.Params.Height[1] = sm.Params.Height[0] + specqbft.Height(maxBatchSize)
 			}
-			results, err := store.GetDecided(msg.GetID(), sm.Params.Height[0], sm.Params.Height[1])
+			msdID := msg.GetID()
+			results, err := store.GetDecided(msdID[:], sm.Params.Height[0], sm.Params.Height[1])
 			sm.UpdateResults(err, results...)
 		}
 

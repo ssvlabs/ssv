@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/pkg/errors"
@@ -28,7 +29,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 			// TODO: remove after v0
 			return nil, nil
 		} else {
-			res, err := store.GetLastChangeRoundMsg(msg.MsgID)
+			res, err := store.GetLastChangeRoundMsg(msg.MsgID[:])
 			if err != nil {
 				logger.Warn("change round sync msg error", zap.Error(err))
 			}

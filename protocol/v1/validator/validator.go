@@ -164,7 +164,7 @@ func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Opt
 	opts := controller.Options{
 		Context:           opt.Context,
 		Role:              role,
-		Identifier:        identifier,
+		Identifier:        identifier[:],
 		Logger:            logger,
 		Storage:           opt.IbftStorage,
 		Network:           opt.P2pNetwork,

@@ -35,12 +35,13 @@ func TestConsumeMessages(t *testing.T) {
 	)
 	require.NoError(t, err)
 	currentInstanceLock := &sync.RWMutex{}
+	id := spectypes.NewMsgID([]byte("1"), spectypes.BNRoleAttester)
 	ctrl := Controller{
 		Ctx:                 context.Background(),
 		Logger:              logex.GetLogger().With(zap.String("who", "controller")),
 		Q:                   q,
 		SignatureState:      SignatureState{},
-		Identifier:          spectypes.NewMsgID([]byte("1"), spectypes.BNRoleAttester),
+		Identifier:          id[:],
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
 	}
@@ -90,9 +91,9 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.RoundChangeMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType),
-				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), ctrl.Identifier),
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier)),
 			},
-			[]*spectypes.SSVMessage{generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), ctrl.Identifier)},
+			[]*spectypes.SSVMessage{generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier))},
 			3,
 			specqbft.Height(1),
 			nil,
@@ -271,7 +272,7 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_change_round_clean_old_messages",
 			[]*spectypes.SSVMessage{
-				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), ctrl.Identifier),
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier)),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
@@ -283,7 +284,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),  // should be removed
 			},
 			[]*spectypes.SSVMessage{
-				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), ctrl.Identifier),
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier)),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(9), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
@@ -415,10 +416,10 @@ func generatePartialSignatureMsg(t *testing.T, msgType spectypes.MsgType, slot p
 	return ssvMsg
 }
 
-func generateSignedMsg(t *testing.T, msgType spectypes.MsgType, height specqbft.Height, round specqbft.Round, id spectypes.MessageID, consensusType specqbft.MessageType) *spectypes.SSVMessage {
+func generateSignedMsg(t *testing.T, msgType spectypes.MsgType, height specqbft.Height, round specqbft.Round, id []byte, consensusType specqbft.MessageType) *spectypes.SSVMessage {
 	ssvMsg := &spectypes.SSVMessage{
 		MsgType: msgType,
-		MsgID:   id,
+		MsgID:   message.ToMessageID(id),
 	}
 
 	signedMsg := specqbft.SignedMessage{

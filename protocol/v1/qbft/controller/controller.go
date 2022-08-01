@@ -37,7 +37,7 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 type Options struct {
 	Context           context.Context
 	Role              spectypes.BeaconRole
-	Identifier        spectypes.MessageID
+	Identifier        []byte
 	Logger            *zap.Logger
 	Storage           qbftstorage.QBFTStore
 	Network           p2pprotocol.Network
@@ -74,7 +74,7 @@ type Controller struct {
 	Network            p2pprotocol.Network
 	InstanceConfig     *qbft.InstanceConfig
 	ValidatorShare     *beaconprotocol.Share
-	Identifier         spectypes.MessageID
+	Identifier         []byte
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
 	KeyManager         spectypes.KeyManager

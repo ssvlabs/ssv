@@ -2,6 +2,8 @@ package fullnode
 
 import (
 	"context"
+	"encoding/hex"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -34,10 +36,10 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 	}
 }
 
-func (f *fullNode) Sync(ctx context.Context, identifier spectypes.MessageID, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
-	logger := f.logger.With(zap.String("identifier", identifier.String()))
+func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+	logger := f.logger.With(zap.String("identifier", hex.EncodeToString(identifier)))
 	logger.Debug("syncing decided")
-	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, identifier, func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
+	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, message.ToMessageID(identifier), func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
 		return from, nil
 	})
 	if err != nil {
@@ -80,7 +82,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier spectypes.MessageID, fro
 	}
 
 	if len(sender) > 0 {
-		err = f.historySyncer.SyncRange(ctx, identifier, handleDecided, localHeight, highest.Message.Height, sender)
+		err = f.historySyncer.SyncRange(ctx, message.ToMessageID(identifier), handleDecided, localHeight, highest.Message.Height, sender)
 		if err != nil {
 			return errors.Wrap(err, "could not complete sync")
 		}
@@ -110,7 +112,7 @@ func (f *fullNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 }
 
 func (f *fullNode) updateDecidedHistory(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	localMsgs, err := f.store.GetDecided(message.ToMessageID(msg.Message.Identifier), msg.Message.Height, msg.Message.Height)
+	localMsgs, err := f.store.GetDecided(msg.Message.Identifier, msg.Message.Height, msg.Message.Height)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read decided")
 	}
@@ -132,13 +134,13 @@ func (f *fullNode) updateDecidedHistory(msg *specqbft.SignedMessage) (*specqbft.
 	return msg, nil
 }
 
-func (f *fullNode) GetDecided(identifier spectypes.MessageID, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (f *fullNode) GetDecided(identifier []byte, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	if len(heightRange) < 2 {
 		return nil, errors.New("missing height range")
 	}
 	return f.store.GetDecided(identifier, heightRange[0], heightRange[1])
 }
 
-func (f *fullNode) GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error) {
+func (f *fullNode) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	return f.store.GetLastDecided(identifier)
 }

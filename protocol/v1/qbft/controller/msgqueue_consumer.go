@@ -2,9 +2,11 @@ package controller
 
 import (
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"encoding/hex"
 	"sync/atomic"
 	"time"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -36,7 +38,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	ctx, cancel := context.WithCancel(c.Ctx)
 	defer cancel()
 
-	identifier := c.Identifier.String()
+	identifier := hex.EncodeToString(c.Identifier)
 
 	for ctx.Err() == nil {
 		time.Sleep(interval)
@@ -208,7 +210,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 
 // processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
 func (c *Controller) processAllDecided(handler MessageHandler) {
-	idx := msgqueue.DecidedMsgIndex(c.Identifier.String())
+	idx := msgqueue.DecidedMsgIndex(hex.EncodeToString(c.Identifier))
 	msgs := c.Q.Pop(1, idx)
 	for len(msgs) > 0 {
 		err := handler(msgs[0])

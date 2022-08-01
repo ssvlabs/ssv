@@ -136,7 +136,7 @@ func TestVerifyPartialSignature(t *testing.T) {
 			identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), role)
 			opts := Options{
 				Role:           role,
-				Identifier:     identifier,
+				Identifier:     identifier[:],
 				Logger:         zap.L(),
 				InstanceConfig: qbft.DefaultConsensusParams(),
 				ValidatorShare: share,

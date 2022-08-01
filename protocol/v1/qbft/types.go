@@ -2,7 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/atomic"
@@ -37,7 +36,7 @@ var RoundStateName = map[int32]string{
 type State struct {
 	Stage atomic.Int32 // RoundState
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
-	Identifier atomic.Value // message.Identifier
+	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
 	Height        atomic.Value // specqbft.Height
 	InputValue    atomic.Value // []byte
@@ -48,7 +47,7 @@ type State struct {
 
 type unsafeState struct {
 	Stage         int32
-	Identifier    spectypes.MessageID
+	Identifier    []byte
 	Height        specqbft.Height
 	InputValue    []byte
 	Round         specqbft.Round
@@ -77,7 +76,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	}
 
 	s.Stage.Store(d.Stage)
-	s.Identifier.Store(d.Identifier)
+	s.Identifier.Store(d.Identifier[:])
 	s.Height.Store(d.Height)
 	s.InputValue.Store(d.InputValue)
 	s.Round.Store(d.Round)
@@ -128,12 +127,12 @@ func (s *State) GetPreparedRound() specqbft.Round {
 }
 
 // GetIdentifier returns the identifier of the state
-func (s *State) GetIdentifier() spectypes.MessageID {
-	if identifier, ok := s.Identifier.Load().(spectypes.MessageID); ok {
+func (s *State) GetIdentifier() []byte {
+	if identifier, ok := s.Identifier.Load().([]byte); ok {
 		return identifier
 	}
 
-	return spectypes.MessageID{}
+	return []byte{}
 }
 
 // GetInputValue returns the input value of the state

@@ -1,7 +1,6 @@
 package instance
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -98,7 +97,7 @@ func TestPreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.MessageID{})
+	instance.state.Identifier.Store([]byte{})
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)

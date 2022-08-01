@@ -25,7 +25,6 @@ import (
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
@@ -172,7 +171,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	time.Sleep(time.Second * 3) // 3s round
 
 	currentInstance := qbftCtrl.GetCurrentInstance()
-	decided, err := ibftStorage.GetLastDecided(message.ToMessageID(qbftCtrl.GetIdentifier()))
+	decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
 	require.NoError(t, err)
 	decidedValue := []byte("")
 	if decided != nil {

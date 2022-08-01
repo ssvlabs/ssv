@@ -122,7 +122,8 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester), specqbft.Height(0), specqbft.Height(4))
+	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}
