@@ -62,7 +62,7 @@ func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbf
 }
 
 // CommitMsgValidationPipeline is a msg validation ONLY pipeline
-func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
@@ -83,7 +83,7 @@ func (v0 *testFork) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 // changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
-func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
@@ -834,7 +834,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	height.Store(specqbft.Height(1))
 
 	identifier := atomic.Value{}
-	identifier.Store(msgID)
+	identifier.Store(msgID[:])
 
 	instance := &Instance{
 		Config: qbft.DefaultConsensusParams(),

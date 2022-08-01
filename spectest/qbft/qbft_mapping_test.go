@@ -519,7 +519,7 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 		ValidatorShare:   share,
 		Network:          net,
 		Config:           qbftprotocol.DefaultConsensusParams(),
-		Identifier:       identifier,
+		Identifier:       identifier[:],
 		Height:           height,
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),

@@ -2,9 +2,11 @@ package validator
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/exporter"
 	"strings"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/exporter"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -199,11 +201,12 @@ func (c *controller) handleValidatorRemovalEvent(
 	}
 
 	// remove decided messages
-	if err := c.ibftStorage.CleanAllDecided(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)); err != nil { // TODO need to delete for multi duty as well
+	messageID := spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	if err := c.ibftStorage.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
 		return nil, errors.Wrap(err, "could not clean all decided messages")
 	}
 	// remove change round messages
-	c.ibftStorage.CleanLastChangeRound(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)) // TODO need to delete for multi duty as well
+	c.ibftStorage.CleanLastChangeRound(messageID[:]) // TODO need to delete for multi duty as well
 
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {

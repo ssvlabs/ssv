@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -52,31 +53,31 @@ func TestCleanDecided(t *testing.T) {
 	require.NoError(t, storage.SaveDecided(generateMsg(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveLastDecided(generateMsg(differMsgID, specqbft.Height(msgsCount))))
 
-	res, err := storage.GetDecided(msgID, 0, specqbft.Height(msgsCount))
+	res, err := storage.GetDecided(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, msgsCount, len(res))
 
-	last, err := storage.GetLastDecided(msgID)
+	last, err := storage.GetLastDecided(msgID[:])
 	require.NoError(t, err)
 	require.NotNil(t, last)
 	require.Equal(t, specqbft.Height(msgsCount), last.Message.Height)
 
 	// remove all decided
-	require.NoError(t, storage.CleanAllDecided(msgID))
-	res, err = storage.GetDecided(msgID, 0, specqbft.Height(msgsCount))
+	require.NoError(t, storage.CleanAllDecided(msgID[:]))
+	res, err = storage.GetDecided(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
 
-	last, err = storage.GetLastDecided(msgID)
+	last, err = storage.GetLastDecided(msgID[:])
 	require.NoError(t, err)
 	require.Nil(t, last)
 
 	// check other msgID
-	res, err = storage.GetDecided(differMsgID, 0, specqbft.Height(msgsCount))
+	res, err = storage.GetDecided(differMsgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res))
 
-	last, err = storage.GetLastDecided(differMsgID)
+	last, err = storage.GetLastDecided(differMsgID[:])
 	require.NoError(t, err)
 	require.NotNil(t, last)
 }
@@ -106,7 +107,7 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 0, 4, 4)))
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester), 0, 4, 4))) // different identifier
 
-	res, err := storage.GetLastChangeRoundMsg(identifier)
+	res, err := storage.GetLastChangeRoundMsg(identifier[:])
 	require.NoError(t, err)
 	require.Equal(t, 4, len(res))
 
@@ -123,7 +124,7 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 0, 2, 1))) // update round for signer 1
 	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(identifier, 1, 2, 3))) // update round for signer 3
 
-	res, err = storage.GetLastChangeRoundMsg(identifier)
+	res, err = storage.GetLastChangeRoundMsg(identifier[:])
 	require.NoError(t, err)
 
 	require.Equal(t, 4, len(res))
@@ -143,7 +144,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	var identifierAtomic, height, round, preparedRound, preparedValue, iv atomic.Value
 	height.Store(specqbft.Height(10))
 	round.Store(specqbft.Round(2))
-	identifierAtomic.Store(identifier)
+	identifierAtomic.Store(identifier[:])
 	preparedRound.Store(specqbft.Round(8))
 	preparedValue.Store([]byte("value"))
 	iv.Store([]byte("input"))
@@ -161,14 +162,14 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
-	require.NoError(t, storage.SaveCurrentInstance(identifier, state))
+	require.NoError(t, storage.SaveCurrentInstance(identifier[:], state))
 
-	savedState, found, err := storage.GetCurrentInstance(identifier)
+	savedState, found, err := storage.GetCurrentInstance(identifier[:])
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, specqbft.Height(10), savedState.GetHeight())
 	require.Equal(t, specqbft.Round(2), savedState.GetRound())
-	require.Equal(t, identifier.String(), savedState.GetIdentifier().String())
+	require.Equal(t, identifier.String(), message.ToMessageID(savedState.GetIdentifier()).String())
 	require.Equal(t, specqbft.Round(8), savedState.GetPreparedRound())
 	require.Equal(t, []byte("value"), savedState.GetPreparedValue())
 	require.Equal(t, []byte("input"), savedState.GetInputValue())
