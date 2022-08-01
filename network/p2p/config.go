@@ -3,20 +3,21 @@ package p2pv1
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/bloxapp/ssv/network/forks"
 	"strings"
 	"time"
 
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	uc "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/forks"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	uc "github.com/bloxapp/ssv/utils/commons"
 )
 
 const (
