@@ -107,6 +107,12 @@ spec:
               optional: true
         - name: LOG_LEVEL
           value: "debug"
+        - name: DB_REPORTING
+          value: "false"
+        - name: PUBSUB_TRACE
+          value: "true"
+        - name: P2P_LOG
+          value: "false"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
         - name: NETWORK
@@ -119,12 +125,8 @@ spec:
           value: ""
         - name: GENESIS_EPOCH
           value: "1"
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
           value: "./data/db"
-        - name: DB_REPORTING
-          value: "true"
         - name: METRICS_API_PORT
           value: "15001"
         - name: ENABLE_PROFILE

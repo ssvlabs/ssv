@@ -147,14 +147,18 @@ spec:
                 optional: true
           - name: LOG_LEVEL
             value: "debug"
+          - name: DB_REPORTING
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: P2P_LOG
+            value: "false"
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: NETWORK
             value: "prater"
           - name: DB_PATH
             value: "./data/db"
-          - name: DB_REPORTING
-            value: "true"
           - name: METRICS_API_PORT
             value: "15007"
           - name: ENABLE_PROFILE
