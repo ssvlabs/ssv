@@ -85,8 +85,8 @@ func (c *Controller) processCommitMsg(signedMessage *specqbft.SignedMessage) (bo
 		if updated != nil {
 			logger.Debug("decided message was updated after late commit processing", zap.Any("updated_signers", updated.GetSigners()))
 			qbft.ReportDecided(c.ValidatorShare.PublicKey.SerializeToHexStr(), updated)
-			if err := c.onNewDecidedMessage(updated); err != nil {
-				logger.Error("could not broadcast decided message", zap.Error(err))
+			if c.newDecidedHandler != nil {
+				go c.newDecidedHandler(updated)
 			}
 		}
 	}
