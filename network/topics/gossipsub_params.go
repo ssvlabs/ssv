@@ -7,11 +7,11 @@ import (
 
 var (
 	// gsD topic stable mesh target count
-	gsD = 5
+	gsD = 8
 	// gsDlo topic stable mesh low watermark
-	gsDlo = 3
+	gsDlo = 6
 	// gsDhi topic stable mesh high watermark
-	gsDhi = 9
+	gsDhi = 12
 
 	// gsMaxIHaveLength is max number for ihave messages to send
 	// decreased the default (5000) to avoid ihave floods
