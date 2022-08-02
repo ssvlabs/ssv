@@ -2,6 +2,7 @@ package signedmsg
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -37,7 +38,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[spectypes.OperatorID
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(message.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err

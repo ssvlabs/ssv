@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -309,7 +310,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee:       mappedCommittee,
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
-		DomainType:      spectypes.GetDefaultDomain(),
+		DomainType:      message.GetDefaultDomain(),
 		Graffiti:        nil,
 	}
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"math"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -129,7 +130,7 @@ func (s *Share) VerifySignedMessage(msg *specqbft.SignedMessage) error {
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, operators)
+	err = msg.GetSignature().VerifyByOperators(msg, message.GetDefaultDomain(), spectypes.QBFTSignatureType, operators)
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

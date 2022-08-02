@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -9,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	commons2 "github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
@@ -95,7 +95,10 @@ func (n *p2pNetwork) initCfg() {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
 	if len(n.cfg.NetworkID) == 0 {
-		n.cfg.NetworkID = string(spectypes.GetDefaultDomain())
+		n.cfg.NetworkID = string(message.GetDefaultDomain())
+	} else {
+		// we have some custom network id, overriding default domain
+		message.SetDefaultDomain([]byte(n.cfg.NetworkID))
 	}
 }
 

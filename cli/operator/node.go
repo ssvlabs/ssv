@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"net/http"
 	"time"
@@ -121,7 +122,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, spectypes.GetDefaultDomain())
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, message.GetDefaultDomain())
 		if err != nil {
 			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}

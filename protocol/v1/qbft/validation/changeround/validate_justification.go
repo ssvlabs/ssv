@@ -3,6 +3,7 @@ package changeround
 import (
 	"bytes"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -88,7 +89,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	}
 	aggregated := pks.Aggregate()
 	for _, justification := range data.RoundChangeJustification {
-		err = justification.Signature.Verify(justification, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize())
+		err = justification.Signature.Verify(justification, message.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}

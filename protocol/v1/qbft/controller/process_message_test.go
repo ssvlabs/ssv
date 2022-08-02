@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"strings"
 	"testing"
 
@@ -134,7 +135,7 @@ func newInMemDb() basedb.IDb {
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message, forkVersion string) *specqbft.SignedMessage {
 	sigType := spectypes.QBFTSignatureType
-	domain := spectypes.ComputeSignatureDomain(spectypes.GetDefaultDomain(), sigType)
+	domain := spectypes.ComputeSignatureDomain(message.GetDefaultDomain(), sigType)
 	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
