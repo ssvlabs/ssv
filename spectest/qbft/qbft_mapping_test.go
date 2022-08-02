@@ -160,7 +160,7 @@ func testsToRun() map[string]struct{} {
 		roundchange.PeerPreparedDifferentHeights(),
 		roundchange.JustificationWrongValue(),
 		roundchange.JustificationWrongRound(),
-		//roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; need to fail if justification has no quorum
+		roundchange.JustificationNoQuorum(),
 		//roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix expected errors in spec
 		//roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix expected errors in spec
 		roundchange.JustificationInvalidRound(),
