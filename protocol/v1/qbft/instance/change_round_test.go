@@ -180,9 +180,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
 	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSigners(), 0)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add votes
 	msg := &specqbft.Message{
@@ -207,9 +205,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
 	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.RoundChangeJustification[0].GetSigners(), 0)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add more votes
 	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKey[operatorIds[2]], msg), prepareData.Data)
@@ -320,9 +316,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambdas"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: consensusMessageSignatureByThree.Serialize(),
@@ -343,9 +338,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambda"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -372,9 +366,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambda"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -390,7 +383,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round justification round lower or equal to message round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid prepared and justification round",
@@ -401,9 +394,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambda"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -419,7 +411,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round prepared round not equal to justification msg round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid justification instance",
@@ -430,9 +422,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambda"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -459,9 +450,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("lambdas"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -488,9 +478,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("lambdas"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
@@ -506,7 +495,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round prepared value not equal to justification msg value",
+			expectedError: "round change justification invalid: prepare data != proposed data",
 		},
 		{
 			name:                "invalid justification sig",
@@ -517,9 +506,8 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				Round:      3,
 				Identifier: []byte("Lambdas"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					PreparedRound:    specqbft.Round(2),
-					NextProposalData: []byte("value"),
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: consensusMessageSignatureByTwo.Serialize(),
@@ -568,7 +556,6 @@ func TestRoundChangeJustification(t *testing.T) {
 	inputValue := changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 		PreparedValue:            []byte("hello"),
 		PreparedRound:            1,
-		NextProposalData:         nil,
 		RoundChangeJustification: nil,
 	})
 
@@ -789,7 +776,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
-			"invalid message sequence number: expected: 1, actual: 2",
+			"msg Height wrong",
 		},
 
 		{

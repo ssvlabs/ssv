@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
@@ -170,7 +170,6 @@ func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte
 	crd := specqbft.RoundChangeData{
 		PreparedValue:            nil,
 		PreparedRound:            0,
-		NextProposalData:         nil,
 		RoundChangeJustification: nil,
 	}
 	encoded, err := crd.Encode()

@@ -6,21 +6,25 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/prepare"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposal"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/roundchange"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -77,68 +81,99 @@ func testsToRun() map[string]struct{} {
 		messages.CreateRoundChangePreviouslyPrepared(),
 		messages.RoundChangeDataEncoding(),
 
-		// TODO(nkryuchkov): failure
-		//spectests.HappyFlow(),
-		//spectests.SevenOperators(),
-		//spectests.TenOperators(),
-		//spectests.ThirteenOperators(),
+		spectests.HappyFlow(),
+		spectests.SevenOperators(),
+		spectests.TenOperators(),
+		spectests.ThirteenOperators(),
+
+		proposal.HappyFlow(),
+		//proposal.NotPreparedPreviouslyJustification(), // TODO(nkryuchkov): failure; need to handle proposal justifications
+		//proposal.PreparedPreviouslyJustification(),    // TODO(nkryuchkov): failure; handle PJ (proposal justifications) & fix "change round justification does not constitute a quorum"
+		//proposal.DifferentJustifications(),            // TODO(nkryuchkov): failure; handle PJ
+		//proposal.JustificationsNotHeighest(),          // TODO(nkryuchkov): failure; handle PJ
+		//proposal.JustificationsValueNotJustified(),    // TODO(nkryuchkov): failure; handle PJ
+		//proposal.DuplicateMsg(),                       // TODO(nkryuchkov): failure; need to check if proposal was already accepted
+		proposal.FirstRoundJustification(),
+		//proposal.FutureRoundNoAcceptedProposal(), // TODO(nkryuchkov): failure; need to decline proposals from future rounds if no proposal was accepted for current round
+		//proposal.FutureRoundAcceptedProposal(),   // TODO(nkryuchkov): failure; need to accept proposals from future rounds if already accepted proposal for current round
+		//proposal.PastRound(),                     // TODO(nkryuchkov): failure; need to decline proposals from past rounds
+		proposal.ImparsableProposalData(),
+		//proposal.InvalidRoundChangeJustificationPrepared(),        // TODO(nkryuchkov): failure; need to handle invalid rc justification
+		//proposal.InvalidRoundChangeJustification(),                // TODO(nkryuchkov): failure; need to handle invalid rc justification
+		//proposal.PreparedPreviouslyNoRCJustificationQuorum(),      // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.NoRCJustification(),                              // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.PreparedPreviouslyNoPrepareJustificationQuorum(), // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.PreparedPreviouslyDuplicatePrepareMsg(),          // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.PreparedPreviouslyDuplicateRCMsg(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.DuplicateRCMsg(),                                 // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
+		//proposal.InvalidPrepareJustificationValue(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
+		//proposal.InvalidPrepareJustificationRound(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
+		proposal.InvalidProposalData(),
+		//proposal.InvalidValueCheck(), // TODO(nkryuchkov): failure; need to check message data
+		proposal.MultiSigner(),
+		//proposal.PostDecided(),            // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
+		//proposal.PostPrepared(),           // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
+		//proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure; need to forbid second proposal for round
+		//proposal.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		proposal.WrongProposer(),
+		//proposal.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 		//
-		// TODO(nkryuchkov): failure
-		//proposal.HappyFlow(),
-		//proposal.NotPreparedPreviouslyJustification(),
-		//proposal.PreparedPreviouslyJustification(),
-		//proposal.DifferentJustifications(),
-		//proposal.JustificationsNotHeighest(),
-		//proposal.JustificationsValueNotJustified(),
-		//proposal.DuplicateMsg(),
-		//proposal.FirstRoundJustification(),
-		//proposal.FutureRoundNoAcceptedProposal(),
-		//proposal.FutureRoundAcceptedProposal(),
-		//proposal.PastRound(),
-		//proposal.ImparsableProposalData(),
-		//proposal.InvalidRoundChangeJustificationPrepared(),
-		//proposal.InvalidRoundChangeJustification(),
-		//proposal.PreparedPreviouslyNoRCJustificationQuorum(),
-		//proposal.NoRCJustification(),
-		//proposal.PreparedPreviouslyNoPrepareJustificationQuorum(),
-		//proposal.PreparedPreviouslyDuplicatePrepareMsg(),
-		//proposal.PreparedPreviouslyDuplicateRCMsg(),
-		//proposal.DuplicateRCMsg(),
-		//proposal.InvalidPrepareJustificationValue(),
-		//proposal.InvalidPrepareJustificationRound(),
-		//proposal.InvalidProposalData(),
-		//proposal.InvalidValueCheck(),
-		//proposal.MultiSigner(),
-		//proposal.PostDecided(),
-		//proposal.PostPrepared(),
-		//proposal.SecondProposalForRound(),
-		//proposal.WrongHeight(),
-		//proposal.WrongProposer(),
-		//proposal.WrongSignature(),
+		prepare.DuplicateMsg(),
+		prepare.HappyFlow(),
+		prepare.ImparsableProposalData(),
+		//prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
+		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
+		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		prepare.PostDecided(),
+		//prepare.WrongData(),      // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		prepare.WrongHeight(),
+		//prepare.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 		//
-		// TODO(nkryuchkov): failure
-		//commit.CurrentRound(),
-		//commit.FutureRound(),
-		//commit.PastRound(),
-		//commit.DuplicateMsg(),
-		//commit.HappyFlow(),
-		//commit.InvalidCommitData(),
-		//commit.PostDecided(),
-		//commit.WrongData1(),
-		//commit.WrongData2(),
-		//commit.MultiSignerWithOverlap(),
-		//commit.MultiSignerNoOverlap(),
-		//commit.Decided(),
-		//commit.NoPrevAcceptedProposal(),
-		//commit.WrongHeight(),
-		//commit.ImparsableCommitData(),
-		//commit.WrongSignature(),
+		commit.CurrentRound(),
+		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		commit.DuplicateMsg(),
+		commit.HappyFlow(),
+		//commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
+		commit.PostDecided(),
+		//commit.WrongData1(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		//commit.WrongData2(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		//commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		commit.MultiSignerNoOverlap(),
+		//commit.Decided(),                // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
+		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		commit.ImparsableCommitData(),
+		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 		//
-		// TODO(nkryuchkov): failure
-		//roundchange.HappyFlow(),
-		//roundchange.PreviouslyPrepared(),
-		//roundchange.F1Speedup(),
-		//roundchange.F1SpeedupPrepared(),
+		//roundchange.HappyFlow(),         // TODO(nkryuchkov): failure; substitution of message signature works incorrectly
+		//roundchange.F1Speedup(),         // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
+		//roundchange.F1SpeedupPrepared(), // TODO(nkryuchkov): failure; need to substitute identifier in justifications in mapping
+		//roundchange.WrongHeight(),       // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		//roundchange.WrongSig(),          // TODO(nkryuchkov): failure; fix expected errors in spec
+		//roundchange.MultiSigner(),       // TODO(nkryuchkov): failure; need to check that message has only 1 signer
+		roundchange.NotPrepared(),
+		//roundchange.Prepared(),                     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.PeerPrepared(),                 // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.PeerPreparedDifferentHeights(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationWrongValue(),
+		roundchange.JustificationWrongRound(),
+		//roundchange.JustificationNoQuorum(),     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.JustificationInvalidRound(),
+		//roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.JustificationDuplicateMsg(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure; need to check message data
+		//roundchange.FutureRound(),                     // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.PastRound(),                       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.F1SpeedupDifferentRounds(),        // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.DuplicateMsgQuorum(),              // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.DuplicateMsgPartialQuorum(),       // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		//roundchange.DuplicateMsgPrepared(),            // TODO(nkryuchkov): failure; fix "change round justification does not constitute a quorum"
+		roundchange.ImparsableRoundChangeData(),
 	}
 
 	result := make(map[string]struct{})
@@ -150,15 +185,23 @@ func testsToRun() map[string]struct{} {
 }
 
 func TestQBFTMapping(t *testing.T) {
-	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/v0.1.1/qbft/spectest/generate/tests.json")
-	require.NoError(t, err)
+	path, _ := os.Getwd()
+	fileName := "tests.json"
+	filePath := path + "/" + fileName
+	jsonTests, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
+		require.NoError(t, err)
 
-	defer func() {
-		require.NoError(t, resp.Body.Close())
-	}()
+		defer func() {
+			require.NoError(t, resp.Body.Close())
+		}()
 
-	jsonTests, err := ioutil.ReadAll(resp.Body)
-	require.NoError(t, err)
+		jsonTests, err = ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.NoError(t, ioutil.WriteFile(filePath, jsonTests, 0644))
+	}
 
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -200,34 +243,6 @@ func TestQBFTMapping(t *testing.T) {
 			})
 		}
 	}
-}
-
-func mapErrors(err string) string {
-	switch err {
-	// TODO(nkryuchkov): ensure that cases below are not bugs
-	case "proposal invalid: proposal not justified: prepares has no quorum",
-		"proposal invalid: proposal not justified: change round has not quorum",
-		"proposal invalid: proposal not justified: change round msg not valid: basic round Change validation failed: round change msg signature invalid: failed to verify signature",
-		"proposal invalid: proposal not justified: proposed data doesn't match highest prepared",
-		"proposal invalid: proposal not justified: signed prepare not valid",
-		"proposal invalid: proposal is not valid with current state",
-		"invalid prepare msg: msg round wrong":
-		return "pre-prepare message sender (id 1) is not the round's leader (expected 2)"
-	case "invalid signed message: message data is invalid":
-		return "could not decode commit data from message: unexpected end of JSON input"
-	case "invalid prepare msg: msg Height wrong":
-		return "invalid message sequence number: expected: 0, actual: 2"
-	case "commit msg invalid: could not get msg commit data: could not decode commit data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode commit data from message: invalid character '\\x01' looking for beginning of value"
-	case "proposal invalid: could not get proposal data: could not decode proposal data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode proposal data from message: invalid character '\\x01' looking for beginning of value"
-	case "invalid prepare msg: could not get prepare data: could not decode prepare data from message: invalid character '\\x01' looking for beginning of value":
-		return "could not decode prepare data from message: invalid character '\\x01' looking for beginning of value"
-	case "commit msg invalid: commit Height is wrong":
-		return "invalid message sequence number: expected: 0, actual: 10"
-	}
-
-	return err
 }
 
 func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
@@ -292,77 +307,32 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     share.Committee[share.NodeID].Pk,
 		Committee:       mappedCommittee,
-		Quorum:          3,
-		PartialQuorum:   2,
+		Quorum:          keysSet.Threshold,
+		PartialQuorum:   keysSet.PartialThreshold,
 		DomainType:      spectypes.PrimusTestnet,
 		Graffiti:        nil,
 	}
 
-	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-	qbftInstance := newQbftInstance(t, logger, qbftStorage, p2pNet, beacon, share, forkVersion)
+	qbftInstance := newQbftInstance(logger, qbftStorage, p2pNet, beacon, share, mappedShare, test.Pre.StartValue, forkVersion)
 	qbftInstance.Init()
-	require.NoError(t, qbftInstance.Start(test.Pre.StartValue))
-	//time.Sleep(time.Second * 3) // 3s round
-
-	signatureMapping := make(map[string]signatureAndID)
+	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
+	qbftInstance.State().Round.Store(test.Pre.State.Round)
+	qbftInstance.State().Height.Store(test.Pre.State.Height)
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
-		origSignAndID := signatureAndID{
-			Signature:  msg.Signature,
-			Identifier: msg.Message.Identifier,
-		}
-
-		modifiedMsg := &qbft.SignedMessage{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message: &qbft.Message{
-				MsgType:    msg.Message.MsgType,
-				Height:     msg.Message.Height,
-				Round:      msg.Message.Round,
-				Identifier: identifier[:],
-				Data:       msg.Message.Data,
-			},
-		}
-
-		domain := spectypes.PrimusTestnet
-		sigType := spectypes.QBFTSignatureType
-		r, err := spectypes.ComputeSigningRoot(modifiedMsg, spectypes.ComputeSignatureDomain(domain, sigType))
-		require.NoError(t, err)
-
-		var aggSig *bls.Sign
-		for _, signer := range modifiedMsg.Signers {
-			sig := keysSet.Shares[signer].SignByte(r)
-			if aggSig == nil {
-				aggSig = sig
-			} else {
-				aggSig.Add(sig)
-			}
-		}
-
-		serializedSig := aggSig.Serialize()
-
-		signatureMapping[string(serializedSig)] = origSignAndID
-		signedMessage := specToSignedMessage(t, keysSet, modifiedMsg)
-		signedMessage.Signature = serializedSig
-
-		if _, err := qbftInstance.ProcessMsg(signedMessage); err != nil {
+		if _, err := qbftInstance.ProcessMsg(msg); err != nil {
 			lastErr = err
 		}
 	}
 
-	//time.Sleep(time.Second * 3) // 3s round
-
-	mappedInstance := new(qbft.Instance)
+	mappedInstance := new(specqbft.Instance)
 	if qbftInstance != nil {
 		preparedValue := qbftInstance.State().GetPreparedValue()
 		if len(preparedValue) == 0 {
 			preparedValue = nil
 		}
 		round := qbftInstance.State().GetRound()
-		//if round == 0 {
-		//	round = 1
-		//}
 
 		_, decidedErr := qbftInstance.CommittedAggregatedMsg()
 		var decidedValue []byte
@@ -370,7 +340,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			decidedValue = test.InputMessages[0].Message.Identifier
 		}
 
-		mappedInstance.State = &qbft.State{
+		mappedInstance.State = &specqbft.State{
 			Share:                           mappedShare,
 			ID:                              test.Pre.State.ID,
 			Round:                           round,
@@ -380,22 +350,30 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			ProposalAcceptedForCurrentRound: test.Pre.State.ProposalAcceptedForCurrentRound,
 			Decided:                         decidedErr == nil,
 			DecidedValue:                    decidedValue,
-			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[qbft.ProposalMsgType], signatureMapping),
-			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[qbft.PrepareMsgType], signatureMapping),
-			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[qbft.CommitMsgType], signatureMapping),
-			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[qbft.RoundChangeMsgType], signatureMapping),
+			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType]),
+			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType]),
+			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType]),
+			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType]),
 		}
 
 		allMessages := mappedInstance.State.ProposeContainer.AllMessaged()
 		if len(allMessages) != 0 {
-			mappedInstance.State.ProposalAcceptedForCurrentRound = allMessages[0]
+			var highestRound specqbft.Round
+			var highestMessage *specqbft.SignedMessage
+			for _, message := range allMessages {
+				if message.Message.Round > highestRound {
+					highestRound = message.Message.Round
+					highestMessage = message
+				}
+			}
+			mappedInstance.State.ProposalAcceptedForCurrentRound = highestMessage
 		}
 
 		mappedInstance.StartValue = qbftInstance.State().GetInputValue()
 	}
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, mapErrors(test.ExpectedError))
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -413,9 +391,13 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	require.Equal(t, len(test.OutputMessages), len(outputMessages))
 
 	for i, outputMessage := range outputMessages {
-		signedMessage := test.OutputMessages[i]
-		signedMessage.Message.Identifier = identifier[:]
-		require.Equal(t, outputMessage, specToSignedMessage(t, keysSet, signedMessage))
+		r1, _ := test.OutputMessages[i].GetRoot()
+
+		msg2 := &specqbft.SignedMessage{}
+		require.NoError(t, msg2.Decode(outputMessage.Data))
+
+		r2, _ := msg2.GetRoot()
+		require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 	}
 
 	db.Close()
@@ -424,16 +406,14 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 	var lastErr error
 
-	keysSet := testingutils.Testing4SharesSet()
-
 	for i, messageBytes := range test.EncodedMessages {
-		m := &qbft.SignedMessage{}
+		m := &specqbft.SignedMessage{}
 		if err := m.Decode(messageBytes); err != nil {
 			lastErr = err
 		}
 
 		if len(test.ExpectedRoots) > 0 {
-			r, err := specToSignedMessage(t, keysSet, m).GetRoot()
+			r, err := m.GetRoot()
 			if err != nil {
 				lastErr = err
 			}
@@ -450,12 +430,12 @@ func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 		}
 
 		switch msg.Message.MsgType {
-		case qbft.RoundChangeMsgType:
-			rc := qbft.RoundChangeData{}
+		case specqbft.RoundChangeMsgType:
+			rc := specqbft.RoundChangeData{}
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}
-			if err := validateRoundChangeData(specToRoundChangeData(t, keysSet, rc)); err != nil {
+			if err := validateRoundChangeData(rc); err != nil {
 				lastErr = err
 			}
 		}
@@ -491,12 +471,8 @@ func validateRoundChangeData(d specqbft.RoundChangeData) error {
 		if len(d.RoundChangeJustification) == 0 {
 			return errors.New("round change justification invalid")
 		}
-		// TODO - should next proposal data be equal to prepared value?
 	}
 
-	if len(d.NextProposalData) == 0 {
-		return errors.New("round change next value invalid")
-	}
 	return nil
 }
 
@@ -504,16 +480,27 @@ func isRoundChangeDataPrepared(d specqbft.RoundChangeData) bool {
 	return d.PreparedRound != 0 || len(d.PreparedValue) != 0
 }
 
-type signatureAndID struct {
-	Signature  []byte
-	Identifier []byte
+// nolint:unused
+type roundRobinLeaderSelector struct {
+	state       *qbftprotocol.State
+	mappedShare *spectypes.Share
 }
 
-func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, forkVersion forksprotocol.ForkVersion) instance.Instancer {
+// nolint:unused
+func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
+	specState := &specqbft.State{
+		Share:  m.mappedShare,
+		Height: m.state.GetHeight(),
+	}
+	// RoundRobinProposer returns OperatorID which starts with 1.
+	// As the result will be used to index OperatorIds which starts from 0,
+	// the result of Calculate should be decremented.
+	return uint64(specqbft.RoundRobinProposer(specState, specqbft.Round(round))) - 1
+}
+
+func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, identifier []byte, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
-	identifier := spectypes.NewMsgID(share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-
 	newInstance := instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
@@ -532,69 +519,17 @@ func newQbftInstance(t *testing.T, logger *zap.Logger, qbftStorage qbftstorage.Q
 	return newInstance
 }
 
-func specToSignedMessage(t *testing.T, keysSet *testingutils.TestKeySet, msg *qbft.SignedMessage) *specqbft.SignedMessage {
-	signers := append([]spectypes.OperatorID{}, msg.GetSigners()...)
-
-	domain := spectypes.PrimusTestnet
-	sigType := spectypes.QBFTSignatureType
-	r, err := spectypes.ComputeSigningRoot(msg, spectypes.ComputeSignatureDomain(domain, sigType))
-	require.NoError(t, err)
-
-	var aggSig *bls.Sign
-	for _, signer := range msg.Signers {
-		sig := keysSet.Shares[signer].SignByte(r)
-		if aggSig == nil {
-			aggSig = sig
-		} else {
-			aggSig.Add(sig)
-		}
-	}
-
-	return &specqbft.SignedMessage{
-		Signature: aggSig.Serialize(),
-		//Signature: []byte(msg.Signature),
-		Signers: signers,
-		Message: &specqbft.Message{
-			MsgType:    msg.Message.MsgType,
-			Height:     msg.Message.Height,
-			Round:      msg.Message.Round,
-			Identifier: msg.Message.Identifier,
-			//Identifier: msg.Message.Identifier,
-			Data: msg.Message.Data,
-		},
-	}
-}
-
-func specToRoundChangeData(t *testing.T, keysSet *testingutils.TestKeySet, spec qbft.RoundChangeData) specqbft.RoundChangeData {
-	rcj := make([]*specqbft.SignedMessage, 0, len(spec.RoundChangeJustification))
-	for _, v := range spec.RoundChangeJustification {
-		rcj = append(rcj, specToSignedMessage(t, keysSet, v))
-	}
-
-	return specqbft.RoundChangeData{
-		PreparedValue:            spec.PreparedValue,
-		PreparedRound:            spec.PreparedRound,
-		NextProposalData:         spec.NextProposalData,
-		RoundChangeJustification: rcj,
-	}
-}
-
-func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer, signatureToSpecSignatureAndID map[string]signatureAndID) *qbft.MsgContainer {
-	c := qbft.NewMsgContainer()
+func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *specqbft.MsgContainer {
+	c := specqbft.NewMsgContainer()
 	container.AllMessaged(func(round specqbft.Round, msg *specqbft.SignedMessage) {
-		signers := append([]spectypes.OperatorID{}, msg.GetSigners()...)
-
-		originalSignatureAndID := signatureToSpecSignatureAndID[string(msg.Signature)]
-
-		// TODO need to use one of the message type (spec/protocol)
-		ok, err := c.AddIfDoesntExist(&qbft.SignedMessage{
-			Signature: originalSignatureAndID.Signature,
-			Signers:   signers,
-			Message: &qbft.Message{
+		ok, err := c.AddIfDoesntExist(&specqbft.SignedMessage{
+			Signature: msg.Signature,
+			Signers:   msg.Signers,
+			Message: &specqbft.Message{
 				MsgType:    msg.Message.MsgType,
 				Height:     msg.Message.Height,
 				Round:      msg.Message.Round,
-				Identifier: originalSignatureAndID.Identifier,
+				Identifier: msg.Message.Identifier,
 				Data:       msg.Message.Data,
 			},
 		})
