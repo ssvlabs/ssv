@@ -37,7 +37,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[spectypes.OperatorID
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err

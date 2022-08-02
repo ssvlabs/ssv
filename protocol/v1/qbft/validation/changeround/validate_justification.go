@@ -88,7 +88,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	}
 	aggregated := pks.Aggregate()
 	for _, justification := range data.RoundChangeJustification {
-		err = justification.Signature.Verify(justification, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, aggregated.Serialize())
+		err = justification.Signature.Verify(justification, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}

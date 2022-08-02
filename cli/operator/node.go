@@ -121,7 +121,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, spectypes.PrimusTestnet)
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, spectypes.GetDefaultDomain())
 		if err != nil {
 			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}

@@ -110,10 +110,6 @@ func (s *Share) PubKeysByID(ids []spectypes.OperatorID) (map[spectypes.OperatorI
 	return ret, nil
 }
 
-// TODO(nkryuchkov): move to a better place
-var domain = spectypes.PrimusTestnet
-var sigType = spectypes.QBFTSignatureType
-
 // VerifySignedMessage returns true of signed message verifies against pks
 func (s *Share) VerifySignedMessage(msg *specqbft.SignedMessage) error {
 	pks, err := s.PubKeysByID(msg.GetSigners())
@@ -133,7 +129,7 @@ func (s *Share) VerifySignedMessage(msg *specqbft.SignedMessage) error {
 		})
 	}
 
-	err = msg.GetSignature().VerifyByOperators(msg, domain, sigType, operators)
+	err = msg.GetSignature().VerifyByOperators(msg, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, operators)
 	//res, err := msg.VerifyAggregatedSig(pks)
 	if err != nil {
 		return err

@@ -64,7 +64,7 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), spectypes.PrimusTestnet)
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), spectypes.GetDefaultDomain())
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 
@@ -157,7 +157,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)
@@ -189,7 +189,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		//res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		//require.True(t, res)

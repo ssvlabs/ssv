@@ -309,7 +309,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee:       mappedCommittee,
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      spectypes.GetDefaultDomain(),
 		Graffiti:        nil,
 	}
 
