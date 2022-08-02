@@ -156,7 +156,7 @@ spec:
           - name: DB_PATH
             value: "./data/db"
           - name: DB_REPORTING
-            value: "true"
+            value: "false"
           - name: METRICS_API_PORT
             value: "15000"
           - name: ENABLE_PROFILE
@@ -173,8 +173,12 @@ spec:
             value: "true"
           - name: NETWORK_ID
             value: "shifu-stage"
-          - name: FORKV2_EPOCH
-            value: '1'
+          - name: P2P_LOG
+            value: "true"
+          - name: DISCOVERY_TRACE
+            value: 'false'
+          - name: PUBSUB_TRACE
+            value: 'false'
           - name: SUBNETS
             value: "0xffffffffffffffffffffffffffffffff"
         volumeMounts:
