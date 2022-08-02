@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -92,6 +93,9 @@ func (n *p2pNetwork) initCfg() {
 	}
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
+	}
+	if len(n.cfg.NetworkID) == 0 {
+		n.cfg.NetworkID = spectypes.GetDefaultDomain()
 	}
 }
 
