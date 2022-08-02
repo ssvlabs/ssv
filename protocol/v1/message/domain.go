@@ -7,6 +7,8 @@ import (
 
 var (
 	// ShifuTestnet is the domain for shifu testnet
+	// NOTE: do not use directly unless you want to check domain,
+	//       i.e. use GetDefaultDomain() to get the current domain.
 	ShifuTestnet = spectypes.DomainType("shifu")
 )
 
