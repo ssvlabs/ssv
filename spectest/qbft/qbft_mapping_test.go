@@ -138,18 +138,18 @@ func testsToRun() map[string]struct{} {
 		commit.HappyFlow(),
 		//commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
 		commit.PostDecided(),
-		//commit.WrongData1(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		//commit.WrongData2(),             // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		//commit.MultiSignerWithOverlap(), // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		//commit.WrongData1(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		//commit.WrongData2(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		commit.MultiSignerWithOverlap(),
 		commit.MultiSignerNoOverlap(),
-		//commit.Decided(),                // TODO(nkryuchkov): failure; need to fix case when multi signer commit msg which does overlap previous valid commit signers and previous valid commits
+		commit.Decided(),
 		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
 		commit.ImparsableCommitData(),
 		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
 
 		roundchange.HappyFlow(),
-		//roundchange.F1Speedup(), // TODO(nkryuchkov): failure; data inside ProposalAcceptedForCurrentRound misses RoundChangeJustification
+		roundchange.F1Speedup(),
 		roundchange.F1SpeedupPrepared(),
 		//roundchange.WrongHeight(), // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
 		//roundchange.WrongSig(),    // TODO(nkryuchkov): failure; fix expected errors in spec
@@ -170,9 +170,9 @@ func testsToRun() map[string]struct{} {
 		roundchange.FutureRound(),
 		roundchange.PastRound(),
 		roundchange.F1SpeedupDifferentRounds(),
-		//roundchange.DuplicateMsgQuorum(),        // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
-		//roundchange.DuplicateMsgPartialQuorum(), // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
-		//roundchange.DuplicateMsgPrepared(),      // TODO(nkryuchkov): failure; RoundChangeContainer has not all messages
+		roundchange.DuplicateMsgQuorum(),
+		roundchange.DuplicateMsgPartialQuorum(),
+		roundchange.DuplicateMsgPrepared(),
 		roundchange.ImparsableRoundChangeData(),
 	}
 
