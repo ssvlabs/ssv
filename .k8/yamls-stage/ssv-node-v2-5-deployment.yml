@@ -126,19 +126,19 @@ spec:
         - name: DB_PATH
           value: "./data/db"
         - name: DB_REPORTING
-          value: "true"
+          value: "false"
         - name: METRICS_API_PORT
           value: "15005"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: P2P_LOG
+          value: "true"
         - name: DISCOVERY_TRACE
-          value: 'true'
+          value: 'false'
         - name: PUBSUB_TRACE
           value: 'true'
         - name: NETWORK_ID
-          value: "ssv-testnet-v2-stage"
-        - name: FORKV2_EPOCH
-          value: '1'
+          value: "shifu-stage"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-5
