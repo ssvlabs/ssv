@@ -7,7 +7,7 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -147,7 +147,7 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage
 }
 
 func (i *Instance) changeRoundQuorum(msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
-	uniqueSigners := make(map[types.OperatorID]bool)
+	uniqueSigners := make(map[spectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {
 			uniqueSigners[signer] = true
