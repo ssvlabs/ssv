@@ -109,16 +109,17 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			}
 			metricsConnections.Dec()
 		},
-		OpenedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
-			if conn := stream.Conn(); conn != nil {
-				metricsStreams.WithLabelValues(string(stream.Protocol())).Inc()
-			}
-		},
-		ClosedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
-			if conn := stream.Conn(); conn != nil {
-				metricsStreams.WithLabelValues(string(stream.Protocol())).Dec()
-			}
-		},
+		// TODO: enable metrics
+		//OpenedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
+		//	if conn := stream.Conn(); conn != nil {
+		//		metricsStreams.WithLabelValues(string(stream.Protocol())).Inc()
+		//	}
+		//},
+		//ClosedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
+		//	if conn := stream.Conn(); conn != nil {
+		//		metricsStreams.WithLabelValues(string(stream.Protocol())).Dec()
+		//	}
+		//},
 	}
 }
 

@@ -204,32 +204,33 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	if ssvMsg == nil {
 		return nil
 	}
-	logger = withIncomingMsgFields(logger, msg, ssvMsg)
-	logger.Debug("incoming pubsub message", zap.String("topic", topic),
-		zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+	//logger = withIncomingMsgFields(logger, msg, ssvMsg)
+	//logger.Debug("incoming pubsub message", zap.String("topic", topic),
+	//	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+	metricsRouterIncoming.WithLabelValues(ssvMsg.GetID().String(), message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
 
-// withIncomingMsgFields adds fields to the given logger
-func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
-	if ssvMsg.MsgType == spectypes.SSVDecidedMsgType || ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
-		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
-		from, err := peer.IDFromBytes(msg.Message.GetFrom())
-		if err == nil {
-			logger = logger.With(zap.String("msgFrom", from.String()))
-		}
-		var sm specqbft.SignedMessage
-		err = sm.Decode(ssvMsg.Data)
-		if err == nil && sm.Message != nil {
-			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-				zap.Any("signers", sm.GetSigners()))
-		}
-	}
-	return logger
-}
+//// withIncomingMsgFields adds fields to the given logger
+//func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
+//	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
+//	if ssvMsg.MsgType == spectypes.SSVDecidedMsgType || ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
+//		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
+//		from, err := peer.IDFromBytes(msg.Message.GetFrom())
+//		if err == nil {
+//			logger = logger.With(zap.String("msgFrom", from.String()))
+//		}
+//		var sm specqbft.SignedMessage
+//		err = sm.Decode(ssvMsg.Data)
+//		if err == nil && sm.Message != nil {
+//			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+//				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
+//				zap.Any("signers", sm.GetSigners()))
+//		}
+//	}
+//	return logger
+//}
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets() error {

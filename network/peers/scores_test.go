@@ -1,6 +1,7 @@
 package peers
 
 import (
+	crand "crypto/rand"
 	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -13,7 +14,9 @@ func TestScoresIndex(t *testing.T) {
 	nks, err := nettesting.CreateKeys(1)
 	require.NoError(t, err)
 
-	pid, err := peer.IDFromPrivateKey(crypto.PrivKey((*crypto.Secp256k1PrivateKey)(nks[0].NetKey)))
+	sk, err := commons.ConvertToInterfacePrivkey(nks[0].NetKey)
+	require.NoError(t, err)
+	pid, err := peer.IDFromPrivateKey(sk)
 	require.NoError(t, err)
 
 	si := newScoreIndex()
@@ -32,7 +35,8 @@ func TestScoresIndex(t *testing.T) {
 }
 
 func TestPeersTopScores(t *testing.T) {
-	pids := createPeerIDs(50)
+	pids, err := createPeerIDs(50)
+	require.NoError(t, err)
 	peerScores := make(map[peer.ID]int)
 	for i, pid := range pids {
 		peerScores[pid] = i + 1
@@ -45,13 +49,18 @@ func TestPeersTopScores(t *testing.T) {
 	require.True(t, ok)
 }
 
-func createPeerIDs(n int) []peer.ID {
+func createPeerIDs(n int) ([]peer.ID, error) {
 	var res []peer.ID
 	for len(res) < n {
-		sk, _ := commons.GenNetworkKey()
-		isk := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(sk))
-		pid, _ := peer.IDFromPrivateKey(isk)
+		isk, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
+		if err != nil {
+			return nil, err
+		}
+		pid, err := peer.IDFromPrivateKey(isk)
+		if err != nil {
+			return nil, err
+		}
 		res = append(res, pid)
 	}
-	return res
+	return res, nil
 }

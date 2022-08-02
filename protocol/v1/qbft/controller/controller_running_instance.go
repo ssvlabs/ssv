@@ -3,17 +3,16 @@ package controller
 import (
 	"encoding/hex"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 )
 
@@ -21,6 +20,7 @@ import (
 // Does not pre-check instance validity and start validity!
 func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
 	newInstance := instance.NewInstance(instanceOpts)
+	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(c.ValidatorShare, newInstance.State())
 
 	c.setCurrentInstance(newInstance)
 

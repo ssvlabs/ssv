@@ -71,8 +71,7 @@ func testHosts(t *testing.T, n int) []host.Host {
 	hosts := make([]host.Host, n)
 
 	for i := 0; i < n; i++ {
-		h, err := libp2p.New(ctx,
-			libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
+		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 		require.NoError(t, err)
 		hosts[i] = h
 	}

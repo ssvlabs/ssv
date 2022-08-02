@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	"github.com/bloxapp/ssv/network/peers"
@@ -119,7 +120,7 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	pk := fromInterfacePubKey(pki)
+	pk := commons.ConvertFromInterfacePubKey(pki)
 	id := enode.PubkeyToIDV4(pk)
 	logger := dvs.logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
