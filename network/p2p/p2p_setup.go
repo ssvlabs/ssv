@@ -95,7 +95,7 @@ func (n *p2pNetwork) initCfg() {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
 	if len(n.cfg.NetworkID) == 0 {
-		n.cfg.NetworkID = spectypes.GetDefaultDomain()
+		n.cfg.NetworkID = string(spectypes.GetDefaultDomain())
 	}
 }
 
