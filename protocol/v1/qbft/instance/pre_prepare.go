@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -23,7 +24,7 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			proposalData, err := signedMessage.Message.GetProposalData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get proposal data: %w", err)
 			}
 			i.containersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
 			return nil

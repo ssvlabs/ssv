@@ -150,6 +150,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
 	var justificationMsg *specqbft.Message
 	var aggSig []byte
+	var roundChangeJustification []*specqbft.SignedMessage
 	ids := make([]spectypes.OperatorID, 0)
 	if i.isPrepared() {
 		quorum, msgs := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
@@ -172,19 +173,18 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 			ids = append(ids, msg.GetSigners()...)
 		}
 		aggSig = aggregatedSig.Serialize()
-		// TODO(nkryuchkov): consider returning an error
-		// return nil, errors.New("not prepared")
-	}
 
-	data := &specqbft.RoundChangeData{
-		PreparedValue:    i.State().GetPreparedValue(),
-		PreparedRound:    i.State().GetPreparedRound(),
-		NextProposalData: nil, // TODO should fill?
-		RoundChangeJustification: []*specqbft.SignedMessage{{
+		roundChangeJustification = []*specqbft.SignedMessage{{
 			Signature: aggSig,
 			Signers:   ids,
 			Message:   justificationMsg,
-		}},
+		}}
+	}
+
+	data := &specqbft.RoundChangeData{
+		PreparedValue:            i.State().GetPreparedValue(),
+		PreparedRound:            i.State().GetPreparedRound(),
+		RoundChangeJustification: roundChangeJustification,
 	}
 	return json.Marshal(data)
 }

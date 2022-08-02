@@ -5,10 +5,10 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"

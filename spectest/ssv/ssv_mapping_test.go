@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -38,15 +39,24 @@ func TestSSVMapping(t *testing.T) {
 	// TODO(nkryuchkov): fix
 	t.Skip()
 
-	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/ssv/spectest/generate/tests.json")
-	require.NoError(t, err)
+	path, _ := os.Getwd()
+	fileName := "tests.json"
+	filePath := path + "/" + fileName
 
-	defer func() {
-		require.NoError(t, resp.Body.Close())
-	}()
+	jsonTests, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/ssv/spectest/generate/tests.json")
+		require.NoError(t, err)
 
-	jsonTests, err := ioutil.ReadAll(resp.Body)
-	require.NoError(t, err)
+		defer func() {
+			require.NoError(t, resp.Body.Close())
+		}()
+
+		jsonTests, err = ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.NoError(t, ioutil.WriteFile(filePath, jsonTests, 0644))
+	}
 
 	specTests := map[string]*tests.SpecTest{}
 	if err := json.Unmarshal(jsonTests, &specTests); err != nil {

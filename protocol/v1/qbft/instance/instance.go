@@ -3,6 +3,7 @@ package instance
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
@@ -251,22 +252,27 @@ func (i *Instance) Stopped() bool {
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	var pp pipelines.SignedMessagePipeline
+	var errPrefix string // TODO(nkryuchkov): make similar in ssv-spec
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		pp = i.PrePrepareMsgPipeline()
+		errPrefix = "proposal invalid"
 	case specqbft.PrepareMsgType:
 		pp = i.PrepareMsgPipeline()
+		errPrefix = "invalid prepare msg"
 	case specqbft.CommitMsgType:
 		pp = i.CommitMsgPipeline()
+		errPrefix = "commit msg invalid"
 	case specqbft.RoundChangeMsgType:
 		pp = i.ChangeRoundMsgPipeline()
+		errPrefix = "round change msg invalid"
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
 	}
 	if err := pp.Run(msg); err != nil {
-		return false, err
+		return false, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
@@ -416,7 +422,7 @@ func generateState(opts *Options) *qbft.State {
 	round.Store(specqbft.Round(0))
 	identifier.Store(opts.Identifier[:])
 	preparedRound.Store(specqbft.Round(0))
-	preparedValue.Store([]byte{})
+	preparedValue.Store([]byte(nil))
 	iv := atomic.Value{}
 	iv.Store([]byte{})
 	return &qbft.State{
