@@ -184,7 +184,7 @@ spec:
           - name: FULLNODE
             value: "true"
           - name: MSG_WORKERS_COUNT
-            value: "512"
+            value: "1024"
           - name: MSG_WORKER_BUFFER_SIZE
             value: "2048"
           - name: SUBNETS

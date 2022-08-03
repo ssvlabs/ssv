@@ -121,10 +121,6 @@ spec:
           value: "false"
         - name: P2P_LOG
           value: "false"
-        - name: FORKV2_EPOCH
-          value: '1'
-        - name: DISCOVERY_TYPE_KEY
-          value: "discv5"
         - name: NETWORK
           value: "prater"
         - name: CONSENSUS_TYPE
