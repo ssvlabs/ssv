@@ -84,7 +84,7 @@ func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte)
 
 	valueHex := hex.EncodeToString(data)
 
-	// check msg is not duplicate
+	//check msg is not duplicate
 	r, err := msg.GetRoot()
 	if err != nil {
 		return

@@ -153,7 +153,7 @@ func TestSignRoot(t *testing.T) {
 		// verify
 		signed := &specqbft.SignedMessage{
 			Signature: sig,
-			Signers:   []spectypes.OperatorID{spectypes.OperatorID(1)},
+			Signers:   []spectypes.OperatorID{1},
 			Message:   msg,
 		}
 
@@ -185,7 +185,7 @@ func TestSignRoot(t *testing.T) {
 		// verify
 		signed := &specqbft.SignedMessage{
 			Signature: sig,
-			Signers:   []spectypes.OperatorID{spectypes.OperatorID(1)},
+			Signers:   []spectypes.OperatorID{1},
 			Message:   msg,
 		}
 

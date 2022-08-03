@@ -50,15 +50,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return nil
 	}
 
-	roundChangeJust := data.RoundChangeJustification
-	if roundChangeJust == nil {
-		return errors.New("change round justification is nil")
-	}
-	if len(roundChangeJust) == 0 {
-		return errors.New("change round justification msg array is empty")
-	}
-
-	for _, rcj := range roundChangeJust {
+	for _, rcj := range data.RoundChangeJustification {
 		if rcj.Message == nil {
 			return errors.New("change round justification msg is nil")
 		}
@@ -105,7 +97,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		}
 	}
 
-	if quorum, _, _ := p.changeRoundQuorum(roundChangeJust); !quorum {
+	if quorum, _, _ := p.changeRoundQuorum(data.RoundChangeJustification); !quorum {
 		return fmt.Errorf("no justifications quorum")
 	}
 
