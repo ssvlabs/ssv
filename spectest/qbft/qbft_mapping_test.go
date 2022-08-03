@@ -166,7 +166,7 @@ func testsToRun() map[string]struct{} {
 		roundchange.JustificationInvalidRound(),
 		//roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix expected errors in spec
 		roundchange.JustificationDuplicateMsg(),
-		//roundchange.InvalidRoundChangeData(),          // TODO(nkryuchkov): failure; need to check message data
+		roundchange.InvalidRoundChangeData(),
 		roundchange.FutureRound(),
 		roundchange.PastRound(),
 		roundchange.F1SpeedupDifferentRounds(),

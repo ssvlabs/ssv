@@ -42,9 +42,14 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	if data == nil {
 		return errors.New("change round data is nil")
 	}
-	if data.PreparedValue == nil || len(data.PreparedValue) == 0 { // no justification
+	if err := data.Validate(); err != nil {
+		return fmt.Errorf("roundChangeData invalid: %w", err)
+	}
+
+	if !data.Prepared() {
 		return nil
 	}
+
 	roundChangeJust := data.RoundChangeJustification
 	if roundChangeJust == nil {
 		return errors.New("change round justification is nil")
@@ -102,6 +107,10 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 
 	if quorum, _, _ := p.changeRoundQuorum(roundChangeJust); !quorum {
 		return fmt.Errorf("no justifications quorum")
+	}
+
+	if data.PreparedRound > signedMessage.Message.Round {
+		return errors.New("prepared round > round")
 	}
 
 	return nil
