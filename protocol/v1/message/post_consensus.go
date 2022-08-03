@@ -14,7 +14,7 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 		return errors.Wrap(err, "could not validate SignedPartialSignatureMessage")
 	}
 
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, spectypes.PrimusTestnet, spectypes.PartialSignatureType, committee); err != nil {
+	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, GetDefaultDomain(), spectypes.PartialSignatureType, committee); err != nil {
 		return errors.Wrap(err, "could not verify PartialSignature by the provided operators")
 	}
 
