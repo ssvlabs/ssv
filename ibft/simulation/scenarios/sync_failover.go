@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -97,8 +96,7 @@ loop:
 		sf.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 	}
 
-	messageID := message.ToMessageID(msgs[1].Message.Identifier)
-	decides, err := dbs[3].GetDecided(messageID[:], 0, 10)
+	decides, err := dbs[3].GetDecided(msgs[1].Message.Identifier, 0, 10)
 	if err != nil {
 		sf.logger.Error("node #4 could not get decided in range", zap.Error(err))
 	} else {

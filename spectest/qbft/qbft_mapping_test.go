@@ -524,7 +524,10 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 	})
 	//newInstance.(*instance.Instance).LeaderSelector = roundRobinLeaderSelector{newInstance.State(), mappedShare}
 	// TODO(nkryuchkov): replace when ready
-	newInstance.(*instance.Instance).LeaderSelector = &constant.Constant{LeaderIndex: 0}
+	newInstance.(*instance.Instance).LeaderSelector = &constant.Constant{
+		LeaderIndex: 0,
+		OperatorIDs: share.OperatorIds,
+	}
 	return newInstance
 }
 
