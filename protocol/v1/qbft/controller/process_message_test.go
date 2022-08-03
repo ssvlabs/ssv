@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"strings"
 	"testing"
 
@@ -157,7 +158,7 @@ func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage,
 				return nil, errors.Wrap(err, "could not copy message")
 			}
 		} else {
-			if err := decided.Aggregate(msg); err != nil {
+			if err := message.Aggregate(decided, msg); err != nil {
 				return nil, errors.Wrap(err, "could not aggregate message")
 			}
 		}

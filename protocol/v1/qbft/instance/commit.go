@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -89,7 +90,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 
 				aggMsg := sigs[0].DeepCopy()
 				for _, s := range msgSig[1:] {
-					if err := aggMsg.Aggregate(s); err != nil {
+					if err := message.Aggregate(aggMsg, s); err != nil {
 						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 					}
 				}
