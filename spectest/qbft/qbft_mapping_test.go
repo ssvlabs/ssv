@@ -209,6 +209,12 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
+	origDomain := message.GetDefaultDomain()
+	message.SetDefaultDomain(spectypes.PrimusTestnet)
+	defer func() {
+		message.SetDefaultDomain(origDomain)
+	}()
+
 	testMap := testsToRun() // TODO(nkryuchkov): remove
 
 	tests := make(map[string]spectest.SpecTest)
