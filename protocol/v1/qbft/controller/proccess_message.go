@@ -115,7 +115,7 @@ func (c *Controller) ProcessLateCommitMsg(logger *zap.Logger, msg *specqbft.Sign
 		return nil, nil
 	}
 	// aggregate message with stored decided
-	if err := decidedMsg.Aggregate(msg); err != nil {
+	if err := message.Aggregate(decidedMsg, msg); err != nil {
 		// TODO(nkryuchkov): declare the error in spec, use errors.Is
 		if err.Error() == "can't aggregate 2 signed messages with mutual signers" {
 			logger.Debug("duplicated signer")

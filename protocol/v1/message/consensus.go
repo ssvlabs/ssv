@@ -1,28 +1,19 @@
 package message
 
 import (
+	"github.com/bloxapp/ssv-spec/qbft"
 	"sort"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-// AppendSigners is a utility that helps to ensure distinct values
-// TODO: sorting?
-func AppendSigners(signers []spectypes.OperatorID, appended ...spectypes.OperatorID) []spectypes.OperatorID {
-	for _, signer := range appended {
-		signers = appendSigner(signers, signer)
+// Aggregate is a utility that helps to ensure sorted signers
+func Aggregate(signedMsg *qbft.SignedMessage, s spectypes.MessageSignature) error {
+	if err := signedMsg.Aggregate(s); err != nil {
+		return err
 	}
-	sort.Slice(signers, func(i, j int) bool {
-		return signers[i] < signers[j]
+	sort.Slice(signedMsg.Signers, func(i, j int) bool {
+		return signedMsg.Signers[i] < signedMsg.Signers[j]
 	})
-	return signers
-}
-
-func appendSigner(signers []spectypes.OperatorID, signer spectypes.OperatorID) []spectypes.OperatorID {
-	for _, s := range signers {
-		if s == signer { // known
-			return signers
-		}
-	}
-	return append(signers, signer)
+	return nil
 }
