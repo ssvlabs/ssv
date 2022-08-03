@@ -1,4 +1,4 @@
-package message
+package types
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
