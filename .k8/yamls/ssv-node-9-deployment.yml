@@ -107,12 +107,6 @@ spec:
               name: config-secrets
               key: abi_version_v2
               optional: true
-        - name: NETWORK_ID
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: network_id_v2
-              optional: true
         - name: LOG_LEVEL
           value: "info"
         - name: DB_REPORTING
