@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/valcheck"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"

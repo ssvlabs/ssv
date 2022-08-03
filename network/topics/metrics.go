@@ -23,6 +23,10 @@ var (
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
 	}, []string{"topic"})
+	metricsPubsubActiveMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:msg:val:active",
+		Help: "Count active message validation",
+	}, []string{"topic"})
 )
 
 func init() {
@@ -36,6 +40,9 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsPubsubInbound); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsPubsubActiveMsgValidation); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

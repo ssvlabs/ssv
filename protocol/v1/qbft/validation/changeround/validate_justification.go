@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
 // validateJustification validates change round justifications
@@ -92,7 +93,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		}
 		aggregated := pks.Aggregate()
 
-		if err = rcj.Signature.Verify(rcj, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, aggregated.Serialize()); err != nil {
+		if err = rcj.Signature.Verify(rcj, types.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize()); err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}
 	}

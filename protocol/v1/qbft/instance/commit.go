@@ -89,7 +89,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 
 				aggMsg := sigs[0].DeepCopy()
 				for _, s := range msgSig[1:] {
-					if err := aggMsg.Aggregate(s); err != nil {
+					if err := message.Aggregate(aggMsg, s); err != nil {
 						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 					}
 				}

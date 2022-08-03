@@ -210,6 +210,12 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
+	origDomain := types.GetDefaultDomain()
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	defer func() {
+		types.SetDefaultDomain(origDomain)
+	}()
+
 	testMap := testsToRun() // TODO(nkryuchkov): remove
 
 	tests := make(map[string]spectest.SpecTest)
@@ -311,7 +317,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee:       mappedCommittee,
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      types.GetDefaultDomain(),
 		Graffiti:        nil,
 	}
 
@@ -508,7 +514,7 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 		ValidatorShare:   share,
 		Network:          net,
 		Config:           qbftprotocol.DefaultConsensusParams(),
-		Identifier:       identifier,
+		Identifier:       identifier[:],
 		Height:           height,
 		RequireMinPeers:  false,
 		Fork:             fork.InstanceFork(),

@@ -13,7 +13,8 @@ func Test_SubnetsEntry(t *testing.T) {
 	SubnetsCount := 128
 	priv, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
-	sk := fromInterfacePrivKey(priv)
+	sk, err := commons.ConvertFromInterfacePrivKey(priv)
+	require.NoError(t, err)
 	ip, err := commons.IPAddr()
 	require.NoError(t, err)
 	node, err := CreateLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)

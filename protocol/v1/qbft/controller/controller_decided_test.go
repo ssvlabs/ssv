@@ -376,7 +376,7 @@ func TestForceDecided(t *testing.T) {
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 
 	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
-	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 3)
+	s1 := qbftstorage.PopulatedStorage(t, sks, 3, 3)
 	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 	// test before sync
 	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
@@ -444,10 +444,10 @@ func TestSyncAfterDecided(t *testing.T) {
 	network.Start(ctx)
 	network.AddPeers(identifier.GetPubKey(), network)
 
-	s1 := testingprotocol.PopulatedStorage(t, sks, 3, 4)
+	s1 := qbftstorage.PopulatedStorage(t, sks, 3, 4)
 	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 
-	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	_ = populatedIbft(2, identifier[:], network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	// test before sync
 	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
@@ -497,7 +497,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 	s1 := qbftstorage.NewQBFTStore(db, zap.L(), "attestations")
 	i1 := populatedIbft(1, identifier[:], network, s1, sks, nodes, newTestKeyManager())
 
-	_ = populatedIbft(2, identifier[:], network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	_ = populatedIbft(2, identifier[:], network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 
@@ -516,7 +516,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	identifier := []byte("Identifier_11")
-	ibft := populatedIbft(1, identifier, network, testingprotocol.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
+	ibft := populatedIbft(1, identifier, network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
 	tests := []struct {
 		name          string

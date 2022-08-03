@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -103,7 +102,7 @@ func (r *syncFailoverScenario) PreExecution(ctx *runner.ScenarioContext) error {
 func (r *syncFailoverScenario) Execute(ctx *runner.ScenarioContext) error {
 	var wg sync.WaitGroup
 
-	msgs := map[specqbft.Height]*specqbft.SignedMessage{}
+	msgs := map[specqbft.Height]*specqbft.Message{}
 	// start several instances one by one
 	seqNumber := specqbft.Height(0)
 loop:
@@ -115,7 +114,7 @@ loop:
 				if msg, err := r.startNode(node, seqNumber); err != nil {
 					r.logger.Error("could not start node", zap.Error(err))
 				} else {
-					msgs[seqNumber] = msg
+					msgs[seqNumber] = msg.Message
 				}
 				wg.Done()
 			}(r.validators[i-1], i, seqNumber)

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -62,7 +63,7 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 		if ret == nil {
 			ret = msg.DeepCopy()
 		} else {
-			if err := ret.Aggregate(msg); err != nil {
+			if err := message.Aggregate(ret, msg); err != nil {
 				return nil, err
 			}
 		}
