@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"strings"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"github.com/bloxapp/ssv/storage/basedb"

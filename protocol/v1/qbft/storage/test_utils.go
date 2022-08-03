@@ -3,16 +3,18 @@ package qbftstorage
 import (
 	"encoding/binary"
 	"encoding/json"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"testing"
+
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -169,13 +171,6 @@ func (i *ibftStorage) CleanLastChangeRound(identifier []byte) {
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
-	// doing the same for v0
-	messageID := message.ToMessageID(identifier)
-	oldIdentifier := []byte(format.IdentifierFormat(messageID.GetPubKey(), messageID.GetRoleType().String()))
-	err = i.delete(lastChangeRoundKey, oldIdentifier)
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
-	}
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -232,4 +227,30 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
+}
+
+// PopulatedStorage create new QBFTStore instance, save the highest height and then populated from 0 to highestHeight
+func PopulatedStorage(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, round specqbft.Round, highestHeight specqbft.Height) QBFTStore {
+	s := NewQBFTStore(testing2.NewInMemDb(), zap.L(), "test-qbft-storage")
+
+	signers := make([]spectypes.OperatorID, 0, len(sks))
+	for k := range sks {
+		signers = append(signers, k)
+	}
+
+	identifier := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
+	for i := 0; i <= int(highestHeight); i++ {
+		signedMsg := testing2.AggregateSign(t, sks, signers, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     specqbft.Height(i),
+			Round:      round,
+			Identifier: identifier[:],
+			Data:       testing2.CommitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
+		})
+		require.NoError(t, s.SaveDecided(signedMsg))
+		if i == int(highestHeight) {
+			require.NoError(t, s.SaveLastDecided(signedMsg))
+		}
+	}
+	return s
 }
