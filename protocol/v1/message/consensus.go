@@ -1,6 +1,7 @@
 package message
 
 import (
+	"github.com/bloxapp/ssv-spec/qbft"
 	"sort"
 
 	"github.com/bloxapp/ssv-spec/qbft"
