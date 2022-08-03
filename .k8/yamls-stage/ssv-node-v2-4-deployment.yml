@@ -95,6 +95,12 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: smart_contract_addr_key
+        - name: ETH_1_SYNC_OFFSET
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth_1_sync_offset
+              optional: true
         - name: ABI_VERSION
           valueFrom:
             secretKeyRef:
@@ -124,15 +130,19 @@ spec:
         - name: DB_PATH
           value: "./data/db"
         - name: DB_REPORTING
-          value: "true"
+          value: "false"
         - name: METRICS_API_PORT
           value: "15004"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: P2P_LOG
+          value: "false"
+        - name: DISCOVERY_TRACE
+          value: 'false'
+        - name: PUBSUB_TRACE
+          value: 'false'
         - name: NETWORK_ID
-          value: "ssv-testnet-v2-stage"
-        - name: FORKV2_EPOCH
-          value: '1'
+          value: "shifu-stage"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-4

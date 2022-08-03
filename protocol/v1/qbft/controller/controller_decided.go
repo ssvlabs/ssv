@@ -2,9 +2,9 @@ package controller
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -27,9 +27,10 @@ func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
 	if c.ReadMode {
 		return nil
 	}
+
 	if err := c.Network.Broadcast(spectypes.SSVMessage{
 		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   c.Identifier,
+		MsgID:   message.ToMessageID(c.Identifier),
 		Data:    data,
 	}); err != nil {
 		return errors.Wrap(err, "could not broadcast decided message")
@@ -104,7 +105,7 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*specqbft.SignedMessage, error) {
-	highestKnown, err := c.DecidedStrategy.GetLastDecided(message.ToMessageID(c.GetIdentifier()))
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}

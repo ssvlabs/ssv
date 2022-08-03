@@ -5,8 +5,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 
@@ -25,7 +27,6 @@ import (
 	qbftStorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
@@ -39,20 +40,35 @@ func TestSSVMapping(t *testing.T) {
 	// TODO(nkryuchkov): fix
 	t.Skip()
 
-	resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/ssv/spectest/generate/tests.json")
-	require.NoError(t, err)
+	path, _ := os.Getwd()
+	fileName := "tests.json"
+	filePath := path + "/" + fileName
 
-	defer func() {
-		require.NoError(t, resp.Body.Close())
-	}()
+	jsonTests, err := ioutil.ReadFile(filePath)
+	if err != nil {
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/ssv/spectest/generate/tests.json")
+		require.NoError(t, err)
 
-	jsonTests, err := ioutil.ReadAll(resp.Body)
-	require.NoError(t, err)
+		defer func() {
+			require.NoError(t, resp.Body.Close())
+		}()
+
+		jsonTests, err = ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.NoError(t, ioutil.WriteFile(filePath, jsonTests, 0644))
+	}
 
 	specTests := map[string]*tests.SpecTest{}
 	if err := json.Unmarshal(jsonTests, &specTests); err != nil {
 		require.NoError(t, err)
 	}
+
+	origDomain := types.GetDefaultDomain()
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	defer func() {
+		types.SetDefaultDomain(origDomain)
+	}()
 
 	testMap := testsToRun() // TODO: remove
 
@@ -172,7 +188,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 	time.Sleep(time.Second * 3) // 3s round
 
 	currentInstance := qbftCtrl.GetCurrentInstance()
-	decided, err := ibftStorage.GetLastDecided(message.ToMessageID(qbftCtrl.GetIdentifier()))
+	decided, err := ibftStorage.GetLastDecided(qbftCtrl.GetIdentifier())
 	require.NoError(t, err)
 	decidedValue := []byte("")
 	if decided != nil {

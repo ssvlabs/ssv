@@ -2,17 +2,17 @@ package controller
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 )
 
@@ -20,6 +20,7 @@ import (
 // Does not pre-check instance validity and start validity!
 func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
 	newInstance := instance.NewInstance(instanceOpts)
+	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(c.ValidatorShare, newInstance.State())
 
 	c.setCurrentInstance(newInstance)
 
@@ -31,7 +32,8 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetPubKey())).Set(float64(newInstance.State().GetHeight()))
+	messageID := message.ToMessageID(c.Identifier)
+	metricsCurrentSequence.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newInstance.State().GetHeight()))
 
 	// catch up if we can
 	go c.fastChangeRoundCatchup(newInstance)
@@ -101,7 +103,7 @@ func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result,
 	}
 	// didn't decided -> purge messages with smaller height
 	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
-	idn := c.Identifier.String()
+	idn := hex.EncodeToString(c.Identifier)
 	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
 			if k.Cmt == specqbft.CommitMsgType && k.H == height {
@@ -124,7 +126,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.InstanceStorage.SaveCurrentInstance(message.ToMessageID(c.GetIdentifier()), c.GetCurrentInstance().State()); err != nil {
+		if err := c.InstanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.GetCurrentInstance().State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
@@ -203,7 +205,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		}
 		c.Q.Add(&spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType, // should be consensus type as it change round msg
-			MsgID:   c.Identifier,
+			MsgID:   message.ToMessageID(c.Identifier),
 			Data:    encodedMsg,
 		})
 		count++
@@ -211,7 +213,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	}
 
 	h := instance.State().GetHeight()
-	err := f.GetChangeRoundMessages(c.Identifier, h, handler)
+	err := f.GetChangeRoundMessages(message.ToMessageID(c.Identifier), h, handler)
 
 	if err != nil {
 		c.Logger.Warn("failed fast change round catchup", zap.Error(err))

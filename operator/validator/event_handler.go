@@ -2,9 +2,11 @@ package validator
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/exporter"
 	"strings"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/exporter"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -90,6 +92,22 @@ func (c *controller) handleOperatorRemovalEvent(
 		}
 	}
 
+	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
+	logFields := make([]zap.Field, 0)
+	if isOperatorEvent || c.validatorOptions.FullNode {
+		logFields = append(logFields,
+			zap.String("operatorName", od.Name),
+			zap.Uint64("operatorId", od.Index),
+			zap.String("operatorPubKey", od.PublicKey),
+			zap.String("ownerAddress", od.OwnerAddress.String()),
+		)
+	}
+
+	if !isOperatorEvent {
+		// TODO: remove this check when we will support operator removal for non-operator (mark as inactive)
+		return logFields, nil
+	}
+
 	shares, err := c.collection.GetOperatorValidatorShares(od.PublicKey, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
@@ -111,15 +129,6 @@ func (c *controller) handleOperatorRemovalEvent(
 		return nil, errors.Wrap(err, "could not delete operator data")
 	}
 
-	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(od.PublicKey, c.operatorPubKey) || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.String("operatorName", od.Name),
-			zap.Uint64("operatorId", od.Index),
-			zap.String("operatorPubKey", od.PublicKey),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
 	return logFields, nil
 }
 
@@ -192,11 +201,12 @@ func (c *controller) handleValidatorRemovalEvent(
 	}
 
 	// remove decided messages
-	if err := c.ibftStorage.CleanAllDecided(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)); err != nil { // TODO need to delete for multi duty as well
+	messageID := spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	if err := c.ibftStorage.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
 		return nil, errors.Wrap(err, "could not clean all decided messages")
 	}
 	// remove change round messages
-	c.ibftStorage.CleanLastChangeRound(spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)) // TODO need to delete for multi duty as well
+	c.ibftStorage.CleanLastChangeRound(messageID[:]) // TODO need to delete for multi duty as well
 
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {

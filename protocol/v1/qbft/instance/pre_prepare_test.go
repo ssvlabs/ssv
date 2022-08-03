@@ -3,7 +3,6 @@ package instance
 import (
 	"crypto/rsa"
 	"encoding/json"
-	"strconv"
 	"testing"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/deterministic"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 )
@@ -42,8 +41,9 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -113,8 +113,9 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
@@ -159,35 +160,34 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 func TestUponPrePrepareHappyFlow(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
-	leader, err := deterministic.New(append([]byte{1, 2, 3, 2, 5, 6, 1, 1}, []byte(strconv.FormatUint(1, 10))...), 4)
-	require.NoError(t, err)
-
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	identifier := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	share := &beacon.Share{
+		Committee:   nodes,
+		NodeID:      operatorIds[0],
+		PublicKey:   secretKeys[operatorIds[0]].GetPublicKey(),
+		OperatorIds: shareOperatorIds,
+	}
+	state := &qbft.State{}
 	instance := &Instance{
 		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.ProposalMsgType: inmem.New(3, 2),
 			specqbft.PrepareMsgType:  inmem.New(3, 2),
 		},
-		Config: qbft.DefaultConsensusParams(),
-		state:  &qbft.State{},
-		ValidatorShare: &beacon.Share{
-			Committee:   nodes,
-			NodeID:      operatorIds[0],
-			PublicKey:   secretKeys[operatorIds[0]].GetPublicKey(),
-			OperatorIds: shareOperatorIds,
-		},
+		Config:         qbft.DefaultConsensusParams(),
+		state:          state,
+		ValidatorShare: share,
 		Logger:         zaptest.NewLogger(t),
 		network:        network,
-		LeaderSelector: leader,
+		LeaderSelector: roundrobin.New(share, state),
 		ssvSigner:      newTestSSVSigner(),
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(identifier)
+	instance.state.Identifier.Store(identifier[:])
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 	instance.state.Height.Store(specqbft.Height(0))
@@ -298,12 +298,16 @@ func TestPrePreparePipeline(t *testing.T) {
 			PublicKey:   sks[operatorIds[0]].GetPublicKey(),
 			OperatorIds: shareOperatorIds,
 		},
-		state:          &qbft.State{},
-		LeaderSelector: &constant.Constant{LeaderIndex: 0},
+		state: &qbft.State{},
+		LeaderSelector: &constant.Constant{
+			LeaderIndex: 0,
+			OperatorIDs: shareOperatorIds,
+		},
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester))
+	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	instance.state.Identifier.Store(messageID[:])
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)

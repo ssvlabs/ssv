@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"sync"
 	"testing"
 
@@ -425,7 +426,8 @@ func (km *testKeyManager) SignRoot(data spectypes.Root, sigType spectypes.Signat
 	defer km.lock.Unlock()
 
 	if key := km.keys[hex.EncodeToString(pk)]; key != nil {
-		computedRoot, err := spectypes.ComputeSigningRoot(data, nil)
+		domain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), sigType)
+		computedRoot, err := spectypes.ComputeSigningRoot(data, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not compute signing root")
 		}

@@ -2,6 +2,8 @@ package changeround
 
 import (
 	"bytes"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -31,7 +33,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	// TODO - change to normal prepare pipeline
 	data, err := signedMessage.Message.GetRoundChangeData()
 	if err != nil {
-		return errors.Wrap(err, "failed to get round change data")
+		return fmt.Errorf("could not get roundChange data : %w", err) // TODO(nkryuchkov): remove whitespace in ssv-spec
 	}
 	if data == nil {
 		return errors.New("change round data is nil")
@@ -56,10 +58,10 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return errors.New("change round justification sequence is wrong")
 	}
 	if signedMessage.Message.Round <= roundChangeJust[0].Message.Round {
-		return errors.New("change round justification round lower or equal to message round")
+		return errors.New("round change justification invalid: msg round wrong")
 	}
 	if data.PreparedRound != roundChangeJust[0].Message.Round {
-		return errors.New("change round prepared round not equal to justification msg round")
+		return errors.New("round change justification invalid: msg round wrong")
 	}
 	if !bytes.Equal(signedMessage.Message.Identifier, roundChangeJust[0].Message.Identifier) {
 		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
@@ -69,7 +71,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return errors.Wrap(err, "failed to get prepare data")
 	}
 	if !bytes.Equal(data.PreparedValue, prepareMsg.Data) {
-		return errors.New("change round prepared value not equal to justification msg value")
+		return errors.New("round change justification invalid: prepare data != proposed data")
 	}
 	if len(roundChangeJust[0].GetSigners()) < p.share.ThresholdSize() {
 		return errors.New("change round justification does not constitute a quorum")
@@ -87,7 +89,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	}
 	aggregated := pks.Aggregate()
 	for _, justification := range data.RoundChangeJustification {
-		err = justification.Signature.Verify(justification, spectypes.PrimusTestnet, spectypes.QBFTSignatureType, aggregated.Serialize())
+		err = justification.Signature.Verify(justification, types.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize())
 		if err != nil {
 			return errors.Wrap(err, "change round could not verify signature")
 		}

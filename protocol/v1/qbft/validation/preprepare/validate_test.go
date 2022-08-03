@@ -1,6 +1,7 @@
 package preprepare
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*beacon.Node)
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
@@ -64,7 +65,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 	}{
 		{
 			"no signers",
-			"invalid number of signers for pre-prepare message",
+			"proposal msg allows 1 signer",
 			&specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
@@ -78,7 +79,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		{
 			"only 2 signers",
-			"invalid number of signers for pre-prepare message",
+			"proposal msg allows 1 signer",
 			&specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
@@ -92,7 +93,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 		},
 		{
 			"non-leader sender",
-			"pre-prepare message sender (id 2) is not the round's leader (expected 1)",
+			"proposal leader invalid",
 			SignMsg(t, 2, sks[2], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,

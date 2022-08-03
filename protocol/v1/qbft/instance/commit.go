@@ -1,6 +1,10 @@
 package instance
 
 import (
+	"encoding/hex"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -22,7 +26,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 
 			commitData, err := signedMessage.Message.GetCommitData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get msg commit data: %w", err)
 			}
 			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
@@ -74,7 +78,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Uint64("round", uint64(i.State().GetRound())),
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())),
+					zap.Uint64("round", uint64(i.State().GetRound())),
 					zap.Int("got_votes", len(sigs)))
 
 				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)
@@ -85,7 +90,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 
 				aggMsg := sigs[0].DeepCopy()
 				for _, s := range msgSig[1:] {
-					if err := aggMsg.Aggregate(s); err != nil {
+					if err := message.Aggregate(aggMsg, s); err != nil {
 						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 					}
 				}

@@ -2,11 +2,11 @@ package p2p
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/network/commons"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -76,7 +76,8 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sk)
 
-				interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privKey))
+				interfacePriv, err := commons.ConvertToInterfacePrivkey(privKey)
+				require.NoError(t, err)
 				b, err := interfacePriv.Raw()
 				require.NoError(t, err)
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
@@ -94,14 +95,16 @@ func TestSetupPrivateKey(t *testing.T) {
 				return
 			}
 			if test.existKey != "" && test.passedKey == "" { // exist and not passed in env
-				interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privateKey))
+				interfacePriv, err := commons.ConvertToInterfacePrivkey(privateKey)
+				require.NoError(t, err)
 				b, err := interfacePriv.Raw()
 				require.NoError(t, err)
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
 				return
 			}
 			// not exist && passed and exist && passed
-			interfacePriv := crypto.PrivKey((*crypto.Secp256k1PrivateKey)(privateKey))
+			interfacePriv, err := commons.ConvertToInterfacePrivkey(privateKey)
+			require.NoError(t, err)
 			b, err := interfacePriv.Raw()
 			require.NoError(t, err)
 			require.Equal(t, test.passedKey, hex.EncodeToString(b))

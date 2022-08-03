@@ -1,6 +1,7 @@
 package changeround
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -30,7 +31,7 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[specty
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
@@ -180,7 +181,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"non-valid change-round-data json",
-			"failed to get round change data: could not decode round change data from message: invalid character 'o' in literal null (expecting 'u')",
+			"could not get roundChange data : could not decode round change data from message: invalid character 'o' in literal null (expecting 'u')",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -211,7 +212,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"small justification round",
-			"change round justification round lower or equal to message round",
+			"round change justification invalid: msg round wrong",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -258,7 +259,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"bad value",
-			"change round prepared value not equal to justification msg value",
+			"round change justification invalid: prepare data != proposed data",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,

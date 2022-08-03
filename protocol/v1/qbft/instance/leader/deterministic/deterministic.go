@@ -9,13 +9,15 @@ import (
 // Deterministic Round robin leader selection is a fair and sequential leader selection.
 // Each instance/ round change the next leader is selected one-by-one.
 type Deterministic struct {
-	baseInt       uint64
-	committeeSize uint64
+	baseInt     uint64
+	operatorIDs []uint64
 }
 
 // New returns a new Deterministic instance or error
-func New(seed []byte, committeeSize uint64) (*Deterministic, error) {
-	ret := &Deterministic{committeeSize: committeeSize}
+func New(seed []byte, operatorIDs []uint64) (*Deterministic, error) {
+	ret := &Deterministic{
+		operatorIDs: operatorIDs,
+	}
 	if err := ret.setSeed(seed); err != nil {
 		return nil, err
 	}
@@ -24,7 +26,8 @@ func New(seed []byte, committeeSize uint64) (*Deterministic, error) {
 
 // Calculate returns the current leader
 func (rr *Deterministic) Calculate(round uint64) uint64 {
-	return (rr.baseInt + round) % rr.committeeSize
+	index := (rr.baseInt + round) % uint64(len(rr.operatorIDs))
+	return rr.operatorIDs[index]
 }
 
 // setSeed takes []byte and converts to uint64,returns error if fails.

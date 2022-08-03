@@ -20,6 +20,7 @@ import (
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,10 +35,11 @@ const (
 )
 
 const (
-	connManagerGCInterval = time.Minute
-	connManagerGCTimeout  = time.Minute
-	peerIndexGCInterval   = 15 * time.Minute
-	reportingInterval     = 30 * time.Second
+	connManagerGCInterval   = time.Minute
+	connManagerGCTimeout    = time.Minute
+	peerIndexGCInterval     = 15 * time.Minute
+	peersReportingInterval  = 60 * time.Second
+	topicsReportingInterval = 180 * time.Second
 )
 
 // p2pNetwork implements network.P2PNetwork
@@ -73,11 +75,15 @@ type p2pNetwork struct {
 func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(pctx)
 
+	logger := cfg.Logger.With(zap.String("who", "p2pNetwork"))
+	if !cfg.P2pLog {
+		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
+	}
 	return &p2pNetwork{
 		parentCtx:            pctx,
 		ctx:                  ctx,
 		cancel:               cancel,
-		logger:               cfg.Logger.With(zap.String("who", "p2pNetwork")),
+		logger:               logger,
 		fork:                 forksfactory.NewFork(cfg.ForkVersion),
 		cfg:                  cfg,
 		msgRouter:            cfg.Router,
@@ -127,10 +133,9 @@ func (n *p2pNetwork) Start() error {
 
 	async.Interval(n.ctx, peerIndexGCInterval, n.idx.GC)
 
-	async.Interval(n.ctx, reportingInterval, func() {
-		go n.reportAllPeers()
-		n.reportTopics()
-	})
+	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers)
+
+	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics)
 
 	if err := n.registerInitialTopics(); err != nil {
 		return err

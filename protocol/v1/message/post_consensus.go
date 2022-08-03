@@ -4,6 +4,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -14,7 +15,7 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 		return errors.Wrap(err, "could not validate SignedPartialSignatureMessage")
 	}
 
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, spectypes.PrimusTestnet, spectypes.PartialSignatureType, committee); err != nil {
+	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, types.GetDefaultDomain(), spectypes.PartialSignatureType, committee); err != nil {
 		return errors.Wrap(err, "could not verify PartialSignature by the provided operators")
 	}
 
