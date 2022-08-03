@@ -106,6 +106,15 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to run migrations", zap.Error(err))
 		}
 
+		if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
+			cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
+		} else {
+			// we have some custom network id, overriding default domain
+			types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
+		}
+		Logger.Info("using ssv network", zap.String("domain", string(types.GetDefaultDomain())),
+			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
+
 		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
