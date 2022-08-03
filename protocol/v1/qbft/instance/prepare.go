@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -62,7 +63,7 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 		if ret == nil {
 			ret = msg.DeepCopy()
 		} else {
-			if err := ret.Aggregate(msg); err != nil {
+			if err := message.Aggregate(ret, msg); err != nil {
 				return nil, err
 			}
 		}
