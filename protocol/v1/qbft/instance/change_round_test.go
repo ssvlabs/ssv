@@ -2,7 +2,7 @@ package instance
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -144,7 +144,7 @@ func GenerateNodes(cnt int) (
 // SignMsg signs the given message by the given private key
 func SignMsg(t *testing.T, signers []spectypes.OperatorID, sk *bls.SecretKey, msg *specqbft.Message) *specqbft.SignedMessage {
 	sigType := spectypes.QBFTSignatureType
-	domain := spectypes.ComputeSignatureDomain(message.GetDefaultDomain(), sigType)
+	domain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), sigType)
 	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
@@ -930,7 +930,7 @@ func aggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, ms
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(message.GetDefaultDomain(), spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err

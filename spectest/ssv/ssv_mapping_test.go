@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -64,10 +64,10 @@ func TestSSVMapping(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	origDomain := message.GetDefaultDomain()
-	message.SetDefaultDomain(spectypes.PrimusTestnet)
+	origDomain := types.GetDefaultDomain()
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
 	defer func() {
-		message.SetDefaultDomain(origDomain)
+		types.SetDefaultDomain(origDomain)
 	}()
 
 	testMap := testsToRun() // TODO: remove
