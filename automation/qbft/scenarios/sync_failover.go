@@ -145,8 +145,7 @@ loop:
 	}
 	r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 
-	messageID := message.ToMessageID(msgs[1].Message.Identifier)
-	decides, err := ctx.Stores[3].GetDecided(messageID[:], 0, nextSeq)
+	decides, err := ctx.Stores[3].GetDecided(msgs[1].Identifier, 0, nextSeq)
 	if err != nil {
 		r.logger.Error("node #4 could not get decided in range", zap.Error(err))
 		return errors.New("node #4 could not get decided in range")

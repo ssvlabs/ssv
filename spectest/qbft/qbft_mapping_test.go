@@ -38,6 +38,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"

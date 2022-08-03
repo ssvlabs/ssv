@@ -3,6 +3,7 @@ package qbftstorage
 import (
 	"encoding/binary"
 	"encoding/json"
+	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -10,9 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -169,13 +168,6 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 func (i *ibftStorage) CleanLastChangeRound(identifier []byte) {
 	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
 	err := i.delete(lastChangeRoundKey, identifier[:])
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
-	}
-	// doing the same for v0
-	messageID := message.ToMessageID(identifier)
-	oldIdentifier := []byte(format.IdentifierFormat(messageID.GetPubKey(), messageID.GetRoleType().String()))
-	err = i.delete(lastChangeRoundKey, oldIdentifier)
 	if err != nil {
 		i.logger.Warn("could not clean last change round message", zap.Error(err))
 	}
