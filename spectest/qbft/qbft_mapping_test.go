@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -208,6 +209,12 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
+	origDomain := message.GetDefaultDomain()
+	message.SetDefaultDomain(spectypes.PrimusTestnet)
+	defer func() {
+		message.SetDefaultDomain(origDomain)
+	}()
+
 	testMap := testsToRun() // TODO(nkryuchkov): remove
 
 	tests := make(map[string]spectest.SpecTest)
@@ -309,7 +316,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 		Committee:       mappedCommittee,
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      message.GetDefaultDomain(),
 		Graffiti:        nil,
 	}
 

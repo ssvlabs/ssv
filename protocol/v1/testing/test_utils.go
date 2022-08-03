@@ -2,6 +2,7 @@ package testing
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -59,7 +60,7 @@ func CreateMultipleSignedMessages(sks map[spectypes.OperatorID]*bls.SecretKey, s
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(message.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
