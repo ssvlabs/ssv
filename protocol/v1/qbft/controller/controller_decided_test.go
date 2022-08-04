@@ -554,7 +554,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Identifier: identifier,
 				Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 			}),
-			errors.New("failed to verify signature"),
+			errors.New("invalid message signature: failed to verify signature"),
 		},
 		{
 			"valid first decided",

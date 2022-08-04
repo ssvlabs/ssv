@@ -1,7 +1,6 @@
 package changeround
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
 // GenerateNodes generates randomly nodes
@@ -122,7 +122,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"invalid prepared change round",
-			"change round could not verify signature: failed to verify signature",
+			"round change justification invalid: invalid message signature: failed to verify signature",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -143,7 +143,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"wrong sequence prepared change round",
-			"change round justification sequence is wrong",
+			"round change justification invalid: change round justification sequence is wrong",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -192,7 +192,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"justification type is not prepared",
-			"change round justification msg type not Prepare (0)",
+			"round change justification invalid: change round justification msg type not Prepare (0)",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -235,7 +235,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"bad lambda",
-			"change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
+			"round change justification invalid: change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,

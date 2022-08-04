@@ -2,7 +2,6 @@ package instance
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -21,6 +20,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -348,7 +348,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round justification msg type not Prepare (0)",
+			expectedError: "round change justification invalid: change round justification msg type not Prepare (0)",
 		},
 		{
 			name:                "invalid justification round",
@@ -432,7 +432,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
+			expectedError: "round change justification invalid: change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
 		},
 		{
 			name:                "invalid justification quorum",
@@ -523,7 +523,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round could not verify signature: failed to verify signature",
+			expectedError: "round change justification invalid: invalid message signature: failed to verify signature",
 		},
 	}
 
@@ -782,7 +782,7 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 				Identifier: msgID[:],
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
-			"msg Height wrong",
+			"message height is wrong",
 		},
 
 		{
