@@ -115,14 +115,14 @@ func testsToRun() map[string]struct{} {
 		//proposal.PostDecided(),            // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
 		//proposal.PostPrepared(),           // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
 		//proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure; need to forbid second proposal for round
-		//proposal.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		proposal.WrongHeight(),
 		proposal.WrongProposer(),
-		//proposal.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		proposal.WrongSignature(),
 
 		prepare.DuplicateMsg(),
 		prepare.HappyFlow(),
 		prepare.ImparsableProposalData(),
-		//prepare.InvalidPrepareData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
+		prepare.InvalidPrepareData(),
 		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
 		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
 		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
@@ -130,14 +130,14 @@ func testsToRun() map[string]struct{} {
 		prepare.PostDecided(),
 		//prepare.WrongData(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		prepare.WrongHeight(),
-		//prepare.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		prepare.WrongSignature(),
 
 		commit.CurrentRound(),
 		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
 		commit.DuplicateMsg(),
 		commit.HappyFlow(),
-		//commit.InvalidCommitData(), // TODO(nkryuchkov): failure; need to expect same error in spec if message is wrong
+		commit.InvalidCommitData(),
 		commit.PostDecided(),
 		//commit.WrongData1(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
 		//commit.WrongData2(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
@@ -145,15 +145,15 @@ func testsToRun() map[string]struct{} {
 		commit.MultiSignerNoOverlap(),
 		commit.Decided(),
 		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
-		//commit.WrongHeight(),            // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
+		commit.WrongHeight(),
 		commit.ImparsableCommitData(),
-		//commit.WrongSignature(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		commit.WrongSignature(),
 
 		roundchange.HappyFlow(),
 		roundchange.F1Speedup(),
 		roundchange.F1SpeedupPrepared(),
-		//roundchange.WrongHeight(), // TODO(nkryuchkov): failure; need to expect the same error in spec if height is wrong
-		//roundchange.WrongSig(),    // TODO(nkryuchkov): failure; fix expected errors in spec
+		roundchange.WrongHeight(),
+		roundchange.WrongSig(),
 		roundchange.MultiSigner(),
 		roundchange.NotPrepared(),
 		roundchange.Prepared(),
@@ -162,10 +162,10 @@ func testsToRun() map[string]struct{} {
 		roundchange.JustificationWrongValue(),
 		roundchange.JustificationWrongRound(),
 		roundchange.JustificationNoQuorum(),
-		//roundchange.JustificationMultiSigners(), // TODO(nkryuchkov): failure; fix expected errors in spec
-		//roundchange.JustificationInvalidSig(),   // TODO(nkryuchkov): failure; fix expected errors in spec
+		roundchange.JustificationMultiSigners(),
+		roundchange.JustificationInvalidSig(),
 		roundchange.JustificationInvalidRound(),
-		//roundchange.JustificationInvalidPrepareData(), // TODO(nkryuchkov): failure; fix expected errors in spec
+		roundchange.JustificationInvalidPrepareData(),
 		roundchange.JustificationDuplicateMsg(),
 		roundchange.InvalidRoundChangeData(),
 		roundchange.FutureRound(),

@@ -77,7 +77,7 @@ func (i *Instance) JustifyPrePrepare(round uint64, proposalData *specqbft.Propos
 
 func (i *Instance) validateRoundChange(signedMsg *specqbft.SignedMessage) error {
 	if len(signedMsg.GetSigners()) != 1 {
-		return errors.New("round change msg allows 1 signer")
+		return errors.New("msg allows 1 signer")
 	}
 
 	return nil

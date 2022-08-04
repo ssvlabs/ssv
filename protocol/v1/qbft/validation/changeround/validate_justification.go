@@ -52,49 +52,8 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 	}
 
 	for _, rcj := range data.RoundChangeJustification {
-		if rcj.Message == nil {
-			return errors.New("change round justification msg is nil")
-		}
-		if rcj.Message.MsgType != specqbft.PrepareMsgType {
-			return errors.Errorf("change round justification msg type not Prepare (%d)", rcj.Message.MsgType)
-		}
-		if signedMessage.Message.Height != rcj.Message.Height {
-			return errors.New("change round justification sequence is wrong")
-		}
-		if signedMessage.Message.Round <= rcj.Message.Round {
-			return errors.New("round change justification invalid: msg round wrong")
-		}
-		if data.PreparedRound != rcj.Message.Round {
-			return errors.New("round change justification invalid: msg round wrong")
-		}
-		if !bytes.Equal(signedMessage.Message.Identifier, rcj.Message.Identifier) {
-			return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
-		}
-		prepareMsg, err := rcj.Message.GetPrepareData()
-		if err != nil {
-			return errors.Wrap(err, "failed to get prepare data")
-		}
-		if !bytes.Equal(data.PreparedValue, prepareMsg.Data) {
-			return errors.New("round change justification invalid: prepare data != proposed data")
-		}
-		if len(rcj.GetSigners()) != 1 {
-			return errors.New("round change msg allows 1 signer")
-		}
-
-		// validateJustification justification signature
-		pksMap, err := p.share.PubKeysByID(rcj.GetSigners())
-		var pks beacon.PubKeys
-		for _, v := range pksMap {
-			pks = append(pks, v)
-		}
-
-		if err != nil {
-			return errors.Wrap(err, "change round could not get pubkey")
-		}
-		aggregated := pks.Aggregate()
-
-		if err = rcj.Signature.Verify(rcj, types.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize()); err != nil {
-			return errors.Wrap(err, "change round could not verify signature")
+		if err := p.validateRoundChangeJustification(rcj, data, signedMessage); err != nil {
+			return fmt.Errorf("round change justification invalid: %w", err)
 		}
 	}
 
@@ -106,6 +65,57 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return errors.New("prepared round > round")
 	}
 
+	return nil
+}
+
+func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.SignedMessage, roundChangeData *specqbft.RoundChangeData, signedMessage *specqbft.SignedMessage) error {
+	if rcj.Message == nil {
+		return errors.New("change round justification msg is nil")
+	}
+	if rcj.Message.MsgType != specqbft.PrepareMsgType {
+		return errors.Errorf("change round justification msg type not Prepare (%d)", rcj.Message.MsgType)
+	}
+	if signedMessage.Message.Height != rcj.Message.Height {
+		return errors.New("change round justification sequence is wrong")
+	}
+	if signedMessage.Message.Round <= rcj.Message.Round {
+		return errors.New("msg round wrong")
+	}
+	if roundChangeData.PreparedRound != rcj.Message.Round {
+		return errors.New("msg round wrong")
+	}
+	if !bytes.Equal(signedMessage.Message.Identifier, rcj.Message.Identifier) {
+		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
+	}
+	prepareMsg, err := rcj.Message.GetPrepareData()
+	if err != nil {
+		return errors.Wrap(err, "failed to get prepare data")
+	}
+	if err := prepareMsg.Validate(); err != nil {
+		return fmt.Errorf("prepareData invalid: %w", err)
+	}
+	if !bytes.Equal(roundChangeData.PreparedValue, prepareMsg.Data) {
+		return errors.New("prepare data != proposed data")
+	}
+	if len(rcj.GetSigners()) != 1 {
+		return errors.New("prepare msg allows 1 signer")
+	}
+
+	// validateJustification justification signature
+	pksMap, err := p.share.PubKeysByID(rcj.GetSigners())
+	var pks beacon.PubKeys
+	for _, v := range pksMap {
+		pks = append(pks, v)
+	}
+
+	if err != nil {
+		return errors.Wrap(err, "change round could not get pubkey")
+	}
+	aggregated := pks.Aggregate()
+
+	if err = rcj.Signature.Verify(rcj, types.GetDefaultDomain(), spectypes.QBFTSignatureType, aggregated.Serialize()); err != nil {
+		return errors.Wrap(err, "invalid message signature")
+	}
 	return nil
 }
 

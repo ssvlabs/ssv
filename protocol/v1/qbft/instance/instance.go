@@ -22,7 +22,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
@@ -253,28 +252,30 @@ func (i *Instance) Stopped() bool {
 
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
-	var pp pipelines.SignedMessagePipeline
-	var errPrefix string // TODO(nkryuchkov): make similar in ssv-spec
+	if err := msg.Validate(); err != nil {
+		return false, errors.Wrap(err, "invalid signed message")
+	}
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
-		pp = i.PrePrepareMsgPipeline()
-		errPrefix = "proposal invalid"
+		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
+			return false, fmt.Errorf("invalid proposal message: %w", err)
+		}
 	case specqbft.PrepareMsgType:
-		pp = i.PrepareMsgPipeline()
-		errPrefix = "invalid prepare msg"
+		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
+			return false, fmt.Errorf("invalid prepare message: %w", err)
+		}
 	case specqbft.CommitMsgType:
-		pp = i.CommitMsgPipeline()
-		errPrefix = "commit msg invalid"
+		if err := i.CommitMsgPipeline().Run(msg); err != nil {
+			return false, fmt.Errorf("invalid commit message: %w", err)
+		}
 	case specqbft.RoundChangeMsgType:
-		pp = i.ChangeRoundMsgPipeline()
-		errPrefix = "round change msg invalid"
+		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
+			return false, fmt.Errorf("invalid round change message: %w", err)
+		}
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
-	}
-	if err := pp.Run(msg); err != nil {
-		return false, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
