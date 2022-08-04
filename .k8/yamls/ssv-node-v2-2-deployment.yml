@@ -115,8 +115,6 @@ spec:
           value: "false"
         - name: P2P_LOG
           value: "false"
-        - name: DISCOVERY_TYPE_KEY
-          value: "discv5"
         - name: NETWORK
           value: "prater"
         - name: CONSENSUS_TYPE
