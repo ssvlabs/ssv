@@ -179,6 +179,16 @@ spec:
             value: "14007"
           - name: FULLNODE
             value: "true"
+          - name: MSG_WORKERS_COUNT
+            value: "1024"
+          - name: MSG_WORKER_BUFFER_SIZE
+            value: "2048"
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
+          - name: P2P_MAX_PEERS
+            value: "300"
+          - name: GENESIS_EPOCH
+            value: "1"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-2
