@@ -256,6 +256,8 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		return false, errors.Wrap(err, "invalid signed message")
 	}
 
+	// TODO(nkryuchkov): remove error wrapping, make the processing similar,
+	// optionally remove pipelines and use the code from spec
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
@@ -267,7 +269,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		}
 	case specqbft.CommitMsgType:
 		if err := i.CommitMsgPipeline().Run(msg); err != nil {
-			return false, fmt.Errorf("invalid commit message: %w", err)
+			return false, err
 		}
 	case specqbft.RoundChangeMsgType:
 		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
@@ -420,21 +422,23 @@ func (i *Instance) setFork(fork forks.Fork) {
 }
 
 func generateState(opts *Options) *qbft.State {
-	var identifier, height, round, preparedRound, preparedValue atomic.Value
+	var identifier, height, round, preparedRound, preparedValue, iv, proposalReceivedForCurrentRound atomic.Value
 	height.Store(opts.Height)
 	round.Store(specqbft.Round(0))
 	identifier.Store(opts.Identifier[:])
 	preparedRound.Store(specqbft.Round(0))
 	preparedValue.Store([]byte(nil))
-	iv := atomic.Value{}
 	iv.Store([]byte{})
+	proposalReceivedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
+
 	return &qbft.State{
-		Stage:         *atomic.NewInt32(int32(qbft.RoundStateNotStarted)),
-		Identifier:    identifier,
-		Height:        height,
-		InputValue:    iv,
-		Round:         round,
-		PreparedRound: preparedRound,
-		PreparedValue: preparedValue,
+		Stage:                           *atomic.NewInt32(int32(qbft.RoundStateNotStarted)),
+		Identifier:                      identifier,
+		Height:                          height,
+		InputValue:                      iv,
+		Round:                           round,
+		PreparedRound:                   preparedRound,
+		PreparedValue:                   preparedValue,
+		ProposalAcceptedForCurrentRound: proposalReceivedForCurrentRound,
 	}
 }

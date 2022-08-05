@@ -133,18 +133,18 @@ func testsToRun() map[string]struct{} {
 		prepare.WrongSignature(),
 
 		commit.CurrentRound(),
-		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		commit.FutureRound(),
+		commit.PastRound(),
 		commit.DuplicateMsg(),
 		commit.HappyFlow(),
 		commit.InvalidCommitData(),
 		commit.PostDecided(),
-		//commit.WrongData1(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		//commit.WrongData2(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		commit.WrongData1(),
+		commit.WrongData2(),
 		commit.MultiSignerWithOverlap(),
 		commit.MultiSignerNoOverlap(),
 		commit.Decided(),
-		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
+		commit.NoPrevAcceptedProposal(),
 		commit.WrongHeight(),
 		commit.ImparsableCommitData(),
 		commit.WrongSignature(),
@@ -327,6 +327,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
 	qbftInstance.State().Round.Store(test.Pre.State.Round)
 	qbftInstance.State().Height.Store(test.Pre.State.Height)
+	qbftInstance.State().ProposalAcceptedForCurrentRound.Store(test.Pre.State.ProposalAcceptedForCurrentRound)
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
@@ -356,26 +357,13 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			Height:                          qbftInstance.State().GetHeight(),
 			LastPreparedRound:               qbftInstance.State().GetPreparedRound(),
 			LastPreparedValue:               preparedValue,
-			ProposalAcceptedForCurrentRound: test.Pre.State.ProposalAcceptedForCurrentRound,
+			ProposalAcceptedForCurrentRound: qbftInstance.State().GetProposalAcceptedForCurrentRound(),
 			Decided:                         decidedErr == nil,
 			DecidedValue:                    decidedValue,
 			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType]),
 			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType]),
 			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType]),
 			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType]),
-		}
-
-		allMessages := mappedInstance.State.ProposeContainer.AllMessaged()
-		if len(allMessages) != 0 {
-			var highestRound specqbft.Round
-			var highestMessage *specqbft.SignedMessage
-			for _, message := range allMessages {
-				if message.Message.Round > highestRound {
-					highestRound = message.Message.Round
-					highestMessage = message
-				}
-			}
-			mappedInstance.State.ProposalAcceptedForCurrentRound = highestMessage
 		}
 
 		mappedInstance.StartValue = qbftInstance.State().GetInputValue()

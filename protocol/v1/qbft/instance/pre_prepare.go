@@ -27,6 +27,9 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 				return fmt.Errorf("could not get proposal data: %w", err)
 			}
 			i.containersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
+
+			i.State().ProposalAcceptedForCurrentRound.Store(signedMessage)
+
 			return nil
 		}),
 		pipelines.CombineQuiet(
