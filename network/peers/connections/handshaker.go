@@ -108,9 +108,9 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		_, pending := h.pending.LoadOrStore(pidStr, true)
 		if pending {
 			return
-		} else {
-			defer h.pending.Delete(pidStr)
 		}
+		defer h.pending.Delete(pidStr)
+
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
 		if err != nil {
