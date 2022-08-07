@@ -85,7 +85,7 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) {
 
 	qbftCtrl, signaturesCount, decidedValue, seqNumber, err := v.comeToConsensusOnInputValue(logger, duty)
 	if err != nil {
-		logger.Error("could not come to consensus", zap.Error(err))
+		logger.Warn("could not come to consensus", zap.Error(err))
 		return
 	}
 

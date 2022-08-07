@@ -118,7 +118,6 @@ func (c *Controller) processNoRunningInstance(
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	logger.Debug("found message in queue when no running instance")
 	err := handler(msgs[0])
 	if err != nil {
 		logger.Warn("could not handle msg", zap.Error(err))
