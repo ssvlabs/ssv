@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,6 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -191,7 +191,7 @@ func TestCommitPipeline(t *testing.T) {
 
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , round, validate proposal, add commit msg, , upon commit msg, ", pipeline.Name())
 }
 
 // AggregateMessages will aggregate given msgs or return error

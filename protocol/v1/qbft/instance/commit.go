@@ -17,12 +17,11 @@ import (
 
 // CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.CommitMsgValidationPipeline()
 	return pipelines.Combine(
 		signedmsg.CheckProposal(i.State()),
-		pipelines.WrapFunc("validation", func(signedMessage *specqbft.SignedMessage) error {
-			if err := pipelines.Combine(
-				i.CommitMsgValidationPipeline(),
-			).Run(signedMessage); err != nil {
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
 				return fmt.Errorf("invalid commit message: %w", err)
 			}
 			return nil
