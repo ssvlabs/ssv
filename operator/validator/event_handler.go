@@ -206,8 +206,9 @@ func (c *controller) handleValidatorRemovalEvent(
 		return nil, errors.Wrap(err, "could not clean all decided messages")
 	}
 	// remove change round messages
-	c.ibftStorage.CleanLastChangeRound(messageID[:]) // TODO need to delete for multi duty as well
-
+	if err := c.ibftStorage.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+		return nil, errors.Wrap(err, "could not clean last change round")
+	}
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")

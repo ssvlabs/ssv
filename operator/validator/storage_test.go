@@ -80,6 +80,11 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	validators, err := collection.GetAllValidatorShares()
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
+
+	require.NoError(t, collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()))
+	_, found, err = collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
+	require.NoError(t, err)
+	require.False(t, found)
 }
 
 func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*beacon.Share, *bls.SecretKey) {
