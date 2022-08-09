@@ -166,8 +166,13 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 }
 
 func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	panic("implement me")
+	prefix := i.prefix
+	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, []byte(lastChangeRoundKey)...)
+	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+		return errors.Wrap(err, "failed to remove decided")
+	}
+	return nil
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
