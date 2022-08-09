@@ -280,9 +280,12 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.SignatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
-	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage             // in order to set the last change round msg
-	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
+	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
+	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
+	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
+		c.Logger.Warn("could not clean change round")
+	}
+
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
 		done()
