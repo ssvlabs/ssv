@@ -283,7 +283,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
 	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
 	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
-		c.Logger.Warn("could not clean change round")
+		c.Logger.Warn("could not clean change round", zap.Error(err))
 	}
 
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
