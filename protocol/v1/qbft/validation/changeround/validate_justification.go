@@ -98,7 +98,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		}
 	}
 
-	if quorum, _, _ := p.changeRoundQuorum(data.RoundChangeJustification); !quorum {
+	if quorum, _, _ := HasQuorum(p.share, data.RoundChangeJustification); !quorum {
 		return fmt.Errorf("no justifications quorum")
 	}
 
@@ -114,14 +114,14 @@ func (p *validateJustification) Name() string {
 	return "validateJustification msg"
 }
 
-// TODO(nkryuchkov): Consider merging with all changeRoundQuorum functions.
-func (p *validateJustification) changeRoundQuorum(msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
+// HasQuorum checks if messages have a quorum.
+func HasQuorum(share *beacon.Share, msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
 	uniqueSigners := make(map[spectypes.OperatorID]bool)
 	for _, msg := range msgs {
 		for _, signer := range msg.GetSigners() {
 			uniqueSigners[signer] = true
 		}
 	}
-	quorum = len(uniqueSigners)*3 >= p.share.CommitteeSize()*2
-	return quorum, len(uniqueSigners), p.share.CommitteeSize()
+	quorum = len(uniqueSigners)*3 >= share.CommitteeSize()*2
+	return quorum, len(uniqueSigners), share.CommitteeSize()
 }
