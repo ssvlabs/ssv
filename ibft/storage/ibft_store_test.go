@@ -82,6 +82,43 @@ func TestCleanDecided(t *testing.T) {
 	require.NotNil(t, last)
 }
 
+func TestIbftStorage_CleanLastChangeRound(t *testing.T) {
+	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	differMsgID := spectypes.NewMsgID([]byte("pk_differ"), spectypes.BNRoleAttester)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
+	require.NoError(t, err)
+
+	generateMsg := func(id spectypes.MessageID, h specqbft.Height, r specqbft.Round, s spectypes.OperatorID) *specqbft.SignedMessage {
+		return &specqbft.SignedMessage{
+			Signature: []byte("sig"),
+			Signers:   []spectypes.OperatorID{s},
+			Message: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
+				Height:     h,
+				Round:      r,
+				Identifier: id[:],
+				Data:       nil,
+			},
+		}
+	}
+
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(msgID, 0, 1, 1)))
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(msgID, 0, 1, 2)))
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(msgID, 0, 1, 3)))
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(msgID, 0, 1, 4)))
+	require.NoError(t, storage.SaveLastChangeRoundMsg(generateMsg(differMsgID, 0, 1, 1))) // different identifier
+
+	require.NoError(t, storage.CleanLastChangeRound(msgID[:]))
+	res, err := storage.GetLastChangeRoundMsg(msgID[:])
+	require.NoError(t, err)
+	require.Equal(t, 0, len(res))
+
+	res, err = storage.GetLastChangeRoundMsg(differMsgID[:])
+	require.NoError(t, err)
+	require.Equal(t, 1, len(res))
+
+}
+
 func TestSaveAndFetchLastChangeRound(t *testing.T) {
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
@@ -177,9 +214,10 @@ func TestSaveAndFetchLastState(t *testing.T) {
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: logger.With(zap.String("who", "badger")),
-		Path:   "",
+		Type:      "badger-memory",
+		Logger:    logger.With(zap.String("who", "badger")),
+		Path:      "",
+		Reporting: true,
 	})
 	if err != nil {
 		return nil, err
