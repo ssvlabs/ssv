@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -62,7 +63,7 @@ func (i *Instance) JustifyPrePrepare(round uint64, proposalData *specqbft.Propos
 		}
 	}
 
-	if quorum, _, _ := i.changeRoundQuorum(proposalData.RoundChangeJustification); !quorum {
+	if quorum, _, _ := changeround.HasQuorum(i.ValidatorShare, proposalData.RoundChangeJustification); !quorum {
 		return errors.New("no change round quorum")
 	}
 	notPrepared, highest, err := i.HighestPrepared(specqbft.Round(round))
