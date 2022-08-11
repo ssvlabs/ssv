@@ -16,7 +16,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // NewSSVMsgValidator creates a new msg validator that validates message structure,
 // and checks that the message was sent on the right topic.
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
-func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID, vals ...func(msg *spectypes.SSVMessage) error) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
 		metricsPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
@@ -36,7 +36,13 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
-		// check decided topic
+		for _, val := range vals {
+			if err := val(msg); err != nil {
+				reportValidationResult(validationResultInvalid)
+				return pubsub.ValidationReject
+			}
+		}
+		// check topic
 		currentTopic := pmsg.GetTopic()
 		currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
 		if msg.MsgType == spectypes.SSVDecidedMsgType {

@@ -53,6 +53,7 @@ var (
 	validationResultNoData   msgValidationResult = "no_data"
 	validationResultSelf     msgValidationResult = "self"
 	validationResultEncoding msgValidationResult = "encoding"
+	validationResultInvalid  msgValidationResult = "invalid"
 	validationResultTopic    msgValidationResult = "topic"
 	validationResultValid    msgValidationResult = "valid"
 )
