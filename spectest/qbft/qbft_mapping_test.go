@@ -123,12 +123,12 @@ func testsToRun() map[string]struct{} {
 		prepare.HappyFlow(),
 		prepare.ImparsableProposalData(),
 		prepare.InvalidPrepareData(),
-		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
-		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
-		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
+		prepare.MultiSigner(),
+		prepare.NoPreviousProposal(),
+		prepare.OldRound(),
+		prepare.FutureRound(),
 		prepare.PostDecided(),
-		//prepare.WrongData(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
+		prepare.WrongData(),
 		prepare.WrongHeight(),
 		prepare.WrongSignature(),
 

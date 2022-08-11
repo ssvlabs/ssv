@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
@@ -56,6 +57,7 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
+		prepare.ValidatePrepareMsg(),
 	)
 }
 

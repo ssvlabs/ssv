@@ -265,7 +265,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		}
 	case specqbft.PrepareMsgType:
 		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
-			return false, fmt.Errorf("invalid prepare message: %w", err)
+			return false, err
 		}
 	case specqbft.CommitMsgType:
 		if err := i.CommitMsgPipeline().Run(msg); err != nil {
