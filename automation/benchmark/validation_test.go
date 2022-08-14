@@ -8,11 +8,14 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/automation/commons"
+	commons2 "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/network/topics"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -24,7 +27,7 @@ import (
 	"testing"
 )
 
-func BenchmarkMsgValidator(t *testing.B) {
+func BenchmarkValidation(t *testing.B) {
 	t.StopTimer()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -38,6 +41,13 @@ func BenchmarkMsgValidator(t *testing.B) {
 	require.NoError(t, err)
 
 	var pmsgs []*pubsub.Message
+
+	sk, err := commons2.GenNetworkKey()
+	require.NoError(t, err)
+	isk, err := commons2.ConvertToInterfacePrivkey(sk)
+	require.NoError(t, err)
+	pid, err := peer.IDFromPrivateKey(isk)
+	require.NoError(t, err)
 
 	pk := share.PublicKey.Serialize()
 	valTopics := f.ValidatorTopicID(pk)
@@ -54,14 +64,30 @@ func BenchmarkMsgValidator(t *testing.B) {
 		}
 		raw, err := msg.Encode()
 		require.NoError(t, err)
-		pmsg := newPBMsg(raw, topicName, []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
+		pmsg := newPBMsg(raw, topicName, []byte(pid.String()))
+		require.NoError(t, signMessage(pid, isk, pmsg.Message))
 		pmsgs = append(pmsgs, pmsg)
 	}
 
 	t.ResetTimer()
 	t.StartTimer()
 
-	t.Run("v0 msg validator", func(b *testing.B) {
+	t.Run("pubsub router signing", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			pmsg := pmsgs[i%len(pmsgs)]
+			ppmsg := newPBMsg(pmsg.GetData(), topicName, []byte(pid.String()))
+			_ = signMessage(pid, isk, ppmsg.Message)
+		}
+	})
+
+	t.Run("pubsub router verification", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			pmsg := pmsgs[i%len(pmsgs)]
+			_ = verifyMessageSignature(pmsg.Message)
+		}
+	})
+
+	t.Run("topic msg validator", func(b *testing.B) {
 		mv := topics.NewSSVMsgValidator(logger, &f, self)
 		require.NotNil(t, mv)
 		pi := peer.ID("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r")
@@ -71,9 +97,29 @@ func BenchmarkMsgValidator(t *testing.B) {
 		}
 	})
 
-	t.Run("msg validator with bls", func(b *testing.B) {
+	t.Run("topic msg validator with pipelines", func(b *testing.B) {
 		ctrlFork := forksfactory.NewFork(forksprotocol.GenesisForkVersion)
 		pip := ctrlFork.ValidateDecidedMsg(share)
+		mv := topics.NewSSVMsgValidator(logger, &f, self, func(msg *spectypes.SSVMessage) error {
+			sm := &specqbft.SignedMessage{}
+			err := sm.Decode(msg.GetData())
+			if err != nil {
+				return err
+			}
+			return pip.Run(sm)
+		})
+		require.NotNil(t, mv)
+		pi := peer.ID("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r")
+		for i := 0; i < b.N; i++ {
+			pmsg := pmsgs[i%len(pmsgs)]
+			require.Equal(t, mv(ctx, pi, pmsg), pubsub.ValidationAccept)
+		}
+	})
+
+	t.Run("topic msg validator with bls", func(b *testing.B) {
+		pip := pipelines.Combine(
+			signedmsg.AuthorizeMsg(share),
+			signedmsg.ValidateQuorum(share.ThresholdSize()))
 		mv := topics.NewSSVMsgValidator(logger, &f, self, func(msg *spectypes.SSVMessage) error {
 			sm := &specqbft.SignedMessage{}
 			err := sm.Decode(msg.GetData())
