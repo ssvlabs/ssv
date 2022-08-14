@@ -9,7 +9,7 @@ import (
 
 // using some duplicated internals from pubsub, so we can simulate the signing/verification in pubsub router
 
-const SignPrefix = "libp2p-pubsub:"
+const signPrefixPubsub = "libp2p-pubsub:"
 
 func verifyMessageSignature(m *ps_pb.Message) error {
 	pubk, err := messagePubKey(m)
@@ -99,5 +99,5 @@ func signMessage(pid peer.ID, key crypto.PrivKey, m *ps_pb.Message) error {
 }
 
 func withSignPrefix(bytes []byte) []byte {
-	return append([]byte(SignPrefix), bytes...)
+	return append([]byte(signPrefixPubsub), bytes...)
 }
