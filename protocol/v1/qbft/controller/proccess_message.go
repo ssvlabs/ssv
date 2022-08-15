@@ -17,37 +17,31 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 		zap.Any("sender", signedMessage.GetSigners()))
 	if c.ReadMode {
 		switch signedMessage.Message.MsgType {
-		case specqbft.RoundChangeMsgType, specqbft.CommitMsgType:
+		case specqbft.RoundChangeMsgType:
+			return c.ProcessChangeRound(signedMessage)
+		case specqbft.CommitMsgType:
 		default: // other types not supported in read mode
 			return nil
 		}
 	}
+
 	logger.Debug("process consensus message")
-	switch signedMessage.Message.MsgType {
-	case specqbft.RoundChangeMsgType: // supporting read-mode
-		if c.ReadMode {
-			return c.ProcessChangeRound(signedMessage)
-		}
-		fallthrough // not in read mode, need to process regular way
-	case specqbft.CommitMsgType:
+	if signedMessage.Message.MsgType == specqbft.CommitMsgType {
 		if processed, err := c.processCommitMsg(signedMessage); err != nil {
 			return errors.Wrap(err, "failed to process late commit")
 		} else if processed {
 			return nil
 		}
-		fallthrough // not processed, need to process as regular consensus commit msg
-	case specqbft.ProposalMsgType, specqbft.PrepareMsgType:
-		if c.GetCurrentInstance() == nil {
-			return errors.New("current instance is nil")
-		}
-		decided, err := c.GetCurrentInstance().ProcessMsg(signedMessage)
-		if err != nil {
-			return errors.Wrap(err, "failed to process message")
-		}
-		logger.Debug("current instance processed message", zap.Bool("decided", decided))
-	default:
-		return errors.Errorf("message type is not suported")
 	}
+
+	if c.GetCurrentInstance() == nil {
+		return errors.New("current instance is nil")
+	}
+	decided, err := c.GetCurrentInstance().ProcessMsg(signedMessage)
+	if err != nil {
+		return errors.Wrap(err, "failed to process message")
+	}
+	logger.Debug("current instance processed message", zap.Bool("decided", decided))
 	return nil
 }
 
