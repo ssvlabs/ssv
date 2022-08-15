@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"math"
 	"time"
 
@@ -33,6 +34,10 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 				return err
 			}
 			i.containersMap[specqbft.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.PreparedValue)
+
+			if err := controller.UpdateChangeRoundMessage(i.Logger, i.changeRoundStore, signedMessage); err != nil {
+				i.Logger.Warn("failed to update change round msg in storage", zap.Error(err))
+			}
 			return nil
 		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
