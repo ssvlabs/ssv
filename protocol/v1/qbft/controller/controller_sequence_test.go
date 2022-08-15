@@ -42,7 +42,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 // TODO: (lint) fix test
 //nolint
 func TestCanStartNewInstance(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
 	height10 := atomic.Value{}

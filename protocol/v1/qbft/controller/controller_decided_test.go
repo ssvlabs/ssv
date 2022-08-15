@@ -107,7 +107,7 @@ import (
 //func (s *testStorage) CleanLastChangeRound(identifier message.Identifier) {}
 
 //func TestDecidedRequiresSync(t *testing.T) {
-//	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+//	uids := []spectypes.OperatorID{1, 2, 3, 4}
 //	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 //
 //	height0 := atomic.Value{}
@@ -130,12 +130,12 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height3,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  4,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -147,12 +147,12 @@ import (
 //		{
 //			"decided from future, requires sync. current is nil",
 //			nil,
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  4,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -164,12 +164,12 @@ import (
 //		{
 //			"decided when init failed to sync",
 //			nil,
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -183,12 +183,12 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height3,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  10,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -202,12 +202,12 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height3,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -221,12 +221,12 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height3,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -241,7 +241,7 @@ import (
 //				Height: height0,
 //			}),
 //			nil,
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  0,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -281,7 +281,7 @@ import (
 //}
 
 //func TestDecideIsCurrentInstance(t *testing.T) {
-//	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+//	uids := []spectypes.OperatorID{1, 2, 3, 4}
 //	secretKeys, _ := testingprotocol.GenerateBLSKeys(uids...)
 //
 //	height1 := atomic.Value{}
@@ -301,7 +301,7 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height1,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -311,7 +311,7 @@ import (
 //		{
 //			"current instance nil",
 //			nil,
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -321,7 +321,7 @@ import (
 //		{
 //			"current instance empty",
 //			&instance.Instance{},
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  1,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -333,7 +333,7 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height1,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -345,7 +345,7 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height4,
 //			}),
-//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+//			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
 //				Height:  2,
 //				Data:    commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
@@ -368,7 +368,7 @@ import (
 //}
 
 func TestForceDecided(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
@@ -389,7 +389,7 @@ func TestForceDecided(t *testing.T) {
 	go func() {
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 
-		signers := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+		signers := []spectypes.OperatorID{1, 2, 3, 4}
 
 		encodedCommit, err := (&specqbft.CommitData{Data: []byte("value")}).Encode()
 		require.NoError(t, err)
@@ -419,7 +419,7 @@ func TestForceDecided(t *testing.T) {
 }
 
 func TestSyncAfterDecided(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestSyncAfterDecided(t *testing.T) {
 }
 
 func TestSyncFromScratchAfterDecided(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	db, _ := kv.New(basedb.Options{
 		Type:   "badger-memory",
@@ -509,7 +509,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 }
 
 func TestValidateDecidedMsg(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 	pi, err := protocolp2p.GenPeerID()
 	require.NoError(t, err)
@@ -582,7 +582,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 }
 
 //func TestController_checkDecidedMessageSigners(t *testing.T) {
-//	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+//	uids := []spectypes.OperatorID{1, 2, 3, 4}
 //	secretKeys, nodes := testingprotocol.GenerateBLSKeys(uids...)
 //	skQuorum := map[spectypes.OperatorID]*bls.SecretKey{}
 //	for i, sk := range secretKeys {

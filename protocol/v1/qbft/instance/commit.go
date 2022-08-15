@@ -3,13 +3,13 @@ package instance
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
