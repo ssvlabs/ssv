@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 )
 
 // GenerateNodes generates randomly nodes
@@ -81,7 +82,7 @@ func TestValidateChangeRound(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       encodePrepareData(t, []byte("value")),
 	}
-	validSig := aggregateSign(t, sks, validMessage)
+	aggSig := aggregateSign(t, sks, validMessage)
 
 	tests := []struct {
 		name string
@@ -111,11 +112,10 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
-							Message:   validMessage,
-						},
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{0}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{1}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{2}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{3}, validMessage),
 					},
 				}),
 			}),
@@ -133,8 +133,8 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{1, 2, 3},
+							Signature: aggSig.Serialize(),
+							Signers:   []spectypes.OperatorID{1},
 							Message:   validMessage,
 						},
 					},
@@ -154,7 +154,7 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Signature: validSig.Serialize(),
+							Signature: aggSig.Serialize(),
 							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
 							Message: &specqbft.Message{
 								MsgType:    specqbft.PrepareMsgType,
@@ -284,7 +284,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"insufficient number of signers",
-			"change round justification does not constitute a quorum",
+			"no justifications quorum",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -294,31 +294,8 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signers: []spectypes.OperatorID{1, 2},
-							Message: validMessage,
-						},
-					},
-				}),
-			}),
-		},
-		{
-			"duplicated signers",
-			"change round could not verify signature: failed to verify signature",
-			SignMsg(t, 1, sks[1], &specqbft.Message{
-				MsgType:    specqbft.RoundChangeMsgType,
-				Round:      3,
-				Height:     12,
-				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue: []byte("value"),
-					PreparedRound: 2,
-					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{1, 2, 2},
-							Message:   validMessage,
-						},
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{1}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{2}, validMessage),
 					},
 				}),
 			}),

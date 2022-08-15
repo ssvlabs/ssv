@@ -187,7 +187,9 @@ func (i *Instance) Start(inputValue []byte) error {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
 
-			msg, err := i.generatePrePrepareMessage(i.State().GetInputValue())
+			msg, err := i.generatePrePrepareMessage(&specqbft.ProposalData{
+				Data: i.State().GetInputValue(),
+			})
 			if err != nil {
 				i.Logger.Warn("failed to generate pre-prepare message", zap.Error(err))
 				return

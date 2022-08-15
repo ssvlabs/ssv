@@ -73,7 +73,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Data:       value,
 		})
 		instance.containersMap[specqbft.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
-		err := instance.JustifyPrePrepare(2, value)
+		err := instance.JustifyPrePrepare(2, &specqbft.ProposalData{Data: value})
 		require.EqualError(t, err, "no change round quorum")
 	})
 
@@ -84,12 +84,18 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		msg = SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], consensusMessage)
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
-		err := instance.JustifyPrePrepare(2, value)
+		err := instance.JustifyPrePrepare(2, &specqbft.ProposalData{
+			Data:                     value,
+			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
+		})
 		require.NoError(t, err)
 	})
 
 	t.Run("wrong value, unjustified", func(t *testing.T) {
-		err := instance.JustifyPrePrepare(2, []byte("wrong value"))
+		err := instance.JustifyPrePrepare(2, &specqbft.ProposalData{
+			Data:                     []byte("wrong value"),
+			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
+		})
 		require.EqualError(t, err, "preparedValue different than highest prepared")
 	})
 }
@@ -138,7 +144,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
-		err := instance.JustifyPrePrepare(2, nil)
+		err := instance.JustifyPrePrepare(2, &specqbft.ProposalData{})
 		require.EqualError(t, err, "no change round quorum")
 	})
 
@@ -148,12 +154,17 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
-		err := instance.JustifyPrePrepare(2, nil)
+		err := instance.JustifyPrePrepare(2, &specqbft.ProposalData{
+			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
+		})
 		require.NoError(t, err)
 	})
 
 	t.Run("any value can be in pre-prepare", func(t *testing.T) {
-		require.NoError(t, instance.JustifyPrePrepare(2, []byte("wrong value")))
+		require.NoError(t, instance.JustifyPrePrepare(2, &specqbft.ProposalData{
+			Data:                     []byte("wrong value"),
+			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
+		}))
 	})
 }
 
@@ -238,11 +249,11 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
-	require.NoError(t, instance.JustifyPrePrepare(1, nil))
+	require.NoError(t, instance.JustifyPrePrepare(1, &specqbft.ProposalData{}))
 
 	// try to justify round 2 without round change
 	instance.State().Round.Store(specqbft.Round(2))
-	err = instance.JustifyPrePrepare(2, nil)
+	err = instance.JustifyPrePrepare(2, &specqbft.ProposalData{})
 	require.EqualError(t, err, "no change round quorum")
 
 	// test no change round quorum
@@ -266,7 +277,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], msg), roundChangeData.PreparedValue)
 
-	err = instance.JustifyPrePrepare(2, nil)
+	err = instance.JustifyPrePrepare(2, &specqbft.ProposalData{})
 	require.EqualError(t, err, "no change round quorum")
 
 	// test with quorum of change round
@@ -280,7 +291,9 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], msg), roundChangeData.PreparedValue)
 
-	err = instance.JustifyPrePrepare(2, nil)
+	err = instance.JustifyPrePrepare(2, &specqbft.ProposalData{
+		RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
+	})
 	require.NoError(t, err)
 }
 
