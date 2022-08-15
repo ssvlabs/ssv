@@ -165,12 +165,14 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 	return res, nil
 }
 
-func (i *ibftStorage) CleanLastChangeRound(identifier []byte) {
-	// use v1 identifier, if not found use the v0. this is to support old msg types when sync history
-	err := i.delete(lastChangeRoundKey, identifier[:])
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
+func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
+	prefix := i.prefix
+	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, []byte(lastChangeRoundKey)...)
+	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+		return errors.Wrap(err, "failed to remove decided")
 	}
+	return nil
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
@@ -209,11 +211,11 @@ func (i *ibftStorage) getAll(id string, pk []byte) ([]*specqbft.SignedMessage, e
 	return res, err
 }
 
-func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
+/*func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
 	return i.db.Delete(prefix, key)
-}
+}*/
 
 func (i *ibftStorage) key(id string, params ...[]byte) []byte {
 	ret := []byte(id)
