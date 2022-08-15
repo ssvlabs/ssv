@@ -2,11 +2,10 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"go.uber.org/zap"
 )
 
 // ProcessChangeRound check basic pipeline validation than check if height or round is higher than the last one. if so, update
@@ -14,7 +13,7 @@ func (c *Controller) ProcessChangeRound(msg *specqbft.SignedMessage) error {
 	if err := c.ValidateChangeRoundMsg(msg); err != nil {
 		return err
 	}
-	return UpdateChangeRoundMessage(c.Logger, c.ChangeRoundStorage, msg)
+	return instance.UpdateChangeRoundMessage(c.Logger, c.ChangeRoundStorage, msg)
 }
 
 // ValidateChangeRoundMsg - validation for read mode change round msg
@@ -24,40 +23,30 @@ func (c *Controller) ValidateChangeRoundMsg(msg *specqbft.SignedMessage) error {
 	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, message.ToMessageID(c.Identifier)).Run(msg)
 }
 
-// UpdateChangeRoundMessage if round for specific signer is higher than local msg
-func UpdateChangeRoundMessage(logger *zap.Logger, changeRoundStorage qbftstorage.ChangeRoundStore, msg *specqbft.SignedMessage) error {
-	local, err := changeRoundStorage.GetLastChangeRoundMsg(msg.Message.Identifier, msg.GetSigners()...) // assume 1 signer
+func (c *Controller) loadLastChangeRound() {
+	var singers []spectypes.OperatorID
+	for k := range c.ValidatorShare.Committee { // get all possible msg's from committee
+		singers = append(singers, k)
+	}
+
+	msgs, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier, singers...)
 	if err != nil {
-		return errors.Wrap(err, "failed to get last change round msg")
+		c.Logger.Warn("failed to load change round messages from storage", zap.Error(err))
+		return
 	}
 
-	fLogger := logger.With(zap.Any("signers", msg.GetSigners()))
-
-	if len(local) == 0 {
-		// no last changeRound msg exist, save the first one
-		fLogger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
-		return changeRoundStorage.SaveLastChangeRoundMsg(msg)
-	}
-	lastMsg := local[0]
-	fLogger = fLogger.With(
-		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
-		zap.Int64("NewHeight", int64(msg.Message.Height)),
-		zap.Int64("lastRound", int64(lastMsg.Message.Round)),
-		zap.Int64("NewRound", int64(msg.Message.Round)))
-
-	if msg.Message.Height < lastMsg.Message.Height {
-		// height is lower than the last known
-		fLogger.Debug("new changeRoundMsg height is lower than last changeRoundMsg")
-		return nil
-	} else if msg.Message.Height == lastMsg.Message.Height {
-		if msg.Message.Round <= lastMsg.Message.Round {
-			// round is not higher than last known
-			fLogger.Debug("new changeRoundMsg round is lower than last changeRoundMsg")
-			return nil
+	res := make(map[spectypes.OperatorID]specqbft.Round)
+	for _, msg := range msgs {
+		encoded, err := msg.Encode()
+		if err != nil {
+			continue
 		}
+		c.Q.Add(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   message.ToMessageID(msg.Message.Identifier),
+			Data:    encoded,
+		})
+		res[msg.GetSigners()[0]] = msg.Message.Round // assuming 1 signer in change round msg
 	}
-
-	// new msg is higher than last one, save.
-	logger.Debug("last change round updated")
-	return changeRoundStorage.SaveLastChangeRoundMsg(msg)
+	c.Logger.Info("successfully loaded change round messages from storage into queue", zap.Any("msgs", res))
 }
