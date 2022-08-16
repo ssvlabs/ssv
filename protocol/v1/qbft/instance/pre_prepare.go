@@ -38,14 +38,6 @@ func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipe
 	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
 }
 
-func (i *Instance) validateRoundChange(signedMsg *specqbft.SignedMessage) error {
-	if len(signedMsg.GetSigners()) != 1 {
-		return errors.New("msg allows 1 signer")
-	}
-
-	return nil
-}
-
 /*
 UponPrePrepareMsg Algorithm 2 IBFTController pseudocode for process pi: normal case operation
 upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
