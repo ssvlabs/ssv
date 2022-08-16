@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
@@ -57,7 +58,7 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		}
 	}
 
-	if quorum, _, _ := HasQuorum(p.share, data.RoundChangeJustification); !quorum {
+	if quorum, _, _ := signedmsg.HasQuorum(p.share, data.RoundChangeJustification); !quorum {
 		return fmt.Errorf("no justifications quorum")
 	}
 
@@ -122,16 +123,4 @@ func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.S
 // Name implements pipeline.Pipeline interface
 func (p *validateJustification) Name() string {
 	return "validateJustification msg"
-}
-
-// HasQuorum checks if messages have a quorum.
-func HasQuorum(share *beacon.Share, msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
-	uniqueSigners := make(map[spectypes.OperatorID]bool)
-	for _, msg := range msgs {
-		for _, signer := range msg.GetSigners() {
-			uniqueSigners[signer] = true
-		}
-	}
-	quorum = len(uniqueSigners)*3 >= share.CommitteeSize()*2
-	return quorum, len(uniqueSigners), share.CommitteeSize()
 }

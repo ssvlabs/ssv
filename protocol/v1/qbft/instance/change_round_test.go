@@ -47,7 +47,7 @@ func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(roundLeader),
+		preprepare.ValidatePrePrepareMsg(share, state, roundLeader),
 	)
 }
 

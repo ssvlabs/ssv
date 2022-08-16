@@ -12,7 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -63,7 +62,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
 		msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(signedMessage.Message.Round)
-		quorum, msgsCount, committeeSize := changeround.HasQuorum(i.ValidatorShare, msgs)
+		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, msgs)
 
 		// change round if quorum reached
 		if !quorum {

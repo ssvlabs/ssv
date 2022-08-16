@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"bytes"
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -10,8 +9,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // PrePrepareMsgPipeline is the main pre-prepare msg pipeline
@@ -33,50 +30,12 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.UponPrePrepareMsg(),
-		),
+		i.UponPrePrepareMsg(),
 	)
 }
 
 func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
-}
-
-// JustifyPrePrepare implements:
-// predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, value)
-// 	return
-// 		round = 1
-// 		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
-// 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
-// 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
-// 				(pr, value) = HighestPrepared(Qrc)
-func (i *Instance) JustifyPrePrepare(round uint64, proposalData *specqbft.ProposalData) error {
-	if round == 1 {
-		return nil
-	}
-
-	for _, rc := range proposalData.RoundChangeJustification {
-		if err := i.validateRoundChange(rc); err != nil {
-			return errors.Wrap(err, "change round msg not valid")
-		}
-	}
-
-	if quorum, _, _ := changeround.HasQuorum(i.ValidatorShare, proposalData.RoundChangeJustification); !quorum {
-		return errors.New("no change round quorum")
-	}
-	notPrepared, highest, err := i.HighestPrepared(specqbft.Round(round))
-	if err != nil {
-		return err
-	}
-	if notPrepared {
-		return nil
-	}
-	if !bytes.Equal(proposalData.Data, highest.PreparedValue) {
-		return errors.New("preparedValue different than highest prepared")
-	}
-	return nil
 }
 
 func (i *Instance) validateRoundChange(signedMsg *specqbft.SignedMessage) error {
@@ -96,15 +55,17 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *specqbft.SignedMessage) error {
+		newRound := signedMessage.Message.Round
+
+		// A future justified proposal should bump us into future round and reset timer
+		if signedMessage.Message.Round > i.State().GetRound() {
+			i.ResetRoundTimer() // TODO: make sure what is needed here is i.ResetRoundTimer(), not something else
+		}
+		i.State().Round.Store(newRound)
+
 		prepareMsg, err := signedMessage.Message.GetProposalData()
 		if err != nil {
 			return errors.Wrap(err, "failed to get prepare message")
-		}
-
-		// Pre-prepare justification
-		err = i.JustifyPrePrepare(uint64(signedMessage.Message.Round), prepareMsg)
-		if err != nil {
-			return err
 		}
 
 		// mark state
