@@ -43,8 +43,7 @@ to run validators in a decentralized and trustless way.
 ## Getting Started
 
 The following documents contains instructions and information on how to get started:
-* [An SSV operator's getting started](./docs/OPERATOR_GETTING_STARTED.md)
-* [How to setup an operator on AWS](./docs/OPERATOR_GETTING_STARTED.md#setting-aws-server-for-operator)
+* [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
 * [Developers' Guide](./docs/DEV_GUIDE.md)
 
 ## Contribution
