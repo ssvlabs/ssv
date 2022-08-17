@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -143,7 +143,7 @@ func TestSignRoot(t *testing.T) {
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(3),
 			Round:      specqbft.Round(2),
-			Identifier: []byte("lambda1"),
+			Identifier: []byte("identifier1"),
 			Data:       commitData,
 		}
 
@@ -175,7 +175,7 @@ func TestSignRoot(t *testing.T) {
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(1),
 			Round:      specqbft.Round(3),
-			Identifier: []byte("lambda2"),
+			Identifier: []byte("identifier2"),
 			Data:       commitData,
 		}
 

@@ -41,7 +41,7 @@ func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 		preprepare.ValidatePrePrepareMsg(share, state, roundLeader),
@@ -54,7 +54,7 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 		prepare.ValidatePrepareMsgSigners(),
@@ -66,7 +66,7 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifie
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 	)
@@ -77,7 +77,7 @@ func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, iden
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),

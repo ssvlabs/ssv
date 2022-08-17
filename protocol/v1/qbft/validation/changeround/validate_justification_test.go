@@ -79,7 +79,7 @@ func TestValidateChangeRound(t *testing.T) {
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     12,
 		Round:      2,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       encodePrepareData(t, []byte("value")),
 	}
 	aggSig := aggregateSign(t, sks, validMessage)
@@ -96,7 +96,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			}),
 		},
@@ -107,7 +107,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
@@ -127,7 +127,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
@@ -148,7 +148,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
@@ -160,7 +160,7 @@ func TestValidateChangeRound(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     11,
 								Round:      2,
-								Identifier: []byte("Lambda"),
+								Identifier: []byte("Identifier"),
 								Data:       encodePrepareData(t, []byte("value")),
 							},
 						},
@@ -175,7 +175,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       nil,
 			}),
 		},
@@ -186,7 +186,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       []byte("non-valid"),
 			}),
 		},
@@ -197,7 +197,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					RoundChangeJustification: []*specqbft.SignedMessage{
@@ -217,7 +217,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 0,
@@ -234,13 +234,13 @@ func TestValidateChangeRound(t *testing.T) {
 			}),
 		},
 		{
-			"bad lambda",
-			"round change justification invalid: change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
+			"bad identifier",
+			"round change justification invalid: change round justification msg identifier not equal to msg identifier not equal to instance identifier",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
@@ -264,7 +264,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
@@ -274,7 +274,7 @@ func TestValidateChangeRound(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     12,
 								Round:      2,
-								Identifier: []byte("Lambda"),
+								Identifier: []byte("Identifier"),
 								Data:       encodePrepareData(t, []byte("xxx")),
 							},
 						},
@@ -289,7 +289,7 @@ func TestValidateChangeRound(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Height:     12,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
