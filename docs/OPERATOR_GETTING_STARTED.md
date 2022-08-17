@@ -93,7 +93,6 @@ $ yq n db.Path "<db folder>" | tee config.yaml \
   && yq w -i config.yaml eth2.Network "prater" \
   && yq w -i config.yaml eth2.BeaconNodeAddr "<ETH 2.0 node>" \
   && yq w -i config.yaml eth1.ETH1Addr "<ETH1 node WebSocket address>" \
-  && yq w -i config.yaml eth1.RegistryContractAddr "0x687fb596F3892904F879118e2113e1EEe8746C2E" \
   && yq w -i config.yaml OperatorPrivateKey "<private key of the operator>"
 ```
 
@@ -104,10 +103,9 @@ db:
   Path: ./data/db/node_1
 eth2:
   Network: prater
-  BeaconNodeAddr: prater-4000-ext.stage.bloxinfra.com:80
+  BeaconNodeAddr: prater-4000.stage.bloxinfra.com:80
 eth1:
-  ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
-  RegistryContractAddr: 0x687fb596F3892904F879118e2113e1EEe8746C2E
+  ETH1Addr: ws://eth1-ws.stage.bloxinfra.com/ws
 OperatorPrivateKey: LS0tLS...
 ```
 
