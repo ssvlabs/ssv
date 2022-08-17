@@ -57,13 +57,14 @@ type Options struct {
 const (
 	NotStarted uint32 = iota
 	InitiatedHandlers
+	SyncedChangeRound
 	WaitingForPeers
 	FoundPeers
 	Ready
 	Forking
 )
 
-// Controller implements Controller interface
+// Controller implements IController interface
 type Controller struct {
 	Ctx context.Context
 
@@ -210,13 +211,18 @@ func (c *Controller) Init() error {
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
+	// checks if InitiatedHandlers. if so, load change round to queue and then set state to new SyncedChangeRound
+	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, SyncedChangeRound) {
+		c.loadLastChangeRound()
+	}
+
 	// if already waiting for peers no need to redundant waiting
 	if atomic.LoadUint32(&c.State) == WaitingForPeers {
 		return ErrAlreadyRunning
 	}
 
 	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, WaitingForPeers) {
+	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
@@ -241,7 +247,7 @@ func (c *Controller) Init() error {
 			}
 			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, InitiatedHandlers) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
