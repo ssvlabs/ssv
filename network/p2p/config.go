@@ -42,7 +42,7 @@ type Config struct {
 	// Subnets is a static bit list of subnets that this node will register upon start.
 	Subnets string `yaml:"Subnets" env:"SUBNETS" env-description:"Hex string that represents the subnets that this node will join upon start"`
 	// PubSubScoring is a flag to turn on/off pubsub scoring
-	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-description:"Flag to turn on/off pubsub scoring"`
+	PubSubScoring bool `yaml:"PubSubScoring" env:"PUBSUB_SCORING" env-default:"true" env-description:"Flag to turn on/off pubsub scoring"`
 	// P2pLog is a flag to turn on/off network logs
 	P2pLog bool `yaml:"P2pLog" env:"P2P_LOG" env-description:"Flag to turn on/off network debug logs"`
 	// PubSubTrace is a flag to turn on/off pubsub tracing in logs
