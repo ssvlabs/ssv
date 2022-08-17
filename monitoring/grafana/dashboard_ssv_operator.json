@@ -2885,7 +2885,7 @@
             {
               "datasource": "${DS_PROMETHEUS}",
               "exemplar": false,
-              "expr": "ssv:network:peers_identity{instance=~\"ssv-exporter.*\"}",
+              "expr": "ssv:network:peers_identity{instance=~\"$instance.*\"}",
               "format": "table",
               "instant": true,
               "interval": "",
