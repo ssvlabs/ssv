@@ -17,7 +17,7 @@ const (
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
 	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 1
+	subnetsTotalWeight = 32
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
 	decidedTopicWeight = 0.5
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
@@ -57,6 +57,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//}
 			logger.Debug("peer scores", zap.String("peer", pid.String()),
 				zap.Any("peerScores", peerScores))
+			metricsPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 			//err := scoreIdx.Score(pid, scores...)
 			//if err != nil {
 			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
