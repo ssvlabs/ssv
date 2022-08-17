@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -12,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -101,19 +102,19 @@ func (r *syncFailoverScenario) PreExecution(ctx *runner.ScenarioContext) error {
 func (r *syncFailoverScenario) Execute(ctx *runner.ScenarioContext) error {
 	var wg sync.WaitGroup
 
-	msgs := map[message.Height]*message.SignedMessage{}
+	msgs := map[specqbft.Height]*specqbft.Message{}
 	// start several instances one by one
-	seqNumber := message.Height(0)
+	seqNumber := specqbft.Height(0)
 loop:
 	for {
 		r.logger.Info("started instances")
 		for i := uint64(1); i < uint64(r.NumOfOperators()); i++ {
 			wg.Add(1)
-			go func(node validator.IValidator, index uint64, seqNumber message.Height) {
+			go func(node validator.IValidator, index uint64, seqNumber specqbft.Height) {
 				if msg, err := r.startNode(node, seqNumber); err != nil {
 					r.logger.Error("could not start node", zap.Error(err))
 				} else {
-					msgs[seqNumber] = msg
+					msgs[seqNumber] = msg.Message
 				}
 				wg.Done()
 			}(r.validators[i-1], i, seqNumber)
@@ -136,7 +137,7 @@ loop:
 		return errors.New("init should fail")
 	}
 
-	ibftc := r.validators[3].(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+	ibftc := r.validators[3].(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 	nextSeq, err := ibftc.NextSeqNumber()
 	if err != nil {
 		r.logger.Error("node #4 could not get state", zap.Int64("highest decided", int64(nextSeq)-1))
@@ -144,7 +145,7 @@ loop:
 	}
 	r.logger.Info("node #4 synced", zap.Int64("highest decided", int64(nextSeq)-1))
 
-	decides, err := ctx.Stores[3].GetDecided(msgs[1].Message.Identifier, 0, nextSeq)
+	decides, err := ctx.Stores[3].GetDecided(msgs[1].Identifier, 0, nextSeq)
 	if err != nil {
 		r.logger.Error("node #4 could not get decided in range", zap.Error(err))
 		return errors.New("node #4 could not get decided in range")
@@ -159,7 +160,8 @@ loop:
 
 func (r *syncFailoverScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	i := r.NumOfOperators() - 1
-	msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(11))
+	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(11))
 	if err != nil {
 		return err
 	}
@@ -175,7 +177,7 @@ func (r *syncFailoverScenario) initNode(val validator.IValidator, net network.P2
 		return errors.Wrap(err, "failed to subscribe topic")
 	}
 
-	ibftc := val.(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	if err := ibftc.Init(); err != nil {
 		if err == controller.ErrAlreadyRunning {
@@ -189,8 +191,8 @@ func (r *syncFailoverScenario) initNode(val validator.IValidator, net network.P2
 	return nil
 }
 
-func (r *syncFailoverScenario) startNode(val validator.IValidator, seqNumber message.Height) (*message.SignedMessage, error) {
-	ibftc := val.(*validator.Validator).Ibfts()[message.RoleTypeAttester]
+func (r *syncFailoverScenario) startNode(val validator.IValidator, seqNumber specqbft.Height) (*specqbft.SignedMessage, error) {
+	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
 		Logger:    r.logger,
@@ -213,6 +215,6 @@ type badNetwork struct {
 	network.P2PNetwork
 }
 
-func (b *badNetwork) Subscribe(message.ValidatorPK) error {
+func (b *badNetwork) Subscribe(spectypes.ValidatorPK) error {
 	return errors.New("bad network")
 }

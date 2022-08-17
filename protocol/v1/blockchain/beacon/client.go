@@ -5,10 +5,9 @@ import (
 
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -16,11 +15,10 @@ import (
 
 // Beacon represents the behavior of the beacon node connector
 type Beacon interface {
-	KeyManager
 	SigningUtil
 
 	// GetDuties returns duties for the passed validators indices
-	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*Duty, error)
+	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error)
 
 	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
 	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error)
@@ -33,23 +31,6 @@ type Beacon interface {
 
 	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
 	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
-}
-
-// KeyManager is an interface responsible for all key manager functions
-type KeyManager interface {
-	Signer
-	// AddShare saves a share key
-	AddShare(shareKey *bls.SecretKey) error
-	// RemoveShare removes a share key
-	RemoveShare(pubKey string) error
-}
-
-// Signer is an interface responsible for all signing operations
-type Signer interface {
-	// SignIBFTMessage signs a network iBFT msg
-	SignIBFTMessage(message *message.ConsensusMessage, pk []byte, forkVersion string) ([]byte, error)
-	// SignAttestation signs the given attestation
-	SignAttestation(data *spec.AttestationData, duty *Duty, pk []byte) (*spec.Attestation, []byte, error)
 }
 
 // SigningUtil is an interface for beacon node signing specific methods

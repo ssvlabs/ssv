@@ -1,11 +1,12 @@
 package forks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p-core/protocol"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // Fork is an interface for network specific fork implementations
@@ -51,9 +52,9 @@ type libp2pConfig interface {
 
 type encoding interface {
 	// EncodeNetworkMsg encodes the given message
-	EncodeNetworkMsg(msg *message.SSVMessage) ([]byte, error)
+	EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error)
 	// DecodeNetworkMsg decodes the given message
-	DecodeNetworkMsg(data []byte) (*message.SSVMessage, error)
+	DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error)
 }
 
 type sync interface {

@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-7
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-7
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12009
           name: port-12009
           protocol: UDP
-          hostPort: 12009            
+          hostPort: 12009
         - containerPort: 13009
           name: port-13009
           hostPort: 13009
@@ -85,6 +85,28 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
+        - name: BOOTNODES
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node_v2
+        - name: REGISTRY_CONTRACT_ADDR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: smart_contract_addr_key_v2
+        - name: ETH_1_SYNC_OFFSET
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth_1_sync_offset
+              optional: true
+        - name: ABI_VERSION
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: abi_version_v2
+              optional: true
         - name: LOG_LEVEL
           value: "info"
         - name: DB_REPORTING
@@ -93,16 +115,6 @@ spec:
           value: "false"
         - name: P2P_LOG
           value: "false"
-        - name: REGISTRY_CONTRACT_ADDR_KEY
-          value: "0x5b46c3659f12D23049Dca9a4edec5E9B24f8948d"
-        - name: ABI_VERSION
-          value: "1"
-        - name: BOOTNODES
-          value: "enr:-Li4QJ8WAERm9vHtwgD8rNEbfPFwmULBOhk_wMOBynUEzzp1GM7pziZ7mrXHCU2LnfqvtPR26Xj5MqRfi0ezWJLd6j6GAYGwQl3xh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLYwuGJc2VjcDI1NmsxoQPG6-D7AhFCyfxfQW-c5rwRoQyUXfR2rdQSjCvwzdCvtYN0Y3CCE4iDdWRwgg-g"
-        - name: NETWORK_ID
-          value: "ssv-testnet-v2-prod"
-        - name: DISCOVERY_TYPE_KEY
-          value: "discv5"
         - name: NETWORK
           value: "prater"
         - name: CONSENSUS_TYPE
@@ -154,4 +166,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true          
+      hostNetwork: true

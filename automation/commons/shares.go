@@ -6,21 +6,22 @@ import (
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // CreateShareAndValidators creates a share and the corresponding validators objects
-func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []spectypes.KeyManager, stores []qbftstorage.QBFTStore) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
 	for _, k := range net.NodeKeys {
@@ -48,16 +49,16 @@ func CreateShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			P2pNetwork:  net.Nodes[i],
 			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),
 			Share: &beacon.Share{
-				NodeID:       message.OperatorID(i + 1),
+				NodeID:       spectypes.OperatorID(i + 1),
 				PublicKey:    share.PublicKey,
 				Committee:    share.Committee,
 				Metadata:     share.Metadata,
 				OwnerAddress: share.OwnerAddress,
 				Operators:    share.Operators,
 			},
-			ForkVersion:                forksprotocol.V0ForkVersion, // TODO need to check v1 too?
+			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
-			Signer:                     km,
+			DutyRoles:                  []spectypes.BeaconRole{spectypes.BNRoleAttester}, // TODO when implemented, need to add more types
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   false,
@@ -76,9 +77,9 @@ func CreateShare(operators [][]byte) (*beacon.Share, map[uint64]*bls.SecretKey, 
 	if err != nil {
 		return nil, nil, err
 	}
-	committee := make(map[message.OperatorID]*beacon.Node)
+	committee := make(map[spectypes.OperatorID]*beacon.Node)
 	for i := 0; i < len(operators); i++ {
-		oid := message.OperatorID(i + 1)
+		oid := spectypes.OperatorID(i + 1)
 		committee[oid] = &beacon.Node{
 			IbftID: uint64(oid),
 			Pk:     m[uint64(oid)].GetPublicKey().Serialize(),

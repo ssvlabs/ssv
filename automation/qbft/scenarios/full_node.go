@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -16,7 +18,6 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -106,8 +107,8 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 		return errors.Wrap(startErr, "could not start validators")
 	}
 
-	const fromHeight = message.Height(0)
-	const toHeight = message.Height(3)
+	const fromHeight = specqbft.Height(0)
+	const toHeight = specqbft.Height(3)
 	for height := fromHeight; height <= toHeight; height++ {
 		allButOneValidators := r.validators[:r.NumOfOperators()+(r.NumOfFullNodes()-1)]
 		if err := r.startInstances(height, allButOneValidators...); err != nil {
@@ -121,7 +122,8 @@ func (r *fullNodeScenario) Execute(ctx *runner.ScenarioContext) error {
 }
 
 func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
-	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(0), message.Height(4))
+	messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+	msgs, err := ctx.Stores[len(ctx.Stores)-1].GetDecided(messageID[:], specqbft.Height(0), specqbft.Height(4))
 	if err != nil {
 		return err
 	}
@@ -134,7 +136,15 @@ func (r *fullNodeScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	return nil
 }
 
-func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv1.LocalNet, kms []beacon.KeyManager, stores []qbftstorage.QBFTStore, regularNodes, committeeNodes int) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
+func createShareAndValidators(
+	ctx context.Context,
+	logger *zap.Logger,
+	net *p2pv1.LocalNet,
+	kms []spectypes.KeyManager,
+	stores []qbftstorage.QBFTStore,
+	regularNodes,
+	committeeNodes int,
+) (*beacon.Share, map[uint64]*bls.SecretKey, []validator.IValidator, error) {
 	validators := make([]validator.IValidator, 0)
 	operators := make([][]byte, 0)
 	for i := 0; i < len(net.NodeKeys) && i < committeeNodes; i++ {
@@ -165,32 +175,32 @@ func createShareAndValidators(ctx context.Context, logger *zap.Logger, net *p2pv
 			P2pNetwork:  net.Nodes[i],
 			Network:     beacon.NewNetwork(core.NetworkFromString("prater")),
 			Share: &beacon.Share{
-				NodeID:       message.OperatorID(i + 1),
+				NodeID:       spectypes.OperatorID(i + 1),
 				PublicKey:    share.PublicKey,
 				Committee:    share.Committee,
 				Metadata:     share.Metadata,
 				OwnerAddress: share.OwnerAddress,
 				Operators:    share.Operators,
 			},
-			ForkVersion:                forksprotocol.V0ForkVersion, // TODO need to check v1 too?
+			ForkVersion:                forksprotocol.GenesisForkVersion, // TODO need to check v1 too?
 			Beacon:                     nil,
-			Signer:                     km,
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
 			ReadMode:                   i >= committeeNodes,
 			FullNode:                   i >= regularNodes,
+			DutyRoles:                  []spectypes.BeaconRole{spectypes.BNRoleAttester},
 		})
 		validators = append(validators, val)
 	}
 	return share, sks, validators, nil
 }
 
-func (r *fullNodeScenario) startInstances(height message.Height, instances ...validator.IValidator) error {
+func (r *fullNodeScenario) startInstances(height specqbft.Height, instances ...validator.IValidator) error {
 	var wg sync.WaitGroup
 
 	for i, instance := range instances {
 		wg.Add(1)
-		go func(node validator.IValidator, index int, seqNumber message.Height) {
+		go func(node validator.IValidator, index int, seqNumber specqbft.Height) {
 			if err := startNode(node, seqNumber, []byte("value"), r.logger); err != nil {
 				r.logger.Error("could not start node", zap.Int("node", index), zap.Error(err))
 			}

@@ -11,7 +11,7 @@ eth2:
 
 eth1:
 ### replace with your eth1 node WebSocket address
-  ETH1Addr: example.url
+  ETH1Addr: ws://eth1-ws-ext.stage.bloxinfra.com/ws
 
 p2p:
 ### replace with your ip and ports

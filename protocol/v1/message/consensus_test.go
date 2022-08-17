@@ -1,78 +1,39 @@
 package message
 
 import (
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
+	"sort"
 	"testing"
+
+	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
-func init() {
-	logex.Build("test", zapcore.DebugLevel, &logex.EncodingConfig{})
-}
+func TestAggregateSorting(t *testing.T) {
+	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
 
-func TestChangeRoundV0Root(t *testing.T) {
-	identifier := NewIdentifier([]byte("as"), RoleTypeAttester)
-	val := []byte("value")
+	identifier := []byte("pk")
 
-	prepareData := PrepareData{Data: val}
-	encodedPrepare, err := prepareData.Encode()
-	require.NoError(t, err)
-
-	crm := RoundChangeData{
-		PreparedValue:    val,
-		Round:            Round(2),
-		NextProposalData: nil,
-		RoundChangeJustification: []*SignedMessage{
-			{
-				Signature: []byte("sig"),
-				Signers:   []OperatorID{1, 2, 3, 4},
-				Message: &ConsensusMessage{
-					MsgType:    PrepareMsgType,
-					Height:     Height(1),
-					Round:      Round(1),
-					Identifier: identifier,
-					Data:       encodedPrepare,
-				},
-			},
-		},
+	generateSignedMsg := func(operatorId spectypes.OperatorID) *specqbft.SignedMessage {
+		return testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     0,
+			Round:      1,
+			Identifier: identifier,
+		})
 	}
 
-	crmEncoded, err := crm.Encode()
-	require.NoError(t, err)
-	cm := ConsensusMessage{
-		MsgType:    RoundChangeMsgType,
-		Height:     Height(1),
-		Round:      Round(2),
-		Identifier: identifier,
-		Data:       crmEncoded,
-	}
-	_, err = cm.GetRoot(forksprotocol.V0ForkVersion.String()) // TODO need to add the v0 real root to compare
-	require.NoError(t, err)
-}
-
-func TestDecidedV0Root(t *testing.T) {
-	identifier := NewIdentifier([]byte("as"), RoleTypeAttester)
-	val := []byte("value")
-	commit := CommitData{Data: val}
-	crmEncoded, err := commit.Encode()
-	require.NoError(t, err)
-	cm := ConsensusMessage{
-		MsgType:    CommitMsgType,
-		Height:     Height(1),
-		Round:      Round(2),
-		Identifier: identifier,
-		Data:       crmEncoded,
+	signedMessage := generateSignedMsg(1)
+	for i := 2; i <= 4; i++ {
+		sig := generateSignedMsg(spectypes.OperatorID(i))
+		require.NoError(t, Aggregate(signedMessage, sig))
 	}
 
-	cm.GetRoot("v0") // TODO need to add the v0 real root to compare
-}
-
-func TestAppendSigners(t *testing.T) {
-	require.Exactly(t, []OperatorID{2, 3, 4}, AppendSigners([]OperatorID{2, 4}, 3))
-	require.Exactly(t, []OperatorID{1, 2, 4, 5}, AppendSigners([]OperatorID{2, 4, 5}, 1, 5))
-	require.Exactly(t, []OperatorID{1, 2}, AppendSigners([]OperatorID{2}, 1, 2))
-	require.Exactly(t, []OperatorID{2, 3}, AppendSigners([]OperatorID{}, 3, 2))
-	require.Exactly(t, []OperatorID{2}, AppendSigners([]OperatorID{}, 2))
+	sorted := sort.SliceIsSorted(signedMessage.Signers, func(i, j int) bool {
+		return signedMessage.Signers[i] < signedMessage.Signers[j]
+	})
+	require.True(t, sorted)
 }

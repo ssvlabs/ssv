@@ -360,43 +360,43 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (string, 
 	abiParser := eth1.NewParser(ec.logger, ec.abiVersion)
 
 	switch ev.Name {
-	case abiparser.OperatorAdded:
-		parsed, err := abiParser.ParseOperatorAddedEvent(vLog, contractAbi)
+	case abiparser.OperatorRegistration:
+		parsed, err := abiParser.ParseOperatorRegistrationEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.OperatorRemoved:
-		parsed, err := abiParser.ParseOperatorRemovedEvent(vLog, contractAbi)
+	case abiparser.OperatorRemoval:
+		parsed, err := abiParser.ParseOperatorRemovalEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.ValidatorAdded:
-		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
+	case abiparser.ValidatorRegistration:
+		parsed, err := abiParser.ParseValidatorRegistrationEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.ValidatorRemoved:
-		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog, contractAbi)
+	case abiparser.ValidatorRemoval:
+		parsed, err := abiParser.ParseValidatorRemovalEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.AccountLiquidated:
-		parsed, err := abiParser.ParseAccountLiquidatedEvent(vLog)
+	case abiparser.AccountLiquidation:
+		parsed, err := abiParser.ParseAccountLiquidationEvent(vLog)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.AccountEnabled:
-		parsed, err := abiParser.ParseAccountEnabledEvent(vLog)
+	case abiparser.AccountEnable:
+		parsed, err := abiParser.ParseAccountEnableEvent(vLog)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err

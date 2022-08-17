@@ -2,19 +2,23 @@ package handlers
 
 import (
 	"fmt"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // LastChangeRoundHandler handler for last-decided protocol
 // TODO: add msg validation
 func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	//plogger = plogger.With(zap.String("who", "last decided handler"))
-	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
+	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
+		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
@@ -25,7 +29,7 @@ func LastChangeRoundHandler(plogger *zap.Logger, store qbftstorage.ChangeRoundSt
 			// TODO: remove after v0
 			return nil, nil
 		} else {
-			res, err := store.GetLastChangeRoundMsg(msg.ID)
+			res, err := store.GetLastChangeRoundMsg(msg.MsgID[:])
 			if err != nil {
 				logger.Warn("change round sync msg error", zap.Error(err))
 			}

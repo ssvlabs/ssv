@@ -1,37 +1,41 @@
 package qbftstorage
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 // DecidedMsgStore manages persistence of messages
 type DecidedMsgStore interface {
-	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
+	GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error)
 	// SaveLastDecided saves the given decided message, after checking that it is indeed the highest
-	SaveLastDecided(signedMsg ...*message.SignedMessage) error
+	SaveLastDecided(signedMsg ...*specqbft.SignedMessage) error
 	// GetDecided returns historical decided messages in the given range
-	GetDecided(identifier message.Identifier, from message.Height, to message.Height) ([]*message.SignedMessage, error)
+	GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// SaveDecided saves historical decided messages
-	SaveDecided(signedMsg ...*message.SignedMessage) error
+	SaveDecided(signedMsg ...*specqbft.SignedMessage) error
+	// CleanAllDecided removes all decided & last decided for msgId
+	CleanAllDecided(msgID []byte) error
 }
 
 // InstanceStore manages instance data
 type InstanceStore interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
-	SaveCurrentInstance(identifier message.Identifier, state *qbft.State) error
+	SaveCurrentInstance(identifier []byte, state *qbft.State) error
 	// GetCurrentInstance returns the state for the current running (not yet decided) instance
-	GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error)
+	GetCurrentInstance(identifier []byte) (*qbft.State, bool, error)
 }
 
 // ChangeRoundStore manages change round data
 type ChangeRoundStore interface {
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	GetLastChangeRoundMsg(identifier message.Identifier, signers ...message.OperatorID) ([]*message.SignedMessage, error)
+	GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error)
 	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	SaveLastChangeRoundMsg(msg *message.SignedMessage) error
+	SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error
 	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
-	CleanLastChangeRound(identifier message.Identifier)
+	CleanLastChangeRound(identifier []byte) error
 }
 
 // QBFTStore is the store used by QBFT components

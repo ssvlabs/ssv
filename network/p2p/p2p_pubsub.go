@@ -3,14 +3,18 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/network"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	genesisFork "github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 const (
@@ -25,7 +29,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
+func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
@@ -39,7 +43,7 @@ func (n *p2pNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg spectypes.SSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -47,23 +51,23 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
 	}
-	vpk := msg.GetIdentifier().GetValidatorPK()
+	vpk := msg.GetID().GetPubKey()
 	topics := n.fork.ValidatorTopicID(vpk)
 	// for decided message, send on decided channel first
 	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
-	if msg.MsgType == message.SSVDecidedMsgType {
+	if msg.MsgType == spectypes.SSVDecidedMsgType {
 		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
 			topics = append([]string{decidedTopic}, topics...)
 		}
 	}
-	sm := message.SignedMessage{}
+	sm := specqbft.SignedMessage{}
 	if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
 		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-			zap.String("consensusMsgType", sm.Message.MsgType.String()),
+			zap.Int("consensusMsgType", int(sm.Message.MsgType)),
 			zap.Any("signers", sm.GetSigners()))
 	}
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		logger.Debug("trying to broadcast message", zap.String("topic", topic), zap.Any("msg", msg))
@@ -75,7 +79,7 @@ func (n *p2pNetwork) Broadcast(msg message.SSVMessage) error {
 }
 
 // Subscribe subscribes to validator subnet
-func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
+func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -92,7 +96,7 @@ func (n *p2pNetwork) Subscribe(pk message.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -102,7 +106,7 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 	}
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
@@ -114,10 +118,10 @@ func (n *p2pNetwork) Unsubscribe(pk message.ValidatorPK) error {
 }
 
 // subscribe subscribes to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(pk message.ValidatorPK) error {
+func (n *p2pNetwork) subscribe(pk spectypes.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == forksv1.UnknownSubnet {
+		if topic == genesisFork.UnknownSubnet {
 			return errors.New("unknown topic")
 		}
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {
@@ -202,26 +206,26 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	}
 	//logger = withIncomingMsgFields(logger, msg, ssvMsg)
 	//logger.Debug("incoming pubsub message", zap.String("topic", topic),
-	//	zap.String("msgType", ssvMsg.MsgType.String()))
-	metricsRouterIncoming.WithLabelValues(ssvMsg.ID.String(), ssvMsg.MsgType.String()).Inc()
+	//	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+	metricsRouterIncoming.WithLabelValues(ssvMsg.GetID().String(), message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
 
 //// withIncomingMsgFields adds fields to the given logger
-//func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *message.SSVMessage) *zap.Logger {
-//	logger = logger.With(zap.String("identifier", ssvMsg.ID.String()))
-//	if ssvMsg.MsgType == message.SSVDecidedMsgType || ssvMsg.MsgType == message.SSVConsensusMsgType {
+//func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
+//	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
+//	if ssvMsg.MsgType == spectypes.SSVDecidedMsgType || ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
 //		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
 //		from, err := peer.IDFromBytes(msg.Message.GetFrom())
 //		if err == nil {
 //			logger = logger.With(zap.String("msgFrom", from.String()))
 //		}
-//		var sm message.SignedMessage
+//		var sm specqbft.SignedMessage
 //		err = sm.Decode(ssvMsg.Data)
 //		if err == nil && sm.Message != nil {
 //			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-//				zap.String("consensusMsgType", sm.Message.MsgType.String()),
+//				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
 //				zap.Any("signers", sm.GetSigners()))
 //		}
 //	}

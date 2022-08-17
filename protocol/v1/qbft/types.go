@@ -3,9 +3,8 @@ package qbft
 import (
 	"encoding/json"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/atomic"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // RoundState is the state of the round
@@ -37,22 +36,22 @@ var RoundStateName = map[int32]string{
 type State struct {
 	Stage atomic.Int32 // RoundState
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
-	Identifier atomic.Value // message.Identifier
+	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
-	Height        atomic.Value // message.Height
+	Height        atomic.Value // specqbft.Height
 	InputValue    atomic.Value // []byte
-	Round         atomic.Value // message.Round
-	PreparedRound atomic.Value // message.Round
+	Round         atomic.Value // specqbft.Round
+	PreparedRound atomic.Value // specqbft.Round
 	PreparedValue atomic.Value // []byte
 }
 
 type unsafeState struct {
 	Stage         int32
-	Identifier    message.Identifier
-	Height        message.Height
+	Identifier    []byte
+	Height        specqbft.Height
 	InputValue    []byte
-	Round         message.Round
-	PreparedRound message.Round
+	Round         specqbft.Round
+	PreparedRound specqbft.Round
 	PreparedValue []byte
 }
 
@@ -77,7 +76,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	}
 
 	s.Stage.Store(d.Stage)
-	s.Identifier.Store(d.Identifier)
+	s.Identifier.Store(d.Identifier[:])
 	s.Height.Store(d.Height)
 	s.InputValue.Store(d.InputValue)
 	s.Round.Store(d.Round)
@@ -88,52 +87,52 @@ func (s *State) UnmarshalJSON(data []byte) error {
 }
 
 // GetHeight returns the height of the state
-func (s *State) GetHeight() message.Height {
-	if height, ok := s.Height.Load().(message.Height); ok {
+func (s *State) GetHeight() specqbft.Height {
+	if height, ok := s.Height.Load().(specqbft.Height); ok {
 		return height
 	}
 
-	return message.Height(0)
+	return specqbft.Height(0)
 }
 
 // NewHeight returns a new height
-func NewHeight(height message.Height) atomic.Value {
+func NewHeight(height specqbft.Height) atomic.Value {
 	h := atomic.Value{}
 	h.Store(height)
 	return h
 }
 
 // GetRound returns the round of the state
-func (s *State) GetRound() message.Round {
-	if round, ok := s.Round.Load().(message.Round); ok {
+func (s *State) GetRound() specqbft.Round {
+	if round, ok := s.Round.Load().(specqbft.Round); ok {
 		return round
 	}
-	return message.Round(0)
+	return specqbft.Round(0)
 }
 
 // NewRound returns a new round
-func NewRound(round message.Round) atomic.Value {
+func NewRound(round specqbft.Round) atomic.Value {
 	value := atomic.Value{}
 	value.Store(round)
 	return value
 }
 
 // GetPreparedRound returns the prepared round of the state
-func (s *State) GetPreparedRound() message.Round {
-	if round, ok := s.PreparedRound.Load().(message.Round); ok {
+func (s *State) GetPreparedRound() specqbft.Round {
+	if round, ok := s.PreparedRound.Load().(specqbft.Round); ok {
 		return round
 	}
 
-	return message.Round(0)
+	return specqbft.Round(0)
 }
 
 // GetIdentifier returns the identifier of the state
-func (s *State) GetIdentifier() message.Identifier {
-	if identifier, ok := s.Identifier.Load().(message.Identifier); ok {
+func (s *State) GetIdentifier() []byte {
+	if identifier, ok := s.Identifier.Load().([]byte); ok {
 		return identifier
 	}
 
-	return nil
+	return []byte{}
 }
 
 // GetInputValue returns the input value of the state

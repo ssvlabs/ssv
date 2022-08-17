@@ -2,11 +2,14 @@ package instance
 
 import (
 	"encoding/hex"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -16,16 +19,16 @@ import (
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 
 			commitData, err := signedMessage.Message.GetCommitData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get msg commit data: %w", err)
 			}
-			i.CommitMessages.AddMessage(signedMessage, commitData.Data)
+			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -44,7 +47,7 @@ func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
@@ -53,7 +56,7 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.CommitMessages.OverrideMessages(signedMessage, commitData.Data)
+			i.containersMap[specqbft.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
 		i.uponCommitMsg(),
@@ -66,27 +69,30 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 	Decide(λi , value, Qcommit)
 */
 func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon commit msg", func(signedMessage *message.SignedMessage) error {
+	return pipelines.WrapFunc("upon commit msg", func(signedMessage *specqbft.SignedMessage) error {
 		msgCommitData, err := signedMessage.Message.GetCommitData()
 		if err != nil {
 			return errors.Wrap(err, "failed to get commit data")
 		}
-		quorum, sigs := i.CommitMessages.QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
+		quorum, sigs := i.containersMap[specqbft.CommitMsgType].QuorumAchieved(signedMessage.Message.Round, msgCommitData.Data)
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Uint64("round", uint64(i.State().GetRound())),
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())),
+					zap.Uint64("round", uint64(i.State().GetRound())),
 					zap.Int("got_votes", len(sigs)))
 
 				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)
-				var msgSig []message.MsgSignature
+				var msgSig []spectypes.MessageSignature
 				for _, s := range sigs {
 					msgSig = append(msgSig, s)
 				}
 
 				aggMsg := sigs[0].DeepCopy()
-				if err := aggMsg.Aggregate(msgSig[1:]...); err != nil {
-					i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
+				for _, s := range msgSig[1:] {
+					if err := message.Aggregate(aggMsg, s); err != nil {
+						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
+					}
 				}
 
 				i.decidedMsg = aggMsg
@@ -98,17 +104,18 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generateCommitMessage(value []byte) (*message.ConsensusMessage, error) {
-	commitMsg := &message.CommitData{Data: value}
+func (i *Instance) generateCommitMessage(value []byte) (*specqbft.Message, error) {
+	commitMsg := &specqbft.CommitData{Data: value}
 	encodedCommitMsg, err := commitMsg.Encode()
 	if err != nil {
 		return nil, err
 	}
-	return &message.ConsensusMessage{
-		MsgType:    message.CommitMsgType,
+	identifier := i.State().GetIdentifier()
+	return &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Identifier: identifier[:],
 		Data:       encodedCommitMsg,
 	}, nil
 }

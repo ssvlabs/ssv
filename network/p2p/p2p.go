@@ -29,7 +29,6 @@ import (
 // network states
 const (
 	stateInitializing int32 = 0
-	stateForking      int32 = 1
 	stateClosing      int32 = 1
 	stateClosed       int32 = 2
 	stateReady        int32 = 10
@@ -149,6 +148,7 @@ func (n *p2pNetwork) peersBalancing() {
 	allPeers := n.host.Network().Peers()
 	currentCount := len(allPeers)
 	if currentCount < n.cfg.MaxPeers {
+		_ = n.idx.GetSubnetsStats() // trigger metrics update
 		return
 	}
 	ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)

@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"math/big"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
@@ -23,7 +22,7 @@ func Init() {
 
 // Create receives a bls.SecretKey hex and count.
 // Will split the secret key into count shares
-func Create(skBytes []byte, threshold uint64, count uint64) (map[message.OperatorID]*bls.SecretKey, error) {
+func Create(skBytes []byte, threshold uint64, count uint64) (map[spectypes.OperatorID]*bls.SecretKey, error) {
 	// master key Polynomial
 	msk := make([]bls.SecretKey, threshold)
 
@@ -41,7 +40,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[message.Operato
 	}
 
 	// evaluate shares - starting from 1 because 0 is master key
-	shares := make(map[message.OperatorID]*bls.SecretKey)
+	shares := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for i := uint64(1); i <= count; i++ {
 		blsID := bls.ID{}
 
@@ -57,7 +56,7 @@ func Create(skBytes []byte, threshold uint64, count uint64) (map[message.Operato
 			return nil, err
 		}
 
-		shares[message.OperatorID(i)] = &sk
+		shares[spectypes.OperatorID(i)] = &sk
 	}
 	return shares, nil
 }

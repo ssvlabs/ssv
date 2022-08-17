@@ -1,16 +1,18 @@
 package msgqueue
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sort"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
 
 // By is function to compare messages
-type By func(a, b *message.SSVMessage) bool
+type By func(a, b *spectypes.SSVMessage) bool
 
 // Combine runs current By and if result is negative, tries to run the other By.
 func (by By) Combine(other By) By {
-	return func(a, b *message.SSVMessage) bool {
+	return func(a, b *spectypes.SSVMessage) bool {
 		if !by(a, b) {
 			return other(a, b)
 		}
@@ -41,7 +43,7 @@ func (by By) Add(msgs []*MsgContainer, msg *MsgContainer) []*MsgContainer {
 
 // ByRound implements By for round based priority
 func ByRound() By {
-	return func(a, b *message.SSVMessage) bool {
+	return func(a, b *spectypes.SSVMessage) bool {
 		aRound, ok := getRound(a)
 		if !ok {
 			return false
@@ -55,13 +57,13 @@ func ByRound() By {
 }
 
 // ByConsensusMsgType implements By for msg type based priority ()
-func ByConsensusMsgType(messageTypes ...message.ConsensusMessageType) By {
+func ByConsensusMsgType(messageTypes ...specqbft.MessageType) By {
 	// using a single map to lookup msg types order
-	m := map[message.ConsensusMessageType]int{}
+	m := map[specqbft.MessageType]int{}
 	for i, mt := range messageTypes {
 		m[mt] = i + 1
 	}
-	return func(a, b *message.SSVMessage) bool {
+	return func(a, b *spectypes.SSVMessage) bool {
 		aMsgType, ok := getConsensusMsgType(a)
 		if !ok {
 			return false

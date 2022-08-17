@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -13,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -111,7 +112,8 @@ func (r *f1MultiRoundScenario) Execute(ctx *runner.ScenarioContext) error {
 
 func (r *f1MultiRoundScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i := range ctx.Stores[:len(ctx.Stores)-1] {
-		msgs, err := ctx.Stores[i].GetDecided(message.NewIdentifier(r.share.PublicKey.Serialize(), message.RoleTypeAttester), message.Height(1), message.Height(4))
+		messageID := spectypes.NewMsgID(r.share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+		msgs, err := ctx.Stores[i].GetDecided(messageID[:], specqbft.Height(1), specqbft.Height(4))
 		if err != nil {
 			return err
 		}

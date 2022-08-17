@@ -2,17 +2,19 @@ package instance
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
@@ -37,35 +39,37 @@ func (v0 *testFork) Apply(instance Instance) {
 
 // PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
 func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.ProposalMsgType),
-		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 		preprepare.ValidatePrePrepareMsg(roundLeader),
 	)
 }
 
 // PrepareMsgPipeline is the full processing msg pipeline for a prepare msg
 func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
+	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.PrepareMsgType),
-		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 
 // CommitMsgValidationPipeline is a msg validation ONLY pipeline
-func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier),
+		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 
@@ -80,14 +84,14 @@ func (v0 *testFork) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 // changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
-func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier message.Identifier, height message.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
-		signedmsg.MsgTypeCheck(message.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier),
+		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
+		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
-		signedmsg.AuthorizeMsg(share, v0.VersionName()),
-		changeround.Validate(share, v0.VersionName()),
+		signedmsg.AuthorizeMsg(share),
+		changeround.Validate(share),
 	)
 }
 
@@ -100,61 +104,70 @@ func testingFork(instance *Instance) *testFork {
 	return &testFork{instance: instance}
 }
 
-func changeRoundDataToBytes(t *testing.T, input *message.RoundChangeData) []byte {
+func changeRoundDataToBytes(t *testing.T, input *specqbft.RoundChangeData) []byte {
 	ret, err := json.Marshal(input)
 	require.NoError(t, err)
 	return ret
 }
-func bytesToChangeRoundData(input []byte) *message.RoundChangeData {
-	ret := &message.RoundChangeData{}
+func bytesToChangeRoundData(input []byte) *specqbft.RoundChangeData {
+	ret := &specqbft.RoundChangeData{}
 	json.Unmarshal(input, ret)
 	return ret
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[message.OperatorID]*bls.SecretKey, map[message.OperatorID]*beacon.Node) {
+func GenerateNodes(cnt int) (
+	map[spectypes.OperatorID]*bls.SecretKey,
+	map[spectypes.OperatorID]*beacon.Node,
+	[]spectypes.OperatorID,
+	[]uint64,
+) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[message.OperatorID]*beacon.Node)
-	sks := make(map[message.OperatorID]*bls.SecretKey)
-	for i := 1; i <= cnt; i++ {
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+	operatorIds := []spectypes.OperatorID{78, 12, 99, 1}
+	shareOperatorIds := make([]uint64, len(operatorIds))
+	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[message.OperatorID(uint64(i))] = &beacon.Node{
-			IbftID: uint64(i),
+		nodes[operatorIds[i]] = &beacon.Node{
+			IbftID: uint64(operatorIds[i]),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[message.OperatorID(uint64(i))] = sk
+		sks[operatorIds[i]] = sk
+		shareOperatorIds[i] = uint64(operatorIds[i])
 	}
-	return sks, nodes
+	return sks, nodes, operatorIds, shareOperatorIds
 }
 
 // SignMsg signs the given message by the given private key
-func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *message.ConsensusMessage, forkVersion string) *message.SignedMessage {
-	//sigType := message.QBFTSigType
-	//domain := message.ComputeSignatureDomain(message.PrimusTestnet, sigType)
-	//sigRoot, err := message.ComputeSigningRoot(msg, domain, forksprotocol.V0ForkVersion.String())
-	sigRoot, err := msg.GetRoot(forkVersion)
+func SignMsg(t *testing.T, signers []spectypes.OperatorID, sk *bls.SecretKey, msg *specqbft.Message) *specqbft.SignedMessage {
+	sigType := spectypes.QBFTSignatureType
+	domain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), sigType)
+	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
 
-	return &message.SignedMessage{
+	return &specqbft.SignedMessage{
 		Message:   msg,
-		Signers:   []message.OperatorID{message.OperatorID(id)},
+		Signers:   signers,
 		Signature: sig.Serialize(),
 	}
 }
 
 func TestRoundChangeInputValue(t *testing.T) {
-	secretKey, nodes := GenerateNodes(4)
+	secretKey, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	instance := &Instance{
-		Logger:          zap.L(),
-		PrepareMessages: msgcontinmem.New(3, 2),
-		Config:          qbft.DefaultConsensusParams(),
-		ValidatorShare:  &beacon.Share{Committee: nodes},
+		Logger: zap.L(),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.PrepareMsgType: msgcontinmem.New(3, 2),
+		},
+		Config:         qbft.DefaultConsensusParams(),
+		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIds},
 		state: &qbft.State{
 			Round: round,
 		},
@@ -164,44 +177,40 @@ func TestRoundChangeInputValue(t *testing.T) {
 	byts, err := instance.roundChangeInputValue()
 	require.NoError(t, err)
 	require.NotNil(t, byts)
-	noPrepareChangeRoundData := message.RoundChangeData{}
+	noPrepareChangeRoundData := specqbft.RoundChangeData{}
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
-	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.GetPreparedRound())
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSigners(), 0)
+	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add votes
-	msg := &message.ConsensusMessage{
-		MsgType:    message.PrepareMsgType,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.PrepareMsgType,
 		Height:     1,
 		Round:      1,
 		Identifier: []byte("Lambda"),
-		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
+		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 	}
 
 	prepareData, err := msg.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.PrepareMessages.AddMessage(SignMsg(t, 1, secretKey[1], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
-	instance.PrepareMessages.AddMessage(SignMsg(t, 2, secretKey[2], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
+	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[:1], secretKey[operatorIds[0]], msg), prepareData.Data)
+	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKey[operatorIds[1]], msg), prepareData.Data)
 
 	// with some prepare votes but not enough
 	byts, err = instance.roundChangeInputValue()
 	require.NoError(t, err)
 	require.NotNil(t, byts)
-	noPrepareChangeRoundData = message.RoundChangeData{}
+	noPrepareChangeRoundData = specqbft.RoundChangeData{}
 	require.NoError(t, json.Unmarshal(byts, &noPrepareChangeRoundData))
 	require.Nil(t, noPrepareChangeRoundData.PreparedValue)
-	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.GetPreparedRound())
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].Message)
-	require.Nil(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSignature())
-	require.Len(t, noPrepareChangeRoundData.GetRoundChangeJustification()[0].GetSigners(), 0)
+	require.EqualValues(t, uint64(0), noPrepareChangeRoundData.PreparedRound)
+	require.Nil(t, noPrepareChangeRoundData.RoundChangeJustification)
 
 	// add more votes
-	instance.PrepareMessages.AddMessage(SignMsg(t, 3, secretKey[3], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
-	instance.State().PreparedRound.Store(message.Round(1))
+	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKey[operatorIds[2]], msg), prepareData.Data)
+	instance.State().PreparedRound.Store(specqbft.Round(1))
 	instance.State().PreparedValue.Store([]byte("value"))
 
 	// with a prepared round
@@ -209,40 +218,40 @@ func TestRoundChangeInputValue(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, byts)
 	data := bytesToChangeRoundData(byts)
-	require.EqualValues(t, 1, data.GetPreparedRound())
+	require.EqualValues(t, 1, data.PreparedRound)
 	require.EqualValues(t, []byte("value"), data.PreparedValue)
 }
 
 func TestValidateChangeRoundMessage(t *testing.T) {
-	secretKeys, nodes := GenerateNodes(4)
+	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	instance := &Instance{
 		Config:         qbft.DefaultConsensusParams(),
-		ValidatorShare: &beacon.Share{Committee: nodes},
+		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIds},
 		state: &qbft.State{
 			Round: round,
 		},
 	}
 
-	consensusMessage := &message.ConsensusMessage{
-		MsgType:    message.PrepareMsgType,
+	consensusMessage := &specqbft.Message{
+		MsgType:    specqbft.PrepareMsgType,
 		Height:     0,
 		Round:      2,
 		Identifier: []byte("Lambdas"),
-		Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
+		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 	}
 
-	twoSigners := map[message.OperatorID]*bls.SecretKey{
-		1: secretKeys[1],
-		2: secretKeys[2],
+	twoSigners := map[spectypes.OperatorID]*bls.SecretKey{
+		operatorIds[0]: secretKeys[operatorIds[0]],
+		operatorIds[1]: secretKeys[operatorIds[1]],
 	}
 
-	threeSigners := map[message.OperatorID]*bls.SecretKey{
-		1: secretKeys[1],
-		2: secretKeys[2],
-		3: secretKeys[3],
+	threeSigners := map[spectypes.OperatorID]*bls.SecretKey{
+		operatorIds[0]: secretKeys[operatorIds[0]],
+		operatorIds[1]: secretKeys[operatorIds[1]],
+		operatorIds[2]: secretKeys[operatorIds[2]],
 	}
 
 	consensusMessageSignatureByTwo := aggregateSign(t, twoSigners, consensusMessage)
@@ -250,71 +259,70 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 
 	tests := []struct {
 		name                string
-		msg                 *message.ConsensusMessage
-		signerID            message.OperatorID
+		msg                 *specqbft.Message
+		signerID            spectypes.OperatorID
 		justificationSigIds []uint64
 		expectedError       string
 	}{
 		{
 			name:     "valid 1",
-			signerID: 1,
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID: operatorIds[0],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
 		{
 			name:     "valid 2",
-			signerID: 1,
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID: operatorIds[0],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      2,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
 		{
 			name:     "valid 3",
-			signerID: 1,
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID: operatorIds[0],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
 		{
 			name:     "valid 4",
-			signerID: 1,
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID: operatorIds[0],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
 		},
 		{
 			name:                "valid justification 1",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambdas"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: consensusMessageSignatureByThree.Serialize(),
-							Signers:   []message.OperatorID{1, 2, 3},
+							Signers:   operatorIds[:3],
 							Message:   consensusMessage,
 						},
 					},
@@ -324,22 +332,21 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification msg type",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.ProposalMsgType,
+							Signers:   operatorIds[:3],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.ProposalMsgType,
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
@@ -353,22 +360,21 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification round",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   operatorIds[:3],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      3,
 								Identifier: []byte("lambdas"),
@@ -378,26 +384,25 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round justification round lower or equal to message round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid prepared and justification round",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   operatorIds[:3],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      1,
 								Identifier: []byte("lambdas"),
@@ -407,26 +412,25 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "change round prepared round not equal to justification msg round",
+			expectedError: "round change justification invalid: msg round wrong",
 		},
 		{
 			name:                "invalid justification instance",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   operatorIds[:3],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
@@ -440,26 +444,25 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "invalid justification quorum",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:2],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("lambdas"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   operatorIds[:2],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("value")}),
+								Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 							},
 						},
 					},
@@ -469,49 +472,47 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		},
 		{
 			name:                "valid justification 2",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2, 3},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:3],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("lambdas"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: nil,
-							Signers:   []message.OperatorID{1, 2, 3},
-							Message: &message.ConsensusMessage{
-								MsgType:    message.PrepareMsgType,
+							Signers:   operatorIds[:3],
+							Message: &specqbft.Message{
+								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      2,
 								Identifier: []byte("lambdas"),
-								Data:       prepareDataToBytes(t, &message.PrepareData{Data: []byte("values")}),
+								Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("values")}),
 							},
 						},
 					},
 				}),
 			},
-			expectedError: "change round prepared value not equal to justification msg value",
+			expectedError: "round change justification invalid: prepare data != proposed data",
 		},
 		{
 			name:                "invalid justification sig",
-			signerID:            1,
-			justificationSigIds: []uint64{1, 2},
-			msg: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			signerID:            operatorIds[0],
+			justificationSigIds: shareOperatorIds[:2],
+			msg: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
 				Identifier: []byte("Lambdas"),
-				Data: changeRoundDataToBytes(t, &message.RoundChangeData{
-					PreparedValue:    []byte("value"),
-					Round:            message.Round(2),
-					NextProposalData: []byte("value"),
-					RoundChangeJustification: []*message.SignedMessage{
+				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
+					PreparedValue: []byte("value"),
+					PreparedRound: specqbft.Round(2),
+					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
 							Signature: consensusMessageSignatureByTwo.Serialize(),
-							Signers:   []message.OperatorID{1, 2, 3},
+							Signers:   operatorIds[:3],
 							Message:   consensusMessage,
 						},
 					},
@@ -532,13 +533,13 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 				test.msg.Data = changeRoundDataToBytes(t, data)
 			}
 
-			signature, err := test.msg.Sign(secretKeys[test.signerID], forksprotocol.V1ForkVersion.String())
+			signature, err := signMessage(test.msg, secretKeys[test.signerID])
 			require.NoError(t, err)
 
-			err = changeround.Validate(instance.ValidatorShare, forksprotocol.V1ForkVersion.String()).
-				Run(&message.SignedMessage{
+			err = changeround.Validate(instance.ValidatorShare).
+				Run(&specqbft.SignedMessage{
 					Signature: signature.Serialize(),
-					Signers:   []message.OperatorID{test.signerID},
+					Signers:   []spectypes.OperatorID{test.signerID},
 					Message:   test.msg,
 				})
 			if len(test.expectedError) > 0 {
@@ -551,27 +552,23 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 }
 
 func TestRoundChangeJustification(t *testing.T) {
-	sks, _ := GenerateNodes(4)
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
-	inputValue := changeRoundDataToBytes(t, &message.RoundChangeData{
+	inputValue := changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 		PreparedValue:            []byte("hello"),
-		Round:                    1,
-		NextProposalData:         nil,
+		PreparedRound:            1,
 		RoundChangeJustification: nil,
 	})
 
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	instance := &Instance{
-		ChangeRoundMessages: msgcontinmem.New(3, 2),
-		Config:              qbft.DefaultConsensusParams(),
-		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
-			0: {IbftID: 0},
-			1: {IbftID: 1},
-			2: {IbftID: 2},
-			3: {IbftID: 3},
-		}},
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.RoundChangeMsgType: msgcontinmem.New(3, 2),
+		},
+		Config:         qbft.DefaultConsensusParams(),
+		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIds},
 		state: &qbft.State{
 			Round: round,
 		},
@@ -584,33 +581,33 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	t.Run("change round quorum no previous prepare", func(t *testing.T) {
-		msg := &message.ConsensusMessage{
-			MsgType:    message.RoundChangeMsgType,
+		msg := &specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     1,
 			Round:      2,
 			Identifier: []byte("Lambda"),
-			Data:       changeRoundDataToBytes(t, &message.RoundChangeData{}),
+			Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 		}
 
 		prepareData, err := msg.GetPrepareData()
 		require.NoError(t, err)
 
-		instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, sks[1], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
-		instance.ChangeRoundMessages.AddMessage(SignMsg(t, 1, sks[2], msg, forksprotocol.V0ForkVersion.String()), prepareData.Data)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], msg), prepareData.Data)
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[1]], msg), prepareData.Data)
 
-		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(1)},
+			Signers:   operatorIds[:1],
 			Message:   msg,
 		}, prepareData.Data)
-		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(2)},
+			Signers:   operatorIds[1:2],
 			Message:   msg,
 		}, prepareData.Data)
-		instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(3)},
+			Signers:   operatorIds[2:3],
 			Message:   msg,
 		}, prepareData.Data)
 
@@ -619,19 +616,19 @@ func TestRoundChangeJustification(t *testing.T) {
 	})
 
 	t.Run("change round quorum not prepared, instance prepared previously", func(t *testing.T) {
-		instance.State().PreparedRound.Store(message.Round(1))
+		instance.State().PreparedRound.Store(specqbft.Round(1))
 		instance.State().PreparedValue.Store([]byte("hello"))
 		err := instance.JustifyRoundChange(2)
 		require.EqualError(t, err, "highest prepared doesn't match prepared state")
 	})
 
 	t.Run("change round quorum prepared, instance prepared", func(t *testing.T) {
-		instance.ChangeRoundMessages = msgcontinmem.New(3, 2)
-		msg1 := &message.SignedMessage{
+		instance.containersMap[specqbft.RoundChangeMsgType] = msgcontinmem.New(3, 2)
+		msg1 := &specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(1)},
-			Message: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			Signers:   operatorIds[:1],
+			Message: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: []byte("Lambda"),
@@ -639,13 +636,13 @@ func TestRoundChangeJustification(t *testing.T) {
 			}}
 		changeRoundData1, err := msg1.Message.GetRoundChangeData()
 		require.NoError(t, err)
-		instance.ChangeRoundMessages.AddMessage(msg1, changeRoundData1.GetPreparedValue())
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg1, changeRoundData1.PreparedValue)
 
-		msg2 := &message.SignedMessage{
+		msg2 := &specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(2)},
-			Message: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			Signers:   operatorIds[1:2],
+			Message: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: []byte("Lambda"),
@@ -653,13 +650,13 @@ func TestRoundChangeJustification(t *testing.T) {
 			}}
 		changeRoundData2, err := msg2.Message.GetRoundChangeData()
 		require.NoError(t, err)
-		instance.ChangeRoundMessages.AddMessage(msg2, changeRoundData2.GetPreparedValue())
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg2, changeRoundData2.PreparedValue)
 
-		msg3 := &message.SignedMessage{
+		msg3 := &specqbft.SignedMessage{
 			Signature: nil,
-			Signers:   []message.OperatorID{message.OperatorID(3)},
-			Message: &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			Signers:   operatorIds[2:3],
+			Message: &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("Lambda"),
@@ -667,7 +664,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			}}
 		changeRoundData3, err := msg3.Message.GetRoundChangeData()
 		require.NoError(t, err)
-		instance.ChangeRoundMessages.AddMessage(msg3, changeRoundData3.GetPreparedValue())
+		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg3, changeRoundData3.PreparedValue)
 
 		// test no previous prepared round with round change quorum (with justification)
 		require.NoError(t, instance.JustifyRoundChange(2))
@@ -678,9 +675,11 @@ func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
 	instance := &Instance{
-		ChangeRoundMessages: msgcontinmem.New(3, 2),
-		Config:              qbft.DefaultConsensusParams(),
-		ValidatorShare: &beacon.Share{Committee: map[message.OperatorID]*beacon.Node{
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.RoundChangeMsgType: msgcontinmem.New(3, 2),
+		},
+		Config: qbft.DefaultConsensusParams(),
+		ValidatorShare: &beacon.Share{Committee: map[spectypes.OperatorID]*beacon.Node{
 			0: {IbftID: 0},
 			1: {IbftID: 1},
 			2: {IbftID: 2},
@@ -688,33 +687,33 @@ func TestHighestPrepared(t *testing.T) {
 		}},
 	}
 
-	msg1 := &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	msg1 := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     1,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{Round: 1, PreparedValue: inputValue}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedRound: 1, PreparedValue: inputValue}),
 	}
 
-	msg2 := &message.ConsensusMessage{
-		MsgType:    message.RoundChangeMsgType,
+	msg2 := &specqbft.Message{
+		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     1,
 		Round:      3,
 		Identifier: []byte("Lambda"),
-		Data:       changeRoundDataToBytes(t, &message.RoundChangeData{Round: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
+		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedRound: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
 	}
 
 	roundChangeData, err := msg1.GetRoundChangeData()
 	require.NoError(t, err)
 
-	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 		Signature: nil,
-		Signers:   []message.OperatorID{message.OperatorID(1)},
+		Signers:   []spectypes.OperatorID{spectypes.OperatorID(1)},
 		Message:   msg1,
 	}, roundChangeData.PreparedValue)
-	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 		Signature: nil,
-		Signers:   []message.OperatorID{message.OperatorID(2)},
+		Signers:   []spectypes.OperatorID{spectypes.OperatorID(2)},
 		Message:   msg2,
 	}, roundChangeData.PreparedValue)
 
@@ -722,114 +721,115 @@ func TestHighestPrepared(t *testing.T) {
 	notPrepared, highest, err := instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
-	require.EqualValues(t, message.Round(2), highest.Round)
+	require.EqualValues(t, specqbft.Round(2), highest.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 
 	// test 2 equals
-	instance.ChangeRoundMessages.AddMessage(&message.SignedMessage{
+	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(&specqbft.SignedMessage{
 		Signature: nil,
-		Signers:   []message.OperatorID{message.OperatorID(2)},
+		Signers:   []spectypes.OperatorID{spectypes.OperatorID(2)},
 		Message:   msg2,
 	}, roundChangeData.PreparedValue)
 
 	notPrepared, highest, err = instance.HighestPrepared(3)
 	require.NoError(t, err)
 	require.False(t, notPrepared)
-	require.EqualValues(t, message.Round(2), highest.Round)
+	require.EqualValues(t, specqbft.Round(2), highest.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 }
 
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
-
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
+	msgID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
 	tests := []struct {
 		name          string
-		msg           *message.SignedMessage
+		msg           *specqbft.SignedMessage
 		expectedError string
 	}{
 		{
 			"valid",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+				Identifier: msgID[:],
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
+			}),
 			"",
 		},
 		{
 			"invalid change round data",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: []byte("ad")}),
-			}, forksprotocol.V0ForkVersion.String()),
+				Identifier: msgID[:],
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: []byte("ad")}),
+			}),
 			"change round justification is nil",
 		},
 		{
 			"invalid seq number",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     2,
 				Round:      1,
-				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
-			"invalid message sequence number: expected: 1, actual: 2",
+				Identifier: msgID[:],
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
+			}),
+			"msg Height wrong",
 		},
 
 		{
 			"invalid lambda",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
 				Identifier: []byte("lambdaa"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
-			"message Lambda (lambdaa) does not equal expected Lambda (lambda)",
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
+			}),
+			"message Lambda (6c616d62646161) does not equal expected Lambda (4c616d62646100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)",
 		},
 		{
 			"valid with different round",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.RoundChangeMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      4,
-				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+				Identifier: msgID[:],
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
+			}),
 			"",
 		},
 		{
 			"invalid msg type",
-			SignMsg(t, 1, sks[1], &message.ConsensusMessage{
-				MsgType:    message.CommitMsgType,
+			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambda"),
-				Data:       changeRoundDataToBytes(t, &message.RoundChangeData{PreparedValue: nil}),
-			}, forksprotocol.V0ForkVersion.String()),
+				Identifier: msgID[:],
+				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
+			}),
 			"message type is wrong",
 		},
 	}
 
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	height := atomic.Value{}
-	height.Store(message.Height(1))
+	height.Store(specqbft.Height(1))
 
 	identifier := atomic.Value{}
-	identifier.Store(message.Identifier("lambda"))
+	identifier.Store(msgID[:])
 
 	instance := &Instance{
 		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
-			Committee: nodes,
-			PublicKey: sks[1].GetPublicKey(), // just placeholder
+			Committee:   nodes,
+			PublicKey:   sks[operatorIds[0]].GetPublicKey(), // just placeholder
+			OperatorIds: shareOperatorIds,
 		},
 		state: &qbft.State{
 			Round:      round,
@@ -853,20 +853,23 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 }
 
 func TestChangeRoundFullQuorumPipeline(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	height := atomic.Value{}
-	height.Store(message.Height(1))
+	height.Store(specqbft.Height(1))
 
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3, 2),
-		Config:          qbft.DefaultConsensusParams(),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.PrepareMsgType: msgcontinmem.New(3, 2),
+		},
+		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
-			Committee: nodes,
-			PublicKey: sks[1].GetPublicKey(), // just placeholder
+			Committee:   nodes,
+			PublicKey:   sks[operatorIds[0]].GetPublicKey(), // just placeholder
+			OperatorIds: shareOperatorIds,
 		},
 		state: &qbft.State{
 			Round:  round,
@@ -878,20 +881,23 @@ func TestChangeRoundFullQuorumPipeline(t *testing.T) {
 }
 
 func TestChangeRoundPipeline(t *testing.T) {
-	sks, nodes := GenerateNodes(4)
+	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	round := atomic.Value{}
-	round.Store(message.Round(1))
+	round.Store(specqbft.Round(1))
 
 	height := atomic.Value{}
-	height.Store(message.Height(1))
+	height.Store(specqbft.Height(1))
 
 	instance := &Instance{
-		PrepareMessages: msgcontinmem.New(3, 2),
-		Config:          qbft.DefaultConsensusParams(),
+		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+			specqbft.PrepareMsgType: msgcontinmem.New(3, 2),
+		},
+		Config: qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{
-			Committee: nodes,
-			PublicKey: sks[1].GetPublicKey(), // just placeholder
+			Committee:   nodes,
+			PublicKey:   sks[operatorIds[0]].GetPublicKey(), // just placeholder
+			OperatorIds: shareOperatorIds,
 		},
 		state: &qbft.State{
 			Round:  round,
@@ -903,16 +909,16 @@ func TestChangeRoundPipeline(t *testing.T) {
 	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }
 
-func prepareDataToBytes(t *testing.T, input *message.PrepareData) []byte {
+func prepareDataToBytes(t *testing.T, input *specqbft.PrepareData) []byte {
 	ret, err := input.Encode()
 	require.NoError(t, err)
 	return ret
 }
 
-func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg *message.ConsensusMessage) *bls.Sign {
+func aggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, msg *specqbft.Message) *bls.Sign {
 	var aggregatedSig *bls.Sign
 	for _, sk := range sks {
-		sig, err := msg.Sign(sk, forksprotocol.V1ForkVersion.String())
+		sig, err := signMessage(msg, sk)
 		require.NoError(t, err)
 		if aggregatedSig == nil {
 			aggregatedSig = sig
@@ -921,4 +927,13 @@ func aggregateSign(t *testing.T, sks map[message.OperatorID]*bls.SecretKey, msg 
 		}
 	}
 	return aggregatedSig
+}
+
+func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
+	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
+	if err != nil {
+		return nil, err
+	}
+	return sk.SignByte(root), nil
 }

@@ -2,10 +2,10 @@ package runner
 
 import (
 	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 )
 
@@ -16,9 +16,10 @@ type Router struct {
 }
 
 // Route processes message and routes it to the right controller
-func (r *Router) Route(message message.SSVMessage) {
-	if err := r.Controllers.ControllerForIdentifier(message.GetIdentifier()).ProcessMsg(&message); err != nil {
+func (r *Router) Route(message spectypes.SSVMessage) {
+	identifier := message.GetID()
+	if err := r.Controllers.ControllerForIdentifier(identifier[:]).ProcessMsg(&message); err != nil {
 		r.Logger.Error("failed to process message",
-			zap.String("identifier", hex.EncodeToString(message.GetIdentifier())))
+			zap.String("identifier", hex.EncodeToString(identifier[:])))
 	}
 }

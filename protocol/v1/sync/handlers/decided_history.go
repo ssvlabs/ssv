@@ -2,19 +2,24 @@ package handlers
 
 import (
 	"fmt"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // HistoryHandler handler for decided history protocol
 // TODO: add msg validation
 func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
-	return func(msg *message.SSVMessage) (*message.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.ID)))
+	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
+		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
@@ -28,9 +33,10 @@ func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, repo
 		} else {
 			items := int(sm.Params.Height[1] - sm.Params.Height[0])
 			if items > maxBatchSize {
-				sm.Params.Height[1] = sm.Params.Height[0] + message.Height(maxBatchSize)
+				sm.Params.Height[1] = sm.Params.Height[0] + specqbft.Height(maxBatchSize)
 			}
-			results, err := store.GetDecided(msg.ID, sm.Params.Height[0], sm.Params.Height[1])
+			msdID := msg.GetID()
+			results, err := store.GetDecided(msdID[:], sm.Params.Height[0], sm.Params.Height[1])
 			sm.UpdateResults(err, results...)
 		}
 

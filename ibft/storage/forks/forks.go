@@ -1,10 +1,11 @@
 package forks
 
-import "github.com/bloxapp/ssv/protocol/v1/message"
+import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+)
 
 // Fork is the interface for fork
 type Fork interface {
-	EncodeSignedMsg(msg *message.SignedMessage) ([]byte, error)
-	DecodeSignedMsg(data []byte) (*message.SignedMessage, error)
-	Identifier(pk []byte, role message.RoleType) []byte
+	EncodeSignedMsg(msg *specqbft.SignedMessage) ([]byte, error)
+	DecodeSignedMsg(data []byte) (*specqbft.SignedMessage, error)
 }

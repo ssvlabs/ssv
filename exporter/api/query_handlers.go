@@ -3,6 +3,10 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
@@ -33,10 +37,10 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, n
 		return
 	}
 
-	identifier := message.NewIdentifier(pkRaw, message.RoleTypeFromString(string(nm.Msg.Filter.Role)))
-	from := message.Height(nm.Msg.Filter.From)
-	to := message.Height(nm.Msg.Filter.To)
-	msgs, err := qbftStorage.GetDecided(identifier, from, to)
+	msgID := spectypes.NewMsgID(pkRaw, message.RoleTypeFromString(string(nm.Msg.Filter.Role)))
+	from := specqbft.Height(nm.Msg.Filter.From)
+	to := specqbft.Height(nm.Msg.Filter.To)
+	msgs, err := qbftStorage.GetDecided(msgID[:], from, to)
 	if err != nil {
 		logger.Warn("failed to get decided messages", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}

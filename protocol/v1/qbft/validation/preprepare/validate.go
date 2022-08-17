@@ -1,21 +1,23 @@
 package preprepare
 
 import (
+	"fmt"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
 // ErrInvalidSignersNum represents an error when the number of signers is invalid.
-var ErrInvalidSignersNum = errors.New("invalid number of signers for pre-prepare message")
+var ErrInvalidSignersNum = errors.New("proposal msg allows 1 signer")
 
 // LeaderResolver resolves round's leader
-type LeaderResolver func(round message.Round) uint64
+type LeaderResolver func(round specqbft.Round) uint64
 
 // ValidatePrePrepareMsg validates pre-prepare message
 func ValidatePrePrepareMsg(resolver LeaderResolver) pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("validate pre-prepare", func(signedMessage *message.SignedMessage) error {
+	return pipelines.WrapFunc("validate pre-prepare", func(signedMessage *specqbft.SignedMessage) error {
 		signers := signedMessage.GetSigners()
 		if len(signers) != 1 {
 			return ErrInvalidSignersNum
@@ -23,7 +25,7 @@ func ValidatePrePrepareMsg(resolver LeaderResolver) pipelines.SignedMessagePipel
 
 		leader := resolver(signedMessage.Message.Round)
 		if uint64(signers[0]) != leader {
-			return errors.Errorf("pre-prepare message sender (id %d) is not the round's leader (expected %d)", signers[0], leader)
+			return fmt.Errorf("proposal leader invalid")
 		}
 		return nil
 	})

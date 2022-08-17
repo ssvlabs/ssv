@@ -1,15 +1,16 @@
 package msgqueue
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
 // it will clean messages of the given identifier and under the given height
-func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
+func SignedMsgCleaner(mid spectypes.MessageID, h specqbft.Height) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
-		if k.Mt != message.SSVConsensusMsgType && k.Mt != message.SSVDecidedMsgType {
+		if k.Mt != spectypes.SSVConsensusMsgType && k.Mt != spectypes.SSVDecidedMsgType {
 			return false
 		}
 		if k.ID != identifier {
@@ -23,14 +24,14 @@ func SignedMsgCleaner(mid message.Identifier, h message.Height) Cleaner {
 	}
 }
 
-func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
+func signedMsgIndexValidator(msg *spectypes.SSVMessage) *specqbft.SignedMessage {
 	if msg == nil {
 		return nil
 	}
-	if msg.MsgType != message.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
+	if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVDecidedMsgType {
 		return nil
 	}
-	sm := &message.SignedMessage{}
+	sm := &specqbft.SignedMessage{}
 	if err := sm.Decode(msg.Data); err != nil {
 		return nil
 	}
@@ -40,18 +41,18 @@ func signedMsgIndexValidator(msg *message.SSVMessage) *message.SignedMessage {
 	return sm
 }
 
-// SignedMsgIndexer is the Indexer used for message.SignedMessage
+// SignedMsgIndexer is the Indexer used for specqbft.SignedMessage
 func SignedMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) Index {
+	return func(msg *spectypes.SSVMessage) Index {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(msg.MsgType, msg.ID.String(), sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.MsgID.String(), sm.Message.Height, sm.Message.MsgType)[0]
 		}
 		return Index{}
 	}
 }
 
-// SignedMsgIndex indexes a message.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt ...message.ConsensusMessageType) []Index {
+// SignedMsgIndex indexes a specqbft.SignedMessage by identifier, msg type and height
+func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cmt ...specqbft.MessageType) []Index {
 	var res []Index
 	for _, mt := range cmt {
 		res = append(res, Index{
@@ -66,34 +67,34 @@ func SignedMsgIndex(msgType message.MsgType, mid string, h message.Height, cmt .
 	return res
 }
 
-// DecidedMsgIndexer is the Indexer used for decided message.SignedMessage
+// DecidedMsgIndexer is the Indexer used for decided specqbft.SignedMessage
 func DecidedMsgIndexer() Indexer {
-	return func(msg *message.SSVMessage) Index {
-		if msg.MsgType != message.SSVDecidedMsgType {
+	return func(msg *spectypes.SSVMessage) Index {
+		if msg.MsgType != spectypes.SSVDecidedMsgType {
 			return Index{}
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return DecidedMsgIndex(msg.ID.String())
+			return DecidedMsgIndex(msg.MsgID.String())
 		}
 		return Index{}
 	}
 }
 
-// DecidedMsgIndex indexes a decided message.SignedMessage by identifier, msg type
+// DecidedMsgIndex indexes a decided specqbft.SignedMessage by identifier, msg type
 func DecidedMsgIndex(mid string) Index {
 	return Index{
 		Name: "decided_index",
-		Mt:   message.SSVDecidedMsgType,
+		Mt:   spectypes.SSVDecidedMsgType,
 		ID:   mid,
-		Cmt:  message.CommitMsgType,
+		Cmt:  specqbft.CommitMsgType,
 		H:    -1,
 	}
 	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 // getRound returns the round of the message if applicable
-func getRound(msg *message.SSVMessage) (message.Round, bool) {
-	sm := message.SignedMessage{}
+func getRound(msg *spectypes.SSVMessage) (specqbft.Round, bool) {
+	sm := specqbft.SignedMessage{}
 	if err := sm.Decode(msg.Data); err != nil {
 		return 0, false
 	}
@@ -104,8 +105,8 @@ func getRound(msg *message.SSVMessage) (message.Round, bool) {
 }
 
 // getConsensusMsgType returns the message.ConsensusMessageType of the message if applicable
-func getConsensusMsgType(msg *message.SSVMessage) (message.ConsensusMessageType, bool) {
-	sm := message.SignedMessage{}
+func getConsensusMsgType(msg *spectypes.SSVMessage) (specqbft.MessageType, bool) {
+	sm := specqbft.SignedMessage{}
 	if err := sm.Decode(msg.Data); err != nil {
 		return 0, false
 	}

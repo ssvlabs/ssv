@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/crypto"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
@@ -20,24 +22,25 @@ type MockMessageEvent struct {
 	From     peer.ID
 	Topic    string
 	Protocol string
-	Msg      *message.SSVMessage
+	Msg      *spectypes.SSVMessage
 }
 
 // MockNetwork is a wrapping interface that enables tests to run with local network
 type MockNetwork interface {
 	Network
 
-	SendStreamMessage(protocol string, pi peer.ID, msg *message.SSVMessage) error
+	SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SSVMessage) error
 	Self() peer.ID
 	PushMsg(e MockMessageEvent)
-	AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork)
+	AddPeers(pk spectypes.ValidatorPK, toAdd ...MockNetwork)
 	Start(ctx context.Context)
 	SetLastDecidedHandler(lastDecidedHandler EventHandler)
 	SetGetHistoryHandler(getHistoryHandler EventHandler)
+	GetBroadcastMessages() []spectypes.SSVMessage
 }
 
 // EventHandler represents a function that handles a message event
-type EventHandler func(e MockMessageEvent) *message.SSVMessage
+type EventHandler func(e MockMessageEvent) *spectypes.SSVMessage
 
 // TODO: cleanup mockNetwork
 type mockNetwork struct {
@@ -61,7 +64,10 @@ type mockNetwork struct {
 	peers     map[peer.ID]MockNetwork
 
 	messagesLock sync.Locker
-	messages     map[string]*message.SSVMessage
+	messages     map[string]*spectypes.SSVMessage
+
+	broadcastMessagesLock sync.Locker
+	broadcastMessages     []spectypes.SSVMessage
 
 	lastDecidedHandler EventHandler
 	getHistoryHandler  EventHandler
@@ -86,7 +92,7 @@ func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) MockNetwork
 		inBufSize:              inBufSize,
 		inPubsub:               make(chan MockMessageEvent, inBufSize),
 		inStream:               make(chan MockMessageEvent, inBufSize),
-		messages:               make(map[string]*message.SSVMessage),
+		messages:               make(map[string]*spectypes.SSVMessage),
 		lastDecidedReady:       make(chan struct{}),
 		getHistoryReady:        make(chan struct{}),
 		topicsLock:             &sync.Mutex{},
@@ -94,6 +100,7 @@ func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) MockNetwork
 		handlersLock:           &sync.Mutex{},
 		peersLock:              &sync.Mutex{},
 		messagesLock:           &sync.Mutex{},
+		broadcastMessagesLock:  &sync.Mutex{},
 		lastDecidedResultsLock: &sync.Mutex{},
 		getHistoryResultsLock:  &sync.Mutex{},
 	}
@@ -159,7 +166,7 @@ func (m *mockNetwork) handleStreamEvent(e MockMessageEvent) {
 	m.messages[e.Topic] = e.Msg
 }
 
-func (m *mockNetwork) Subscribe(pk message.ValidatorPK) error {
+func (m *mockNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	spk := hex.EncodeToString(pk)
 
 	m.subscribedLock.Lock()
@@ -168,7 +175,7 @@ func (m *mockNetwork) Subscribe(pk message.ValidatorPK) error {
 	return nil
 }
 
-func (m *mockNetwork) Unsubscribe(pk message.ValidatorPK) error {
+func (m *mockNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	m.subscribedLock.Lock()
 	defer m.subscribedLock.Unlock()
 
@@ -178,7 +185,7 @@ func (m *mockNetwork) Unsubscribe(pk message.ValidatorPK) error {
 	return nil
 }
 
-func (m *mockNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
+func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	spk := hex.EncodeToString(pk)
 
 	m.topicsLock.Lock()
@@ -191,8 +198,8 @@ func (m *mockNetwork) Peers(pk message.ValidatorPK) ([]peer.ID, error) {
 	return peers, nil
 }
 
-func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
-	pk := msg.GetIdentifier().GetValidatorPK()
+func (m *mockNetwork) Broadcast(msg spectypes.SSVMessage) error {
+	pk := msg.GetID().GetPubKey()
 	spk := hex.EncodeToString(pk)
 	topic := spk
 
@@ -215,6 +222,10 @@ func (m *mockNetwork) Broadcast(msg message.SSVMessage) error {
 		}
 		mn.PushMsg(e)
 	}
+
+	m.broadcastMessagesLock.Lock()
+	m.broadcastMessages = append(m.broadcastMessages, msg)
+	m.broadcastMessagesLock.Unlock()
 
 	return nil
 }
@@ -253,11 +264,11 @@ func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...Request
 	m.handlers[pid] = requestHandlers
 }
 
-func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) {
+func (m *mockNetwork) LastDecided(mid spectypes.MessageID) ([]SyncResult, error) {
 	//m.lock.Lock()
 	//defer m.lock.Unlock()
 
-	spk := hex.EncodeToString(mid.GetValidatorPK())
+	spk := hex.EncodeToString(mid.GetPubKey())
 	topic := spk
 
 	syncMsg, err := (&message.SyncMessage{
@@ -271,9 +282,9 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 		return nil, err
 	}
 
-	msg := &message.SSVMessage{
+	msg := &spectypes.SSVMessage{
 		Data:    syncMsg,
-		ID:      mid,
+		MsgID:   mid,
 		MsgType: message.SSVSyncMsgType,
 	}
 
@@ -290,16 +301,16 @@ func (m *mockNetwork) LastDecided(mid message.Identifier) ([]SyncResult, error) 
 	return m.PollLastDecidedMessages(), nil
 }
 
-func (m *mockNetwork) GetHistory(mid message.Identifier, from, to message.Height, targets ...string) ([]SyncResult, message.Height, error) {
+func (m *mockNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error) {
 	// TODO: remove hardcoded return, use input parameters
 	return m.PollGetHistoryMessages(), to, nil
 }
 
-func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Height) ([]SyncResult, error) {
+func (m *mockNetwork) LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]SyncResult, error) {
 	//m.lock.Lock()
 	//defer m.lock.Unlock()
 
-	spk := hex.EncodeToString(mid.GetValidatorPK())
+	spk := hex.EncodeToString(mid.GetPubKey())
 	topic := spk
 
 	syncMsg, err := json.Marshal(&message.SyncMessage{
@@ -311,9 +322,9 @@ func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Hei
 		return nil, err
 	}
 
-	msg := &message.SSVMessage{
+	msg := &spectypes.SSVMessage{
 		Data:    syncMsg,
-		ID:      mid,
+		MsgID:   mid,
 		MsgType: message.SSVSyncMsgType,
 	}
 
@@ -330,11 +341,11 @@ func (m *mockNetwork) LastChangeRound(mid message.Identifier, height message.Hei
 	return nil, nil // TODO: fix returned value
 }
 
-func (m *mockNetwork) ReportValidation(message *message.SSVMessage, res MsgValidationResult) {
+func (m *mockNetwork) ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult) {
 	panic("implement me")
 }
 
-func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *message.SSVMessage) error {
+func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SSVMessage) error {
 	e := MockMessageEvent{
 		From:     m.self,
 		Protocol: protocol,
@@ -386,7 +397,7 @@ func (m *mockNetwork) PollGetHistoryMessages() []SyncResult {
 }
 
 // AddPeers enables to inject other peers
-func (m *mockNetwork) AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork) {
+func (m *mockNetwork) AddPeers(pk spectypes.ValidatorPK, toAdd ...MockNetwork) {
 	// TODO: support subnets
 	spk := hex.EncodeToString(pk)
 
@@ -410,6 +421,13 @@ func (m *mockNetwork) AddPeers(pk message.ValidatorPK, toAdd ...MockNetwork) {
 	m.topicsLock.Lock()
 	m.topics[spk] = peers
 	m.topicsLock.Unlock()
+}
+
+func (m *mockNetwork) GetBroadcastMessages() []spectypes.SSVMessage {
+	m.broadcastMessagesLock.Lock()
+	defer m.broadcastMessagesLock.Unlock()
+
+	return m.broadcastMessages
 }
 
 // GenPeerID generates a new network key

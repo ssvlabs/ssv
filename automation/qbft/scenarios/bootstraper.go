@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/automation/commons"
@@ -11,7 +12,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -41,18 +41,18 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 			}
 			dbs = append(dbs, db)
 		}
-		forkVersion := forksprotocol.V0ForkVersion
+		forkVersion := forksprotocol.GenesisForkVersion
 
 		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, scenario.NumOfBootnodes() > 0)
 		if err != nil {
 			return nil, err
 		}
 		stores := make([]qbftstorageprotocol.QBFTStore, 0)
-		kms := make([]beacon.KeyManager, 0)
+		kms := make([]spectypes.KeyManager, 0)
 		for i, node := range ln.Nodes {
 			store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations", forkVersion)
 			stores = append(stores, store)
-			km := commons.NewTestSigner()
+			km := commons.NewTestKeyManager()
 			kms = append(kms, km)
 			node.RegisterHandlers(p2pprotocol.WithHandler(
 				p2pprotocol.LastDecidedProtocol,

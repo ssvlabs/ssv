@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	types "github.com/prysmaticlabs/eth2-types"
@@ -24,7 +25,7 @@ const (
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
-	ExecuteDuty(duty *beaconprotocol.Duty) error
+	ExecuteDuty(duty *spectypes.Duty) error
 }
 
 // DutyController interface for dispatching duties execution according to slot ticker
@@ -100,7 +101,7 @@ func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
 }
 
 // ExecuteDuty tries to execute the given duty
-func (dc *dutyController) ExecuteDuty(duty *beaconprotocol.Duty) error {
+func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 	if dc.executor != nil {
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(duty)
@@ -119,7 +120,7 @@ func (dc *dutyController) ExecuteDuty(duty *beaconprotocol.Duty) error {
 				return
 			}
 			logger.Info("starting duty processing")
-			v.ExecuteDuty(uint64(duty.Slot), duty)
+			v.StartDuty(duty)
 		}()
 	} else {
 		logger.Warn("could not find validator")
@@ -134,7 +135,7 @@ func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
 		go dc.notifyCurrentSlot(currentSlot)
 
 		// execute duties
-		dc.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
+		dc.logger.Info("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
@@ -152,7 +153,7 @@ func (dc *dutyController) notifyCurrentSlot(slot types.Slot) {
 }
 
 // onDuty handles next duty
-func (dc *dutyController) onDuty(duty *beaconprotocol.Duty) {
+func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 	if dc.shouldExecute(duty) {
 		logger.Debug("duty was sent to execution")
@@ -165,7 +166,7 @@ func (dc *dutyController) onDuty(duty *beaconprotocol.Duty) {
 	logger.Warn("slot is irrelevant, ignoring duty")
 }
 
-func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
+func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 	if uint64(duty.Slot) < dc.getEpochFirstSlot(dc.genesisEpoch) {
 		// wait until genesis epoch starts
 		dc.logger.Debug("skipping slot, lower than genesis",
@@ -187,7 +188,7 @@ func (dc *dutyController) shouldExecute(duty *beaconprotocol.Duty) bool {
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *beaconprotocol.Duty) *zap.Logger {
+func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
@@ -212,7 +213,7 @@ type readOnlyDutyExec struct {
 	logger *zap.Logger
 }
 
-func (e *readOnlyDutyExec) ExecuteDuty(duty *beaconprotocol.Duty) error {
+func (e *readOnlyDutyExec) ExecuteDuty(duty *spectypes.Duty) error {
 	e.logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
 		zap.Uint64("slot", uint64(duty.Slot)),

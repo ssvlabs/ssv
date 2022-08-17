@@ -2,9 +2,10 @@ package api
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/ibft/proto"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -12,7 +13,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
@@ -86,24 +86,25 @@ func TestHandleDecidedQuery(t *testing.T) {
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := validator.GenerateNodes(4)
-	oids := make([]message.OperatorID, 0)
+	oids := make([]spectypes.OperatorID, 0)
 	for oid := range sks {
 		oids = append(oids, oid)
 	}
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, message.Height(0), message.Height(250), func(height message.Height) ([]message.OperatorID, *message.ConsensusMessage) {
-		commitData := message.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
+	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
 			panic(err)
 		}
 
-		return oids, &message.ConsensusMessage{
-			MsgType:    message.CommitMsgType,
+		id := spectypes.NewMsgID(pk.Serialize(), spectypes.BNRoleAttester)
+		return oids, &specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
-			Identifier: message.NewIdentifier(pk.Serialize(), message.RoleTypeAttester),
+			Identifier: id[:],
 			Data:       commitDataBytes,
 		}
 	})
@@ -118,7 +119,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
-		msgs, ok := nm.Msg.Data.([]*proto.SignedMessage)
+		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
 		require.True(t, ok)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})

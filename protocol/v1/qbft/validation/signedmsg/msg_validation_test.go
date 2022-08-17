@@ -3,9 +3,8 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestBasicMsgValidation(t *testing.T) {
@@ -14,11 +13,11 @@ func TestBasicMsgValidation(t *testing.T) {
 	err := pipeline.Run(nil)
 	require.EqualError(t, err, "signed message is nil")
 
-	err = pipeline.Run(&message.SignedMessage{})
+	err = pipeline.Run(&specqbft.SignedMessage{})
 	require.EqualError(t, err, "message body is nil")
 
-	err = pipeline.Run(&message.SignedMessage{
-		Message: &message.ConsensusMessage{},
+	err = pipeline.Run(&specqbft.SignedMessage{
+		Message: &specqbft.Message{},
 	})
 	require.NoError(t, err)
 }

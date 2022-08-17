@@ -2,11 +2,10 @@ package api
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/conversion"
-	"github.com/bloxapp/ssv/ibft/proto"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/utils/format"
 	"github.com/pkg/errors"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // Message represents an exporter message
@@ -21,7 +20,7 @@ type Message struct {
 
 // NewDecidedAPIMsg creates a new message from the given message
 // TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*message.SignedMessage) Message {
+func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -29,8 +28,9 @@ func NewDecidedAPIMsg(msgs ...*message.SignedMessage) Message {
 			Data: []string{},
 		}
 	}
-	pkv := msgs[0].Message.Identifier.GetValidatorPK()
-	role := msgs[0].Message.Identifier.GetRoleType()
+	identifier := message.ToMessageID(msgs[0].Message.Identifier)
+	pkv := identifier.GetPubKey()
+	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
@@ -44,22 +44,11 @@ func NewDecidedAPIMsg(msgs ...*message.SignedMessage) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-// TODO: avoid converting to v0 once explorer is upgraded
-func DecidedAPIData(msgs ...*message.SignedMessage) (interface{}, error) {
+func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
-	var data []*proto.SignedMessage
-	pkv := msgs[0].Message.Identifier.GetValidatorPK()
-	for _, msg := range msgs {
-		identifierV0 := format.IdentifierFormat(pkv, msg.Message.Identifier.GetRoleType().String())
-		v0Msg, err := conversion.ToSignedMessageV0(msg, []byte(identifierV0))
-		if err != nil {
-			return Message{}, err
-		}
-		data = append(data, v0Msg)
-	}
-	return data, nil
+	return msgs, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses

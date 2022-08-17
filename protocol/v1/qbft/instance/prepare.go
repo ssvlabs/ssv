@@ -3,30 +3,32 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-
+	"fmt"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // PrepareMsgPipeline is the main prepare msg pipeline
 func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
-		pipelines.WrapFunc("add prepare msg", func(signedMessage *message.SignedMessage) error {
+		pipelines.WrapFunc("add prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 
 			prepareMsg, err := signedMessage.Message.GetPrepareData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get prepare data: %w", err)
 			}
-			i.PrepareMessages.AddMessage(signedMessage, prepareMsg.Data)
+			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
 		pipelines.CombineQuiet(
@@ -37,17 +39,17 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 // PreparedAggregatedMsg returns a signed message for the state's prepared value with the max known signatures
-func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
+func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 	if !i.isPrepared() {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.PrepareMessages.ReadOnlyMessagesByRound(i.State().GetPreparedRound())
+	msgs := i.containersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.State().GetPreparedRound())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
 
-	var ret *message.SignedMessage
+	var ret *specqbft.SignedMessage
 	for _, msg := range msgs {
 		p, err := msg.Message.GetPrepareData()
 		if err != nil {
@@ -61,7 +63,7 @@ func (i *Instance) PreparedAggregatedMsg() (*message.SignedMessage, error) {
 		if ret == nil {
 			ret = msg.DeepCopy()
 		} else {
-			if err := ret.Aggregate(msg); err != nil {
+			if err := message.Aggregate(ret, msg); err != nil {
 				return nil, err
 			}
 		}
@@ -77,7 +79,7 @@ upon receiving a quorum of valid ⟨PREPARE, λi, ri, value⟩ messages do:
 	broadcast ⟨COMMIT, λi, ri, value⟩
 */
 func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon prepare msg", func(signedMessage *message.SignedMessage) error {
+	return pipelines.WrapFunc("upon prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 
 		prepareData, err := signedMessage.Message.GetPrepareData()
 		if err != nil {
@@ -85,15 +87,15 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 		}
 
 		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-		if quorum, _ := i.PrepareMessages.QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
+		if quorum, _ := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
 			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Any("round", i.State().GetRound()))
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)
-				i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the message.PrepareData cause of msgCount saves that way
+				i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
 				i.ProcessStageChange(qbft.RoundStatePrepare)
 
 				// send commit msg
@@ -112,17 +114,18 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrepareMessage(value []byte) (*message.ConsensusMessage, error) {
-	prepareMsg := &message.PrepareData{Data: value}
+func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, error) {
+	prepareMsg := &specqbft.PrepareData{Data: value}
 	encodedPrepare, err := prepareMsg.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode prepare data")
 	}
-	return &message.ConsensusMessage{
-		MsgType:    message.PrepareMsgType,
+	identifier := i.State().GetIdentifier()
+	return &specqbft.Message{
+		MsgType:    specqbft.PrepareMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Identifier: identifier[:],
 		Data:       encodedPrepare,
 	}, nil
 }

@@ -2,12 +2,15 @@ package strategy
 
 import (
 	"context"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Mode represents an internal mode of the node.
@@ -26,17 +29,17 @@ const (
 // in light mode, the node doesn't save history, only last/highest decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier message.Identifier, from, to *message.SignedMessage, pip pipelines.SignedMessagePipeline) error
+	Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error
 	// UpdateDecided updates the given decided message and returns the updated version (could include new signers)
-	UpdateDecided(msg *message.SignedMessage) (*message.SignedMessage, error)
+	UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error)
 	// GetDecided returns historical decided messages
-	GetDecided(identifier message.Identifier, heightRange ...message.Height) ([]*message.SignedMessage, error)
+	GetDecided(identifier []byte, heightRange ...specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// GetLastDecided returns height decided messages
-	GetLastDecided(identifier message.Identifier) (*message.SignedMessage, error)
+	GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error)
 }
 
 // UpdateLastDecided saves last decided message if its height is larger than persisted height
-func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, signedMsgs ...*message.SignedMessage) (*message.SignedMessage, error) {
+func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, signedMsgs ...*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	highest := sync.GetHighestSignedMessage(signedMsgs...)
 	//logger.Debug("updating last decided", zap.Any("highest", highest))
 	if highest == nil {
@@ -48,7 +51,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 	}
 	if local == nil {
 		// should create
-	} else if local.Message.Higher(highest.Message) {
+	} else if local.Message.Height > highest.Message.Height {
 		return nil, nil
 	} else if highest.Message.Height == local.Message.Height {
 		msg, ok := CheckSigners(local, highest)
@@ -59,7 +62,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 		highest = msg
 	}
 	logger = logger.With(zap.Int64("height", int64(highest.Message.Height)),
-		zap.String("identifier", highest.Message.Identifier.String()), zap.Any("signers", highest.Signers))
+		zap.String("identifier", message.ToMessageID(highest.Message.Identifier).String()), zap.Any("signers", highest.Signers))
 	if err := store.SaveLastDecided(highest); err != nil {
 		return highest, errors.Wrap(err, "could not save last decided")
 	}
@@ -68,7 +71,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 }
 
 // CheckSigners will return the decided message with more signers if both are with the same height
-func CheckSigners(local, msg *message.SignedMessage) (*message.SignedMessage, bool) {
+func CheckSigners(local, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, bool) {
 	if local == nil {
 		return msg, true
 	}

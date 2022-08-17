@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/valcheck"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	ibft "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	ibftinstance "github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
@@ -49,7 +49,7 @@ func (r *farFutureSync) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTSt
 	wg.Wait()
 
 	// start several instances one by one
-	seqNumber := message.Height(0)
+	seqNumber := specqbft.Height(0)
 loop:
 	for {
 		r.logger.Info("started instances")
@@ -81,7 +81,7 @@ loop:
 	}
 }
 
-func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber message.Height) {
+func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber specqbft.Height) {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
 		Logger:    r.logger,
 		SeqNumber: seqNumber,

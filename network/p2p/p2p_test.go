@@ -4,24 +4,26 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{
 		cfg:  &Config{MaxPeers: 40, TopicMaxPeers: 8},
-		fork: forksfactory.NewFork(forksprotocol.V2ForkVersion),
+		fork: forksfactory.NewFork(forksprotocol.GenesisForkVersion),
 	}
 
 	require.Equal(t, 40, n.getMaxPeers(""))
@@ -38,7 +40,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
-	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, pks, forksprotocol.V0ForkVersion)
+	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, pks, forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -107,7 +109,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 //	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 //		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 //
-//	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, pks, forksprotocol.V0ForkVersion)
+//	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, pks, forksprotocol.GenesisForkVersion)
 //	require.NoError(t, err)
 //	require.NotNil(t, routers)
 //	require.NotNil(t, ln)
@@ -175,6 +177,8 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 
 	routers := make([]*dummyRouter, n)
 
+	// for now, skip routers for v0
+	//if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])
@@ -221,10 +225,10 @@ type dummyRouter struct {
 	i      int
 }
 
-func (r *dummyRouter) Route(message message.SSVMessage) {
+func (r *dummyRouter) Route(message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	r.logger.Debug("got message",
-		zap.String("identifier", hex.EncodeToString(message.GetIdentifier())),
+		zap.String("identifier", message.GetID().String()),
 		zap.Uint64("count", c))
 }
 
@@ -245,7 +249,7 @@ func (r *dummyRouter) Route(message message.SSVMessage) {
 //	if err != nil {
 //		return nil, err
 //	}
-//	id := message.NewIdentifier(pk, message.RoleTypeAttester)
+//	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 //	v0SignedMsg := &proto.SignedMessage{
 //		Message: &proto.Message{
 //			Type:      3,

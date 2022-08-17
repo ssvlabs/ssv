@@ -139,6 +139,12 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: smart_contract_addr_key
+          - name: ETH_1_SYNC_OFFSET
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: eth_1_sync_offset
+                optional: true
           - name: ABI_VERSION
             valueFrom:
               secretKeyRef:
@@ -174,7 +180,7 @@ spec:
           - name: FULLNODE
             value: "true"
           - name: MSG_WORKERS_COUNT
-            value: "512"
+            value: "1024"
           - name: MSG_WORKER_BUFFER_SIZE
             value: "2048"
           - name: SUBNETS

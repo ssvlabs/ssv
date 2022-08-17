@@ -19,10 +19,10 @@ func Test_ForkVersionEntry(t *testing.T) {
 	node, err := CreateLocalNode(sk, "", ip, commons.DefaultUDP, commons.DefaultTCP)
 	require.NoError(t, err)
 
-	require.NoError(t, SetForkVersionEntry(node, "v0"))
+	require.NoError(t, SetForkVersionEntry(node, forksprotocol.GenesisForkVersion.String()))
 	t.Log("ENR with fork version:", node.Node().String())
 
 	fv, err := GetForkVersionEntry(node.Node().Record())
 	require.NoError(t, err)
-	require.Equal(t, forksprotocol.ForkVersion("v0"), fv)
+	require.Equal(t, forksprotocol.ForkVersion(forksprotocol.GenesisForkVersion.String()), fv)
 }

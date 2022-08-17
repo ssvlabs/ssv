@@ -4,19 +4,25 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"sync"
 	"time"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
@@ -24,11 +30,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
-
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -58,11 +59,12 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
-	KeyManager                 beaconprotocol.KeyManager
+	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
+	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"1024" env-description:"Number of goroutines to use for message workers"`
@@ -85,12 +87,13 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context    context.Context
-	collection validator.ICollection
-	storage    registrystorage.OperatorsCollection
-	logger     *zap.Logger
-	beacon     beaconprotocol.Beacon
-	keyManager beaconprotocol.KeyManager
+	context     context.Context
+	collection  validator.ICollection
+	storage     registrystorage.OperatorsCollection
+	ibftStorage qbftstorage.QBFTStore
+	logger      *zap.Logger
+	beacon      beaconprotocol.Beacon
+	keyManager  spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -150,7 +153,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	qbftStorage := storage.New(options.DB, options.Logger, message.RoleTypeAttester.String(), options.ForkVersion) // TODO need to support multi duties
+	qbftStorage := storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion) // TODO need to support multi duties
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -170,8 +173,9 @@ func NewController(options ControllerOptions) Controller {
 		Network:                    options.ETHNetwork,
 		P2pNetwork:                 options.Network,
 		Beacon:                     options.Beacon,
+		KeyManager:                 options.KeyManager,
 		ForkVersion:                options.ForkVersion,
-		Signer:                     options.Beacon,
+		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
 		IbftStorage:                qbftStorage,
@@ -182,6 +186,7 @@ func NewController(options ControllerOptions) Controller {
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
+		ibftStorage:                qbftStorage,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
@@ -245,15 +250,15 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			pk := msg.ID.GetValidatorPK()
+			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				if err := v.ProcessMsg(&msg); err != nil {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
-			} else if c.forkVersion != forksprotocol.V0ForkVersion {
-				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != message.SSVConsensusMsgType {
+			} else {
+				if msg.MsgType != spectypes.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
@@ -266,7 +271,7 @@ func (c *controller) handleRouterMessages() {
 
 // getShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, error) {
+func (c *controller) getShare(pk spectypes.ValidatorPK) (*beaconprotocol.Share, error) {
 	share, found, err := c.collection.GetValidatorShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -277,13 +282,13 @@ func (c *controller) getShare(pk message.ValidatorPK) (*beaconprotocol.Share, er
 	return share, nil
 }
 
-func (c *controller) handleWorkerMessages(msg *message.SSVMessage) error {
-	share, err := c.getShare(msg.GetIdentifier().GetValidatorPK())
+func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
+	share, err := c.getShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
 	}
 	if share == nil {
-		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetIdentifier().GetValidatorPK()))
+		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 	}
 
 	opts := *c.validatorOptions
@@ -447,7 +452,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent) (*beaconprotocol.Share, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*beaconprotocol.Share, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -463,7 +468,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorAddedEvent)
 
 	if isOperatorShare {
 		if shareSecret == nil {
-			return nil, isOperatorShare, errors.New("could not decode shareSecret key from ValidatorAdded event")
+			return nil, isOperatorShare, errors.New("could not decode shareSecret")
 		}
 
 		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))

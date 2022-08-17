@@ -2,17 +2,20 @@ package controller
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
 // onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
 // in read mode, we don't broadcast the message in the network
-func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
-	qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), msg)
+func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
+	qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), msg)
 	// encode the message first to avoid sharing msg with 2 goroutines
 	data, err := msg.Encode()
 	if err != nil {
@@ -21,12 +24,13 @@ func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
 	if c.newDecidedHandler != nil {
 		go c.newDecidedHandler(msg)
 	}
-	if c.readMode {
+	if c.ReadMode {
 		return nil
 	}
-	if err := c.network.Broadcast(message.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
-		ID:      c.Identifier,
+
+	if err := c.Network.Broadcast(spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   message.ToMessageID(c.Identifier),
 		Data:    data,
 	}); err != nil {
 		return errors.Wrap(err, "could not broadcast decided message")
@@ -35,8 +39,8 @@ func (c *Controller) onNewDecidedMessage(msg *message.SignedMessage) error {
 }
 
 // ValidateDecidedMsg - the main decided msg pipeline
-func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
-	return c.fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
+func (c *Controller) ValidateDecidedMsg(msg *specqbft.SignedMessage) error {
+	return c.Fork.ValidateDecidedMsg(c.ValidatorShare).Run(msg)
 }
 
 // processDecidedMessage is responsible for processing an incoming decided message.
@@ -45,12 +49,12 @@ func (c *Controller) ValidateDecidedMsg(msg *message.SignedMessage) error {
 // 2. old decided > exit
 // 3. new message > force decide or stop instance and sync
 // 4. last decided, try to update signers
-func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
+func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 	if err := c.ValidateDecidedMsg(msg); err != nil {
-		c.logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
+		c.Logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
-	logger := c.logger.With(zap.String("who", "processDecided"),
+	logger := c.Logger.With(zap.String("who", "processDecided"),
 		zap.Uint64("height", uint64(msg.Message.Height)),
 		zap.Any("signer ids", msg.Signers))
 	logger.Debug("received valid decided msg")
@@ -61,37 +65,37 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 		return err
 	}
 	// old message
-	if localMsg != nil && localMsg.Message.Higher(msg.Message) {
+	if localMsg != nil && localMsg.Message.Height > msg.Message.Height {
 		logger.Debug("known decided msg")
 		return nil
 	}
 	// new message, force decide or stop instance and sync
-	if localMsg == nil || msg.Message.Higher(localMsg.Message) {
+	if localMsg == nil || msg.Message.Height > localMsg.Message.Height {
 		if c.forceDecided(msg) {
 			logger.Debug("current instance decided")
 			return nil
 		}
-		updated, err := c.decidedStrategy.UpdateDecided(msg)
+		updated, err := c.DecidedStrategy.UpdateDecided(msg)
 		if err != nil {
 			return err
 		}
 		if updated != nil {
-			qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), updated)
+			qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 			if c.newDecidedHandler != nil {
 				go c.newDecidedHandler(msg)
 			}
 		}
-		if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+		if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
 			logger.Debug("stopping current instance")
 			currentInstance.Stop()
 		}
 		return c.syncDecided(localMsg, msg)
 	}
 	// last decided, try to update it (merge new signers)
-	if updated, err := c.decidedStrategy.UpdateDecided(msg); err != nil {
+	if updated, err := c.DecidedStrategy.UpdateDecided(msg); err != nil {
 		logger.Warn("could not update decided")
 	} else if updated != nil {
-		qbft.ReportDecided(hex.EncodeToString(msg.Message.Identifier.GetValidatorPK()), updated)
+		qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 		if c.newDecidedHandler != nil {
 			go c.newDecidedHandler(msg)
 		}
@@ -100,8 +104,8 @@ func (c *Controller) processDecidedMessage(msg *message.SignedMessage) error {
 }
 
 // highestKnownDecided returns the highest known decided instance
-func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
-	highestKnown, err := c.decidedStrategy.GetLastDecided(c.GetIdentifier())
+func (c *Controller) highestKnownDecided() (*specqbft.SignedMessage, error) {
+	highestKnown, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +113,8 @@ func (c *Controller) highestKnownDecided() (*message.SignedMessage, error) {
 }
 
 // highestKnownDecided returns the highest known decided instance
-func (c *Controller) forceDecided(msg *message.SignedMessage) bool {
-	if currentInstance := c.getCurrentInstance(); currentInstance != nil {
+func (c *Controller) forceDecided(msg *specqbft.SignedMessage) bool {
+	if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
 		// check if decided for current instance
 		currentState := currentInstance.State()
 		if currentState != nil && currentState.GetHeight() == msg.Message.Height {

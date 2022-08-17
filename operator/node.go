@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -18,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -74,7 +74,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, message.RoleTypeAttester.String(), opts.ForkVersion)
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
 
 	node := &operatorNode{
 		context:        opts.Context,

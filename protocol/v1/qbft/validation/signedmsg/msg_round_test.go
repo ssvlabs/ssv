@@ -3,16 +3,15 @@ package signedmsg
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func TestMsgRound(t *testing.T) {
 	tests := []struct {
 		name          string
-		expectedRound message.Round
-		actualRound   message.Round
+		expectedRound specqbft.Round
+		actualRound   specqbft.Round
 		expectedError string
 	}{
 		{
@@ -32,8 +31,8 @@ func TestMsgRound(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			pipeline := ValidateRound(test.expectedRound)
-			err := pipeline.Run(&message.SignedMessage{
-				Message: &message.ConsensusMessage{
+			err := pipeline.Run(&specqbft.SignedMessage{
+				Message: &specqbft.Message{
 					Round: test.actualRound,
 				},
 			})

@@ -2,16 +2,17 @@ package worker
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync"
 	"testing"
 	"time"
 
+	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/utils/logex"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 func init() {
@@ -26,12 +27,12 @@ func TestWorker(t *testing.T) {
 		Buffer:       2,
 	})
 
-	worker.UseHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		return nil
 	})
 	for i := 0; i < 5; i++ {
-		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
+		require.True(t, worker.TryEnqueue(&spectypes.SSVMessage{}))
 		time.Sleep(time.Second * 1)
 	}
 }
@@ -47,7 +48,7 @@ func TestManyWorkers(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		return nil
@@ -55,7 +56,7 @@ func TestManyWorkers(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
+		require.True(t, worker.TryEnqueue(&spectypes.SSVMessage{}))
 	}
 	wg.Wait()
 }
@@ -71,7 +72,7 @@ func TestBuffer(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg *message.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		time.Sleep(time.Millisecond * 100)
@@ -80,7 +81,7 @@ func TestBuffer(t *testing.T) {
 
 	for i := 0; i < 11; i++ { // should buffer 10 msgs
 		wg.Add(1)
-		require.True(t, worker.TryEnqueue(&message.SSVMessage{}))
+		require.True(t, worker.TryEnqueue(&spectypes.SSVMessage{}))
 	}
 	wg.Wait()
 }

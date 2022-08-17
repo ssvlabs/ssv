@@ -2,10 +2,12 @@ package validator
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
 // ShareOptions - used to load validator share from config
@@ -16,13 +18,15 @@ type ShareOptions struct {
 	Committee    map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 	OwnerAddress string         `yaml:"OwnerAddress" env:"LOCAL_OWNER_ADDRESS" env-description:"Local validator owner address"`
 	Operators    []string       `yaml:"Operators" env:"LOCAL_OPERATORS" env-description:"Local validator selected operators"`
+	OperatorIds  []int          `yaml:"OperatorIds" env:"LOCAL_OPERATOR_IDS" env-description:"Local validator selected operator ids"`
 }
 
 // ToShare creates a Share instance from ShareOptions
 func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 	var err error
 
-	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 && len(options.OwnerAddress) > 0 && len(options.Operators) > 0 {
+	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 &&
+		len(options.OwnerAddress) > 0 && len(options.Operators) > 0 && len(options.OperatorIds) > 0 {
 		validatorPk := &bls.PublicKey{}
 		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
 			return nil, errors.Wrap(err, "failed to decode validator key")
@@ -35,9 +39,9 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 			}
 			return val
 		}
-		ibftCommittee := make(map[message.OperatorID]*beacon.Node)
+		ibftCommittee := make(map[spectypes.OperatorID]*beacon.Node)
 		for pk, id := range options.Committee {
-			ibftCommittee[message.OperatorID(id)] = &beacon.Node{
+			ibftCommittee[spectypes.OperatorID(id)] = &beacon.Node{
 				IbftID: uint64(id),
 				Pk:     _getBytesFromHex(pk),
 			}
@@ -48,17 +52,23 @@ func (options *ShareOptions) ToShare() (*beacon.Share, error) {
 			operators = append(operators, []byte(op))
 		}
 
+		var operatorIds []uint64
+		for _, opID := range options.OperatorIds {
+			operatorIds = append(operatorIds, uint64(opID))
+		}
+
 		if err != nil {
 			return nil, err
 		}
 
 		share := beacon.Share{
-			NodeID:       message.OperatorID(options.NodeID),
+			NodeID:       spectypes.OperatorID(options.NodeID),
 			Metadata:     nil,
 			PublicKey:    validatorPk,
 			Committee:    ibftCommittee,
 			OwnerAddress: options.OwnerAddress,
 			Operators:    operators,
+			OperatorIds:  operatorIds,
 		}
 		return &share, nil
 	}

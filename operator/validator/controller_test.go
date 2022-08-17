@@ -2,17 +2,21 @@ package validator
 
 import (
 	"context"
-	forksv2 "github.com/bloxapp/ssv/network/forks/v2"
+	"sync"
+	"testing"
+	"time"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"sync"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -26,34 +30,34 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg *message.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		wg.Done()
 		return nil
 	})
 
 	wg.Add(2)
 
-	identifier := message.NewIdentifier([]byte("pk"), message.RoleTypeAttester)
-	ctr.messageRouter.Route(message.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
-		ID:      identifier,
+	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	ctr.messageRouter.Route(spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
 
-	ctr.messageRouter.Route(message.SSVMessage{
-		MsgType: message.SSVConsensusMsgType,
-		ID:      identifier,
+	ctr.messageRouter.Route(spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   identifier,
 		Data:    generateChangeRoundMsg(t, identifier),
 	})
 
-	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
+	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
 		MsgType: message.SSVSyncMsgType,
-		ID:      identifier,
+		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
-	ctr.messageRouter.Route(message.SSVMessage{ // checks that not process unnecessary message
-		MsgType: message.SSVPostConsensusMsgType,
-		ID:      identifier,
+	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
 	go func() {
@@ -143,7 +147,7 @@ func setupController(logger *zap.Logger, validators map[string]validator.IValida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger, forksv2.New().MsgID()),
+		messageRouter:          newMessageRouter(logger, genesis.New().MsgID()),
 		messageWorker: worker.NewWorker(&worker.Config{
 			Ctx:          context.Background(),
 			Logger:       logger,
@@ -162,23 +166,22 @@ func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {
 	}}
 }
 
-func generateChangeRoundMsg(t *testing.T, identifier message.Identifier) []byte {
-	crd := message.RoundChangeData{
+func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
+	crd := specqbft.RoundChangeData{
 		PreparedValue:            nil,
-		Round:                    0,
-		NextProposalData:         nil,
+		PreparedRound:            0,
 		RoundChangeJustification: nil,
 	}
 	encoded, err := crd.Encode()
 	require.NoError(t, err)
-	sm := message.SignedMessage{
+	sm := specqbft.SignedMessage{
 		Signature: []byte("sig"),
-		Signers:   []message.OperatorID{1},
-		Message: &message.ConsensusMessage{
-			MsgType:    message.RoundChangeMsgType,
+		Signers:   []spectypes.OperatorID{1},
+		Message: &specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     0,
 			Round:      1,
-			Identifier: identifier,
+			Identifier: identifier[:],
 			Data:       encoded,
 		},
 	}

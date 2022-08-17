@@ -2,12 +2,12 @@ package abiparser
 
 import (
 	"math/big"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // MalformedEventError is returned when event is malformed
@@ -21,121 +21,120 @@ func (e *MalformedEventError) Error() string {
 
 // Event names
 const (
-	OperatorAdded     = "OperatorAdded"
-	OperatorRemoved   = "OperatorRemoved"
-	ValidatorAdded    = "ValidatorAdded"
-	ValidatorRemoved  = "ValidatorRemoved"
-	AccountLiquidated = "AccountLiquidated"
-	AccountEnabled    = "AccountEnabled"
+	OperatorRegistration  = "OperatorRegistration"
+	OperatorRemoval       = "OperatorRemoval"
+	ValidatorRegistration = "ValidatorRegistration"
+	ValidatorRemoval      = "ValidatorRemoval"
+	AccountLiquidation    = "AccountLiquidation"
+	AccountEnable         = "AccountEnable"
 )
 
-// ValidatorAddedEvent struct represents event received by the smart contract
-type ValidatorAddedEvent struct {
-	PublicKey          []byte
-	OwnerAddress       common.Address
-	OperatorPublicKeys [][]byte
-	OperatorIds        []*big.Int
-	SharesPublicKeys   [][]byte
-	EncryptedKeys      [][]byte
-}
-
-// AccountLiquidatedEvent struct represents event received by the smart contract
-type AccountLiquidatedEvent struct {
-	OwnerAddress common.Address
-}
-
-// AccountEnabledEvent struct represents event received by the smart contract
-type AccountEnabledEvent struct {
-	OwnerAddress common.Address
-}
-
-// OperatorAddedEvent struct represents event received by the smart contract
-type OperatorAddedEvent struct {
-	Id           *big.Int //nolint
+// OperatorRegistrationEvent struct represents event received by the smart contract
+type OperatorRegistrationEvent struct {
+	Id           uint32 //nolint // indexed
 	Name         string
-	OwnerAddress common.Address
+	OwnerAddress common.Address // indexed
 	PublicKey    []byte
 	Fee          *big.Int
 }
 
-// OperatorRemovedEvent struct represents event received by the smart contract
-type OperatorRemovedEvent struct {
-	OperatorId   *big.Int //nolint
-	OwnerAddress common.Address
+// OperatorRemovalEvent struct represents event received by the smart contract
+type OperatorRemovalEvent struct {
+	OperatorId   uint32         //nolint
+	OwnerAddress common.Address // indexed
 }
 
-// ValidatorRemovedEvent struct represents event received by the smart contract
-type ValidatorRemovedEvent struct {
-	OwnerAddress common.Address
+// ValidatorRegistrationEvent struct represents event received by the smart contract
+type ValidatorRegistrationEvent struct {
+	PublicKey          []byte
+	OwnerAddress       common.Address // indexed
+	OperatorPublicKeys [][]byte
+	OperatorIds        []uint32
+	SharesPublicKeys   [][]byte
+	EncryptedKeys      [][]byte
+}
+
+// ValidatorRemovalEvent struct represents event received by the smart contract
+type ValidatorRemovalEvent struct {
+	OwnerAddress common.Address // indexed
 	PublicKey    []byte
+}
+
+// AccountLiquidationEvent struct represents event received by the smart contract
+type AccountLiquidationEvent struct {
+	OwnerAddress common.Address // indexed
+}
+
+// AccountEnableEvent struct represents event received by the smart contract
+type AccountEnableEvent struct {
+	OwnerAddress common.Address // indexed
 }
 
 // AbiV2 parsing events from v2 abi contract
 type AbiV2 struct {
 }
 
-// ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v2 *AbiV2) ParseOperatorAddedEvent(
-	logger *zap.Logger,
+// ParseOperatorRegistrationEvent parses an OperatorRegistrationEvent
+func (v2 *AbiV2) ParseOperatorRegistrationEvent(
 	log types.Log,
 	contractAbi abi.ABI,
-) (*OperatorAddedEvent, error) {
-	var operatorAddedEvent OperatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&operatorAddedEvent, OperatorAdded, log.Data)
+) (*OperatorRegistrationEvent, error) {
+	var operatorRegistrationEvent OperatorRegistrationEvent
+	err := contractAbi.UnpackIntoInterface(&operatorRegistrationEvent, OperatorRegistration, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
-			Err: errors.Wrapf(err, "could not unpack %s event", OperatorAdded),
+			Err: errors.Wrap(err, "could not unpack event"),
 		}
 	}
 	outAbi, err := getOutAbi()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not define ABI")
 	}
-	pubKey, err := readOperatorPubKey(operatorAddedEvent.PublicKey, outAbi)
+	pubKey, err := readOperatorPubKey(operatorRegistrationEvent.PublicKey, outAbi)
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not read %s event operator public key", OperatorAdded)
+		return nil, errors.Wrapf(err, "could not read %s event operator public key", OperatorRegistration)
 	}
-	operatorAddedEvent.PublicKey = []byte(pubKey)
+	operatorRegistrationEvent.PublicKey = []byte(pubKey)
 
 	if len(log.Topics) < 3 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", OperatorAdded),
+			Err: errors.Errorf("%s event missing topics", OperatorRegistration),
 		}
 	}
-	operatorAddedEvent.Id = log.Topics[1].Big()
-	operatorAddedEvent.OwnerAddress = common.HexToAddress(log.Topics[2].Hex())
-	return &operatorAddedEvent, nil
+	operatorRegistrationEvent.Id = uint32(log.Topics[1].Big().Uint64())
+	operatorRegistrationEvent.OwnerAddress = common.HexToAddress(log.Topics[2].Hex())
+	return &operatorRegistrationEvent, nil
 }
 
-// ParseOperatorRemovedEvent parses OperatorRemovedEvent
-func (v2 *AbiV2) ParseOperatorRemovedEvent(
-	logger *zap.Logger,
-	log types.Log,
-	contractAbi abi.ABI,
-) (*OperatorRemovedEvent, error) {
-	var operatorRemovedEvent OperatorRemovedEvent
-
-	if len(log.Topics) < 3 {
-		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", OperatorRemoved),
-		}
-	}
-	operatorRemovedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
-	operatorRemovedEvent.OperatorId = log.Topics[2].Big()
-	return &operatorRemovedEvent, nil
-}
-
-// ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v2 *AbiV2) ParseValidatorAddedEvent(
-	logger *zap.Logger,
-	log types.Log,
-	contractAbi abi.ABI,
-) (event *ValidatorAddedEvent, error error) {
-	var validatorAddedEvent ValidatorAddedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorAddedEvent, ValidatorAdded, log.Data)
+// ParseOperatorRemovalEvent parses OperatorRemovalEvent
+func (v2 *AbiV2) ParseOperatorRemovalEvent(log types.Log, contractAbi abi.ABI) (*OperatorRemovalEvent, error) {
+	var operatorRemovalEvent OperatorRemovalEvent
+	err := contractAbi.UnpackIntoInterface(&operatorRemovalEvent, OperatorRemoval, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
-			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorAdded),
+			Err: errors.Wrap(err, "could not unpack event"),
+		}
+	}
+
+	if len(log.Topics) < 2 {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event missing topics", OperatorRemoval),
+		}
+	}
+	operatorRemovalEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	return &operatorRemovalEvent, nil
+}
+
+// ParseValidatorRegistrationEvent parses ValidatorRegistrationEvent
+func (v2 *AbiV2) ParseValidatorRegistrationEvent(
+	log types.Log,
+	contractAbi abi.ABI,
+) (event *ValidatorRegistrationEvent, error error) {
+	var validatorRegistrationEvent ValidatorRegistrationEvent
+	err := contractAbi.UnpackIntoInterface(&validatorRegistrationEvent, ValidatorRegistration, log.Data)
+	if err != nil {
+		return nil, &MalformedEventError{
+			Err: errors.Wrap(err, "could not unpack event"),
 		}
 	}
 
@@ -144,69 +143,97 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(
 		return nil, errors.Wrap(err, "could not define ABI")
 	}
 
-	for i, ek := range validatorAddedEvent.EncryptedKeys {
+	for i, ek := range validatorRegistrationEvent.EncryptedKeys {
 		out, err := outAbi.Unpack("method", ek)
 		if err != nil {
 			return nil, &MalformedEventError{
-				Err: errors.Wrapf(err, "could not unpack %s event EncryptedKey", ValidatorAdded),
+				Err: errors.Wrap(err, "could not unpack EncryptedKey"),
 			}
 		}
-		if encryptedSharePrivateKey, ok := out[0].(string); ok {
-			validatorAddedEvent.EncryptedKeys[i] = []byte(encryptedSharePrivateKey)
+
+		encryptedSharePrivateKey, ok := out[0].(string)
+		if !ok {
+			return nil, &MalformedEventError{
+				Err: errors.Wrap(err, "could not cast EncryptedKey"),
+			}
 		}
+		validatorRegistrationEvent.EncryptedKeys[i] = []byte(encryptedSharePrivateKey)
 	}
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", ValidatorAdded),
+			Err: errors.Errorf("%s event missing topics", ValidatorRegistration),
 		}
 	}
-	validatorAddedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	validatorRegistrationEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 
-	return &validatorAddedEvent, nil
+	return &validatorRegistrationEvent, nil
 }
 
-// ParseValidatorRemovedEvent parses ValidatorRemovedEvent
-func (v2 *AbiV2) ParseValidatorRemovedEvent(logger *zap.Logger, log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
-	var validatorRemovedEvent ValidatorRemovedEvent
-	err := contractAbi.UnpackIntoInterface(&validatorRemovedEvent, ValidatorRemoved, log.Data)
+// ParseValidatorRemovalEvent parses ValidatorRemovalEvent
+func (v2 *AbiV2) ParseValidatorRemovalEvent(log types.Log, contractAbi abi.ABI) (*ValidatorRemovalEvent, error) {
+	var validatorRemovalEvent ValidatorRemovalEvent
+	err := contractAbi.UnpackIntoInterface(&validatorRemovalEvent, ValidatorRemoval, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
-			Err: errors.Wrapf(err, "could not unpack %s event", ValidatorRemoved),
+			Err: errors.Wrap(err, "could not unpack event"),
 		}
 	}
 
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", ValidatorRemoved),
+			Err: errors.Errorf("%s event missing topics", ValidatorRemoval),
 		}
 	}
-	validatorRemovedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	validatorRemovalEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
 
-	return &validatorRemovedEvent, nil
+	return &validatorRemovalEvent, nil
 }
 
-// ParseAccountLiquidatedEvent parses AccountLiquidatedEvent
-func (v2 *AbiV2) ParseAccountLiquidatedEvent(log types.Log) (*AccountLiquidatedEvent, error) {
-	var accountLiquidatedEvent AccountLiquidatedEvent
+// ParseAccountLiquidationEvent parses AccountLiquidationEvent
+func (v2 *AbiV2) ParseAccountLiquidationEvent(log types.Log) (*AccountLiquidationEvent, error) {
+	var accountLiquidationEvent AccountLiquidationEvent
 
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", AccountLiquidated),
+			Err: errors.Errorf("%s event missing topics", AccountLiquidation),
 		}
 	}
-	accountLiquidatedEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
-	return &accountLiquidatedEvent, nil
+	accountLiquidationEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	return &accountLiquidationEvent, nil
 }
 
-// ParseAccountEnabledEvent parses AccountEnabledEvent
-func (v2 *AbiV2) ParseAccountEnabledEvent(log types.Log) (*AccountEnabledEvent, error) {
-	var accountEnabledEvent AccountEnabledEvent
+// ParseAccountEnableEvent parses AccountEnableEvent
+func (v2 *AbiV2) ParseAccountEnableEvent(log types.Log) (*AccountEnableEvent, error) {
+	var accountEnableEvent AccountEnableEvent
 
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event missing topics", AccountEnabled),
+			Err: errors.Errorf("%s event missing topics", AccountEnable),
 		}
 	}
-	accountEnabledEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
-	return &accountEnabledEvent, nil
+	accountEnableEvent.OwnerAddress = common.HexToAddress(log.Topics[1].Hex())
+	return &accountEnableEvent, nil
+}
+
+func readOperatorPubKey(operatorPublicKey []byte, outAbi abi.ABI) (string, error) {
+	outOperatorPublicKey, err := outAbi.Unpack("method", operatorPublicKey)
+	if err != nil {
+		return "", &MalformedEventError{
+			Err: err,
+		}
+	}
+
+	operatorPublicKeyString, ok := outOperatorPublicKey[0].(string)
+	if !ok {
+		return "", &MalformedEventError{
+			Err: errors.Wrap(err, "could not cast OperatorPublicKey"),
+		}
+	}
+
+	return operatorPublicKeyString, nil
+}
+
+func getOutAbi() (abi.ABI, error) {
+	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
+	return abi.JSON(strings.NewReader(def))
 }

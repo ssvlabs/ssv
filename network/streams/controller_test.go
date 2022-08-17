@@ -3,8 +3,8 @@ package streams
 import (
 	"bytes"
 	"context"
-	forksv1 "github.com/bloxapp/ssv/network/forks/v1"
-	ssv_protocol "github.com/bloxapp/ssv/protocol/v1/message"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/stretchr/testify/require"
@@ -21,9 +21,9 @@ func TestStreamCtrl(t *testing.T) {
 	//logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	ctrl0 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
-		hosts[0], forksv1.New(), time.Second)
+		hosts[0], genesis.New(), time.Second)
 	ctrl1 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
-		hosts[1], forksv1.New(), time.Second)
+		hosts[1], genesis.New(), time.Second)
 
 	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {
@@ -31,11 +31,11 @@ func TestStreamCtrl(t *testing.T) {
 			defer done()
 			require.NoError(t, err)
 			require.NotNil(t, msg)
-			resp, err := dummyMsg().MarshalJSON()
+			resp, err := dummyMsg().Encode()
 			require.NoError(t, err)
 			require.NoError(t, res(resp))
 		})
-		d, err := dummyMsg().MarshalJSON()
+		d, err := dummyMsg().Encode()
 		require.NoError(t, err)
 		res, err := ctrl1.Request(hosts[0].ID(), prot, d)
 		require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestStreamCtrl(t *testing.T) {
 			require.NotNil(t, s)
 			<-time.After(timeout + time.Millisecond)
 		})
-		d, err := dummyMsg().MarshalJSON()
+		d, err := dummyMsg().Encode()
 		require.NoError(t, err)
 		res, err := ctrl0.Request(hosts[0].ID(), prot, d)
 		require.Error(t, err)
@@ -63,6 +63,6 @@ func TestStreamCtrl(t *testing.T) {
 
 }
 
-func dummyMsg() *ssv_protocol.SSVMessage {
-	return &ssv_protocol.SSVMessage{Data: []byte("dummy")}
+func dummyMsg() *spectypes.SSVMessage {
+	return &spectypes.SSVMessage{Data: []byte("dummy")}
 }

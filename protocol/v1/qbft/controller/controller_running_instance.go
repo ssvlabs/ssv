@@ -2,13 +2,17 @@ package controller
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 )
 
@@ -16,6 +20,7 @@ import (
 // Does not pre-check instance validity and start validity!
 func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
 	newInstance := instance.NewInstance(instanceOpts)
+	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(c.ValidatorShare, newInstance.State())
 
 	c.setCurrentInstance(newInstance)
 
@@ -27,7 +32,8 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
-	metricsCurrentSequence.WithLabelValues(c.Identifier.GetRoleType().String(), hex.EncodeToString(c.Identifier.GetValidatorPK())).Set(float64(newInstance.State().GetHeight()))
+	messageID := message.ToMessageID(c.Identifier)
+	metricsCurrentSequence.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newInstance.State().GetHeight()))
 
 	// catch up if we can
 	go c.fastChangeRoundCatchup(newInstance)
@@ -38,8 +44,8 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 instanceLoop:
 	for {
 		stage := <-stageChan
-		if c.getCurrentInstance() == nil {
-			c.logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
+		if c.GetCurrentInstance() == nil {
+			c.Logger.Debug("stage channel was invoked but instance is already empty", zap.Any("stage", stage))
 			break instanceLoop
 		}
 		exit, e := c.instanceStageChange(stage)
@@ -50,10 +56,10 @@ instanceLoop:
 		if exit {
 			// exited with no error means instance decided
 			// fetch decided msg and return
-			retMsg, e := c.decidedStrategy.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
+			retMsg, e := c.DecidedStrategy.GetDecided(c.Identifier, instanceOpts.Height, instanceOpts.Height)
 			if e != nil {
 				err = e
-				c.logger.Error("failed to get decided when instance exist", zap.Error(e))
+				c.Logger.Error("failed to get decided when instance exist", zap.Error(e))
 				break instanceLoop
 			}
 			if len(retMsg) == 0 {
@@ -67,14 +73,14 @@ instanceLoop:
 			break instanceLoop
 		}
 	}
-	var seq message.Height
-	if c.getCurrentInstance() != nil {
+	var seq specqbft.Height
+	if c.GetCurrentInstance() != nil {
 		// saves seq as instance will be cleared
-		seq = c.getCurrentInstance().State().GetHeight()
+		seq = c.GetCurrentInstance().State().GetHeight()
 		// when main instance loop breaks, nil current instance
 		c.setCurrentInstance(nil)
 	}
-	c.logger.Debug("iBFT instance result loop stopped")
+	c.Logger.Debug("iBFT instance result loop stopped")
 
 	c.afterInstance(seq, retRes, err)
 
@@ -82,11 +88,11 @@ instanceLoop:
 }
 
 // afterInstance is triggered after the instance was finished
-func (c *Controller) afterInstance(height message.Height, res *instance.Result, err error) {
+func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result, err error) {
 	// if instance was decided -> wait for late commit messages
 	decided := res != nil && res.Decided
 	if decided && err == nil {
-		if height == message.Height(0) {
+		if height == specqbft.Height(0) {
 			if res.Msg == nil || res.Msg.Message == nil {
 				// missing sequence number
 				return
@@ -97,10 +103,10 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 	}
 	// didn't decided -> purge messages with smaller height
 	//c.q.Purge(msgqueue.DefaultMsgIndex(message.SSVConsensusMsgType, c.Identifier)) // TODO: that's the right indexer? might need be height and all messages
-	idn := c.Identifier.String()
-	c.q.Clean(func(k msgqueue.Index) bool {
+	idn := hex.EncodeToString(c.Identifier)
+	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
-			if k.Cmt == message.CommitMsgType && k.H == height {
+			if k.Cmt == specqbft.CommitMsgType && k.H == height {
 				return false
 			}
 			return true
@@ -111,8 +117,8 @@ func (c *Controller) afterInstance(height message.Height, res *instance.Result, 
 
 // instanceStageChange processes a stage change for the current instance, returns true if requires stopping the instance after stage process.
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
-	logger := c.logger.With()
-	if ci := c.getCurrentInstance(); ci != nil {
+	logger := c.Logger.With()
+	if ci := c.GetCurrentInstance(); ci != nil {
 		if s := ci.State(); s != nil {
 			logger = logger.With(zap.Uint64("instanceHeight", uint64(s.GetHeight())))
 		}
@@ -120,21 +126,21 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.instanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.getCurrentInstance().State()); err != nil {
+		if err := c.InstanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.GetCurrentInstance().State()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
 		run := func() error {
-			agg, err := c.getCurrentInstance().CommittedAggregatedMsg()
+			agg, err := c.GetCurrentInstance().CommittedAggregatedMsg()
 			if err != nil {
 				return errors.Wrap(err, "could not get aggregated commit msg and save to storage")
 			}
-			updated, err := c.decidedStrategy.UpdateDecided(agg)
+			updated, err := c.DecidedStrategy.UpdateDecided(agg)
 			if err != nil {
 				return errors.Wrap(err, "could not save highest decided message to storage")
 			}
 			logger.Info("decided current instance",
-				zap.String("identifier", agg.Message.Identifier.String()),
+				zap.String("identifier", message.ToMessageID(agg.Message.Identifier).String()),
 				zap.Any("signers", agg.GetSigners()),
 				zap.Uint64("height", uint64(agg.Message.Height)),
 				zap.Any("updated", updated))
@@ -148,20 +154,20 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 
 		err := run()
 		// call stop after decided in order to prevent race condition
-		c.getCurrentInstance().Stop()
+		c.GetCurrentInstance().Stop()
 		if err != nil {
 			return true, err
 		}
 		return false, nil
 	case qbft.RoundStateChangeRound:
 		// set time for next round change
-		c.getCurrentInstance().ResetRoundTimer()
+		c.GetCurrentInstance().ResetRoundTimer()
 		// broadcast round change
-		if err := c.getCurrentInstance().BroadcastChangeRound(); err != nil {
-			c.logger.Error("could not broadcast round change message", zap.Error(err))
+		if err := c.GetCurrentInstance().BroadcastChangeRound(); err != nil {
+			c.Logger.Error("could not broadcast round change message", zap.Error(err))
 		}
 	case qbft.RoundStateStopped:
-		c.logger.Info("current iBFT instance stopped, nilling currentInstance")
+		c.Logger.Info("current iBFT instance stopped, nilling currentInstance")
 		return true, nil
 	}
 	return false, nil
@@ -171,16 +177,16 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 // This is an active msg fetching instead of waiting for an incoming msg to be received which can take a while
 func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	count := 0
-	f := changeround.NewLastRoundFetcher(c.logger, c.network)
-	handler := func(msg *message.SignedMessage) error {
-		if ctxErr := c.ctx.Err(); ctxErr != nil {
+	f := changeround.NewLastRoundFetcher(c.Logger, c.Network)
+	handler := func(msg *specqbft.SignedMessage) error {
+		if ctxErr := c.Ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		currentInstance := c.getCurrentInstance()
+		currentInstance := c.GetCurrentInstance()
 		if currentInstance == nil {
 			return errors.New("current instance is nil")
 		}
-		logger := c.logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
+		logger := c.Logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
 		if stage := currentInstance.State(); stage != nil && stage.GetHeight() > msg.Message.Height {
 			logger.Debug("change round message is old, ignoring",
 				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
@@ -189,7 +195,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 			logger.Debug("got change round message of an newer decided",
 				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
 		}
-		err := c.getCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
+		err := c.GetCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
 		if err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
@@ -197,9 +203,9 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if err != nil {
 			return errors.Wrap(err, "could not encode msg")
 		}
-		c.q.Add(&message.SSVMessage{
-			MsgType: message.SSVConsensusMsgType, // should be consensus type as it change round msg
-			ID:      c.Identifier,
+		c.Q.Add(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType, // should be consensus type as it change round msg
+			MsgID:   message.ToMessageID(c.Identifier),
 			Data:    encodedMsg,
 		})
 		count++
@@ -207,12 +213,12 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 	}
 
 	h := instance.State().GetHeight()
-	err := f.GetChangeRoundMessages(c.Identifier, h, handler)
+	err := f.GetChangeRoundMessages(message.ToMessageID(c.Identifier), h, handler)
 
 	if err != nil {
-		c.logger.Warn("failed fast change round catchup", zap.Error(err))
+		c.Logger.Warn("failed fast change round catchup", zap.Error(err))
 		return
 	}
 
-	c.logger.Info("fast change round catchup finished", zap.Int("count", count), zap.Int64("height", int64(h)))
+	c.Logger.Info("fast change round catchup finished", zap.Int("count", count), zap.Int64("height", int64(h)))
 }

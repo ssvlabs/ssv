@@ -2,12 +2,15 @@ package lastdecided
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/sync"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"time"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v1/sync"
 )
 
 const (
@@ -17,11 +20,11 @@ const (
 )
 
 // GetLastDecided reads last decided message from store
-type GetLastDecided func(i message.Identifier) (*message.SignedMessage, error)
+type GetLastDecided func(i spectypes.MessageID) (*specqbft.SignedMessage, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(ctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error)
+	GetLastDecided(ctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -38,13 +41,13 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier message.Identifier, getLastDecided GetLastDecided) (*message.SignedMessage, string, message.Height, error) {
+func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error) {
 	ctx, cancel := context.WithTimeout(pctx, lastDecidedTimeout)
 	defer cancel()
 	var err error
 	var sender string
 	var remoteMsgs []p2pprotocol.SyncResult
-	var localMsg, highest *message.SignedMessage
+	var localMsg, highest *specqbft.SignedMessage
 
 	logger := l.logger.With(zap.String("identifier", identifier.String()))
 
@@ -73,7 +76,7 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier mes
 		return nil, "", 0, errors.Wrap(err, "could not get highest decided from remote peers")
 	}
 
-	var localHeight message.Height
+	var localHeight specqbft.Height
 	localMsg, err = getLastDecided(identifier)
 	if err != nil {
 		return nil, "", 0, errors.Wrap(err, "could not fetch local highest instance during sync")
