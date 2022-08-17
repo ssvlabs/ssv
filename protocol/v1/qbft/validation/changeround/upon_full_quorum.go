@@ -27,7 +27,7 @@ func UponFullQuorum(logger *zap.Logger) pipelines.SignedMessagePipeline {
 //			let v such that (−, v) = HighestPrepared(Qrc))
 //		else
 //			let v such that v = inputValue i
-//		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
+//		broadcast ⟨PROPOSAL, λi, ri, v⟩
 func (p *uponFullQuorum) Run(signedMessage *specqbft.SignedMessage) error {
 	panic("not implemented yet")
 }

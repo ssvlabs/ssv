@@ -13,7 +13,7 @@ type RoundState int32
 // RoundState values
 const (
 	RoundStateNotStarted  RoundState = 0
-	RoundStatePrePrepare  RoundState = 1
+	RoundStateProposal    RoundState = 1
 	RoundStatePrepare     RoundState = 2
 	RoundStateCommit      RoundState = 3
 	RoundStateChangeRound RoundState = 4
@@ -24,7 +24,7 @@ const (
 // RoundStateName represents the map of the round state names
 var RoundStateName = map[int32]string{
 	0: "NotStarted",
-	1: "PrePrepare",
+	1: "Proposal",
 	2: "Prepare",
 	3: "Commit",
 	4: "ChangeRound",
@@ -174,14 +174,14 @@ func NewByteValue(val []byte) atomic.Value {
 
 // InstanceConfig is the configuration of the instance
 type InstanceConfig struct {
-	RoundChangeDurationSeconds   float32
-	LeaderPreprepareDelaySeconds float32
+	RoundChangeDurationSeconds float32
+	LeaderProposalDelaySeconds float32
 }
 
 //DefaultConsensusParams returns the default round change duration time
 func DefaultConsensusParams() *InstanceConfig {
 	return &InstanceConfig{
-		RoundChangeDurationSeconds:   3,
-		LeaderPreprepareDelaySeconds: 1,
+		RoundChangeDurationSeconds: 3,
+		LeaderProposalDelaySeconds: 1,
 	}
 }
