@@ -40,24 +40,30 @@ func DefaultScoringConfig() *ScoringConfig {
 }
 
 // scoreInspector inspects scores and updates the score index accordingly
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
-			err := scoreIdx.Score(pid, &peers.NodeScore{
-				Name:  "PS_Score",
-				Value: peerScores.Score,
-			}, &peers.NodeScore{
-				Name:  "PS_BehaviourPenalty",
-				Value: peerScores.BehaviourPenalty,
-			}, &peers.NodeScore{
-				Name:  "PS_IPColocationFactor",
-				Value: peerScores.IPColocationFactor,
-			})
-			if err != nil {
-				logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
-			} else {
-				logger.Debug("peer scores were updated", zap.String("peer", pid.String()))
-			}
+			//scores := []*peers.NodeScore{
+			//	{
+			//		Name:  "PS_Score",
+			//		Value: peerScores.Score,
+			//	}, {
+			//		Name:  "PS_BehaviourPenalty",
+			//		Value: peerScores.BehaviourPenalty,
+			//	}, {
+			//		Name:  "PS_IPColocationFactor",
+			//		Value: peerScores.IPColocationFactor,
+			//	},
+			//}
+			logger.Debug("peer scores", zap.String("peer", pid.String()),
+				zap.Any("peerScores", peerScores))
+			//err := scoreIdx.Score(pid, scores...)
+			//if err != nil {
+			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
+			//} else {
+			//	logger.Debug("peer scores were updated", zap.String("peer", pid.String()),
+			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
+			//}
 		}
 	}
 }
@@ -85,6 +91,9 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
 		TopicScoreCap: 32.72,
+		AppSpecificScore: func(p peer.ID) float64 {
+			return 0
+		},
 		//AppSpecificScore: appSpecificScore(
 		//	cfg.Logger.With(zap.String("who", "appSpecificScore")),
 		//	cfg.ScoreIndex),
@@ -94,6 +103,7 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 		IPColocationFactorWhitelist: cfg.Scoring.IPWhilelist,
 		BehaviourPenaltyWeight:      -15.92,
 		BehaviourPenaltyThreshold:   6,
+		SeenMsgTTL:                  cfg.MsgIDCacheTTL,
 		BehaviourPenaltyDecay:       scoreDecay(cfg.Scoring.OneEpochDuration*10, cfg.Scoring.OneEpochDuration),
 		DecayInterval:               cfg.Scoring.OneEpochDuration,
 		DecayToZero:                 decayToZero,
@@ -160,7 +170,8 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 		MeshMessageDeliveriesActivation: 4 * cfg.Scoring.OneEpochDuration,
 		MeshFailurePenaltyWeight:        meshWeight,
 		MeshFailurePenaltyDecay:         scoreDecay(decayEpoch*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
-		InvalidMessageDeliveriesWeight:  0, // TODO: enable once validation is in place
+		InvalidMessageDeliveriesWeight:  0.0, // TODO: enable once validation is in place
+		InvalidMessageDeliveriesDecay:   0.1,
 		//InvalidMessageDeliveriesWeight:  -140.4475,
 		//InvalidMessageDeliveriesDecay:   scoreDecay(invalidDecayPeriod),
 	}
@@ -224,7 +235,8 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScorePa
 		MeshMessageDeliveriesActivation: 1 * cfg.Scoring.OneEpochDuration,
 		MeshFailurePenaltyWeight:        meshWeight,
 		MeshFailurePenaltyDecay:         scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
-		InvalidMessageDeliveriesWeight:  0.0,
+		InvalidMessageDeliveriesWeight:  0.0, // TODO: enable once validation is in place
+		InvalidMessageDeliveriesDecay:   0.1,
 		//InvalidMessageDeliveriesWeight:  -maxScore() / topicWeight,
 		//InvalidMessageDeliveriesDecay:   scoreDecay(invalidDecayPeriod, cfg.Scoring.OneEpochDuration),
 	}
