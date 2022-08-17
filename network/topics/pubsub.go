@@ -60,17 +60,7 @@ type PububConfig struct {
 type ScoringConfig struct {
 	IPWhilelist        []*net.IPNet
 	IPColocationWeight float64
-	AppSpecificWeight  float64
 	OneEpochDuration   time.Duration
-}
-
-// DefaultScoringConfig returns the default scoring config
-func DefaultScoringConfig() *ScoringConfig {
-	return &ScoringConfig{
-		IPColocationWeight: defaultIPColocationWeight,
-		AppSpecificWeight:  defaultAppSpecificWeight,
-		OneEpochDuration:   defaultOneEpochDuration,
-	}
 }
 
 // PubsubBundle includes the pubsub router, plus involved components
@@ -133,11 +123,13 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		psOpts = append(psOpts, pubsub.WithDiscovery(cfg.Discovery))
 	}
 
+	var topicScoreFactory func(string) *pubsub.TopicScoreParams
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams(cfg), peerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
+		topicScoreFactory = topicScoreParams(cfg, fork)
 	}
 
 	if cfg.MsgIDHandler != nil {
@@ -155,7 +147,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, nil)
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

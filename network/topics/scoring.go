@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -10,12 +11,32 @@ import (
 )
 
 const (
-	defaultAppSpecificWeight  = 1.0
 	defaultIPColocationWeight = -32.0
-	defaultOneEpochDuration   = 6 * 64 * time.Second
+	// defaultOneEpochDuration is slots-per-epoch * slot-duration
+	defaultOneEpochDuration = (12 * time.Second) * 32
 
+	// decidedTopicWeight specifies the scoring weight that we apply to a subnet topic
+	subnetTopicWeight = 0.8
+	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
+	decidedTopicWeight = 0.9
+	// maxInMeshScore describes the max score a peer can attain from being in the mesh
+	maxInMeshScore = 10
+	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
+	maxFirstDeliveryScore = 40
+	// decayToZero specifies the terminal value that we will use when decaying
+	// a value.
 	decayToZero = 0.01
+	// dampeningFactor reduces the amount by which the various thresholds and caps are created.
+	dampeningFactor = 90
 )
+
+// DefaultScoringConfig returns the default scoring config
+func DefaultScoringConfig() *ScoringConfig {
+	return &ScoringConfig{
+		IPColocationWeight: defaultIPColocationWeight,
+		OneEpochDuration:   defaultOneEpochDuration,
+	}
+}
 
 // scoreInspector inspects scores and updates the score index accordingly
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
@@ -41,7 +62,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(scores m
 }
 
 // peerScoreThresholds returns the thresholds to use for peer scoring
-// TODO: fine-tune values
 func peerScoreThresholds() *pubsub.PeerScoreThresholds {
 	return &pubsub.PeerScoreThresholds{
 		GossipThreshold:             -4000,
@@ -60,62 +80,98 @@ func scoreDecay(totalDurationDecay time.Duration, oneEpochDuration time.Duration
 }
 
 // peerScoreParams returns peer score params in the router level
-// TODO: find-tune values
 func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
-		TopicScoreCap: 32.0,
-		AppSpecificScore: appSpecificScore(
-			cfg.Logger.With(zap.String("who", "appSpecificScore")),
-			cfg.ScoreIndex),
-		AppSpecificWeight:           cfg.Scoring.AppSpecificWeight,
+		TopicScoreCap: 32.72,
+		//AppSpecificScore: appSpecificScore(
+		//	cfg.Logger.With(zap.String("who", "appSpecificScore")),
+		//	cfg.ScoreIndex),
+		AppSpecificWeight:           0,
 		IPColocationFactorWeight:    cfg.Scoring.IPColocationWeight,
 		IPColocationFactorThreshold: 10, // max 10 peers from the same IP
 		IPColocationFactorWhitelist: cfg.Scoring.IPWhilelist,
-		BehaviourPenaltyWeight:      -16.0,
+		BehaviourPenaltyWeight:      -15.92,
 		BehaviourPenaltyThreshold:   6,
 		BehaviourPenaltyDecay:       scoreDecay(cfg.Scoring.OneEpochDuration*10, cfg.Scoring.OneEpochDuration),
 		DecayInterval:               cfg.Scoring.OneEpochDuration,
 		DecayToZero:                 decayToZero,
-		RetainScore:                 cfg.Scoring.OneEpochDuration * 100,
+		RetainScore:                 cfg.Scoring.OneEpochDuration * 10,
 	}
 }
 
-func appSpecificScore(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(p peer.ID) float64 {
-	return func(p peer.ID) float64 {
-		// TODO: complete
-		scores, err := scoreIdx.GetScore(p, "")
-		if err != nil {
-			logger.Warn("could not get score for peer", zap.String("peer", p.String()), zap.Error(err))
-			return 0.0
-		}
-		var res float64
-		for _, s := range scores {
-			res += s.Value
-		}
-		return res
-	}
-}
-
-//func decidedTopicScoreParams() *pubsub.TopicScoreParams {
-//	pubsub.DefaultGossipSubParams()
-//	return &pubsub.TopicScoreParams{
-//		TopicWeight:                     0,
-//		TimeInMeshWeight:                0,
-//		TimeInMeshQuantum:               0,
-//		TimeInMeshCap:                   0,
-//		FirstMessageDeliveriesWeight:    0,
-//		FirstMessageDeliveriesDecay:     0,
-//		FirstMessageDeliveriesCap:       0,
-//		MeshMessageDeliveriesWeight:     0,
-//		MeshMessageDeliveriesDecay:      0,
-//		MeshMessageDeliveriesCap:        0,
-//		MeshMessageDeliveriesThreshold:  0,
-//		MeshMessageDeliveriesWindow:     0,
-//		MeshMessageDeliveriesActivation: 0,
-//		MeshFailurePenaltyWeight:        0,
-//		MeshFailurePenaltyDecay:         0,
-//		InvalidMessageDeliveriesWeight:  0,
-//		InvalidMessageDeliveriesDecay:   0,
+//
+//func appSpecificScore(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(p peer.ID) float64 {
+//	return func(p peer.ID) float64 {
+//		// TODO: complete
+//		scores, err := scoreIdx.GetScore(p, "")
+//		if err != nil {
+//			logger.Warn("could not get score for peer", zap.String("peer", p.String()), zap.Error(err))
+//			return 0.0
+//		}
+//		var res float64
+//		for _, s := range scores {
+//			res += s.Value
+//		}
+//		return res
 //	}
 //}
+
+// topicScoreParams factory for creating scoring params for topics
+func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
+	decidedTopic := f.GetTopicFullName(f.DecidedTopic())
+	return func(s string) *pubsub.TopicScoreParams {
+		switch s {
+		case decidedTopic:
+			return decidedTopicScoreParams(cfg)
+		default:
+			return subnetTopicScoreParams(cfg)
+		}
+	}
+}
+
+// decidedTopicScoreParams returns the scoring params for the decided topic
+func decidedTopicScoreParams(cfg *PububConfig) *pubsub.TopicScoreParams {
+	return &pubsub.TopicScoreParams{
+		TopicWeight:                     decidedTopicWeight,
+		TimeInMeshWeight:                0,
+		TimeInMeshQuantum:               0,
+		TimeInMeshCap:                   0,
+		FirstMessageDeliveriesWeight:    0,
+		FirstMessageDeliveriesDecay:     0,
+		FirstMessageDeliveriesCap:       0,
+		MeshMessageDeliveriesWeight:     0,
+		MeshMessageDeliveriesDecay:      0,
+		MeshMessageDeliveriesCap:        0,
+		MeshMessageDeliveriesThreshold:  0,
+		MeshMessageDeliveriesWindow:     0,
+		MeshMessageDeliveriesActivation: 0,
+		MeshFailurePenaltyWeight:        0,
+		MeshFailurePenaltyDecay:         0,
+		InvalidMessageDeliveriesWeight:  0,
+		InvalidMessageDeliveriesDecay:   0,
+	}
+}
+
+// subnetTopicScoreParams returns the scoring params for a subnet topic
+func subnetTopicScoreParams(cfg *PububConfig) *pubsub.TopicScoreParams {
+	return &pubsub.TopicScoreParams{
+		TopicWeight:                     subnetTopicWeight,
+		TimeInMeshWeight:                0,
+		TimeInMeshQuantum:               0,
+		TimeInMeshCap:                   0,
+		FirstMessageDeliveriesWeight:    0,
+		FirstMessageDeliveriesDecay:     0,
+		FirstMessageDeliveriesCap:       0,
+		MeshMessageDeliveriesWeight:     0,
+		MeshMessageDeliveriesDecay:      0,
+		MeshMessageDeliveriesCap:        0,
+		MeshMessageDeliveriesThreshold:  0,
+		MeshMessageDeliveriesWindow:     0,
+		MeshMessageDeliveriesActivation: 0,
+		MeshFailurePenaltyWeight:        0,
+		MeshFailurePenaltyDecay:         0,
+		InvalidMessageDeliveriesWeight:  0,
+		InvalidMessageDeliveriesDecay:   0,
+	}
+}
