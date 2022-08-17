@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"math"
 	"time"
@@ -15,10 +16,10 @@ const (
 	// defaultOneEpochDuration is slots-per-epoch * slot-duration
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
-	// decidedTopicWeight specifies the scoring weight that we apply to a subnet topic
-	subnetTopicWeight = 0.8
+	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
+	subnetsTotalWeight = 1
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
-	decidedTopicWeight = 0.9
+	decidedTopicWeight = 0.5
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
 	maxInMeshScore = 10
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
@@ -123,55 +124,144 @@ func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.Topic
 	return func(s string) *pubsub.TopicScoreParams {
 		switch s {
 		case decidedTopic:
-			return decidedTopicScoreParams(cfg)
+			return decidedTopicScoreParams(cfg, f)
 		default:
-			return subnetTopicScoreParams(cfg)
+			return subnetTopicScoreParams(cfg, f)
 		}
 	}
 }
 
-// decidedTopicScoreParams returns the scoring params for the decided topic
-func decidedTopicScoreParams(cfg *PububConfig) *pubsub.TopicScoreParams {
+// decidedTopicScoreParams returns the scoring params for the decided topic,
+// based on lighthouse parameters for block-topic, with some changes from prysm and alignment to ssv:
+// https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
+func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreParams {
+	inMeshTime := cfg.Scoring.OneEpochDuration
+	decayEpoch := time.Duration(5)
+	blocksPerEpoch := uint64(32) // TODO: check as we don't know this number in ssv
+	meshWeight := -0.717         // TODO: check why the value is different than
+	//if !meshDeliveryIsScored {
+	//	// Set the mesh weight as zero as a temporary measure, so as to prevent
+	//	// the average nodes from being penalised.
+	//	meshWeight = 0
+	//}
 	return &pubsub.TopicScoreParams{
 		TopicWeight:                     decidedTopicWeight,
-		TimeInMeshWeight:                0,
-		TimeInMeshQuantum:               0,
-		TimeInMeshCap:                   0,
-		FirstMessageDeliveriesWeight:    0,
-		FirstMessageDeliveriesDecay:     0,
-		FirstMessageDeliveriesCap:       0,
-		MeshMessageDeliveriesWeight:     0,
-		MeshMessageDeliveriesDecay:      0,
-		MeshMessageDeliveriesCap:        0,
-		MeshMessageDeliveriesThreshold:  0,
-		MeshMessageDeliveriesWindow:     0,
-		MeshMessageDeliveriesActivation: 0,
-		MeshFailurePenaltyWeight:        0,
-		MeshFailurePenaltyDecay:         0,
-		InvalidMessageDeliveriesWeight:  0,
-		InvalidMessageDeliveriesDecay:   0,
+		TimeInMeshWeight:                maxInMeshScore / inMeshCap(inMeshTime),
+		TimeInMeshQuantum:               inMeshTime,
+		TimeInMeshCap:                   inMeshCap(inMeshTime),
+		FirstMessageDeliveriesWeight:    1,
+		FirstMessageDeliveriesDecay:     scoreDecay(cfg.Scoring.OneEpochDuration*20, cfg.Scoring.OneEpochDuration),
+		FirstMessageDeliveriesCap:       23,
+		MeshMessageDeliveriesWeight:     meshWeight,
+		MeshMessageDeliveriesDecay:      scoreDecay(decayEpoch*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		MeshMessageDeliveriesCap:        float64(blocksPerEpoch * uint64(decayEpoch)),
+		MeshMessageDeliveriesThreshold:  float64(blocksPerEpoch*uint64(decayEpoch)) / 10,
+		MeshMessageDeliveriesWindow:     2 * time.Second,
+		MeshMessageDeliveriesActivation: 4 * cfg.Scoring.OneEpochDuration,
+		MeshFailurePenaltyWeight:        meshWeight,
+		MeshFailurePenaltyDecay:         scoreDecay(decayEpoch*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		InvalidMessageDeliveriesWeight:  0, // TODO: enable once validation is in place
+		//InvalidMessageDeliveriesWeight:  -140.4475,
+		//InvalidMessageDeliveriesDecay:   scoreDecay(invalidDecayPeriod),
 	}
 }
 
 // subnetTopicScoreParams returns the scoring params for a subnet topic
-func subnetTopicScoreParams(cfg *PububConfig) *pubsub.TopicScoreParams {
-	return &pubsub.TopicScoreParams{
-		TopicWeight:                     subnetTopicWeight,
-		TimeInMeshWeight:                0,
-		TimeInMeshQuantum:               0,
-		TimeInMeshCap:                   0,
-		FirstMessageDeliveriesWeight:    0,
-		FirstMessageDeliveriesDecay:     0,
-		FirstMessageDeliveriesCap:       0,
-		MeshMessageDeliveriesWeight:     0,
-		MeshMessageDeliveriesDecay:      0,
-		MeshMessageDeliveriesCap:        0,
-		MeshMessageDeliveriesThreshold:  0,
-		MeshMessageDeliveriesWindow:     0,
-		MeshMessageDeliveriesActivation: 0,
-		MeshFailurePenaltyWeight:        0,
-		MeshFailurePenaltyDecay:         0,
-		InvalidMessageDeliveriesWeight:  0,
-		InvalidMessageDeliveriesDecay:   0,
+// based on lighthouse parameters for attestation subnet, with some changes from prysm and alignment to ssv:
+// https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
+func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreParams {
+	subnetCount := uint64(f.Subnets())
+	// Get weight for each specific subnet.
+	topicWeight := subnetsTotalWeight / float64(subnetCount)
+	// TODO: get active subnets/validators
+	activeValidators := uint64(128)
+	subnetWeight := activeValidators / subnetCount
+	// Determine the amount of validators expected in a subnet in a single slot.
+	numPerSlot := time.Duration(subnetWeight / uint64(32))
+	if numPerSlot == 0 {
+		return nil
 	}
+	//comsPerSlot := committeeCountPerSlot(activeValidators)
+	//exceedsThreshold := comsPerSlot >= 2*subnetCount/uint64(32)
+	firstDecay := time.Duration(1)
+	meshDecay := time.Duration(4)
+	//if exceedsThreshold {
+	//	firstDecay = 4
+	//	meshDecay = 16
+	//}
+	rate := numPerSlot * 2 / time.Duration(gsD)
+	if rate == 0 {
+		return nil
+	}
+	// Determine expected first deliveries based on the message rate.
+	firstMessageCap, err := decayLimit(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration), float64(rate))
+	if err != nil {
+		return nil
+	}
+	firstMessageWeight := maxFirstDeliveryScore / firstMessageCap
+	// Determine expected mesh deliveries based on message rate applied with a dampening factor.
+	meshThreshold, err := decayThreshold(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		float64(numPerSlot)/dampeningFactor)
+	if err != nil {
+		return nil
+	}
+	meshWeight := -scoreByWeight(topicWeight, meshThreshold)
+	meshCap := 4 * meshThreshold
+	//invalidDecayPeriod := 50 * cfg.Scoring.OneEpochDuration
+	return &pubsub.TopicScoreParams{
+		TopicWeight:                     topicWeight,
+		TimeInMeshWeight:                maxInMeshScore / inMeshCap(cfg.Scoring.OneEpochDuration),
+		TimeInMeshQuantum:               cfg.Scoring.OneEpochDuration,
+		TimeInMeshCap:                   inMeshCap(cfg.Scoring.OneEpochDuration),
+		FirstMessageDeliveriesWeight:    firstMessageWeight,
+		FirstMessageDeliveriesDecay:     scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		FirstMessageDeliveriesCap:       firstMessageCap,
+		MeshMessageDeliveriesWeight:     meshWeight,
+		MeshMessageDeliveriesDecay:      scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		MeshMessageDeliveriesCap:        meshCap,
+		MeshMessageDeliveriesThreshold:  meshThreshold,
+		MeshMessageDeliveriesWindow:     2 * time.Second,
+		MeshMessageDeliveriesActivation: 1 * cfg.Scoring.OneEpochDuration,
+		MeshFailurePenaltyWeight:        meshWeight,
+		MeshFailurePenaltyDecay:         scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
+		InvalidMessageDeliveriesWeight:  0.0,
+		//InvalidMessageDeliveriesWeight:  -maxScore() / topicWeight,
+		//InvalidMessageDeliveriesDecay:   scoreDecay(invalidDecayPeriod, cfg.Scoring.OneEpochDuration),
+	}
+}
+
+// the cap for `inMesh` time scoring.
+func inMeshCap(inMeshTime time.Duration) float64 {
+	return float64((3600 * time.Second) / inMeshTime)
+}
+
+// is used to determine the threshold from the decay limit with
+// a provided growth rate. This applies the decay rate to a
+// computed limit.
+func decayThreshold(decayRate, rate float64) (float64, error) {
+	d, err := decayLimit(decayRate, rate)
+	if err != nil {
+		return 0, err
+	}
+	return d * decayRate, nil
+}
+
+// decayLimit provides the value till which a decay process will
+// limit till provided with an expected growth rate.
+func decayLimit(decayRate, rate float64) (float64, error) {
+	if 1 <= decayRate {
+		return 0, errors.Errorf("got an invalid decayLimit rate: %f", decayRate)
+	}
+	return rate / (1 - decayRate), nil
+}
+
+// provides the relevant score by the provided weight and threshold.
+func scoreByWeight(weight, threshold float64) float64 {
+	return maxScore() / (weight * threshold * threshold)
+}
+
+// maxScore attainable by a peer.
+func maxScore() float64 {
+	totalWeight := decidedTopicWeight + subnetsTotalWeight
+	return (maxInMeshScore + maxFirstDeliveryScore) * totalWeight
 }
