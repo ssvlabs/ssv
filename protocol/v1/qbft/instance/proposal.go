@@ -13,8 +13,17 @@ import (
 
 // ProposalMsgPipeline is the main proposal msg pipeline
 func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.proposalMsgValidationPipeline()
+
+	// TODO: Add value check.
 	return pipelines.Combine(
-		i.proposalMsgValidationPipeline(),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid proposal message: %w", err)
+			}
+			return nil
+		}),
+
 		pipelines.WrapFunc("add proposal msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid proposal message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -58,7 +67,7 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 			i.bumpToRound(newRound)
 		}
 
-		prepareMsg, err := signedMessage.Message.GetProposalData()
+		proposalData, err := signedMessage.Message.GetProposalData()
 		if err != nil {
 			return errors.Wrap(err, "failed to get prepare message")
 		}
@@ -67,12 +76,12 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 		i.ProcessStageChange(qbft.RoundStateProposal)
 
 		// broadcast prepare msg
-		broadcastMsg, err := i.generatePrepareMessage(prepareMsg.Data)
+		broadcastMsg, err := i.generatePrepareMessage(proposalData.Data)
 		if err != nil {
-			return errors.Wrap(err, "failed to generate prepare message")
+			return errors.Wrap(err, "could not create prepare msg")
 		}
 		if err := i.SignAndBroadcast(broadcastMsg); err != nil {
-			i.Logger.Error("could not broadcast prepare message", zap.Error(err))
+			i.Logger.Error("failed to broadcast prepare message", zap.Error(err))
 			return err
 		}
 		return nil
