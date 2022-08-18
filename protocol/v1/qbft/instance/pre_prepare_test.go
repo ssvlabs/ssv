@@ -349,7 +349,7 @@ func TestPrePreparePipeline(t *testing.T) {
 	instance.fork = testingFork(instance)
 
 	pipeline := instance.PrePrepareMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, upon pre-prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, sequence, lambda, authorize, validate pre-prepare, , add pre-prepare msg, upon pre-prepare msg, ", pipeline.Name())
 }
 
 type testSSVSigner struct {

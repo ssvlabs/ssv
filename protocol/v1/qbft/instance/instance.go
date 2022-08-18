@@ -256,12 +256,10 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		return false, errors.Wrap(err, "invalid signed message")
 	}
 
-	// TODO(nkryuchkov): remove error wrapping, make the processing similar,
-	// optionally remove pipelines and use the code from spec
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
-			return false, fmt.Errorf("invalid proposal message: %w", err)
+			return false, err
 		}
 	case specqbft.PrepareMsgType:
 		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
@@ -273,11 +271,11 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		}
 	case specqbft.RoundChangeMsgType:
 		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
-			return false, fmt.Errorf("invalid round change message: %w", err)
+			return false, err
 		}
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		return false, errors.Errorf("undefined message type")
+		return false, fmt.Errorf("undefined message type")
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
@@ -362,7 +360,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 
 	encodedMsg, err := signedMessage.Encode()
 	if err != nil {
-		return errors.New("failed to encode consensus message")
+		return errors.New("could not encode message")
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
