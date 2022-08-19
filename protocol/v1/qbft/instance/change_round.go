@@ -3,7 +3,6 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"math"
 	"time"
 
@@ -13,13 +12,20 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // ChangeRoundMsgPipeline - the main change round msg pipeline
 func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.ChangeRoundMsgValidationPipeline()
 	return pipelines.Combine(
-		i.ChangeRoundMsgValidationPipeline(),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid round change message: %w", err)
+			}
+			return nil
+		}),
 		pipelines.WrapFunc("add change round msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid change round message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),

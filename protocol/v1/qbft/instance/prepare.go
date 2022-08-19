@@ -6,13 +6,13 @@ import (
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -37,8 +37,6 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 func (i *Instance) PrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
-		signedmsg.ValidateRound(i.State().GetRound()),
-		prepare.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -102,32 +100,46 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			return err
 		}
 
-		// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-		if quorum, _ := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(signedMessage.Message.Round, prepareData.Data); quorum {
-			var errorPrp error
-			i.processPrepareQuorumOnce.Do(func() {
-				i.Logger.Info("prepared instance",
-					zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
-
-				// set prepared state
-				i.State().PreparedRound.Store(signedMessage.Message.Round)
-				i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
-				i.ProcessStageChange(qbft.RoundStatePrepare)
-
-				// send commit msg
-				broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
-				if err != nil {
-					return
-				}
-				if e := i.SignAndBroadcast(broadcastMsg); e != nil {
-					i.Logger.Info("could not broadcast commit message", zap.Error(err))
-					errorPrp = e
-				}
-			})
-			return errorPrp
+		if quorum, _, _ := signedmsg.HasQuorum(i.ValidatorShare, i.containersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.State().GetRound())); !quorum {
+			return nil
 		}
-		return nil
+
+		if i.didSendCommitForHeightAndRound() {
+			return nil // already moved to commit stage
+		}
+
+		var errorPrp error
+		i.processPrepareQuorumOnce.Do(func() {
+			i.Logger.Info("prepared instance",
+				zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
+
+			// set prepared state
+			i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
+			i.State().PreparedRound.Store(i.State().GetRound())
+			i.ProcessStageChange(qbft.RoundStatePrepare)
+
+			// send commit msg
+			broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
+			if err != nil {
+				return
+			}
+			if e := i.SignAndBroadcast(broadcastMsg); e != nil {
+				i.Logger.Info("could not broadcast commit message", zap.Error(err))
+				errorPrp = e
+			}
+		})
+		return errorPrp
+
 	})
+}
+
+func (i *Instance) didSendCommitForHeightAndRound() bool {
+	for _, msg := range i.containersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(i.State().GetRound()) {
+		if msg.MatchedSigners([]spectypes.OperatorID{i.ValidatorShare.NodeID}) {
+			return true
+		}
+	}
+	return false
 }
 
 func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, error) {

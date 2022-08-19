@@ -22,6 +22,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
@@ -257,44 +258,24 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		return false, errors.Wrap(err, "invalid signed message")
 	}
 
-	// TODO(nkryuchkov): remove error wrapping, make the processing similar,
-	// optionally remove pipelines and use the code from spec
-	switch msg.Message.MsgType {
-	case specqbft.ProposalMsgType:
-		if err := i.ProposalMsgPipeline().Run(msg); err != nil {
-			if errors.Is(err, signedmsg.ErrWrongRound) {
-				// NOTE: These 4 checks will be replaced by one in a future PR.
-				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
-			}
-			return false, fmt.Errorf("invalid proposal message: %w", err)
-		}
-	case specqbft.PrepareMsgType:
-		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
-			if errors.Is(err, signedmsg.ErrWrongRound) {
-				// NOTE: These 4 checks will be replaced by one in a future PR.
-				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
-			}
-			return false, err
-		}
-	case specqbft.CommitMsgType:
-		if err := i.CommitMsgPipeline().Run(msg); err != nil {
-			if errors.Is(err, signedmsg.ErrWrongRound) {
-				// NOTE: These 4 checks will be replaced by one in a future PR.
-				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
-			}
-			return false, err
-		}
-	case specqbft.RoundChangeMsgType:
-		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
-			if errors.Is(err, signedmsg.ErrWrongRound) {
-				// NOTE: These 4 checks will be replaced by one in a future PR.
-				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
-			}
-			return false, fmt.Errorf("invalid round change message: %w", err)
-		}
-	default:
+	pipelineMap := map[specqbft.MessageType]pipelines.SignedMessagePipeline{
+		specqbft.ProposalMsgType:    i.ProposalMsgPipeline(),
+		specqbft.PrepareMsgType:     i.PrepareMsgPipeline(),
+		specqbft.CommitMsgType:      i.CommitMsgPipeline(),
+		specqbft.RoundChangeMsgType: i.ChangeRoundMsgPipeline(),
+	}
+
+	p, ok := pipelineMap[msg.Message.MsgType]
+	if !ok {
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		return false, errors.Errorf("undefined message type")
+		return false, fmt.Errorf("undefined message type")
+	}
+
+	if err := p.Run(msg); err != nil {
+		if errors.Is(err, signedmsg.ErrWrongRound) {
+			i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+		}
+		return false, err
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)

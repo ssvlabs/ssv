@@ -13,8 +13,16 @@ import (
 
 // ProposalMsgPipeline is the main proposal msg pipeline
 func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.proposalMsgValidationPipeline()
+
+	// TODO: Add value check.
 	return pipelines.Combine(
-		i.proposalMsgValidationPipeline(),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid proposal message: %w", err)
+			}
+			return nil
+		}),
 		pipelines.WrapFunc("add proposal msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid proposal message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),

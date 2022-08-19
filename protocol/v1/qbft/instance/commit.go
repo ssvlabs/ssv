@@ -120,12 +120,12 @@ func (i *Instance) generateCommitMessage(value []byte) (*specqbft.Message, error
 	if err != nil {
 		return nil, err
 	}
-	identifier := i.State().GetIdentifier()
+
 	return &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: identifier[:],
+		Identifier: i.State().GetIdentifier(),
 		Data:       encodedCommitMsg,
 	}, nil
 }
