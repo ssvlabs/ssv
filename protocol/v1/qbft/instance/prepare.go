@@ -104,9 +104,11 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			return nil
 		}
 
-		if i.didSendCommitForHeightAndRound() {
-			return nil // already moved to commit stage
-		}
+		// TODO: this seems to do the same thing as processPrepareQuorumOnce,
+		// need to check if processPrepareQuorumOnce needs to be replaced with processPrepareQuorumOnce
+		//if i.didSendCommitForHeightAndRound() {
+		//	return nil // already moved to commit stage
+		//}
 
 		var errorPrp error
 		i.processPrepareQuorumOnce.Do(func() {
