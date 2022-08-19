@@ -54,10 +54,12 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.AuthorizeMsg(share),
+		signedmsg.ValidateRound(state.GetRound()),
+		signedmsg.ValidateLambdas(identifier[:]),
+		prepare.ValidateProposal(state),
 		prepare.ValidatePrepareMsg(),
+		signedmsg.AuthorizeMsg(share),
 	)
 }
 

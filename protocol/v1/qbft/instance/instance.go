@@ -22,6 +22,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
 
@@ -256,26 +257,21 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		return false, errors.Wrap(err, "invalid signed message")
 	}
 
-	switch msg.Message.MsgType {
-	case specqbft.ProposalMsgType:
-		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
-			return false, err
-		}
-	case specqbft.PrepareMsgType:
-		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
-			return false, err
-		}
-	case specqbft.CommitMsgType:
-		if err := i.CommitMsgPipeline().Run(msg); err != nil {
-			return false, err
-		}
-	case specqbft.RoundChangeMsgType:
-		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
-			return false, err
-		}
-	default:
+	pipelineMap := map[specqbft.MessageType]pipelines.SignedMessagePipeline{
+		specqbft.ProposalMsgType:    i.PrePrepareMsgPipeline(),
+		specqbft.PrepareMsgType:     i.PrepareMsgPipeline(),
+		specqbft.CommitMsgType:      i.CommitMsgPipeline(),
+		specqbft.RoundChangeMsgType: i.ChangeRoundMsgPipeline(),
+	}
+
+	p, ok := pipelineMap[msg.Message.MsgType]
+	if !ok {
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, fmt.Errorf("undefined message type")
+	}
+
+	if err := p.Run(msg); err != nil {
+		return false, err
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
