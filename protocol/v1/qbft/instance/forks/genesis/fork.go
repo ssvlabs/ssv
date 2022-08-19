@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/commit"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -64,12 +65,14 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 }
 
 // CommitMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
-		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateRound(state.GetRound()),
+		signedmsg.ValidateLambdas(state.GetIdentifier()),
+		commit.ValidateProposal(state),
 		signedmsg.AuthorizeMsg(share),
 	)
 }
