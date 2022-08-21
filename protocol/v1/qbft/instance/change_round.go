@@ -327,6 +327,6 @@ func UpdateChangeRoundMessage(logger *zap.Logger, changeRoundStorage qbftstorage
 	}
 
 	// new msg is higher than last one, save.
-	logger.Debug("last change round updated")
+	fLogger.Debug("last change round updated")
 	return changeRoundStorage.SaveLastChangeRoundMsg(msg)
 }
