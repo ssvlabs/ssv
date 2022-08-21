@@ -118,8 +118,8 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		}
 		if meta := msg.GetMeta(); meta != nil {
 			if ctrl := meta.Control; ctrl != nil {
-				fields = append(fields, zap.Int("ihaveCount", len(ctrl.GetIhave())))
-				fields = append(fields, zap.Int("iwantCount", len(ctrl.GetIwant())))
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
 			}
 			var subs []string
 			for _, sub := range meta.Subscription {
@@ -136,8 +136,8 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		}
 		if meta := msg.GetMeta(); meta != nil {
 			if ctrl := meta.Control; ctrl != nil {
-				fields = append(fields, zap.Int("ihaveCount", len(ctrl.GetIhave())))
-				fields = append(fields, zap.Int("iwantCount", len(ctrl.GetIwant())))
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
 			}
 			var subs []string
 			for _, sub := range meta.Subscription {
@@ -154,8 +154,8 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		}
 		if meta := msg.GetMeta(); meta != nil {
 			if ctrl := meta.Control; ctrl != nil {
-				fields = append(fields, zap.Int("ihaveCount", len(ctrl.GetIhave())))
-				fields = append(fields, zap.Int("iwantCount", len(ctrl.GetIwant())))
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
 			}
 			var subs []string
 			for _, sub := range meta.Subscription {
@@ -168,4 +168,34 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		return
 	}
 	pst.logger.Debug("pubsub event", fields...)
+}
+
+func appendIHave(fields []zap.Field, ihave []*ps_pb.TraceEvent_ControlIHaveMeta) []zap.Field {
+	if len(ihave) > 0 {
+		fields = append(fields, zap.Int("ihaveCount", len(ihave)))
+		for _, im := range ihave {
+			var mids []string
+			msgids := im.GetMessageIDs()
+			for _, mid := range msgids {
+				mids = append(mids, hex.EncodeToString(mid))
+			}
+			fields = append(fields, zap.Strings("IHAVEmsgIDs", mids))
+		}
+	}
+	return fields
+}
+
+func appendIWant(fields []zap.Field, iwant []*ps_pb.TraceEvent_ControlIWantMeta) []zap.Field {
+	if len(iwant) > 0 {
+		fields = append(fields, zap.Int("iwantCount", len(iwant)))
+		for _, im := range iwant {
+			var mids []string
+			msgids := im.GetMessageIDs()
+			for _, mid := range msgids {
+				mids = append(mids, hex.EncodeToString(mid))
+			}
+			fields = append(fields, zap.Strings("IWANTmsgIDs", mids))
+		}
+	}
+	return fields
 }
