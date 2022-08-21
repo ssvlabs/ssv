@@ -162,7 +162,7 @@ spec:
           - name: DB_PATH
             value: "./data/db"
           - name: DB_REPORTING
-            value: "true"
+            value: "false"
           - name: METRICS_API_PORT
             value: "15008"
           - name: ENABLE_PROFILE
