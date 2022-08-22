@@ -62,7 +62,7 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		msg := evt.GetRejectMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
 		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
+			fields = append(fields, zap.String("receivedFrom", pid.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
@@ -70,7 +70,7 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		msg := evt.GetDuplicateMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
 		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
+			fields = append(fields, zap.String("receivedFrom", pid.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
@@ -78,7 +78,7 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		msg := evt.GetDeliverMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
 		if err == nil {
-			fields = append(fields, zap.String("targetPeer", pid.String()))
+			fields = append(fields, zap.String("receivedFrom", pid.String()))
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
@@ -96,11 +96,37 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		fields = append(fields, zap.String("topic", evt.GetJoin().GetTopic()))
 	case ps_pb.TraceEvent_LEAVE:
 		fields = append(fields, zap.String("topic", evt.GetLeave().GetTopic()))
+	case ps_pb.TraceEvent_GRAFT:
+		msg := evt.GetGraft()
+		pid, err := peer.IDFromBytes(msg.GetPeerID())
+		if err == nil {
+			fields = append(fields, zap.String("graftPeer", pid.String()))
+		}
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
+	case ps_pb.TraceEvent_PRUNE:
+		msg := evt.GetPrune()
+		pid, err := peer.IDFromBytes(msg.GetPeerID())
+		if err == nil {
+			fields = append(fields, zap.String("prunePeer", pid.String()))
+		}
+		fields = append(fields, zap.String("topic", msg.GetTopic()))
 	case ps_pb.TraceEvent_SEND_RPC:
 		msg := evt.GetSendRPC()
 		pid, err := peer.IDFromBytes(msg.GetSendTo())
 		if err == nil {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
+		}
+		if meta := msg.GetMeta(); meta != nil {
+			if ctrl := meta.Control; ctrl != nil {
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
+			}
+			var subs []string
+			for _, sub := range meta.Subscription {
+				subs = append(subs, sub.GetTopic())
+			}
+			fields = append(fields, zap.Int("subsCount", len(subs)))
+			fields = append(fields, zap.Strings("subs", subs))
 		}
 	case ps_pb.TraceEvent_DROP_RPC:
 		msg := evt.GetDropRPC()
@@ -108,6 +134,68 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		if err == nil {
 			fields = append(fields, zap.String("targetPeer", pid.String()))
 		}
+		if meta := msg.GetMeta(); meta != nil {
+			if ctrl := meta.Control; ctrl != nil {
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
+			}
+			var subs []string
+			for _, sub := range meta.Subscription {
+				subs = append(subs, sub.GetTopic())
+			}
+			fields = append(fields, zap.Int("subsCount", len(subs)))
+			fields = append(fields, zap.Strings("subs", subs))
+		}
+	case ps_pb.TraceEvent_RECV_RPC:
+		msg := evt.GetRecvRPC()
+		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
+		if err == nil {
+			fields = append(fields, zap.String("receivedFrom", pid.String()))
+		}
+		if meta := msg.GetMeta(); meta != nil {
+			if ctrl := meta.Control; ctrl != nil {
+				fields = appendIHave(fields, ctrl.GetIhave())
+				fields = appendIWant(fields, ctrl.GetIwant())
+			}
+			var subs []string
+			for _, sub := range meta.Subscription {
+				subs = append(subs, sub.GetTopic())
+			}
+			fields = append(fields, zap.Int("subsCount", len(subs)))
+			fields = append(fields, zap.Strings("subs", subs))
+		}
+	default:
+		return
 	}
 	pst.logger.Debug("pubsub event", fields...)
+}
+
+func appendIHave(fields []zap.Field, ihave []*ps_pb.TraceEvent_ControlIHaveMeta) []zap.Field {
+	if len(ihave) > 0 {
+		fields = append(fields, zap.Int("ihaveCount", len(ihave)))
+		for _, im := range ihave {
+			var mids []string
+			msgids := im.GetMessageIDs()
+			for _, mid := range msgids {
+				mids = append(mids, hex.EncodeToString(mid))
+			}
+			fields = append(fields, zap.Strings("IHAVEmsgIDs", mids))
+		}
+	}
+	return fields
+}
+
+func appendIWant(fields []zap.Field, iwant []*ps_pb.TraceEvent_ControlIWantMeta) []zap.Field {
+	if len(iwant) > 0 {
+		fields = append(fields, zap.Int("iwantCount", len(iwant)))
+		for _, im := range iwant {
+			var mids []string
+			msgids := im.GetMessageIDs()
+			for _, mid := range msgids {
+				mids = append(mids, hex.EncodeToString(mid))
+			}
+			fields = append(fields, zap.Strings("IWANTmsgIDs", mids))
+		}
+	}
+	return fields
 }
