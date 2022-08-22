@@ -106,7 +106,7 @@ The following objects will be used by the API:
 
 `/stream` is an API that allows consumers to get live data that is collected by the exporter, which will push the information it receives from SSV nodes.
 
-For example, exporter will push a message for a new decided message that it picked up from the network:
+For example, exporter will push a message for a new decided message that was broadcast-ed in the network:
 ```json
 {
   "type": "decided",
