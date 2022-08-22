@@ -49,9 +49,12 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 		newRound := signedMessage.Message.Round
 
-		// A future justified proposal should bump us into future round and reset timer
-		if signedMessage.Message.Round > i.State().GetRound() {
-			i.ResetRoundTimer() // TODO: make sure what is needed here is i.ResetRoundTimer(), not something else
+		if currentRound := i.State().GetRound(); signedMessage.Message.Round > currentRound {
+			i.Logger.Debug("received future justified proposal, bumping into its round and resetting timer",
+				zap.Uint64("current_round", uint64(currentRound)),
+				zap.Uint64("future_round", uint64(signedMessage.Message.Round)),
+			)
+			i.ResetRoundTimer()
 			i.bumpToRound(newRound)
 		}
 
