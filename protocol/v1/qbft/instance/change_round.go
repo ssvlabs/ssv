@@ -7,7 +7,6 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -63,7 +62,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
 		msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(signedMessage.Message.Round)
-		quorum, msgsCount, committeeSize := i.changeRoundQuorum(msgs)
+		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, msgs)
 
 		// change round if quorum reached
 		if !quorum {
@@ -144,17 +143,6 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage
 		return nil
 	}
 	return i.UponPrePrepareMsg().Run(msg)
-}
-
-func (i *Instance) changeRoundQuorum(msgs []*specqbft.SignedMessage) (quorum bool, t int, n int) {
-	uniqueSigners := make(map[spectypes.OperatorID]bool)
-	for _, msg := range msgs {
-		for _, signer := range msg.GetSigners() {
-			uniqueSigners[signer] = true
-		}
-	}
-	quorum = len(uniqueSigners)*3 >= i.ValidatorShare.CommitteeSize()*2
-	return quorum, len(uniqueSigners), i.ValidatorShare.CommitteeSize()
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {

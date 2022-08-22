@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/commit"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -19,7 +20,7 @@ import (
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	validationPipeline := i.CommitMsgValidationPipeline()
 	return pipelines.Combine(
-		signedmsg.CheckProposal(i.State()),
+		signedmsg.ProposalExists(i.State()),
 		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
 			if err := validationPipeline.Run(signedMessage); err != nil {
 				return fmt.Errorf("invalid commit message: %w", err)
@@ -31,12 +32,12 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	)
 }
 
-// CommitMsgValidationPipeline is the main commit msg pipeline
+// CommitMsgValidationPipeline is the commit msg validation pipeline.
 func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight()),
 		signedmsg.ValidateRound(i.State().GetRound()),
-		signedmsg.ValidateProposal(i.State()),
+		commit.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),

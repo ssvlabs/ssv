@@ -274,7 +274,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 				// NOTE: These 4 checks will be replaced by one in a future PR.
 				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
 			}
-			return false, fmt.Errorf("invalid prepare message: %w", err)
+			return false, err
 		}
 	case specqbft.CommitMsgType:
 		if err := i.CommitMsgPipeline().Run(msg); err != nil {
