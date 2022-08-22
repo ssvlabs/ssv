@@ -27,6 +27,13 @@ ssv:
     MsgWorkersCount: 2048 # default is 1024
 ```
 
+With environment variables:
+```dotenv
+SUBNETS=0xffffffffffffffffffffffffffffffff
+WS_API_PORT=15000
+P2P_MAX_PEERS=150 # recommended but not a must
+```
+
 ## APIs
 
 Exporter Node provides WebSocket endpoints for reading the collected data. \
