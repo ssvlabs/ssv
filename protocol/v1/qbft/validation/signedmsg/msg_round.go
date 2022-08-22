@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
+// ErrWrongRound is returned when round is wrong.
 var ErrWrongRound = fmt.Errorf("round is wrong")
 
 // ValidateRound validates round
