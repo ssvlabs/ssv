@@ -14,8 +14,8 @@ import (
 // ErrInvalidSignersNum represents an error when the number of signers is invalid.
 var ErrInvalidSignersNum = errors.New("prepare msg allows 1 signer")
 
-// ValidatePrepareMsg validates prepare message.
-func ValidatePrepareMsg() pipelines.SignedMessagePipeline {
+// ValidatePrepareMsgSigners validates prepare message signers.
+func ValidatePrepareMsgSigners() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("validate prepare", func(signedMessage *specqbft.SignedMessage) error {
 		signers := signedMessage.GetSigners()
 		if len(signers) != 1 {

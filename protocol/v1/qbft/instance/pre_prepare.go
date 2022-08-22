@@ -26,8 +26,6 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			}
 			i.containersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
 
-			i.State().ProposalAcceptedForCurrentRound.Store(signedMessage)
-
 			return nil
 		}),
 		i.UponPrePrepareMsg(),
@@ -47,6 +45,8 @@ upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(�
 */
 func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *specqbft.SignedMessage) error {
+		i.State().ProposalAcceptedForCurrentRound.Store(signedMessage)
+
 		newRound := signedMessage.Message.Round
 
 		if currentRound := i.State().GetRound(); signedMessage.Message.Round > currentRound {
