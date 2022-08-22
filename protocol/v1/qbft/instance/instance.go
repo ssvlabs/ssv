@@ -23,6 +23,7 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // Options defines option attributes for the Instance
@@ -261,18 +262,34 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
 			return false, fmt.Errorf("invalid proposal message: %w", err)
 		}
 	case specqbft.PrepareMsgType:
 		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
 			return false, fmt.Errorf("invalid prepare message: %w", err)
 		}
 	case specqbft.CommitMsgType:
 		if err := i.CommitMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
 			return false, err
 		}
 	case specqbft.RoundChangeMsgType:
 		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
 			return false, fmt.Errorf("invalid round change message: %w", err)
 		}
 	default:
