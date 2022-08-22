@@ -17,13 +17,13 @@ const (
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
 	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 32
+	subnetsTotalWeight = 64
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
-	decidedTopicWeight = 0.5
+	decidedTopicWeight = 0.7
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
-	maxInMeshScore = 10
+	maxInMeshScore = 30
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
-	maxFirstDeliveryScore = 40
+	maxFirstDeliveryScore = 90
 	// decayToZero specifies the terminal value that we will use when decaying
 	// a value.
 	decayToZero = 0.01
@@ -91,7 +91,7 @@ func scoreDecay(totalDurationDecay time.Duration, oneEpochDuration time.Duration
 func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
-		TopicScoreCap: 32.72,
+		TopicScoreCap: 53.749999999999986,
 		AppSpecificScore: func(p peer.ID) float64 {
 			return 0
 		},
@@ -228,12 +228,12 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScorePa
 		FirstMessageDeliveriesWeight:    firstMessageWeight,
 		FirstMessageDeliveriesDecay:     scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		FirstMessageDeliveriesCap:       firstMessageCap,
-		MeshMessageDeliveriesWeight:     meshWeight,
+		MeshMessageDeliveriesWeight:     -37.22,
 		MeshMessageDeliveriesDecay:      scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		MeshMessageDeliveriesCap:        meshCap,
 		MeshMessageDeliveriesThreshold:  meshThreshold,
 		MeshMessageDeliveriesWindow:     2 * time.Second,
-		MeshMessageDeliveriesActivation: 1 * cfg.Scoring.OneEpochDuration,
+		MeshMessageDeliveriesActivation: 200 * time.Second,
 		MeshFailurePenaltyWeight:        meshWeight,
 		MeshFailurePenaltyDecay:         scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		InvalidMessageDeliveriesWeight:  0.0, // TODO: enable once validation is in place
