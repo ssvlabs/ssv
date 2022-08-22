@@ -57,7 +57,7 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		prepare.ValidatePrepareMsg(),
+		prepare.ValidatePrepareMsgSigners(),
 	)
 }
 

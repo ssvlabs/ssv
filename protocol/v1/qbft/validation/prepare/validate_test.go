@@ -106,7 +106,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidatePrepareMsg().Run(test.msg)
+			err := ValidatePrepareMsgSigners().Run(test.msg)
 			if len(test.err) > 0 {
 				require.EqualError(t, err, test.err)
 			} else {
