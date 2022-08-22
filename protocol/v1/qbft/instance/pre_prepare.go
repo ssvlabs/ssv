@@ -52,8 +52,8 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		// A future justified proposal should bump us into future round and reset timer
 		if signedMessage.Message.Round > i.State().GetRound() {
 			i.ResetRoundTimer() // TODO: make sure what is needed here is i.ResetRoundTimer(), not something else
+			i.bumpToRound(newRound)
 		}
-		i.State().Round.Store(newRound)
 
 		prepareMsg, err := signedMessage.Message.GetProposalData()
 		if err != nil {
