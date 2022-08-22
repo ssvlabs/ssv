@@ -135,7 +135,7 @@ func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
 		go dc.notifyCurrentSlot(currentSlot)
 
 		// execute duties
-		dc.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
+		dc.logger.Info("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
