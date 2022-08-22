@@ -18,11 +18,6 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/messages"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/prepare"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposal"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/proposer"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/roundchange"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -35,9 +30,12 @@ import (
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/constant"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
@@ -47,144 +45,19 @@ import (
 
 // nolint
 func testsToRun() map[string]struct{} {
-	testList := spectest.AllTests
-	testList = []spectest.SpecTest{
-		proposer.FourOperators(),
-		proposer.SevenOperators(),
-		proposer.TenOperators(),
-		proposer.ThirteenOperators(),
+	tests := make(map[string]struct{})
 
-		messages.RoundChangeDataInvalidJustifications(),
-		messages.RoundChangeDataInvalidPreparedRound(),
-		messages.RoundChangeDataInvalidPreparedValue(),
-		messages.RoundChangePrePreparedJustifications(),
-		messages.RoundChangeNotPreparedJustifications(),
-		messages.CommitDataEncoding(),
-		messages.DecidedMsgEncoding(),
-		messages.MsgNilIdentifier(),
-		messages.MsgNonZeroIdentifier(),
-		messages.MsgTypeUnknown(),
-		messages.PrepareDataEncoding(),
-		messages.ProposeDataEncoding(),
-		messages.MsgDataNil(),
-		messages.MsgDataNonZero(),
-		messages.SignedMsgSigTooShort(),
-		messages.SignedMsgSigTooLong(),
-		messages.SignedMsgNoSigners(),
-		messages.GetRoot(),
-		messages.SignedMessageEncoding(),
-		messages.CreateProposal(),
-		messages.CreateProposalPreviouslyPrepared(),
-		messages.CreateProposalNotPreviouslyPrepared(),
-		messages.CreatePrepare(),
-		messages.CreateCommit(),
-		messages.CreateRoundChange(),
-		messages.CreateRoundChangePreviouslyPrepared(),
-		messages.RoundChangeDataEncoding(),
-
-		spectests.HappyFlow(),
-		spectests.SevenOperators(),
-		spectests.TenOperators(),
-		spectests.ThirteenOperators(),
-
-		proposal.HappyFlow(),
-		proposal.NotPreparedPreviouslyJustification(),
-		proposal.PreparedPreviouslyJustification(),
-		proposal.DifferentJustifications(),
-		//proposal.JustificationsNotHeighest(),       // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
-		//proposal.JustificationsValueNotJustified(), // TODO(nkryuchkov): failure; Check if proposal for round >1 was prepared previously with rc justification prepares at different heights but the prepare justification or value is not the highest
-		//proposal.DuplicateMsg(),                    // TODO(nkryuchkov): failure; need to check if proposal was already accepted
-		proposal.FirstRoundJustification(),
-		//proposal.FutureRoundNoAcceptedProposal(), // TODO(nkryuchkov): failure; need to decline proposals from future rounds if no proposal was accepted for current round
-		//proposal.FutureRoundAcceptedProposal(),   // TODO(nkryuchkov): failure; need to accept proposals from future rounds if already accepted proposal for current round
-		//proposal.PastRound(),                     // TODO(nkryuchkov): failure; need to decline proposals from past rounds
-		proposal.ImparsableProposalData(),
-		//proposal.InvalidRoundChangeJustificationPrepared(),        // TODO(nkryuchkov): failure; need to handle invalid rc justification
-		//proposal.InvalidRoundChangeJustification(),                // TODO(nkryuchkov): failure; need to handle invalid rc justification
-		//proposal.PreparedPreviouslyNoRCJustificationQuorum(),      // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.NoRCJustification(),                              // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.PreparedPreviouslyNoPrepareJustificationQuorum(), // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.PreparedPreviouslyDuplicatePrepareMsg(),          // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.PreparedPreviouslyDuplicateRCMsg(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.DuplicateRCMsg(),                                 // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously with or without quorum of prepared or round change msgs justification
-		//proposal.InvalidPrepareJustificationValue(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
-		//proposal.InvalidPrepareJustificationRound(),               // TODO(nkryuchkov): failure; need to check if proposal for round >1 was prepared or not prepared previously but one of the prepare justifications has value != highest prepared or round != highest prepared round
-		proposal.InvalidProposalData(),
-		//proposal.InvalidValueCheck(), // TODO(nkryuchkov): failure; need to check message data
-		proposal.MultiSigner(),
-		//proposal.PostDecided(),            // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
-		//proposal.PostPrepared(),           // TODO(nkryuchkov): failure; need to avoid processing proposal message after instance became prepared or decided
-		//proposal.SecondProposalForRound(), // TODO(nkryuchkov): failure; need to forbid second proposal for round
-		proposal.WrongHeight(),
-		proposal.WrongProposer(),
-		proposal.WrongSignature(),
-
-		prepare.DuplicateMsg(),
-		prepare.HappyFlow(),
-		prepare.ImparsableProposalData(),
-		prepare.InvalidPrepareData(),
-		//prepare.MultiSigner(),        // TODO(nkryuchkov): failure; need to check that message has only 1 signer
-		//prepare.NoPreviousProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
-		//prepare.OldRound(),           // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//prepare.FutureRound(),        // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		prepare.PostDecided(),
-		//prepare.WrongData(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		prepare.WrongHeight(),
-		prepare.WrongSignature(),
-
-		commit.CurrentRound(),
-		//commit.FutureRound(), // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		//commit.PastRound(),   // TODO(nkryuchkov): failure; need to fail to process message if its round is not equal to current one
-		commit.DuplicateMsg(),
-		commit.HappyFlow(),
-		commit.InvalidCommitData(),
-		commit.PostDecided(),
-		//commit.WrongData1(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		//commit.WrongData2(), // TODO(nkryuchkov): failure; need to check if message data is different from proposal data
-		commit.MultiSignerWithOverlap(),
-		commit.MultiSignerNoOverlap(),
-		commit.Decided(),
-		//commit.NoPrevAcceptedProposal(), // TODO(nkryuchkov): failure; need to fail to process message if proposal was not received
-		commit.WrongHeight(),
-		commit.ImparsableCommitData(),
-		commit.WrongSignature(),
-
-		roundchange.HappyFlow(),
-		roundchange.F1Speedup(),
-		roundchange.F1SpeedupPrepared(),
-		roundchange.WrongHeight(),
-		roundchange.WrongSig(),
-		roundchange.MultiSigner(),
-		roundchange.NotPrepared(),
-		roundchange.Prepared(),
-		roundchange.PeerPrepared(),
-		roundchange.PeerPreparedDifferentHeights(),
-		roundchange.JustificationWrongValue(),
-		roundchange.JustificationWrongRound(),
-		roundchange.JustificationNoQuorum(),
-		roundchange.JustificationMultiSigners(),
-		roundchange.JustificationInvalidSig(),
-		roundchange.JustificationInvalidRound(),
-		roundchange.JustificationInvalidPrepareData(),
-		roundchange.JustificationDuplicateMsg(),
-		roundchange.InvalidRoundChangeData(),
-		roundchange.FutureRound(),
-		roundchange.PastRound(),
-		roundchange.F1SpeedupDifferentRounds(),
-		roundchange.DuplicateMsgQuorum(),
-		roundchange.DuplicateMsgPartialQuorum(),
-		roundchange.DuplicateMsgPrepared(),
-		roundchange.ImparsableRoundChangeData(),
+	testsBrokenInSpec := map[string]struct{}{
+		commit.FutureDecided().TestName(): {},
 	}
 
-	//testList = []spectest.SpecTest{}
-
-	result := make(map[string]struct{})
-	for _, test := range testList {
-		result[test.TestName()] = struct{}{}
+	for _, testItem := range spectest.AllTests {
+		if _, exists := testsBrokenInSpec[testItem.TestName()]; !exists {
+			tests[testItem.TestName()] = struct{}{}
+		}
 	}
 
-	return result
+	return tests
 }
 
 func TestQBFTMapping(t *testing.T) {
@@ -217,7 +90,7 @@ func TestQBFTMapping(t *testing.T) {
 		types.SetDefaultDomain(origDomain)
 	}()
 
-	testMap := testsToRun() // TODO(nkryuchkov): remove
+	testMap := testsToRun() // TODO: Remove overriding after commit.FutureDecided() is fixed in spec.
 
 	tests := make(map[string]spectest.SpecTest)
 	for name, test := range untypedTests {
@@ -327,6 +200,7 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	qbftInstance.State().InputValue.Store(test.Pre.StartValue)
 	qbftInstance.State().Round.Store(test.Pre.State.Round)
 	qbftInstance.State().Height.Store(test.Pre.State.Height)
+	qbftInstance.State().ProposalAcceptedForCurrentRound.Store(test.Pre.State.ProposalAcceptedForCurrentRound)
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
@@ -356,26 +230,13 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 			Height:                          qbftInstance.State().GetHeight(),
 			LastPreparedRound:               qbftInstance.State().GetPreparedRound(),
 			LastPreparedValue:               preparedValue,
-			ProposalAcceptedForCurrentRound: test.Pre.State.ProposalAcceptedForCurrentRound,
+			ProposalAcceptedForCurrentRound: qbftInstance.State().GetProposalAcceptedForCurrentRound(),
 			Decided:                         decidedErr == nil,
 			DecidedValue:                    decidedValue,
 			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType]),
 			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType]),
 			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType]),
 			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType]),
-		}
-
-		allMessages := mappedInstance.State.ProposeContainer.AllMessaged()
-		if len(allMessages) != 0 {
-			var highestRound specqbft.Round
-			var highestMessage *specqbft.SignedMessage
-			for _, message := range allMessages {
-				if message.Message.Round > highestRound {
-					highestRound = message.Message.Round
-					highestMessage = message
-				}
-			}
-			mappedInstance.State.ProposalAcceptedForCurrentRound = highestMessage
 		}
 
 		mappedInstance.StartValue = qbftInstance.State().GetInputValue()
@@ -410,6 +271,39 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	}
 
 	db.Close()
+}
+
+type forkWithValueCheck struct {
+	forks.Fork
+}
+
+func (f forkWithValueCheck) PrePrepareMsgValidationPipeline(share *beaconprotocol.Share, state *qbftprotocol.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		f.Fork.PrePrepareMsgValidationPipeline(share, state, roundLeader),
+		msgValueCheck(),
+	)
+}
+
+func msgValueCheck() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("value check", func(signedMessage *specqbft.SignedMessage) error {
+		if signedMessage.Message.MsgType != specqbft.ProposalMsgType {
+			return nil
+		}
+
+		proposalData, err := signedMessage.Message.GetProposalData()
+		if err != nil {
+			return nil
+		}
+		if err := proposalData.Validate(); err != nil {
+			return nil
+		}
+
+		if err := testingutils.TestingConfig(testingutils.Testing4SharesSet()).ValueCheckF(proposalData.Data); err != nil {
+			return fmt.Errorf("proposal not justified: proposal value invalid: %w", err)
+		}
+
+		return nil
+	})
 }
 
 func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
@@ -510,6 +404,7 @@ func (m roundRobinLeaderSelector) Calculate(round uint64) uint64 {
 func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net protocolp2p.MockNetwork, beacon *validator.TestBeacon, share *beaconprotocol.Share, mappedShare *spectypes.Share, identifier []byte, forkVersion forksprotocol.ForkVersion) instance.Instancer {
 	const height = 0
 	fork := forksfactory.NewFork(forkVersion)
+
 	newInstance := instance.NewInstance(&instance.Options{
 		Logger:           logger,
 		ValidatorShare:   share,
@@ -518,7 +413,7 @@ func newQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 		Identifier:       identifier[:],
 		Height:           height,
 		RequireMinPeers:  false,
-		Fork:             fork.InstanceFork(),
+		Fork:             forkWithValueCheck{fork.InstanceFork()},
 		SSVSigner:        beacon.KeyManager,
 		ChangeRoundStore: qbftStorage,
 	})
