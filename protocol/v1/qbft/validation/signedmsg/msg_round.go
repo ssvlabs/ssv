@@ -54,7 +54,7 @@ func ValidateProposal(state *qbft.State) pipelines.SignedMessagePipeline {
 		}
 
 		if !bytes.Equal(proposedCommitData.Data, msgCommitData.Data) {
-			return fmt.Errorf("proposed data different than commit msg data")
+			return fmt.Errorf("message data is different from proposed data")
 		}
 
 		return nil

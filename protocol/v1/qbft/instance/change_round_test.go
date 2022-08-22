@@ -376,7 +376,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "round change justification invalid: msg round wrong",
+			expectedError: "round change justification invalid: round is wrong",
 		},
 		{
 			name:                "invalid prepared and justification round",
@@ -404,7 +404,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 					},
 				}),
 			},
-			expectedError: "round change justification invalid: msg round wrong",
+			expectedError: "round change justification invalid: round is wrong",
 		},
 		{
 			name:                "invalid justification instance",

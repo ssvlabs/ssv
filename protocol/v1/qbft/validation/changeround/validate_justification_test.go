@@ -212,7 +212,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"small justification round",
-			"round change justification invalid: msg round wrong",
+			"round change justification invalid: round is wrong",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
