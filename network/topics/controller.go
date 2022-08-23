@@ -325,6 +325,7 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 	tc.topic = topic
 	if ctrl.scoreParamsFactory != nil {
 		if p := ctrl.scoreParamsFactory(name); p != nil {
+			ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
 			if err := topic.SetScoreParams(p); err != nil {
 				//ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
 				return errors.Wrap(err, "could not set topic score params")
