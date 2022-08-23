@@ -97,7 +97,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 		if !syncEndedEvent.Success {
 			logger.Warn("could not parse all events from eth1")
 		} else if rawOffset := syncEndedEvent.Logs[nResults-1].BlockNumber; rawOffset > syncOffset.Uint64() {
-			logger.Debug("upgrading sync offset", zap.Uint64("syncOffset", rawOffset))
+			logger.Info("upgrading sync offset", zap.Uint64("syncOffset", rawOffset))
 			syncOffset.SetUint64(rawOffset)
 			if err := storage.SaveSyncOffset(syncOffset); err != nil {
 				return errors.Wrap(err, "could not upgrade sync offset")

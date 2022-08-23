@@ -1,20 +1,43 @@
 package instance
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/commit"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.CommitMsgValidationPipeline()
 	return pipelines.Combine(
-		i.CommitMsgValidationPipeline(),
+		signedmsg.ProposalExists(i.State()),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid commit message: %w", err)
+			}
+			return nil
+		}),
+
+		i.uponCommitMsg(),
+	)
+}
+
+// CommitMsgValidationPipeline is the commit msg validation pipeline.
+func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight()),
+		signedmsg.ValidateRound(i.State().GetRound()),
+		commit.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -22,21 +45,12 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 
 			commitData, err := signedMessage.Message.GetCommitData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get msg commit data: %w", err)
 			}
 			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.uponCommitMsg(),
-		),
 	)
-}
-
-// CommitMsgValidationPipeline is the main commit msg pipeline
-func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight())
 }
 
 // DecidedMsgPipeline is the main pipeline for decided msgs
@@ -74,7 +88,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		if quorum {
 			i.processCommitQuorumOnce.Do(func() {
 				i.Logger.Info("commit iBFT instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Uint64("round", uint64(i.State().GetRound())),
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())),
+					zap.Uint64("round", uint64(i.State().GetRound())),
 					zap.Int("got_votes", len(sigs)))
 
 				// need to cant signedMessages to message.MsgSignature TODO other way? (:Niv)
@@ -85,7 +100,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 
 				aggMsg := sigs[0].DeepCopy()
 				for _, s := range msgSig[1:] {
-					if err := aggMsg.Aggregate(s); err != nil {
+					if err := message.Aggregate(aggMsg, s); err != nil {
 						i.Logger.Error("could not aggregate commit messages after quorum", zap.Error(err)) //TODO need to return?
 					}
 				}

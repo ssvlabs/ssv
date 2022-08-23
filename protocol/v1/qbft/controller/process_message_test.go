@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"strings"
 	"testing"
 
@@ -13,7 +16,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -134,7 +136,7 @@ func newInMemDb() basedb.IDb {
 // SignMsg signs the given message by the given private key TODO redundant func from commit_test.go
 func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message, forkVersion string) *specqbft.SignedMessage {
 	sigType := spectypes.QBFTSignatureType
-	domain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, sigType)
+	domain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), sigType)
 	sigRoot, err := spectypes.ComputeSigningRoot(msg, domain)
 	require.NoError(t, err)
 	sig := sk.SignByte(sigRoot)
@@ -157,7 +159,7 @@ func AggregateMessages(sigs []*specqbft.SignedMessage) (*specqbft.SignedMessage,
 				return nil, errors.Wrap(err, "could not copy message")
 			}
 		} else {
-			if err := decided.Aggregate(msg); err != nil {
+			if err := message.Aggregate(decided, msg); err != nil {
 				return nil, errors.Wrap(err, "could not aggregate message")
 			}
 		}

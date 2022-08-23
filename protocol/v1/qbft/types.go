@@ -2,7 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/atomic"
@@ -37,35 +36,38 @@ var RoundStateName = map[int32]string{
 type State struct {
 	Stage atomic.Int32 // RoundState
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
-	Identifier atomic.Value // message.Identifier
+	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
-	Height        atomic.Value // specqbft.Height
-	InputValue    atomic.Value // []byte
-	Round         atomic.Value // specqbft.Round
-	PreparedRound atomic.Value // specqbft.Round
-	PreparedValue atomic.Value // []byte
+	Height                          atomic.Value // specqbft.Height
+	InputValue                      atomic.Value // []byte
+	Round                           atomic.Value // specqbft.Round
+	PreparedRound                   atomic.Value // specqbft.Round
+	PreparedValue                   atomic.Value // []byte
+	ProposalAcceptedForCurrentRound atomic.Value // *specqbft.SignedMessage
 }
 
 type unsafeState struct {
-	Stage         int32
-	Identifier    spectypes.MessageID
-	Height        specqbft.Height
-	InputValue    []byte
-	Round         specqbft.Round
-	PreparedRound specqbft.Round
-	PreparedValue []byte
+	Stage                           int32
+	Identifier                      []byte
+	Height                          specqbft.Height
+	InputValue                      []byte
+	Round                           specqbft.Round
+	PreparedRound                   specqbft.Round
+	PreparedValue                   []byte
+	ProposalAcceptedForCurrentRound *specqbft.SignedMessage
 }
 
 // MarshalJSON implements marshaling interface
 func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
-		Stage:         s.Stage.Load(),
-		Identifier:    s.GetIdentifier(),
-		Height:        s.GetHeight(),
-		InputValue:    s.GetInputValue(),
-		Round:         s.GetRound(),
-		PreparedRound: s.GetPreparedRound(),
-		PreparedValue: s.GetPreparedValue(),
+		Stage:                           s.Stage.Load(),
+		Identifier:                      s.GetIdentifier(),
+		Height:                          s.GetHeight(),
+		InputValue:                      s.GetInputValue(),
+		Round:                           s.GetRound(),
+		PreparedRound:                   s.GetPreparedRound(),
+		PreparedValue:                   s.GetPreparedValue(),
+		ProposalAcceptedForCurrentRound: s.GetProposalAcceptedForCurrentRound(),
 	})
 }
 
@@ -77,12 +79,13 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	}
 
 	s.Stage.Store(d.Stage)
-	s.Identifier.Store(d.Identifier)
+	s.Identifier.Store(d.Identifier[:])
 	s.Height.Store(d.Height)
 	s.InputValue.Store(d.InputValue)
 	s.Round.Store(d.Round)
 	s.PreparedRound.Store(d.PreparedRound)
 	s.PreparedValue.Store(d.PreparedValue)
+	s.ProposalAcceptedForCurrentRound.Store(d.ProposalAcceptedForCurrentRound)
 
 	return nil
 }
@@ -128,12 +131,12 @@ func (s *State) GetPreparedRound() specqbft.Round {
 }
 
 // GetIdentifier returns the identifier of the state
-func (s *State) GetIdentifier() spectypes.MessageID {
-	if identifier, ok := s.Identifier.Load().(spectypes.MessageID); ok {
+func (s *State) GetIdentifier() []byte {
+	if identifier, ok := s.Identifier.Load().([]byte); ok {
 		return identifier
 	}
 
-	return spectypes.MessageID{}
+	return []byte{}
 }
 
 // GetInputValue returns the input value of the state
@@ -147,6 +150,15 @@ func (s *State) GetInputValue() []byte {
 // GetPreparedValue returns the prepared value of the state
 func (s *State) GetPreparedValue() []byte {
 	if value, ok := s.PreparedValue.Load().([]byte); ok {
+		return value
+	}
+
+	return nil
+}
+
+// GetProposalAcceptedForCurrentRound returns proposal accepted for current round
+func (s *State) GetProposalAcceptedForCurrentRound() *specqbft.SignedMessage {
+	if value, ok := s.ProposalAcceptedForCurrentRound.Load().(*specqbft.SignedMessage); ok {
 		return value
 	}
 

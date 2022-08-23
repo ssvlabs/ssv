@@ -1,7 +1,6 @@
 package instance
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -98,11 +97,11 @@ func TestPreparePipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store(spectypes.MessageID{})
+	instance.state.Identifier.Store([]byte{})
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()
 	// TODO: fix bad-looking name
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add prepare msg, if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , round, validate proposal, add prepare msg, , upon prepare msg, ", pipeline.Name())
 }

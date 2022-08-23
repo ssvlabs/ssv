@@ -87,7 +87,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		return peerScores
 	}
 	stats := c.subnetsIdx.GetSubnetsStats()
-	minSubnetPeers := (len(allPeers) / 10) + 1
+	minSubnetPeers := 2
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
 	for _, pid := range allPeers {
 		var peerScore int

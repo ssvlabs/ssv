@@ -3,20 +3,42 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // PrepareMsgPipeline is the main prepare msg pipeline
 func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.PrepareMsgValidationPipeline()
+
+	return pipelines.Combine(
+		signedmsg.ProposalExists(i.State()),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid prepare message: %w", err)
+			}
+			return nil
+		}),
+
+		i.uponPrepareMsg(),
+	)
+}
+
+// PrepareMsgValidationPipeline is the prepare msg validation pipeline.
+func (i *Instance) PrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
+		signedmsg.ValidateRound(i.State().GetRound()),
+		prepare.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -24,15 +46,11 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			prepareMsg, err := signedMessage.Message.GetPrepareData()
 			if err != nil {
-				return err
+				return fmt.Errorf("could not get prepare data: %w", err)
 			}
 			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.uponPrepareMsg(),
-		),
 	)
 }
 
@@ -61,7 +79,7 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 		if ret == nil {
 			ret = msg.DeepCopy()
 		} else {
-			if err := ret.Aggregate(msg); err != nil {
+			if err := message.Aggregate(ret, msg); err != nil {
 				return nil, err
 			}
 		}
@@ -89,7 +107,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			var errorPrp error
 			i.processPrepareQuorumOnce.Do(func() {
 				i.Logger.Info("prepared instance",
-					zap.String("Lambda", i.State().GetIdentifier().String()), zap.Any("round", i.State().GetRound()))
+					zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
 
 				// set prepared state
 				i.State().PreparedRound.Store(signedMessage.Message.Round)

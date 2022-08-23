@@ -67,7 +67,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"1024" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
 }
 

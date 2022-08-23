@@ -77,7 +77,7 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
 // it tries to read current fork items, and if not found it tries to read v0 items
-func (i *ibftStorage) GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -110,7 +110,7 @@ func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) err
 	return nil
 }
 
-func (i *ibftStorage) GetDecided(identifier spectypes.MessageID, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -151,7 +151,7 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 	})
 }
 
-func (i *ibftStorage) CleanAllDecided(msgID spectypes.MessageID) error {
+func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -167,7 +167,7 @@ func (i *ibftStorage) CleanAllDecided(msgID spectypes.MessageID) error {
 	return nil
 }
 
-func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state *qbft.State) error {
+func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *qbft.State) error {
 	value, err := state.MarshalJSON()
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
@@ -175,7 +175,7 @@ func (i *ibftStorage) SaveCurrentInstance(identifier spectypes.MessageID, state 
 	return i.save(value, currentKey, identifier[:])
 }
 
-func (i *ibftStorage) GetCurrentInstance(identifier spectypes.MessageID) (*qbft.State, bool, error) {
+func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*qbft.State, bool, error) {
 	val, found, err := i.get(currentKey, identifier[:])
 	if !found {
 		return nil, found, nil
@@ -207,7 +207,7 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error 
 }
 
 // GetLastChangeRoundMsg returns last known change round message
-func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -239,14 +239,17 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier spectypes.MessageID, sign
 }
 
 // CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
-func (i *ibftStorage) CleanLastChangeRound(identifier spectypes.MessageID) {
+func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	err := i.delete(lastChangeRoundKey, identifier[:])
-	if err != nil {
-		i.logger.Warn("could not clean last change round message", zap.Error(err))
+	prefix := i.prefix
+	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, []byte(lastChangeRoundKey)...)
+	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+		return errors.Wrap(err, "failed to remove decided")
 	}
+	return nil
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {

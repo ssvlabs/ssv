@@ -2,7 +2,9 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/pkg/errors"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"go.uber.org/zap"
 )
 
@@ -11,45 +13,40 @@ func (c *Controller) ProcessChangeRound(msg *specqbft.SignedMessage) error {
 	if err := c.ValidateChangeRoundMsg(msg); err != nil {
 		return err
 	}
-	res, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier, msg.GetSigners()...)
-	if err != nil {
-		return errors.Wrap(err, "failed to get last change round msg")
-	}
-
-	logger := c.Logger.With(zap.Any("signers", msg.GetSigners()))
-
-	if len(res) == 0 {
-		// no last changeRound msg exist, save the first one
-		c.Logger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
-		return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
-	}
-	lastMsg := res[0]
-	logger = logger.With(
-		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
-		zap.Int64("NewHeight", int64(msg.Message.Height)),
-		zap.Int64("lastRound", int64(lastMsg.Message.Round)),
-		zap.Int64("NewRound", int64(msg.Message.Round)))
-
-	if msg.Message.Height < lastMsg.Message.Height {
-		// height is lower than the last known
-		logger.Debug("new changeRoundMsg height is lower than last changeRoundMsg")
-		return nil
-	} else if msg.Message.Height == lastMsg.Message.Height {
-		if msg.Message.Round <= lastMsg.Message.Round {
-			// round is not higher than last known
-			logger.Debug("new changeRoundMsg round is lower than last changeRoundMsg")
-			return nil
-		}
-	}
-
-	// new msg is higher than last one, save.
-	logger.Debug("last change round updated")
-	return c.ChangeRoundStorage.SaveLastChangeRoundMsg(msg)
+	return instance.UpdateChangeRoundMessage(c.Logger, c.ChangeRoundStorage, msg)
 }
 
 // ValidateChangeRoundMsg - validation for read mode change round msg
 // validating -
 // basic validation, signature, changeRound data
 func (c *Controller) ValidateChangeRoundMsg(msg *specqbft.SignedMessage) error {
-	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, c.Identifier).Run(msg)
+	return c.Fork.ValidateChangeRoundMsg(c.ValidatorShare, message.ToMessageID(c.Identifier)).Run(msg)
+}
+
+func (c *Controller) loadLastChangeRound() {
+	var singers []spectypes.OperatorID
+	for k := range c.ValidatorShare.Committee { // get all possible msg's from committee
+		singers = append(singers, k)
+	}
+
+	msgs, err := c.ChangeRoundStorage.GetLastChangeRoundMsg(c.Identifier, singers...)
+	if err != nil {
+		c.Logger.Warn("failed to load change round messages from storage", zap.Error(err))
+		return
+	}
+
+	res := make(map[spectypes.OperatorID]specqbft.Round)
+	for _, msg := range msgs {
+		encoded, err := msg.Encode()
+		if err != nil {
+			continue
+		}
+		c.Q.Add(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   message.ToMessageID(msg.Message.Identifier),
+			Data:    encoded,
+		})
+		res[msg.GetSigners()[0]] = msg.Message.Round // assuming 1 signer in change round msg
+	}
+	c.Logger.Info("successfully loaded change round messages from storage into queue", zap.Any("msgs", res))
 }

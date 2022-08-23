@@ -3,19 +3,17 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
-
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // ChangeRoundMsgPipeline - the main change round msg pipeline
@@ -33,6 +31,10 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 				return err
 			}
 			i.containersMap[specqbft.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.PreparedValue)
+
+			if err := UpdateChangeRoundMessage(i.Logger, i.changeRoundStore, signedMessage); err != nil {
+				i.Logger.Warn("failed to update change round msg in storage", zap.Error(err))
+			}
 			return nil
 		}),
 		i.ChangeRoundPartialQuorumMsgPipeline(),
@@ -64,7 +66,8 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
-		quorum, msgsCount, committeeSize := i.changeRoundQuorum(signedMessage.Message.Round)
+		msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(signedMessage.Message.Round)
+		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, msgs)
 
 		// change round if quorum reached
 		if !quorum {
@@ -101,18 +104,26 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				return
 			}
 
-			var value []byte
+			var proposalData *specqbft.ProposalData
+
 			if notPrepared {
-				value = i.State().GetInputValue()
-				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", value)))
+				proposalData = &specqbft.ProposalData{
+					Data:                     i.State().GetInputValue(),
+					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
+				}
+				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
-				value = highest.PreparedValue
-				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", value)))
+				proposalData = &specqbft.ProposalData{
+					Data:                     highest.PreparedValue,
+					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
+					PrepareJustification:     highest.RoundChangeJustification,
+				}
+				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
 			// send pre-prepare msg
 			var broadcastMsg specqbft.Message
-			broadcastMsg, err = i.generatePrePrepareMessage(value)
+			broadcastMsg, err = i.generatePrePrepareMessage(proposalData)
 			if err != nil {
 				return
 			}
@@ -139,53 +150,19 @@ func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage
 	return i.UponPrePrepareMsg().Run(msg)
 }
 
-func (i *Instance) changeRoundQuorum(round specqbft.Round) (quorum bool, t int, n int) {
-	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
-	msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
-	quorum = len(msgs)*3 >= i.ValidatorShare.CommitteeSize()*2
-	return quorum, len(msgs), i.ValidatorShare.CommitteeSize()
-}
-
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
-	var justificationMsg *specqbft.Message
-	var aggSig []byte
-	ids := make([]spectypes.OperatorID, 0)
+	data := &specqbft.RoundChangeData{
+		PreparedValue: i.State().GetPreparedValue(),
+		PreparedRound: i.State().GetPreparedRound(),
+	}
 	if i.isPrepared() {
 		quorum, msgs := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
-		var aggregatedSig *bls.Sign
-		justificationMsg = msgs[0].Message
-		for _, msg := range msgs {
-			// add sig to aggregate
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(msg.Signature); err != nil {
-				return nil, err
-			}
-			if aggregatedSig == nil {
-				aggregatedSig = sig
-			} else {
-				aggregatedSig.Add(sig)
-			}
 
-			// add id to list
-			ids = append(ids, msg.GetSigners()...)
-		}
-		aggSig = aggregatedSig.Serialize()
-		// TODO(nkryuchkov): consider returning an error
-		// return nil, errors.New("not prepared")
+		data.RoundChangeJustification = msgs
 	}
 
-	data := &specqbft.RoundChangeData{
-		PreparedValue:    i.State().GetPreparedValue(),
-		PreparedRound:    i.State().GetPreparedRound(),
-		NextProposalData: nil, // TODO should fill?
-		RoundChangeJustification: []*specqbft.SignedMessage{{
-			Signature: aggSig,
-			Signers:   ids,
-			Message:   justificationMsg,
-		}},
-	}
 	return json.Marshal(data)
 }
 
@@ -286,4 +263,42 @@ func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {
 func (i *Instance) roundTimeoutSeconds() time.Duration {
 	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State().GetRound()))
 	return time.Duration(float64(time.Second) * roundTimeout)
+}
+
+// UpdateChangeRoundMessage if round for specific signer is higher than local msg
+func UpdateChangeRoundMessage(logger *zap.Logger, changeRoundStorage qbftstorage.ChangeRoundStore, msg *specqbft.SignedMessage) error {
+	local, err := changeRoundStorage.GetLastChangeRoundMsg(msg.Message.Identifier, msg.GetSigners()...) // assume 1 signer
+	if err != nil {
+		return errors.Wrap(err, "failed to get last change round msg")
+	}
+
+	fLogger := logger.With(zap.Any("signers", msg.GetSigners()))
+
+	if len(local) == 0 {
+		// no last changeRound msg exist, save the first one
+		fLogger.Debug("no last change round exist. saving first one", zap.Int64("NewHeight", int64(msg.Message.Height)), zap.Int64("NewRound", int64(msg.Message.Round)))
+		return changeRoundStorage.SaveLastChangeRoundMsg(msg)
+	}
+	lastMsg := local[0]
+	fLogger = fLogger.With(
+		zap.Int64("lastHeight", int64(lastMsg.Message.Height)),
+		zap.Int64("NewHeight", int64(msg.Message.Height)),
+		zap.Int64("lastRound", int64(lastMsg.Message.Round)),
+		zap.Int64("NewRound", int64(msg.Message.Round)))
+
+	if msg.Message.Height < lastMsg.Message.Height {
+		// height is lower than the last known
+		fLogger.Debug("new changeRoundMsg height is lower than last changeRoundMsg")
+		return nil
+	} else if msg.Message.Height == lastMsg.Message.Height {
+		if msg.Message.Round <= lastMsg.Message.Round {
+			// round is not higher than last known
+			fLogger.Debug("new changeRoundMsg round is lower than last changeRoundMsg")
+			return nil
+		}
+	}
+
+	// new msg is higher than last one, save.
+	fLogger.Debug("last change round updated")
+	return changeRoundStorage.SaveLastChangeRoundMsg(msg)
 }

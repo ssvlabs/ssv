@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
 // GenerateNodes generates randomly nodes
@@ -30,7 +32,7 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[specty
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
@@ -80,7 +82,7 @@ func TestValidateChangeRound(t *testing.T) {
 		Identifier: []byte("Lambda"),
 		Data:       encodePrepareData(t, []byte("value")),
 	}
-	validSig := aggregateSign(t, sks, validMessage)
+	aggSig := aggregateSign(t, sks, validMessage)
 
 	tests := []struct {
 		name string
@@ -110,18 +112,17 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
-							Message:   validMessage,
-						},
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{0}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{1}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{2}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{3}, validMessage),
 					},
 				}),
 			}),
 		},
 		{
 			"invalid prepared change round",
-			"change round could not verify signature: failed to verify signature",
+			"round change justification invalid: invalid message signature: failed to verify signature",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -132,8 +133,8 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{1, 2, 3},
+							Signature: aggSig.Serialize(),
+							Signers:   []spectypes.OperatorID{1},
 							Message:   validMessage,
 						},
 					},
@@ -142,7 +143,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"wrong sequence prepared change round",
-			"change round justification sequence is wrong",
+			"round change justification invalid: change round justification sequence is wrong",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -153,7 +154,7 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
 						{
-							Signature: validSig.Serialize(),
+							Signature: aggSig.Serialize(),
 							Signers:   []spectypes.OperatorID{0, 1, 2, 3},
 							Message: &specqbft.Message{
 								MsgType:    specqbft.PrepareMsgType,
@@ -180,7 +181,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"non-valid change-round-data json",
-			"failed to get round change data: could not decode round change data from message: invalid character 'o' in literal null (expecting 'u')",
+			"could not get roundChange data : could not decode round change data from message: invalid character 'o' in literal null (expecting 'u')",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -191,7 +192,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"justification type is not prepared",
-			"change round justification msg type not Prepare (0)",
+			"round change justification invalid: change round justification msg type not Prepare (0)",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -211,7 +212,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"small justification round",
-			"change round justification round lower or equal to message round",
+			"round change justification invalid: round is wrong",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
@@ -234,7 +235,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"bad lambda",
-			"change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
+			"round change justification invalid: change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -258,7 +259,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"bad value",
-			"change round prepared value not equal to justification msg value",
+			"round change justification invalid: prepare data != proposed data",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -283,7 +284,7 @@ func TestValidateChangeRound(t *testing.T) {
 		},
 		{
 			"insufficient number of signers",
-			"change round justification does not constitute a quorum",
+			"no justifications quorum",
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
@@ -293,31 +294,8 @@ func TestValidateChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 2,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signers: []spectypes.OperatorID{1, 2},
-							Message: validMessage,
-						},
-					},
-				}),
-			}),
-		},
-		{
-			"duplicated signers",
-			"change round could not verify signature: failed to verify signature",
-			SignMsg(t, 1, sks[1], &specqbft.Message{
-				MsgType:    specqbft.RoundChangeMsgType,
-				Round:      3,
-				Height:     12,
-				Identifier: []byte("Lambda"),
-				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
-					PreparedValue: []byte("value"),
-					PreparedRound: 2,
-					RoundChangeJustification: []*specqbft.SignedMessage{
-						{
-							Signature: validSig.Serialize(),
-							Signers:   []spectypes.OperatorID{1, 2, 2},
-							Message:   validMessage,
-						},
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{1}, validMessage),
+						protocoltesting.SignMsg(t, sks, []spectypes.OperatorID{2}, validMessage),
 					},
 				}),
 			}),

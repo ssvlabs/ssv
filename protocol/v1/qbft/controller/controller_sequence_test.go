@@ -27,8 +27,9 @@ import (
 //nolint
 func testIBFTInstance(t *testing.T) *Controller {
 	currentInstanceLock := &sync.RWMutex{}
+	messageID := spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester)
 	ret := &Controller{
-		Identifier: spectypes.NewMsgID([]byte("Identifier_11"), spectypes.BNRoleAttester),
+		Identifier: messageID[:],
 		// instances: make([]*Instance, 0),
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
@@ -41,7 +42,7 @@ func testIBFTInstance(t *testing.T) *Controller {
 // TODO: (lint) fix test
 //nolint
 func TestCanStartNewInstance(t *testing.T) {
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
+	uids := []spectypes.OperatorID{1, 2, 3, 4}
 	sks, nodes := testingprotocol.GenerateBLSKeys(uids...)
 
 	height10 := atomic.Value{}
@@ -66,7 +67,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			testingprotocol.PopulatedStorage(t, sks, 3, 10),
+			qbftstorage.PopulatedStorage(t, sks, 3, 10),
 			Ready,
 			nil,
 			"",
@@ -122,7 +123,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			testingprotocol.PopulatedStorage(t, sks, 3, 10),
+			qbftstorage.PopulatedStorage(t, sks, 3, 10),
 			Ready,
 			nil,
 			"instance seq invalid",
@@ -137,7 +138,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			testingprotocol.PopulatedStorage(t, sks, 3, 10),
+			qbftstorage.PopulatedStorage(t, sks, 3, 10),
 			Ready,
 			nil,
 			"instance seq invalid",
@@ -152,7 +153,7 @@ func TestCanStartNewInstance(t *testing.T) {
 				PublicKey: sks[1].GetPublicKey(),
 				Committee: nodes,
 			},
-			testingprotocol.PopulatedStorage(t, sks, 3, 10),
+			qbftstorage.PopulatedStorage(t, sks, 3, 10),
 			Ready,
 			instance2.NewInstanceWithState(&qbft.State{
 				Height: height10,

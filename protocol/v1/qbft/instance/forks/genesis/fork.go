@@ -2,7 +2,6 @@ package genesis
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -11,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
@@ -44,7 +44,7 @@ func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(roundLeader),
+		preprepare.ValidatePrePrepareMsg(share, state, roundLeader),
 	)
 }
 
@@ -57,11 +57,12 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
+		prepare.ValidatePrepareMsgSigners(),
 	)
 }
 
 // CommitMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
@@ -72,7 +73,7 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifie
 }
 
 // ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier spectypes.MessageID, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),

@@ -28,13 +28,14 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	// It will be created if it doesn't exist.
 
 	opt := badger.DefaultOptions(options.Path)
+	opt.Logger = nil // remove default logger (INFO)
 	if options.Type == "badger-memory" {
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""
 	}
 
-	if options.Logger != nil {
+	if options.Logger != nil && options.Reporting {
 		opt.Logger = newLogger(options.Logger)
 	}
 

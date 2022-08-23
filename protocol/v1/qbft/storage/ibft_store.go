@@ -9,33 +9,33 @@ import (
 
 // DecidedMsgStore manages persistence of messages
 type DecidedMsgStore interface {
-	GetLastDecided(identifier spectypes.MessageID) (*specqbft.SignedMessage, error)
+	GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error)
 	// SaveLastDecided saves the given decided message, after checking that it is indeed the highest
 	SaveLastDecided(signedMsg ...*specqbft.SignedMessage) error
 	// GetDecided returns historical decided messages in the given range
-	GetDecided(identifier spectypes.MessageID, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
+	GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// SaveDecided saves historical decided messages
 	SaveDecided(signedMsg ...*specqbft.SignedMessage) error
 	// CleanAllDecided removes all decided & last decided for msgId
-	CleanAllDecided(msgID spectypes.MessageID) error
+	CleanAllDecided(msgID []byte) error
 }
 
 // InstanceStore manages instance data
 type InstanceStore interface {
 	// SaveCurrentInstance saves the state for the current running (not yet decided) instance
-	SaveCurrentInstance(identifier spectypes.MessageID, state *qbft.State) error
+	SaveCurrentInstance(identifier []byte, state *qbft.State) error
 	// GetCurrentInstance returns the state for the current running (not yet decided) instance
-	GetCurrentInstance(identifier spectypes.MessageID) (*qbft.State, bool, error)
+	GetCurrentInstance(identifier []byte) (*qbft.State, bool, error)
 }
 
 // ChangeRoundStore manages change round data
 type ChangeRoundStore interface {
 	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	GetLastChangeRoundMsg(identifier spectypes.MessageID, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error)
+	GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error)
 	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
 	SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error
 	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
-	CleanLastChangeRound(identifier spectypes.MessageID)
+	CleanLastChangeRound(identifier []byte) error
 }
 
 // QBFTStore is the store used by QBFT components

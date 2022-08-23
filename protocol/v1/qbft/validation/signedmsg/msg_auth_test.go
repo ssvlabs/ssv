@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -37,7 +38,7 @@ func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[spectypes.OperatorID
 }
 
 func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(spectypes.PrimusTestnet, spectypes.QBFTSignatureType)
+	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
 	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
 	if err != nil {
 		return nil, err
@@ -119,7 +120,7 @@ func TestAuthorizeMsg(t *testing.T) {
 			[]spectypes.OperatorID{1},
 			[]*bls.SecretKey{sks[1]},
 			_byteArray("b4fa352d2d6dbdf884266af7ea0914451929b343527ea6c1737ac93b3dde8b7c98e6ce61d68b7a2e7b7af8f8d0fd429d0bdd5f930b83e6842bf4342d3d1d3d10fc0d15bab7649bb8aa8287ca104a1f79d396ce0217bb5cd3e6503a3bce4c9776"),
-			"failed to verify signature",
+			"invalid message signature: failed to verify signature",
 		},
 	}
 

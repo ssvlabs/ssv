@@ -1,6 +1,7 @@
 package inmem
 
 import (
+	"bytes"
 	"encoding/hex"
 	"sync"
 
@@ -15,7 +16,6 @@ type messagesContainer struct {
 	messagesByRound         map[specqbft.Round][]*specqbft.SignedMessage
 	messagesByRoundAndValue map[specqbft.Round]map[string][]*specqbft.SignedMessage // map[round]map[valueHex]msgs
 	allChangeRoundMessages  []*specqbft.SignedMessage
-	exitingMsgSigners       map[specqbft.Round]map[spectypes.OperatorID]bool
 	quorumThreshold         uint64
 	partialQuorumThreshold  uint64
 	lock                    sync.RWMutex
@@ -27,7 +27,6 @@ func New(quorumThreshold, partialQuorumThreshold uint64) msgcont.MessageContaine
 		messagesByRound:         make(map[specqbft.Round][]*specqbft.SignedMessage),
 		messagesByRoundAndValue: make(map[specqbft.Round]map[string][]*specqbft.SignedMessage),
 		allChangeRoundMessages:  make([]*specqbft.SignedMessage, 0),
-		exitingMsgSigners:       make(map[specqbft.Round]map[spectypes.OperatorID]bool),
 		quorumThreshold:         quorumThreshold,
 		partialQuorumThreshold:  partialQuorumThreshold,
 	}
@@ -85,12 +84,19 @@ func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte)
 
 	valueHex := hex.EncodeToString(data)
 
-	// check msg is not duplicate
-	if c.exitingMsgSigners[msg.Message.Round] != nil {
-		for _, signer := range msg.GetSigners() {
-			if _, found := c.exitingMsgSigners[msg.Message.Round][signer]; found {
-				return
-			}
+	//check msg is not duplicate
+	r, err := msg.GetRoot()
+	if err != nil {
+		return
+	}
+
+	for _, existingMsg := range c.messagesByRound[msg.Message.Round] {
+		toMatchRoot, err := existingMsg.GetRoot()
+		if err != nil {
+			return
+		}
+		if bytes.Equal(r, toMatchRoot) && existingMsg.MatchedSigners(msg.Signers) {
+			return
 		}
 	}
 
@@ -105,7 +111,6 @@ func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte)
 	_, found = c.messagesByRoundAndValue[msg.Message.Round]
 	if !found {
 		c.messagesByRoundAndValue[msg.Message.Round] = make(map[string][]*specqbft.SignedMessage)
-		c.exitingMsgSigners[msg.Message.Round] = make(map[spectypes.OperatorID]bool)
 	}
 	_, found = c.messagesByRoundAndValue[msg.Message.Round][valueHex]
 	if !found {
@@ -117,9 +122,6 @@ func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte)
 		c.allChangeRoundMessages = append(c.allChangeRoundMessages, msg)
 	}
 
-	for _, signer := range msg.GetSigners() {
-		c.exitingMsgSigners[msg.Message.Round][signer] = true
-	}
 	c.messagesByRoundAndValue[msg.Message.Round][valueHex] = append(c.messagesByRoundAndValue[msg.Message.Round][valueHex], msg)
 }
 
@@ -127,7 +129,6 @@ func (c *messagesContainer) AddMessage(msg *specqbft.SignedMessage, data []byte)
 func (c *messagesContainer) OverrideMessages(msg *specqbft.SignedMessage, data []byte) {
 	c.lock.Lock()
 	// reset previous round data
-	delete(c.exitingMsgSigners, msg.Message.Round)
 	delete(c.messagesByRound, msg.Message.Round)
 	delete(c.messagesByRoundAndValue, msg.Message.Round)
 	c.lock.Unlock()

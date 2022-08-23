@@ -37,7 +37,7 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 type Options struct {
 	Context           context.Context
 	Role              spectypes.BeaconRole
-	Identifier        spectypes.MessageID
+	Identifier        []byte
 	Logger            *zap.Logger
 	Storage           qbftstorage.QBFTStore
 	Network           p2pprotocol.Network
@@ -57,13 +57,14 @@ type Options struct {
 const (
 	NotStarted uint32 = iota
 	InitiatedHandlers
+	SyncedChangeRound
 	WaitingForPeers
 	FoundPeers
 	Ready
 	Forking
 )
 
-// Controller implements Controller interface
+// Controller implements IController interface
 type Controller struct {
 	Ctx context.Context
 
@@ -74,7 +75,7 @@ type Controller struct {
 	Network            p2pprotocol.Network
 	InstanceConfig     *qbft.InstanceConfig
 	ValidatorShare     *beaconprotocol.Share
-	Identifier         spectypes.MessageID
+	Identifier         []byte
 	Fork               forks.Fork
 	Beacon             beaconprotocol.Beacon
 	KeyManager         spectypes.KeyManager
@@ -210,13 +211,18 @@ func (c *Controller) Init() error {
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
 
+	// checks if InitiatedHandlers. if so, load change round to queue and then set state to new SyncedChangeRound
+	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, SyncedChangeRound) {
+		c.loadLastChangeRound()
+	}
+
 	// if already waiting for peers no need to redundant waiting
 	if atomic.LoadUint32(&c.State) == WaitingForPeers {
 		return ErrAlreadyRunning
 	}
 
 	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, WaitingForPeers) {
+	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
 		minPeers := 1
@@ -241,7 +247,7 @@ func (c *Controller) Init() error {
 			}
 			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, InitiatedHandlers) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
@@ -280,9 +286,12 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.SignatureState.setHeight(opts.SeqNumber)                       // update sig state once height determent
-	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage             // in order to set the last change round msg
-	instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier) // clean previews last change round msg's (TODO place in instance?)
+	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
+	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
+	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
+		c.Logger.Warn("could not clean change round", zap.Error(err))
+	}
+
 	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
 	defer func() {
 		done()
