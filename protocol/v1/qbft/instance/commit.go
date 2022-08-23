@@ -12,13 +12,32 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/commit"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.CommitMsgValidationPipeline()
 	return pipelines.Combine(
-		i.CommitMsgValidationPipeline(),
+		signedmsg.ProposalExists(i.State()),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid commit message: %w", err)
+			}
+			return nil
+		}),
+
+		i.uponCommitMsg(),
+	)
+}
+
+// CommitMsgValidationPipeline is the commit msg validation pipeline.
+func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight()),
+		signedmsg.ValidateRound(i.State().GetRound()),
+		commit.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -31,16 +50,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.uponCommitMsg(),
-		),
 	)
-}
-
-// CommitMsgValidationPipeline is the main commit msg pipeline
-func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight())
 }
 
 // DecidedMsgPipeline is the main pipeline for decided msgs

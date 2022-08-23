@@ -38,33 +38,36 @@ type State struct {
 	// lambda is an instance unique identifier, much like a block hash in a blockchain
 	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
-	Height        atomic.Value // specqbft.Height
-	InputValue    atomic.Value // []byte
-	Round         atomic.Value // specqbft.Round
-	PreparedRound atomic.Value // specqbft.Round
-	PreparedValue atomic.Value // []byte
+	Height                          atomic.Value // specqbft.Height
+	InputValue                      atomic.Value // []byte
+	Round                           atomic.Value // specqbft.Round
+	PreparedRound                   atomic.Value // specqbft.Round
+	PreparedValue                   atomic.Value // []byte
+	ProposalAcceptedForCurrentRound atomic.Value // *specqbft.SignedMessage
 }
 
 type unsafeState struct {
-	Stage         int32
-	Identifier    []byte
-	Height        specqbft.Height
-	InputValue    []byte
-	Round         specqbft.Round
-	PreparedRound specqbft.Round
-	PreparedValue []byte
+	Stage                           int32
+	Identifier                      []byte
+	Height                          specqbft.Height
+	InputValue                      []byte
+	Round                           specqbft.Round
+	PreparedRound                   specqbft.Round
+	PreparedValue                   []byte
+	ProposalAcceptedForCurrentRound *specqbft.SignedMessage
 }
 
 // MarshalJSON implements marshaling interface
 func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
-		Stage:         s.Stage.Load(),
-		Identifier:    s.GetIdentifier(),
-		Height:        s.GetHeight(),
-		InputValue:    s.GetInputValue(),
-		Round:         s.GetRound(),
-		PreparedRound: s.GetPreparedRound(),
-		PreparedValue: s.GetPreparedValue(),
+		Stage:                           s.Stage.Load(),
+		Identifier:                      s.GetIdentifier(),
+		Height:                          s.GetHeight(),
+		InputValue:                      s.GetInputValue(),
+		Round:                           s.GetRound(),
+		PreparedRound:                   s.GetPreparedRound(),
+		PreparedValue:                   s.GetPreparedValue(),
+		ProposalAcceptedForCurrentRound: s.GetProposalAcceptedForCurrentRound(),
 	})
 }
 
@@ -82,6 +85,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	s.Round.Store(d.Round)
 	s.PreparedRound.Store(d.PreparedRound)
 	s.PreparedValue.Store(d.PreparedValue)
+	s.ProposalAcceptedForCurrentRound.Store(d.ProposalAcceptedForCurrentRound)
 
 	return nil
 }
@@ -146,6 +150,15 @@ func (s *State) GetInputValue() []byte {
 // GetPreparedValue returns the prepared value of the state
 func (s *State) GetPreparedValue() []byte {
 	if value, ok := s.PreparedValue.Load().([]byte); ok {
+		return value
+	}
+
+	return nil
+}
+
+// GetProposalAcceptedForCurrentRound returns proposal accepted for current round
+func (s *State) GetProposalAcceptedForCurrentRound() *specqbft.SignedMessage {
+	if value, ok := s.ProposalAcceptedForCurrentRound.Load().(*specqbft.SignedMessage); ok {
 		return value
 	}
 

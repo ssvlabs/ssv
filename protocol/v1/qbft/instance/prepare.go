@@ -12,13 +12,33 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // PrepareMsgPipeline is the main prepare msg pipeline
 func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
+	validationPipeline := i.PrepareMsgValidationPipeline()
+
+	return pipelines.Combine(
+		signedmsg.ProposalExists(i.State()),
+		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
+			if err := validationPipeline.Run(signedMessage); err != nil {
+				return fmt.Errorf("invalid prepare message: %w", err)
+			}
+			return nil
+		}),
+
+		i.uponPrepareMsg(),
+	)
+}
+
+// PrepareMsgValidationPipeline is the prepare msg validation pipeline.
+func (i *Instance) PrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
+		signedmsg.ValidateRound(i.State().GetRound()),
+		prepare.ValidateProposal(i.State()),
 		pipelines.WrapFunc("add prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -31,10 +51,6 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
-		pipelines.CombineQuiet(
-			signedmsg.ValidateRound(i.State().GetRound()),
-			i.uponPrepareMsg(),
-		),
 	)
 }
 
