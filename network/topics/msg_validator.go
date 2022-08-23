@@ -36,6 +36,11 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
+		if msg == nil {
+			reportValidationResult(validationResultEncoding)
+			return pubsub.ValidationReject
+		}
+		pmsg.ValidatorData = *msg
 		// check decided topic
 		currentTopic := pmsg.GetTopic()
 		currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
