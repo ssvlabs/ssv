@@ -34,7 +34,7 @@ var (
 	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_highest_decided",
 		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey"})
+	}, []string{"identifier", "pubKey"})
 )
 
 func init() {

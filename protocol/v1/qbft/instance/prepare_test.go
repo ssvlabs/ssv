@@ -50,7 +50,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	consensusMessage1 := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Round:      1,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 	}
 
@@ -70,7 +70,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	consensusMessage2 := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Round:      1,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value2")}),
 	}
 	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[3:4], sks[operatorIds[3]], consensusMessage2), prepareData.Data)
@@ -103,5 +103,5 @@ func TestPreparePipeline(t *testing.T) {
 	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()
 	// TODO: fix bad-looking name
-	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , round, validate proposal, add prepare msg, , upon prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, , round, validate proposal, add prepare msg, , upon prepare msg, ", pipeline.Name())
 }

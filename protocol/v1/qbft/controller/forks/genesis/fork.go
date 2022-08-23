@@ -47,7 +47,7 @@ func (g *ForkGenesis) ValidateChangeRoundMsg(share *beacon.Share, identifier spe
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
 	)

@@ -1,20 +1,21 @@
 package qbft
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"log"
 	"strconv"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 var (
 	metricsDecidedSigners = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:ibft:last_decided_signers",
 		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey", "nodeId"})
+	}, []string{"identifier", "pubKey", "nodeId"})
 )
 
 func init() {

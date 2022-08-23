@@ -86,7 +86,7 @@ func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.S
 		return errors.New("round is wrong")
 	}
 	if !bytes.Equal(signedMessage.Message.Identifier, rcj.Message.Identifier) {
-		return errors.New("change round justification msg Lambda not equal to msg Lambda not equal to instance lambda")
+		return errors.New("change round justification msg identifier not equal to msg identifier not equal to instance identifier")
 	}
 	prepareMsg, err := rcj.Message.GetPrepareData()
 	if err != nil {

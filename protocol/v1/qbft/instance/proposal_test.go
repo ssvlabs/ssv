@@ -45,7 +45,7 @@ func TestJustifyProposalAfterChangeRoundPrepared(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
-	identifier := []byte("Lambda")
+	identifier := []byte("Identifier")
 	messageID := spectypes.NewMsgID(identifier, spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(messageID[:])
@@ -142,7 +142,7 @@ func TestJustifyProposalAfterChangeRoundNoPrepare(t *testing.T) {
 		Logger: zaptest.NewLogger(t),
 	}
 
-	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	messageID := spectypes.NewMsgID([]byte("Identifier"), spectypes.BNRoleAttester)
 	instance.state.Round.Store(specqbft.Round(1))
 	instance.state.Identifier.Store(messageID[:])
 	instance.state.PreparedValue.Store([]byte(nil))
@@ -151,7 +151,7 @@ func TestJustifyProposalAfterChangeRoundNoPrepare(t *testing.T) {
 	consensusMessage := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 
@@ -198,7 +198,7 @@ func TestUponProposalHappyFlow(t *testing.T) {
 	require.NoError(t, err)
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
-	identifier := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID([]byte("Identifier"), spectypes.BNRoleAttester)
 	share := &beacon.Share{
 		Committee:   nodes,
 		NodeID:      operatorIds[0],
@@ -283,7 +283,7 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
-		Identifier: []byte("lambdas"),
+		Identifier: []byte("identifiers"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err := msg.GetRoundChangeData()
@@ -293,7 +293,7 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	msg = &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
-		Identifier: []byte("lambdas"),
+		Identifier: []byte("identifiers"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
@@ -307,7 +307,7 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	msg = &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Round:      2,
-		Identifier: []byte("lambdas"),
+		Identifier: []byte("identifiers"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 	}
 	roundChangeData, err = msg.GetRoundChangeData()
@@ -342,14 +342,14 @@ func TestProposalPipeline(t *testing.T) {
 	}
 
 	instance.state.Round.Store(specqbft.Round(1))
-	messageID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	messageID := spectypes.NewMsgID([]byte("Identifier"), spectypes.BNRoleAttester)
 	instance.state.Identifier.Store(messageID[:])
 	instance.state.Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)
 
 	pipeline := instance.ProposalMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate proposal, , add proposal msg, upon proposal msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, validate proposal, , add proposal msg, upon proposal msg, ", pipeline.Name())
 }
 
 type testSSVSigner struct {

@@ -6,7 +6,7 @@ import (
 	"regexp"
 )
 
-// IdentifierFormat return base format for lambda
+// IdentifierFormat return base format for identifier
 func IdentifierFormat(pubKey []byte, roleType string) string {
 	return fmt.Sprintf("%s_%s", hex.EncodeToString(pubKey), roleType)
 }
@@ -15,7 +15,7 @@ var (
 	identifierRegexp = regexp.MustCompile("(.+)_(ATTESTER)|(PROPOSER)|(AGGREGATOR)|(UNKNOWN)")
 )
 
-// IdentifierUnformat return parts of the given lambda
+// IdentifierUnformat return parts of the given identifier
 func IdentifierUnformat(identifier string) (string, string) {
 	parts := identifierRegexp.FindStringSubmatch(identifier)
 	if len(parts) < 2 {

@@ -72,7 +72,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       []byte(time.Now().Weekday().String()),
 				},
 				Signature: []byte{},
@@ -86,7 +86,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       []byte(time.Now().Weekday().String()),
 				},
 				Signature: []byte{},
@@ -99,7 +99,7 @@ func TestValidatePrepareMsg(t *testing.T) {
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.PrepareMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       []byte(time.Now().Weekday().String()),
 			}),
 		},
@@ -135,7 +135,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -145,7 +145,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -159,7 +159,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -169,7 +169,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data2,
 				},
 				Signature: []byte{},
@@ -183,7 +183,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.PrepareMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},

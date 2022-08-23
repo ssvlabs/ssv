@@ -11,11 +11,11 @@ var (
 	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_stage",
 		Help: "IBFTs stage",
-	}, []string{"lambda", "pubKey"})
+	}, []string{"identifier", "pubKey"})
 	metricsIBFTRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_round",
 		Help: "IBFTs round",
-	}, []string{"lambda", "pubKey"})
+	}, []string{"identifier", "pubKey"})
 )
 
 func init() {

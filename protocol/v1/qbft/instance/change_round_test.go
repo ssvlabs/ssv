@@ -44,7 +44,7 @@ func (v0 *testFork) ProposalMsgValidationPipeline(share *beacon.Share, state *qb
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 		proposal.ValidateProposalMsg(share, state, roundLeader),
@@ -57,7 +57,7 @@ func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbf
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 	)
@@ -68,7 +68,7 @@ func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier 
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 	)
@@ -89,7 +89,7 @@ func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, identi
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(height),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
@@ -189,7 +189,7 @@ func TestRoundChangeInputValue(t *testing.T) {
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     1,
 		Round:      1,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 	}
 
@@ -240,7 +240,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     0,
 		Round:      2,
-		Identifier: []byte("Lambdas"),
+		Identifier: []byte("Identifiers"),
 		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 	}
 
@@ -264,7 +264,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
@@ -275,7 +275,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      2,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
@@ -286,7 +286,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
@@ -297,7 +297,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 			},
 			expectedError: "",
@@ -309,7 +309,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambdas"),
+				Identifier: []byte("Identifiers"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -329,7 +329,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -341,7 +341,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    specqbft.ProposalMsgType,
 								Height:     0,
 								Round:      2,
-								Identifier: []byte("lambdas"),
+								Identifier: []byte("identifiers"),
 								Data:       []byte("value"),
 							},
 						},
@@ -357,7 +357,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -369,7 +369,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      3,
-								Identifier: []byte("lambdas"),
+								Identifier: []byte("identifiers"),
 								Data:       []byte("value"),
 							},
 						},
@@ -385,7 +385,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -397,7 +397,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      1,
-								Identifier: []byte("lambdas"),
+								Identifier: []byte("identifiers"),
 								Data:       []byte("value"),
 							},
 						},
@@ -413,7 +413,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -425,14 +425,14 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      2,
-								Identifier: []byte("lambdas"),
+								Identifier: []byte("identifiers"),
 								Data:       []byte("value"),
 							},
 						},
 					},
 				}),
 			},
-			expectedError: "round change justification invalid: change round justification msg Lambda not equal to msg Lambda not equal to instance lambda",
+			expectedError: "round change justification invalid: change round justification msg identifier not equal to msg identifier not equal to instance identifier",
 		},
 		{
 			name:                "invalid justification quorum",
@@ -441,7 +441,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("lambdas"),
+				Identifier: []byte("identifiers"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -450,14 +450,14 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     0,
 							Round:      2,
-							Identifier: []byte("lambdas"),
+							Identifier: []byte("identifiers"),
 							Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 						}),
 						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorIds[1]}, &specqbft.Message{
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     0,
 							Round:      2,
-							Identifier: []byte("lambdas"),
+							Identifier: []byte("identifiers"),
 							Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value")}),
 						}),
 					},
@@ -472,7 +472,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("lambdas"),
+				Identifier: []byte("identifiers"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -484,7 +484,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 								MsgType:    specqbft.PrepareMsgType,
 								Height:     0,
 								Round:      2,
-								Identifier: []byte("lambdas"),
+								Identifier: []byte("identifiers"),
 								Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("values")}),
 							},
 						},
@@ -500,7 +500,7 @@ func TestValidateChangeRoundMessage(t *testing.T) {
 			msg: &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Round:      3,
-				Identifier: []byte("Lambdas"),
+				Identifier: []byte("Identifiers"),
 				Data: changeRoundDataToBytes(t, &specqbft.RoundChangeData{
 					PreparedValue: []byte("value"),
 					PreparedRound: specqbft.Round(2),
@@ -590,7 +590,7 @@ func TestRoundChangeJustification(t *testing.T) {
 			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     1,
 			Round:      2,
-			Identifier: []byte("Lambda"),
+			Identifier: []byte("Identifier"),
 			Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{}),
 		}
 
@@ -636,7 +636,7 @@ func TestRoundChangeJustification(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       inputValue,
 			}}
 		changeRoundData1, err := msg1.Message.GetRoundChangeData()
@@ -650,7 +650,7 @@ func TestRoundChangeJustification(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       inputValue,
 			}}
 		changeRoundData2, err := msg2.Message.GetRoundChangeData()
@@ -664,7 +664,7 @@ func TestRoundChangeJustification(t *testing.T) {
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       inputValue,
 			}}
 		changeRoundData3, err := msg3.Message.GetRoundChangeData()
@@ -696,7 +696,7 @@ func TestHighestPrepared(t *testing.T) {
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     1,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedRound: 1, PreparedValue: inputValue}),
 	}
 
@@ -704,7 +704,7 @@ func TestHighestPrepared(t *testing.T) {
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     1,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedRound: 2, PreparedValue: append(inputValue, []byte("highest")...)}),
 	}
 
@@ -745,7 +745,7 @@ func TestHighestPrepared(t *testing.T) {
 
 func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
-	msgID := spectypes.NewMsgID([]byte("Lambda"), spectypes.BNRoleAttester)
+	msgID := spectypes.NewMsgID([]byte("Identifier"), spectypes.BNRoleAttester)
 	tests := []struct {
 		name          string
 		msg           *specqbft.SignedMessage
@@ -786,15 +786,15 @@ func TestChangeRoundMsgValidationPipeline(t *testing.T) {
 		},
 
 		{
-			"invalid lambda",
+			"invalid identifier",
 			SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
-				Identifier: []byte("lambdaa"),
+				Identifier: []byte("identifiera"),
 				Data:       changeRoundDataToBytes(t, &specqbft.RoundChangeData{PreparedValue: nil}),
 			}),
-			"message Lambda (6c616d62646161) does not equal expected Lambda (4c616d62646100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000)",
+			"message identifier (6964656e74696669657261) does not equal expected identifier (4964656e746966696572000000000000000000000000000000000000000000000000000000000000000000000000000000000000)",
 		},
 		{
 			"valid with different round",
@@ -911,7 +911,7 @@ func TestChangeRoundPipeline(t *testing.T) {
 	}
 	instance.fork = testingFork(instance)
 	pipeline := instance.ChangeRoundMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, validateJustification msg, , add change round msg, upon change round partial quorum, if first pipeline non error, continue to second, ", pipeline.Name())
 }
 
 func prepareDataToBytes(t *testing.T, input *specqbft.PrepareData) []byte {

@@ -28,19 +28,19 @@ func TestAggregatedMsg(t *testing.T) {
 	msg1 := SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 	msg2 := SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 	msg3 := SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 
@@ -134,7 +134,7 @@ func committedAggregatedMsg(t *testing.T) {
 	consensusMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	}
 
@@ -157,7 +157,7 @@ func committedAggregatedMsg(t *testing.T) {
 	m := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value2")}),
 	}
 
@@ -191,7 +191,7 @@ func TestCommitPipeline(t *testing.T) {
 
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
-	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , round, validate proposal, add commit msg, , upon commit msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, , round, validate proposal, add commit msg, , upon commit msg, ", pipeline.Name())
 }
 
 // AggregateMessages will aggregate given msgs or return error

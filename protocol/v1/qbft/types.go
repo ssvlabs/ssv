@@ -35,7 +35,7 @@ var RoundStateName = map[int32]string{
 // State holds an iBFT state, thread safe
 type State struct {
 	Stage atomic.Int32 // RoundState
-	// lambda is an instance unique identifier, much like a block hash in a blockchain
+	// Identifier is an instance unique identifier, much like a block hash in a blockchain
 	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
 	Height                          atomic.Value // specqbft.Height
