@@ -29,8 +29,20 @@ var (
 	}, []string{"topic"})
 	metricsPubsubPeerScoreInspect = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:inspect",
-		Help: "Count active message validation",
+		Help: "Gauge for negative peer scores",
 	}, []string{"pid"})
+	metricPubsubPeerScoreAverage = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:avg",
+		Help: "Counts average score among peers",
+	})
+	metricPubsubPeerScorePositive = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:positive",
+		Help: "Counts peers with positive score",
+	})
+	metricPubsubPeerScoreNegative = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:negative",
+		Help: "Counts peers with negative score",
+	})
 )
 
 func init() {
@@ -50,6 +62,15 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsPubsubPeerScoreInspect); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricPubsubPeerScoreAverage); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricPubsubPeerScorePositive); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricPubsubPeerScoreNegative); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

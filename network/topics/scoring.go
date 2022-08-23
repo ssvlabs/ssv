@@ -17,13 +17,13 @@ const (
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
 	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 64
+	subnetsTotalWeight = 32
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
 	decidedTopicWeight = 0.7
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
-	maxInMeshScore = 30
+	maxInMeshScore = 15
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
-	maxFirstDeliveryScore = 90
+	maxFirstDeliveryScore = 50
 	// decayToZero specifies the terminal value that we will use when decaying
 	// a value.
 	decayToZero = 0.01
@@ -40,8 +40,12 @@ func DefaultScoringConfig() *ScoringConfig {
 }
 
 // scoreInspector inspects scores and updates the score index accordingly
+// TODO: finalize once validation is in place
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+		sum := 0.0
+		positiveCount := 0
+		negativeCount := 0
 		for pid, peerScores := range scores {
 			//scores := []*peers.NodeScore{
 			//	{
@@ -57,7 +61,13 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//}
 			logger.Debug("peer scores", zap.String("peer", pid.String()),
 				zap.Any("peerScores", peerScores))
-			metricsPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
+			if peerScores.Score < float64(0) {
+				metricsPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
+				negativeCount++
+			} else if peerScores.Score > float64(0) {
+				positiveCount++
+			}
+			sum += peerScores.Score
 			//err := scoreIdx.Score(pid, scores...)
 			//if err != nil {
 			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
@@ -66,6 +76,13 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
+		if len(scores) > 0 {
+			metricPubsubPeerScoreAverage.Set(sum / float64(len(scores)))
+		} else {
+			metricPubsubPeerScoreAverage.Set(0.0)
+		}
+		metricPubsubPeerScorePositive.Set(float64(positiveCount))
+		metricPubsubPeerScoreNegative.Set(float64(negativeCount))
 	}
 }
 
@@ -228,12 +245,12 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScorePa
 		FirstMessageDeliveriesWeight:    firstMessageWeight,
 		FirstMessageDeliveriesDecay:     scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		FirstMessageDeliveriesCap:       firstMessageCap,
-		MeshMessageDeliveriesWeight:     -37.22,
+		MeshMessageDeliveriesWeight:     meshWeight,
 		MeshMessageDeliveriesDecay:      scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		MeshMessageDeliveriesCap:        meshCap,
 		MeshMessageDeliveriesThreshold:  meshThreshold,
 		MeshMessageDeliveriesWindow:     2 * time.Second,
-		MeshMessageDeliveriesActivation: 200 * time.Second,
+		MeshMessageDeliveriesActivation: 1 * cfg.Scoring.OneEpochDuration,
 		MeshFailurePenaltyWeight:        meshWeight,
 		MeshFailurePenaltyDecay:         scoreDecay(meshDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		InvalidMessageDeliveriesWeight:  0.0, // TODO: enable once validation is in place
