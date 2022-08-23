@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -35,8 +35,8 @@ func (g *ForkGenesis) VersionName() string {
 	return forksprotocol.GenesisForkVersion.String()
 }
 
-// PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
-func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+// ProposalMsgValidationPipeline is the validation pipeline for proposal messages
+func (g *ForkGenesis) ProposalMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader proposal.LeaderResolver) pipelines.SignedMessagePipeline {
 	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
@@ -44,7 +44,7 @@ func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state
 		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(share, state, roundLeader),
+		proposal.ValidateProposalMsg(share, state, roundLeader),
 	)
 }
 

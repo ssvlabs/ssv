@@ -161,7 +161,7 @@ func (i *Instance) Containers() map[specqbft.MessageType]msgcont.MessageContaine
 // 	pvi ← ⊥
 // 	inputV aluei ← value
 // 	if leader(hi, ri) = pi then
-// 		broadcast ⟨PRE-PREPARE, λi, ri, inputV aluei⟩ message
+// 		broadcast ⟨PROPOSAL, λi, ri, inputV aluei⟩ message
 // 		set timer to running and expire after t(ri)
 func (i *Instance) Start(inputValue []byte) error {
 	if !i.initialized {
@@ -181,22 +181,22 @@ func (i *Instance) Start(inputValue []byte) error {
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
-			//i.ProcessStageChange(qbft.RoundStatePrePrepare) we need to process the proposal msg in order to broadcast to prepare msg
+			//i.ProcessStageChange(qbft.RoundStateProposal) we need to process the proposal msg in order to broadcast to prepare msg
 
-			// LeaderPreprepareDelaySeconds waits to let other nodes complete their instance start or round change.
+			// LeaderProposalDelaySeconds waits to let other nodes complete their instance start or round change.
 			// Waiting will allow a more stable msg receiving for all parties.
-			time.Sleep(time.Duration(i.Config.LeaderPreprepareDelaySeconds))
+			time.Sleep(time.Duration(i.Config.LeaderProposalDelaySeconds))
 
-			msg, err := i.generatePrePrepareMessage(&specqbft.ProposalData{
+			msg, err := i.generateProposalMessage(&specqbft.ProposalData{
 				Data: i.State().GetInputValue(),
 			})
 			if err != nil {
-				i.Logger.Warn("failed to generate pre-prepare message", zap.Error(err))
+				i.Logger.Warn("failed to generate proposal message", zap.Error(err))
 				return
 			}
 
 			if err := i.SignAndBroadcast(&msg); err != nil {
-				i.Logger.Error("could not broadcast pre-prepare", zap.Error(err))
+				i.Logger.Error("could not broadcast proposal", zap.Error(err))
 			}
 		}()
 	}
@@ -261,7 +261,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	// optionally remove pipelines and use the code from spec
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
-		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
+		if err := i.ProposalMsgPipeline().Run(msg); err != nil {
 			if errors.Is(err, signedmsg.ErrWrongRound) {
 				// NOTE: These 4 checks will be replaced by one in a future PR.
 				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
