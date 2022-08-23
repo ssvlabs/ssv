@@ -123,7 +123,7 @@ func TestConsumeMessages(t *testing.T) {
 			generateInstance(0, 1, qbft.RoundStateNotStarted),
 		},
 		{
-			"by_state_PrePrepare",
+			"by_state_Proposal",
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),     // verify priority is right
@@ -134,7 +134,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"by_state_prepare",
@@ -176,7 +176,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"by_state_no_message_pop_change_round",
@@ -189,7 +189,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"default_late_commit",
@@ -243,7 +243,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(1),
-			generateInstance(1, 1, qbft.RoundStatePrePrepare),
+			generateInstance(1, 1, qbft.RoundStateProposal),
 		},
 		{
 			"instance_change_round_clean_old_messages",
@@ -448,7 +448,7 @@ func (i *InstanceMock) Containers() map[specqbft.MessageType]msgcont.MessageCont
 	panic("implement me")
 }
 
-func (i *InstanceMock) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
+func (i *InstanceMock) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 	//TODO implement me
 	panic("implement me")
 }

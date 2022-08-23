@@ -1,4 +1,4 @@
-package preprepare
+package proposal
 
 import (
 	"bytes"
@@ -22,9 +22,9 @@ var ErrInvalidSignersNum = errors.New("proposal msg allows 1 signer")
 // LeaderResolver resolves round's leader
 type LeaderResolver func(round specqbft.Round) uint64
 
-// ValidatePrePrepareMsg validates pre-prepare message
-func ValidatePrePrepareMsg(share *beacon.Share, state *qbft.State, resolver LeaderResolver) pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("validate pre-prepare", func(signedMessage *specqbft.SignedMessage) error {
+// ValidateProposalMsg validates proposal message
+func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver LeaderResolver) pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("validate proposal", func(signedMessage *specqbft.SignedMessage) error {
 		signers := signedMessage.GetSigners()
 		if len(signers) != 1 {
 			return ErrInvalidSignersNum
@@ -40,7 +40,7 @@ func ValidatePrePrepareMsg(share *beacon.Share, state *qbft.State, resolver Lead
 			return fmt.Errorf("could not get proposal data: %w", err)
 		}
 
-		if err := JustifyPrePrepare(share, state, uint64(signedMessage.Message.Round), prepareMsg); err != nil {
+		if err := Justify(share, state, uint64(signedMessage.Message.Round), prepareMsg); err != nil {
 			return fmt.Errorf("proposal not justified: %w", err)
 		}
 
@@ -54,15 +54,15 @@ func ValidatePrePrepareMsg(share *beacon.Share, state *qbft.State, resolver Lead
 	})
 }
 
-// JustifyPrePrepare implements:
-// predicate JustifyPrePrepare(hPRE-PREPARE, λi, round, value)
+// Justify implements:
+// predicate JustifyProposal(hPROPOSAL, λi, round, value)
 // 	return
 // 		round = 1
 // 		∨ received a quorum Qrc of valid <ROUND-CHANGE, λi, round, prj , pvj> messages such that:
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func JustifyPrePrepare(share *beacon.Share, state *qbft.State, round uint64, proposalData *specqbft.ProposalData) error {
+func Justify(share *beacon.Share, state *qbft.State, round uint64, proposalData *specqbft.ProposalData) error {
 	// TODO: move its tests to this package
 	if round == 1 {
 		return nil

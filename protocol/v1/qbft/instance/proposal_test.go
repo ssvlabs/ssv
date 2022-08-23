@@ -19,10 +19,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 )
 
-func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
+func TestJustifyProposalAfterChangeRoundPrepared(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	value, err := (&specqbft.ProposalData{Data: []byte(time.Now().Weekday().String())}).Encode()
@@ -94,7 +94,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 			Data:       value,
 		})
 		instance.containersMap[specqbft.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
-		err := preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{Data: value})
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{Data: value})
 		require.EqualError(t, err, "change round has not quorum")
 	})
 
@@ -105,7 +105,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 		msg = SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], roundChangeMessage)
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
-		err := preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
 			Data:                     value,
 			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
 			PrepareJustification:     prepareMessages,
@@ -114,7 +114,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	})
 
 	t.Run("wrong value, unjustified", func(t *testing.T) {
-		err := preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
 			Data:                     wrongValue,
 			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
 			PrepareJustification:     prepareMessages,
@@ -123,7 +123,7 @@ func TestJustifyPrePrepareAfterChangeRoundPrepared(t *testing.T) {
 	})
 }
 
-func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
+func TestJustifyProposalAfterChangeRoundNoPrepare(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
@@ -167,7 +167,7 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
-		err := preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
 		require.EqualError(t, err, "change round has not quorum")
 	})
 
@@ -177,21 +177,21 @@ func TestJustifyPrePrepareAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
-		err := preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
 			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
 		})
 		require.NoError(t, err)
 	})
 
-	t.Run("any value can be in pre-prepare", func(t *testing.T) {
-		require.NoError(t, preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
+	t.Run("any value can be in proposal", func(t *testing.T) {
+		require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
 			Data:                     []byte("wrong value"),
 			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
 		}))
 	})
 }
 
-func TestUponPrePrepareHappyFlow(t *testing.T) {
+func TestUponProposalHappyFlow(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	pi, err := protocolp2p.GenPeerID()
@@ -236,17 +236,17 @@ func TestUponPrePrepareHappyFlow(t *testing.T) {
 		Identifier: identifier[:],
 		Data:       proposalDataToBytes(t, &specqbft.ProposalData{Data: []byte(time.Now().Weekday().String())}),
 	})
-	require.NoError(t, instance.PrePrepareMsgPipeline().Run(msg))
+	require.NoError(t, instance.ProposalMsgPipeline().Run(msg))
 	msgs := instance.containersMap[specqbft.ProposalMsgType].ReadOnlyMessagesByRound(1)
 	require.Len(t, msgs, 1)
 	require.NotNil(t, msgs[0])
-	require.True(t, instance.State().Stage.Load() == int32(qbft.RoundStatePrePrepare))
+	require.True(t, instance.State().Stage.Load() == int32(qbft.RoundStateProposal))
 
-	// return nil if another pre-prepare received.
-	require.NoError(t, instance.UponPrePrepareMsg().Run(msg))
+	// return nil if another proposal received.
+	require.NoError(t, instance.UponProposalMsg().Run(msg))
 }
 
-func TestInstance_JustifyPrePrepare(t *testing.T) {
+func TestInstance_JustifyProposal(t *testing.T) {
 	secretKeys, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	pi, err := protocolp2p.GenPeerID()
@@ -272,11 +272,11 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
-	require.NoError(t, preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 1, &specqbft.ProposalData{}))
+	require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 1, &specqbft.ProposalData{}))
 
 	// try to justify round 2 without round change
 	instance.State().Round.Store(specqbft.Round(2))
-	err = preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
 	require.EqualError(t, err, "change round has not quorum")
 
 	// test no change round quorum
@@ -300,7 +300,7 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], msg), roundChangeData.PreparedValue)
 
-	err = preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
 	require.EqualError(t, err, "change round has not quorum")
 
 	// test with quorum of change round
@@ -314,13 +314,13 @@ func TestInstance_JustifyPrePrepare(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], msg), roundChangeData.PreparedValue)
 
-	err = preprepare.JustifyPrePrepare(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
 		RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
 	})
 	require.NoError(t, err)
 }
 
-func TestPrePreparePipeline(t *testing.T) {
+func TestProposalPipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
@@ -348,8 +348,8 @@ func TestPrePreparePipeline(t *testing.T) {
 
 	instance.fork = testingFork(instance)
 
-	pipeline := instance.PrePrepareMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate pre-prepare, , add pre-prepare msg, upon pre-prepare msg, ", pipeline.Name())
+	pipeline := instance.ProposalMsgPipeline()
+	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, validate proposal, , add proposal msg, upon proposal msg, ", pipeline.Name())
 }
 
 type testSSVSigner struct {

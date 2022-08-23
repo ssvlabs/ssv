@@ -35,7 +35,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
@@ -277,9 +277,9 @@ type forkWithValueCheck struct {
 	forks.Fork
 }
 
-func (f forkWithValueCheck) PrePrepareMsgValidationPipeline(share *beaconprotocol.Share, state *qbftprotocol.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+func (f forkWithValueCheck) ProposalMsgValidationPipeline(share *beaconprotocol.Share, state *qbftprotocol.State, roundLeader proposal.LeaderResolver) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		f.Fork.PrePrepareMsgValidationPipeline(share, state, roundLeader),
+		f.Fork.ProposalMsgValidationPipeline(share, state, roundLeader),
 		msgValueCheck(),
 	)
 }

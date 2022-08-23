@@ -11,12 +11,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
-// PrePrepareMsgPipeline is the main pre-prepare msg pipeline
-func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
+// ProposalMsgPipeline is the main proposal msg pipeline
+func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		i.prePrepareMsgValidationPipeline(),
-		pipelines.WrapFunc("add pre-prepare msg", func(signedMessage *specqbft.SignedMessage) error {
-			i.Logger.Info("received valid pre-prepare message for round",
+		i.proposalMsgValidationPipeline(),
+		pipelines.WrapFunc("add proposal msg", func(signedMessage *specqbft.SignedMessage) error {
+			i.Logger.Info("received valid proposal message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
 				zap.Uint64("round", uint64(signedMessage.Message.Round)))
 
@@ -28,23 +28,23 @@ func (i *Instance) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
 
 			return nil
 		}),
-		i.UponPrePrepareMsg(),
+		i.UponProposalMsg(),
 	)
 }
 
-func (i *Instance) prePrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.PrePrepareMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
+func (i *Instance) proposalMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return i.fork.ProposalMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
 }
 
 /*
-UponPrePrepareMsg Algorithm 2 IBFTController pseudocode for process pi: normal case operation
-upon receiving a valid ⟨PRE-PREPARE, λi, ri, value⟩ message m from leader(λi, round) such that:
-	JustifyPrePrepare(m) do
+UponProposalMsg Algorithm 2 IBFTController pseudocode for process pi: normal case operation
+upon receiving a valid ⟨PROPOSAL, λi, ri, value⟩ message m from leader(λi, round) such that:
+	JustifyProposal(m) do
 		set timer i to running and expire after t(ri)
 		broadcast ⟨PREPARE, λi, ri, value⟩
 */
-func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("upon pre-prepare msg", func(signedMessage *specqbft.SignedMessage) error {
+func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon proposal msg", func(signedMessage *specqbft.SignedMessage) error {
 		i.State().ProposalAcceptedForCurrentRound.Store(signedMessage)
 
 		newRound := signedMessage.Message.Round
@@ -64,7 +64,7 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 		}
 
 		// mark state
-		i.ProcessStageChange(qbft.RoundStatePrePrepare)
+		i.ProcessStageChange(qbft.RoundStateProposal)
 
 		// broadcast prepare msg
 		broadcastMsg, err := i.generatePrepareMessage(prepareMsg.Data)
@@ -79,7 +79,7 @@ func (i *Instance) UponPrePrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generatePrePrepareMessage(proposalMsg *specqbft.ProposalData) (specqbft.Message, error) {
+func (i *Instance) generateProposalMessage(proposalMsg *specqbft.ProposalData) (specqbft.Message, error) {
 	proposalEncodedMsg, err := proposalMsg.Encode()
 	if err != nil {
 		return specqbft.Message{}, errors.Wrap(err, "failed to encoded proposal message")
@@ -94,12 +94,12 @@ func (i *Instance) generatePrePrepareMessage(proposalMsg *specqbft.ProposalData)
 	}, nil
 }
 
-func (i *Instance) checkExistingPrePrepare(round specqbft.Round) (bool, *specqbft.SignedMessage, error) {
+func (i *Instance) checkExistingProposal(round specqbft.Round) (bool, *specqbft.SignedMessage, error) {
 	msgs := i.containersMap[specqbft.ProposalMsgType].ReadOnlyMessagesByRound(round)
 	if len(msgs) == 1 {
 		return true, msgs[0], nil
 	} else if len(msgs) > 1 {
-		return false, nil, errors.New("multiple pre-preparer msgs, can't decide which one to use")
+		return false, nil, errors.New("multiple proposal msgs, can't decide which one to use")
 	}
 	return false, nil, nil
 }

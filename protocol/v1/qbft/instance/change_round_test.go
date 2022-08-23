@@ -17,7 +17,7 @@ import (
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/protocol/v1/types"
@@ -38,8 +38,8 @@ func (v0 *testFork) Apply(instance Instance) {
 
 }
 
-// PrePrepareMsgPipelineV0 is the full processing msg pipeline for a pre-prepare msg
-func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+// ProposalMsgValidationPipeline is the full processing msg pipeline for a proposal msg
+func (v0 *testFork) ProposalMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader proposal.LeaderResolver) pipelines.SignedMessagePipeline {
 	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
@@ -47,7 +47,7 @@ func (v0 *testFork) PrePrepareMsgValidationPipeline(share *beacon.Share, state *
 		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(share, state, roundLeader),
+		proposal.ValidateProposalMsg(share, state, roundLeader),
 	)
 }
 
