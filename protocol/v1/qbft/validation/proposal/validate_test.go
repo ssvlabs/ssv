@@ -1,4 +1,4 @@
-package preprepare
+package proposal
 
 import (
 	"testing"
@@ -55,7 +55,7 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message) 
 	return sm
 }
 
-func TestValidatePrePrepareValue(t *testing.T) {
+func TestValidateProposalValue(t *testing.T) {
 	sks, nodes := GenerateNodes(4)
 	share := &beacon.Share{
 		Committee: nodes,
@@ -124,7 +124,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			state := &qbft.State{}
 			state.Round.Store(test.msg.Message.Round)
 
-			err := ValidatePrePrepareMsg(share, state, func(round specqbft.Round) uint64 {
+			err := ValidateProposalMsg(share, state, func(round specqbft.Round) uint64 {
 				return 1
 			}).Run(test.msg)
 			if len(test.err) > 0 {

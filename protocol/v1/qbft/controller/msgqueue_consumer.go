@@ -225,7 +225,7 @@ func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height
 	switch stage {
 	case qbft.RoundStateNotStarted:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType)
-	case qbft.RoundStatePrePrepare:
+	case qbft.RoundStateProposal:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType) // looking for propose in case is leader
 	case qbft.RoundStatePrepare:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)

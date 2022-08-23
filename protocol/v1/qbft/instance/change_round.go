@@ -61,7 +61,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 			let v such that (−, v) = HighestPrepared(Qrc))
 		else
 			let v such that v = inputValue i
-		broadcast ⟨PRE-PREPARE, λi, ri, v⟩
+		broadcast ⟨PROPOSAL, λi, ri, v⟩
 */
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
@@ -94,7 +94,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			logger.Info("change round quorum received")
 
 			if !i.IsLeader() {
-				err = i.actOnExistingPrePrepare(signedMessage)
+				err = i.actOnExistingProposal(signedMessage)
 				return
 			}
 
@@ -111,24 +111,24 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 					Data:                     i.State().GetInputValue(),
 					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
 				}
-				logger.Info("broadcasting pre-prepare as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
+				logger.Info("broadcasting proposal as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
 				proposalData = &specqbft.ProposalData{
 					Data:                     highest.PreparedValue,
 					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
 					PrepareJustification:     highest.RoundChangeJustification,
 				}
-				logger.Info("broadcasting pre-prepare as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
+				logger.Info("broadcasting proposal as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
-			// send pre-prepare msg
+			// send proposal msg
 			var broadcastMsg specqbft.Message
-			broadcastMsg, err = i.generatePrePrepareMessage(proposalData)
+			broadcastMsg, err = i.generateProposalMessage(proposalData)
 			if err != nil {
 				return
 			}
 			if e := i.SignAndBroadcast(&broadcastMsg); e != nil {
-				logger.Error("could not broadcast pre-prepare message after round change", zap.Error(err))
+				logger.Error("could not broadcast proposal message after round change", zap.Error(err))
 				err = e
 			}
 		})
@@ -136,18 +136,18 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	})
 }
 
-// actOnExistingPrePrepare will try to find exiting pre-prepare msg and run the UponPrePrepareMsg if found.
-// We do this in case a future pre-prepare msg was sent before we reached change round quorum, this check is to prevent the instance to wait another round.
-func (i *Instance) actOnExistingPrePrepare(signedMessage *specqbft.SignedMessage) error {
-	found, msg, err := i.checkExistingPrePrepare(signedMessage.Message.Round)
+// actOnExistingProposal will try to find exiting proposal msg and run the UponProposalMsg if found.
+// We do this in case a future proposal msg was sent before we reached change round quorum, this check is to prevent the instance to wait another round.
+func (i *Instance) actOnExistingProposal(signedMessage *specqbft.SignedMessage) error {
+	found, msg, err := i.checkExistingProposal(signedMessage.Message.Round)
 	if err != nil {
 		return err
 	}
 	if !found {
-		i.Logger.Debug("not found exist pre-prepare for change round")
+		i.Logger.Debug("not found exist proposal for change round")
 		return nil
 	}
-	return i.UponPrePrepareMsg().Run(msg)
+	return i.UponProposalMsg().Run(msg)
 }
 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
