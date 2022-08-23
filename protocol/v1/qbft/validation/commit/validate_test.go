@@ -29,7 +29,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -39,7 +39,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -53,7 +53,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},
@@ -63,7 +63,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data2,
 				},
 				Signature: []byte{},
@@ -77,7 +77,7 @@ func TestValidateProposal(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       data1,
 				},
 				Signature: []byte{},

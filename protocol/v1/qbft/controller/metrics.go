@@ -1,9 +1,10 @@
 package controller
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"log"
 )
 
 var (
@@ -11,7 +12,7 @@ var (
 	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_sequence",
 		Help: "The highest decided sequence number",
-	}, []string{"lambda", "pubKey"})
+	}, []string{"identifier", "pubKey"})
 	metricsRunningIBFTsCount = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:validator:running_ibfts_count_all",
 		Help: "Count all running IBFTs",

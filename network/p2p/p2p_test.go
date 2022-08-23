@@ -4,20 +4,20 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -252,11 +252,11 @@ func (r *dummyRouter) Route(message spectypes.SSVMessage) {
 //	id := message.NewIdentifier(pk, spectypes.BNRoleAttester)
 //	v0SignedMsg := &proto.SignedMessage{
 //		Message: &proto.Message{
-//			Type:      3,
-//			Round:     2,
-//			Lambda:    id,
-//			SeqNumber: uint64(height),
-//			Value:     []byte("bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="),
+//			Type:       3,
+//			Round:      2,
+//			Identifier: id,
+//			SeqNumber:  uint64(height),
+//			Value:      []byte("bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="),
 //		},
 //		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN"),
 //		SignerIds: []uint64{1, 3, 4},

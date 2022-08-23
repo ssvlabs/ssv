@@ -172,7 +172,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	}
 
 	messageID := message.ToMessageID(i.State().GetIdentifier())
-	i.Logger.Info("Node is starting iBFT instance", zap.String("Lambda", hex.EncodeToString(i.State().GetIdentifier())))
+	i.Logger.Info("Node is starting iBFT instance", zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())))
 	i.State().InputValue.Store(inputValue)
 	i.State().Round.Store(specqbft.Round(1)) // start from 1
 	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)

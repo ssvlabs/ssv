@@ -77,7 +77,7 @@ func TestValidateProposalValue(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       validEncodedPrepare,
 				},
 				Signature: []byte{},
@@ -91,7 +91,7 @@ func TestValidateProposalValue(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
+					Identifier: []byte("Identifier"),
 					Data:       validEncodedPrepare,
 				},
 				Signature: []byte{},
@@ -104,7 +104,7 @@ func TestValidateProposalValue(t *testing.T) {
 			SignMsg(t, 2, sks[2], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       []byte("wrong value"),
 			}),
 		},
@@ -114,7 +114,7 @@ func TestValidateProposalValue(t *testing.T) {
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       validEncodedPrepare,
 			}),
 		},

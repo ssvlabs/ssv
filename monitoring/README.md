@@ -38,9 +38,9 @@ METRICS_API_PORT=15000
 * `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
 * `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
 * `ssv:network:net_messages_inbound{topic}` Count incoming network messages
-* `ssv:validator:ibft_highest_decided{lambda}` The highest decided sequence number
-* `ssv:validator:ibft_round{lambda}` IBFTs round
-* `ssv:validator:ibft_stage{lambda}` IBFTs stage
+* `ssv:validator:ibft_highest_decided{identifier}` The highest decided sequence number
+* `ssv:validator:ibft_round{identifier}` IBFTs round
+* `ssv:validator:ibft_stage{identifier}` IBFTs stage
 * `ssv:validator:ibft_current_slot{pubKey}` Current running slot
 * `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
 * `ssv:validator:running_ibfts_count_all` Count all running IBFTs
