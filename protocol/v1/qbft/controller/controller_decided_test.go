@@ -10,6 +10,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -240,6 +241,7 @@ import (
 //			instance.NewInstanceWithState(&qbft.State{
 //				Height: height0,
 //			}),
+
 //			nil,
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 //				MsgType: message.CommitMsgType,
@@ -386,20 +388,38 @@ func TestForceDecided(t *testing.T) {
 
 	time.Sleep(time.Second * 1) // wait for sync to complete
 
+	messageData := []byte("value")
 	go func() {
 		time.Sleep(time.Millisecond * 500) // wait for instance to start
 
 		signers := []spectypes.OperatorID{1, 2, 3, 4}
 
-		encodedCommit, err := (&specqbft.CommitData{Data: []byte("value")}).Encode()
+		encodedProposalData, err := (&specqbft.ProposalData{Data: messageData}).Encode()
 		require.NoError(t, err)
-		decidedMsg := testingprotocol.AggregateSign(t, sks, signers, &specqbft.Message{
+
+		proposalMessage := &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.Height(4),
+			Round:      specqbft.Round(1),
+			Identifier: identifier[:],
+			Data:       encodedProposalData,
+		}
+
+		signedProposal := testingutils.SignQBFTMsg(sks[signers[0]], signers[0], proposalMessage)
+
+		i1.(*Controller).GetCurrentInstance().State().ProposalAcceptedForCurrentRound.Store(signedProposal)
+
+		encodedCommit, err := (&specqbft.CommitData{Data: messageData}).Encode()
+		require.NoError(t, err)
+
+		commitMessage := &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(4),
 			Round:      specqbft.Round(1),
 			Identifier: identifier[:],
 			Data:       encodedCommit,
-		})
+		}
+		decidedMsg := testingprotocol.AggregateSign(t, sks, signers, commitMessage)
 
 		require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
 	}()
@@ -407,7 +427,7 @@ func TestForceDecided(t *testing.T) {
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:    zap.L(),
 		SeqNumber: 4,
-		Value:     commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
+		Value:     commitDataToBytes(t, &specqbft.CommitData{Data: messageData}),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)
@@ -554,7 +574,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 				Identifier: identifier,
 				Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 			}),
-			errors.New("failed to verify signature"),
+			errors.New("invalid message signature: failed to verify signature"),
 		},
 		{
 			"valid first decided",
@@ -645,7 +665,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 //}
 
 // TODO: (lint) fix test
-//nolint
+// nolint
 func populatedIbft(
 	nodeID spectypes.OperatorID,
 	identifier []byte,

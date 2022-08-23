@@ -22,8 +22,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	msgcontinmem "github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // Options defines option attributes for the Instance
@@ -253,28 +253,48 @@ func (i *Instance) Stopped() bool {
 
 // ProcessMsg will process the message
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
-	var pp pipelines.SignedMessagePipeline
-	var errPrefix string // TODO(nkryuchkov): make similar in ssv-spec
+	if err := msg.Validate(); err != nil {
+		return false, errors.Wrap(err, "invalid signed message")
+	}
 
+	// TODO(nkryuchkov): remove error wrapping, make the processing similar,
+	// optionally remove pipelines and use the code from spec
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
-		pp = i.PrePrepareMsgPipeline()
-		errPrefix = "proposal invalid"
+		if err := i.PrePrepareMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
+			return false, fmt.Errorf("invalid proposal message: %w", err)
+		}
 	case specqbft.PrepareMsgType:
-		pp = i.PrepareMsgPipeline()
-		errPrefix = "invalid prepare msg"
+		if err := i.PrepareMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
+			return false, err
+		}
 	case specqbft.CommitMsgType:
-		pp = i.CommitMsgPipeline()
-		errPrefix = "commit msg invalid"
+		if err := i.CommitMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
+			return false, err
+		}
 	case specqbft.RoundChangeMsgType:
-		pp = i.ChangeRoundMsgPipeline()
-		errPrefix = "round change msg invalid"
+		if err := i.ChangeRoundMsgPipeline().Run(msg); err != nil {
+			if errors.Is(err, signedmsg.ErrWrongRound) {
+				// NOTE: These 4 checks will be replaced by one in a future PR.
+				i.Logger.Debug(fmt.Sprintf("message round (%d) does not equal state round (%d)", msg.Message.Round, i.State().GetRound()))
+			}
+			return false, fmt.Errorf("invalid round change message: %w", err)
+		}
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
 		return false, errors.Errorf("undefined message type")
-	}
-	if err := pp.Run(msg); err != nil {
-		return false, fmt.Errorf("%s: %w", errPrefix, err)
 	}
 
 	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
@@ -419,21 +439,23 @@ func (i *Instance) setFork(fork forks.Fork) {
 }
 
 func generateState(opts *Options) *qbft.State {
-	var identifier, height, round, preparedRound, preparedValue atomic.Value
+	var identifier, height, round, preparedRound, preparedValue, iv, proposalReceivedForCurrentRound atomic.Value
 	height.Store(opts.Height)
 	round.Store(specqbft.Round(0))
 	identifier.Store(opts.Identifier[:])
 	preparedRound.Store(specqbft.Round(0))
 	preparedValue.Store([]byte(nil))
-	iv := atomic.Value{}
 	iv.Store([]byte{})
+	proposalReceivedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
+
 	return &qbft.State{
-		Stage:         *atomic.NewInt32(int32(qbft.RoundStateNotStarted)),
-		Identifier:    identifier,
-		Height:        height,
-		InputValue:    iv,
-		Round:         round,
-		PreparedRound: preparedRound,
-		PreparedValue: preparedValue,
+		Stage:                           *atomic.NewInt32(int32(qbft.RoundStateNotStarted)),
+		Identifier:                      identifier,
+		Height:                          height,
+		InputValue:                      iv,
+		Round:                           round,
+		PreparedRound:                   preparedRound,
+		PreparedValue:                   preparedValue,
+		ProposalAcceptedForCurrentRound: proposalReceivedForCurrentRound,
 	}
 }

@@ -24,7 +24,7 @@ func TestMsgSeq(t *testing.T) {
 			"different msg seq",
 			1,
 			2,
-			"msg Height wrong",
+			"message height is wrong",
 		},
 	}
 
