@@ -2260,10 +2260,10 @@
                   "job 6": true,
                   "job 7": true,
                   "job 8": true,
-                  "lambda 1": true,
-                  "lambda 2": true,
-                  "lambda 3": true,
-                  "lambda 4": true
+                  "identifier 1": true,
+                  "identifier 2": true,
+                  "identifier 3": true,
+                  "identifier 4": true
                 },
                 "indexByName": {
                   "Time 1": 12,
@@ -2306,10 +2306,10 @@
                   "job 6": 36,
                   "job 7": 40,
                   "job 8": 44,
-                  "lambda 1": 15,
-                  "lambda 2": 22,
-                  "lambda 3": 27,
-                  "lambda 4": 32,
+                  "identifier 1": 15,
+                  "identifier 2": 22,
+                  "identifier 3": 27,
+                  "identifier 4": 32,
                   "pubKey": 2
                 },
                 "renameByName": {
@@ -2647,7 +2647,7 @@
                     ],
                     "operation": "aggregate"
                   },
-                  "lambda": {
+                  "identifier": {
                     "aggregations": [],
                     "operation": "groupby"
                   }
@@ -2668,7 +2668,7 @@
                   "Value": "Messages in Queue",
                   "Value (lastNotNull)": "Messages",
                   "Value (sum)": "Messages",
-                  "lambda": "Identifier"
+                  "identifier": "Identifier"
                 }
               }
             }
@@ -2790,14 +2790,14 @@
                   "index_name": 5,
                   "instance": 2,
                   "job": 3,
-                  "lambda": 4,
+                  "identifier": 4,
                   "msg_type": 6
                 },
                 "renameByName": {
                   "Value": "Messages Ratio",
                   "consensus_type": "Consensus Type",
                   "index_name": "Index Name",
-                  "lambda": "Identifier",
+                  "identifier": "Identifier",
                   "msg_type": "Msg Type"
                 }
               }
