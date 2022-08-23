@@ -149,12 +149,16 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 // topicScoreParams factory for creating scoring params for topics
 func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
 	decidedTopic := f.GetTopicFullName(f.DecidedTopic())
-	return func(s string) *pubsub.TopicScoreParams {
-		switch s {
+	return func(t string) *pubsub.TopicScoreParams {
+		switch t {
 		case decidedTopic:
 			return decidedTopicScoreParams(cfg, f)
 		default:
-			return subnetTopicScoreParams(cfg, f)
+			p, err := subnetTopicScoreParams(cfg, f)
+			if err != nil {
+				cfg.Logger.Debug("ignoring topic score params", zap.String("topic", t), zap.Error(err))
+			}
+			return p
 		}
 	}
 }
@@ -198,17 +202,17 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 // subnetTopicScoreParams returns the scoring params for a subnet topic
 // based on lighthouse parameters for attestation subnet, with some changes from prysm and alignment to ssv:
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
-func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreParams {
+func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreParams, error) {
 	subnetCount := uint64(f.Subnets())
 	// Get weight for each specific subnet.
 	topicWeight := subnetsTotalWeight / float64(subnetCount)
-	// TODO: get active subnets/validators
-	activeValidators := uint64(128)
+	// TODO: get active subnets/validators, for now using some heuristic values
+	activeValidators := uint64(1500)
 	subnetWeight := activeValidators / subnetCount
 	// Determine the amount of validators expected in a subnet in a single slot.
 	numPerSlot := time.Duration(subnetWeight / uint64(32))
 	if numPerSlot == 0 {
-		return nil
+		return nil, errors.New("got invalid num per slot: 0")
 	}
 	//comsPerSlot := committeeCountPerSlot(activeValidators)
 	//exceedsThreshold := comsPerSlot >= 2*subnetCount/uint64(32)
@@ -220,19 +224,19 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScorePa
 	//}
 	rate := numPerSlot * 2 / time.Duration(gsD)
 	if rate == 0 {
-		return nil
+		return nil, errors.New("got invalid rate: 0")
 	}
 	// Determine expected first deliveries based on the message rate.
 	firstMessageCap, err := decayLimit(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration), float64(rate))
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	firstMessageWeight := maxFirstDeliveryScore / firstMessageCap
 	// Determine expected mesh deliveries based on message rate applied with a dampening factor.
 	meshThreshold, err := decayThreshold(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
 		float64(numPerSlot)/dampeningFactor)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	meshWeight := -scoreByWeight(topicWeight, meshThreshold)
 	meshCap := 4 * meshThreshold
@@ -257,7 +261,7 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScorePa
 		InvalidMessageDeliveriesDecay:   0.1,
 		//InvalidMessageDeliveriesWeight:  -maxScore() / topicWeight,
 		//InvalidMessageDeliveriesDecay:   scoreDecay(invalidDecayPeriod, cfg.Scoring.OneEpochDuration),
-	}
+	}, nil
 }
 
 // the cap for `inMesh` time scoring.
