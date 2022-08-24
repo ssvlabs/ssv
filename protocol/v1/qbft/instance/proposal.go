@@ -23,7 +23,6 @@ func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 			}
 			return nil
 		}),
-
 		pipelines.WrapFunc("add proposal msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid proposal message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),

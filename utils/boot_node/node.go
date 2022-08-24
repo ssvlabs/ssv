@@ -105,6 +105,8 @@ func (n *bootNode) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p", handler.httpHandler)
 
+	// TODO: fix linter
+	// nolint: gosec
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", 5000), mux); err != nil {
 		log.Fatalf("Failed to start server %v", err)
 	}
