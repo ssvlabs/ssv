@@ -44,8 +44,8 @@ func (v0 *testFork) ProposalMsgValidationPipeline(share *beacon.Share, state *qb
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.AuthorizeMsg(share),
 		proposal.ValidateProposalMsg(share, state, roundLeader),
 	)
@@ -64,12 +64,12 @@ func (v0 *testFork) PrepareMsgValidationPipeline(share *beacon.Share, state *qbf
 }
 
 // CommitMsgValidationPipeline is a msg validation ONLY pipeline
-func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateIdentifiers(identifier[:]),
-		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.AuthorizeMsg(share),
 	)
 }

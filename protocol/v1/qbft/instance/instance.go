@@ -270,7 +270,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 		p = i.ChangeRoundMsgPipeline()
 	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		return false, errors.Errorf("undefined message type")
+		return false, fmt.Errorf("undefined message type")
 	}
 
 	if err := p.Run(msg); err != nil {
@@ -362,7 +362,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 
 	encodedMsg, err := signedMessage.Encode()
 	if err != nil {
-		return errors.New("failed to encode consensus message")
+		return errors.New("could not encode message")
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
