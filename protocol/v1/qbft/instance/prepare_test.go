@@ -103,5 +103,5 @@ func TestPreparePipeline(t *testing.T) {
 	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()
 	// TODO: fix bad-looking name
-	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, , round, validate proposal, add prepare msg, , upon prepare msg, ", pipeline.Name())
+	require.EqualValues(t, "combination of: validate proposal, combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, , add prepare msg, , upon prepare msg, ", pipeline.Name())
 }

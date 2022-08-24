@@ -13,6 +13,7 @@ type MessageContainer interface {
 	AllMessaged(func(round specqbft.Round, msg *specqbft.SignedMessage)) []*specqbft.SignedMessage
 
 	// QuorumAchieved returns true if enough msgs were received (round, value)
+	// TODO - calculate quorum one way (for prepare, commit, change round and decided) and refactor
 	QuorumAchieved(round specqbft.Round, value []byte) (bool, []*specqbft.SignedMessage)
 
 	PartialChangeRoundQuorum(stateRound specqbft.Round) (found bool, lowestChangeRound specqbft.Round)

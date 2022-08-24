@@ -12,6 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 

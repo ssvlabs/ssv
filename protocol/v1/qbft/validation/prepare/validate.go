@@ -39,15 +39,15 @@ func ValidateProposal(state *qbft.State) pipelines.SignedMessagePipeline {
 			return fmt.Errorf("could not get proposed data: %w", err)
 		}
 
-		msgPrepareData, err := signedMessage.Message.GetPrepareData()
+		prepareData, err := signedMessage.Message.GetPrepareData()
 		if err != nil {
 			return fmt.Errorf("could not get prepare data: %w", err)
 		}
-		if err := msgPrepareData.Validate(); err != nil {
-			return fmt.Errorf("msgPrepareData invalid: %w", err)
+		if err := prepareData.Validate(); err != nil {
+			return fmt.Errorf("prepareData invalid: %w", err)
 		}
 
-		if !bytes.Equal(proposedData.Data, msgPrepareData.Data) {
+		if !bytes.Equal(prepareData.Data, proposedData.Data) {
 			return fmt.Errorf("message data is different from proposed data")
 		}
 
