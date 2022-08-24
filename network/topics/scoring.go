@@ -17,18 +17,24 @@ const (
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
 	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 32
+	subnetsTotalWeight = 8
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
 	decidedTopicWeight = 0.7
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
-	maxInMeshScore = 15
+	maxInMeshScore = 10
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
-	maxFirstDeliveryScore = 50
+	maxFirstDeliveryScore = 40
 	// decayToZero specifies the terminal value that we will use when decaying
 	// a value.
 	decayToZero = 0.01
 	// dampeningFactor reduces the amount by which the various thresholds and caps are created.
 	dampeningFactor = 90
+)
+
+var (
+	// ipColocationThreshold defines the max peers that can live on the same IP
+	// 8 by default, should be tweaked in tests and therefore this is a var rather than const
+	ipColocationThreshold = 8
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -108,7 +114,7 @@ func scoreDecay(totalDurationDecay time.Duration, oneEpochDuration time.Duration
 func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
-		TopicScoreCap: 53.749999999999986,
+		TopicScoreCap: 32.0,
 		AppSpecificScore: func(p peer.ID) float64 {
 			return 0
 		},
@@ -117,7 +123,7 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 		//	cfg.ScoreIndex),
 		AppSpecificWeight:           0,
 		IPColocationFactorWeight:    cfg.Scoring.IPColocationWeight,
-		IPColocationFactorThreshold: 10, // max 10 peers from the same IP
+		IPColocationFactorThreshold: ipColocationThreshold,
 		IPColocationFactorWhitelist: cfg.Scoring.IPWhilelist,
 		BehaviourPenaltyWeight:      -15.92,
 		BehaviourPenaltyThreshold:   6,
