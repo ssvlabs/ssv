@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
 	"github.com/prysmaticlabs/prysm/config/params"
@@ -108,8 +109,9 @@ func (n *bootNode) Start(ctx context.Context) error {
 	mux.HandleFunc("/p2p", handler.httpHandler)
 
 	server := http.Server{
-		Addr:    fmt.Sprintf(":%d", 5000),
-		Handler: mux,
+		Addr:              fmt.Sprintf(":%d", 5000),
+		Handler:           mux,
+		ReadHeaderTimeout: 3 * time.Second, // TODO: check what timeout is needed
 	}
 
 	if err := server.ListenAndServe(); err != nil {

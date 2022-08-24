@@ -72,8 +72,9 @@ func (ws *wsServer) Start(addr string) error {
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
 
 	server := http.Server{
-		Addr:    addr,
-		Handler: ws.router,
+		Addr:              addr,
+		Handler:           ws.router,
+		ReadHeaderTimeout: 3 * time.Second, // TODO: check what timeout is needed
 	}
 	err := server.ListenAndServe()
 	if err != nil {
