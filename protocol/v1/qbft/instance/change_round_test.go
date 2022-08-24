@@ -44,8 +44,8 @@ func (v0 *testFork) ProposalMsgValidationPipeline(share *beacon.Share, state *qb
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.AuthorizeMsg(share),
 		proposal.ValidateProposalMsg(share, state, roundLeader),
 	)

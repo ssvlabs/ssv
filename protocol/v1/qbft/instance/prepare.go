@@ -136,12 +136,12 @@ func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, erro
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode prepare data")
 	}
-	identifier := i.State().GetIdentifier()
+
 	return &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     i.State().GetHeight(),
 		Round:      i.State().GetRound(),
-		Identifier: identifier[:],
+		Identifier: i.State().GetIdentifier(),
 		Data:       encodedPrepare,
 	}, nil
 }

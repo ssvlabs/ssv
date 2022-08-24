@@ -30,17 +30,21 @@ func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver Leader
 			return ErrInvalidSignersNum
 		}
 
-		leader := resolver(signedMessage.Message.Round)
-		if uint64(signers[0]) != leader {
+		leader := spectypes.OperatorID(resolver(signedMessage.Message.Round))
+		if !signedMessage.MatchedSigners([]spectypes.OperatorID{leader}) {
 			return fmt.Errorf("proposal leader invalid")
 		}
 
-		prepareMsg, err := signedMessage.Message.GetProposalData()
+		proposalData, err := signedMessage.Message.GetProposalData()
 		if err != nil {
 			return fmt.Errorf("could not get proposal data: %w", err)
 		}
 
-		if err := Justify(share, state, uint64(signedMessage.Message.Round), prepareMsg); err != nil {
+		if err := proposalData.Validate(); err != nil {
+			return errors.Wrap(err, "proposalData invalid")
+		}
+
+		if err := Justify(share, state, signedMessage.Message.Round, proposalData); err != nil {
 			return fmt.Errorf("proposal not justified: %w", err)
 		}
 
@@ -62,8 +66,9 @@ func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver Leader
 // 			∀ <ROUND-CHANGE, λi, round, prj , pvj> ∈ Qrc : prj = ⊥ ∧ prj = ⊥
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
-func Justify(share *beacon.Share, state *qbft.State, round uint64, proposalData *specqbft.ProposalData) error {
-	// TODO: move its tests to this package
+// TODO: move its tests to this package
+func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, proposalData *specqbft.ProposalData) error {
+	// TODO: add value check
 	if round == 1 {
 		return nil
 	}
@@ -73,8 +78,10 @@ func Justify(share *beacon.Share, state *qbft.State, round uint64, proposalData 
 		if err := pipelines.Combine(
 			signedmsg.BasicMsgValidation(),
 			signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
+			signedmsg.ValidateSequenceNumber(state.GetHeight()),
+			signedmsg.ValidateRound(round),
 			signedmsg.AuthorizeMsg(share),
-			changeround.Validate(share),
+			changeround.ValidateWithRound(share, round),
 		).Run(rc); err != nil {
 			return fmt.Errorf("change round msg not valid: %w", err)
 		}
@@ -189,6 +196,7 @@ func validateRoundChangeJustification(
 	if signedPrepare.Message.Round != round {
 		return errors.New("round is wrong")
 	}
+
 	prepareData, err := signedPrepare.Message.GetPrepareData()
 	if err != nil {
 		return errors.Wrap(err, "could not get prepare data")
@@ -196,6 +204,7 @@ func validateRoundChangeJustification(
 	if err := prepareData.Validate(); err != nil {
 		return errors.Wrap(err, "prepareData invalid")
 	}
+
 	if !bytes.Equal(prepareData.Data, value) {
 		return errors.New("prepare data != proposed data")
 	}

@@ -2,7 +2,7 @@ package qbft
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"reflect"
@@ -22,7 +22,7 @@ func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
 	fileName := "tests.json"
 	filePath := path + "/" + fileName
-	jsonTests, err := ioutil.ReadFile(filePath)
+	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
 		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
@@ -31,10 +31,10 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, resp.Body.Close())
 		}()
 
-		jsonTests, err = ioutil.ReadAll(resp.Body)
+		jsonTests, err = io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		require.NoError(t, ioutil.WriteFile(filePath, jsonTests, 0644))
+		require.NoError(t, os.WriteFile(filePath, jsonTests, 0644))
 	}
 
 	untypedTests := map[string]interface{}{}
