@@ -8,7 +8,6 @@ import (
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -101,9 +100,8 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 
 	go func() {
 		server := &http.Server{
-			Addr:              addr,
-			Handler:           mux,
-			ReadHeaderTimeout: 3 * time.Second, // TODO: check what timeout is needed
+			Addr:    addr,
+			Handler: mux,
 		}
 
 		if err := server.ListenAndServe(); err != nil {
