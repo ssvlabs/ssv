@@ -17,12 +17,21 @@ import (
 // validateJustification validates change round justifications
 type validateJustification struct {
 	share *beacon.Share
+	round *specqbft.Round
 }
 
 // Validate is the constructor of validateJustification
 func Validate(share *beacon.Share) pipelines.SignedMessagePipeline {
 	return &validateJustification{
 		share: share,
+	}
+}
+
+// ValidateWithRound is the constructor of validateJustification with round
+func ValidateWithRound(share *beacon.Share, round specqbft.Round) pipelines.SignedMessagePipeline {
+	return &validateJustification{
+		share: share,
+		round: &round,
 	}
 }
 
@@ -62,7 +71,12 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return fmt.Errorf("no justifications quorum")
 	}
 
-	if data.PreparedRound > signedMessage.Message.Round {
+	round := signedMessage.Message.Round
+	if p.round != nil {
+		round = *p.round
+	}
+
+	if data.PreparedRound > round {
 		return errors.New("prepared round > round")
 	}
 
@@ -90,12 +104,12 @@ func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.S
 	}
 	prepareMsg, err := rcj.Message.GetPrepareData()
 	if err != nil {
-		return errors.Wrap(err, "failed to get prepare data")
+		return errors.Wrap(err, "could not get prepare data")
 	}
 	if err := prepareMsg.Validate(); err != nil {
 		return fmt.Errorf("prepareData invalid: %w", err)
 	}
-	if !bytes.Equal(roundChangeData.PreparedValue, prepareMsg.Data) {
+	if !bytes.Equal(prepareMsg.Data, roundChangeData.PreparedValue) {
 		return errors.New("prepare data != proposed data")
 	}
 	if len(rcj.GetSigners()) != 1 {
