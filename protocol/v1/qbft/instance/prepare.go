@@ -135,6 +135,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
+// nolint:unused
 func (i *Instance) didSendCommitForHeightAndRound() bool {
 	for _, msg := range i.containersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(i.State().GetRound()) {
 		if msg.MatchedSigners([]spectypes.OperatorID{i.ValidatorShare.NodeID}) {

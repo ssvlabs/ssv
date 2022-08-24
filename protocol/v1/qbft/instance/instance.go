@@ -257,18 +257,20 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 	if err := msg.Validate(); err != nil {
 		return false, errors.Wrap(err, "invalid signed message")
 	}
+	var p pipelines.SignedMessagePipeline
 
-	pipelineMap := map[specqbft.MessageType]pipelines.SignedMessagePipeline{
-		specqbft.ProposalMsgType:    i.ProposalMsgPipeline(),
-		specqbft.PrepareMsgType:     i.PrepareMsgPipeline(),
-		specqbft.CommitMsgType:      i.CommitMsgPipeline(),
-		specqbft.RoundChangeMsgType: i.ChangeRoundMsgPipeline(),
-	}
-
-	p, ok := pipelineMap[msg.Message.MsgType]
-	if !ok {
+	switch msg.Message.MsgType {
+	case specqbft.ProposalMsgType:
+		p = i.ProposalMsgPipeline()
+	case specqbft.PrepareMsgType:
+		p = i.PrepareMsgPipeline()
+	case specqbft.CommitMsgType:
+		p = i.CommitMsgPipeline()
+	case specqbft.RoundChangeMsgType:
+		p = i.ChangeRoundMsgPipeline()
+	default:
 		i.Logger.Warn("undefined message type", zap.Any("msg", msg))
-		return false, fmt.Errorf("undefined message type")
+		return false, errors.Errorf("undefined message type")
 	}
 
 	if err := p.Run(msg); err != nil {
