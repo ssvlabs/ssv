@@ -23,11 +23,11 @@ const (
 // the following are kept in vars to allow flexibility (e.g. in tests)
 var (
 	// validationQueueSize is the size that we assign to the validation queue
-	validationQueueSize = 256
+	validationQueueSize = 512
 	// outboundQueueSize is the size that we assign to the outbound message queue
-	outboundQueueSize = 256
+	outboundQueueSize = 512
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
-	validateThrottle = 4096
+	validateThrottle = 8192
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
