@@ -71,7 +71,11 @@ func (ws *wsServer) Start(addr string) error {
 		zap.String("addr", addr),
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
 
-	err := http.ListenAndServe(addr, ws.router)
+	server := http.Server{
+		Addr:    addr,
+		Handler: ws.router,
+	}
+	err := server.ListenAndServe()
 	if err != nil {
 		ws.logger.Warn("could not start http server", zap.Error(err))
 	}

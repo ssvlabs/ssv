@@ -4,15 +4,17 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
-	"github.com/prysmaticlabs/prysm/config/params"
-	"github.com/prysmaticlabs/prysm/network"
-	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"io"
 	"log"
 	"net"
 	"net/http"
+
+	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
+	"github.com/prysmaticlabs/prysm/config/params"
+	"github.com/prysmaticlabs/prysm/network"
+	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+
+	"github.com/bloxapp/ssv/utils"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -105,7 +107,12 @@ func (n *bootNode) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p", handler.httpHandler)
 
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", 5000), mux); err != nil {
+	server := http.Server{
+		Addr:    fmt.Sprintf(":%d", 5000),
+		Handler: mux,
+	}
+
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server %v", err)
 	}
 

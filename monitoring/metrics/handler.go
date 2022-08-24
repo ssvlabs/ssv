@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 // Handler handles incoming metrics requests
@@ -98,7 +99,12 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	})
 
 	go func() {
-		if err := http.ListenAndServe(addr, mux); err != nil {
+		server := &http.Server{
+			Addr:    addr,
+			Handler: mux,
+		}
+
+		if err := server.ListenAndServe(); err != nil {
 			mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
 		}
 	}()
