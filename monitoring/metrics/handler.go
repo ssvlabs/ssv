@@ -99,7 +99,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	})
 
 	go func() {
-		// TODO: fix linter
+		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 		// nolint: gosec
 		if err := http.ListenAndServe(addr, mux); err != nil {
 			mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
