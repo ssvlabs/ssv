@@ -144,6 +144,18 @@ func (mr *MockControllerMockRecorder) GetAllValidatorShares() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidatorShares", reflect.TypeOf((*MockController)(nil).GetAllValidatorShares))
 }
 
+// GetValidatorStats mocks base method
+func (m *MockController) GetValidatorStats() (uint64, uint64, error) {
+	m.ctrl.T.Helper()
+	return 2, 2, nil
+}
+
+// GetValidatorStats indicates an expected call of GetValidatorStats
+func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
+}
+
 // OnFork mocks base method
 func (m *MockController) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	m.ctrl.T.Helper()

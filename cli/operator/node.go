@@ -164,11 +164,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
-		//Logger.Info("xxx", zap.String("ua", cfg.P2pNetworkConfig.UserAgent), zap.String("oid", cfg.P2pNetworkConfig.OperatorID))
+
 		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
-		if err := p2pNet.Setup(); err != nil {
-			Logger.Fatal("failed to setup network", zap.Error(err))
-		}
 
 		ctx := cmd.Context()
 		cfg.SSVOptions.ForkVersion = ssvForkVersion
@@ -236,6 +233,12 @@ var StartNodeCmd = &cobra.Command{
 
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
+		}
+		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, error) {
+			return validatorCtrl.GetValidatorStats()
+		}
+		if err := p2pNet.Setup(); err != nil {
+			Logger.Fatal("failed to setup network", zap.Error(err))
 		}
 		if err := p2pNet.Start(); err != nil {
 			Logger.Fatal("failed to start network", zap.Error(err))

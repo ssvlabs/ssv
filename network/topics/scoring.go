@@ -133,7 +133,7 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 		DecayToZero:                 decayToZero,
 		// RetainScore changed to 5 epochs (100 epochs in ETH),
 		// as we don't want to ban honest peers for so long
-		RetainScore:                 cfg.Scoring.OneEpochDuration * 5,
+		RetainScore: cfg.Scoring.OneEpochDuration * 5,
 	}
 }
 
@@ -176,8 +176,12 @@ func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.Topic
 func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreParams {
 	inMeshTime := cfg.Scoring.OneEpochDuration
 	decayEpoch := time.Duration(5)
-	blocksPerEpoch := uint64(32) // TODO: check as we don't know this number in ssv
-	meshWeight := -0.717         // TODO: check why the value is different than
+	activeValidators, _, err := cfg.GetValidatorStats()
+	if err != nil {
+		activeValidators = 1000
+	}
+	blocksPerEpoch := activeValidators / 2 // assuming only half of the validators are sending messages
+	meshWeight := -0.717
 	//if !meshDeliveryIsScored {
 	//	// Set the mesh weight as zero as a temporary measure, so as to prevent
 	//	// the average nodes from being penalised.
@@ -210,11 +214,13 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 // based on lighthouse parameters for attestation subnet, with some changes from prysm and alignment to ssv:
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
 func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreParams, error) {
+	activeValidators, _, err := cfg.GetValidatorStats()
+	if err == nil {
+		activeValidators = 1000
+	}
 	subnetCount := uint64(f.Subnets())
 	// Get weight for each specific subnet.
 	topicWeight := subnetsTotalWeight / float64(subnetCount)
-	// TODO: get active subnets/validators, for now using some heuristic values
-	activeValidators := uint64(1500)
 	subnetWeight := activeValidators / subnetCount
 	// Determine the amount of validators expected in a subnet in a single slot.
 	numPerSlot := time.Duration(subnetWeight / uint64(32))

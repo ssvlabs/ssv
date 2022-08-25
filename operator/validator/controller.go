@@ -84,6 +84,10 @@ type Controller interface {
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	OnFork(forkVersion forksprotocol.ForkVersion) error
+	// GetValidatorStats returns stats of validators, including the following:
+	//  - the amount of validators in the network
+	//  - the amount of validators assigned to this operator
+	GetValidatorStats() (uint64, uint64, error)
 }
 
 // controller implements Controller
@@ -239,6 +243,20 @@ func (c *controller) setupNetworkHandlers() error {
 
 func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 	return c.collection.GetAllValidatorShares()
+}
+
+func (c *controller) GetValidatorStats() (uint64, uint64, error) {
+	allShares, err := c.collection.GetAllValidatorShares()
+	if err != nil {
+		return 0, 0, err
+	}
+	operatorShares := 0
+	for _, s := range allShares {
+		if ok := s.IsOperatorShare(c.operatorPubKey); ok {
+			operatorShares++
+		}
+	}
+	return uint64(len(allShares)), uint64(operatorShares), nil
 }
 
 func (c *controller) handleRouterMessages() {

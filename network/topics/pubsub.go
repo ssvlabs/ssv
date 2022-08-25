@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p-core/discovery"
@@ -54,6 +55,8 @@ type PububConfig struct {
 	ValidationQueueSize int
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
+
+	GetValidatorStats network.GetValidatorStats
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -129,6 +132,12 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams(cfg), peerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
+		if cfg.GetValidatorStats == nil {
+			cfg.GetValidatorStats = func() (uint64, uint64, error) {
+				// default in case it was not injected
+				return 1000, 25, nil
+			}
+		}
 		topicScoreFactory = topicScoreParams(cfg, fork)
 	}
 
