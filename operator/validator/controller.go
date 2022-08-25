@@ -218,10 +218,6 @@ func NewController(options ControllerOptions) Controller {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
 
-	if err := ctrl.setupNetworkHandlers(); err != nil {
-		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
-	}
-
 	return &ctrl
 }
 
@@ -384,6 +380,10 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers() {
+	// first, set stream handlers
+	if err := c.setupNetworkHandlers(); err != nil {
+		c.logger.Panic("could not register stream handlers", zap.Error(err))
+	}
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
