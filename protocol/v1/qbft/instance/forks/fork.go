@@ -1,8 +1,6 @@
 package forks
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -21,7 +19,7 @@ type msgValidation interface {
 	// PrepareMsgValidationPipeline is the validation pipeline for prepare messages
 	PrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
 	// CommitMsgValidationPipeline is the validation pipeline for commit messages
-	CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline
+	CommitMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
 	// ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
 	ChangeRoundMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
 }
