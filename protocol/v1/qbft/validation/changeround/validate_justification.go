@@ -57,10 +57,13 @@ func (p *validateJustification) Run(signedMessage *specqbft.SignedMessage) error
 		return fmt.Errorf("roundChangeData invalid: %w", err)
 	}
 
+	// Addition to formal spec
+	// We add this extra tests on the msg itself to filter round change msgs with invalid justifications, before they are inserted into msg containers
 	if !data.Prepared() {
 		return nil
 	}
 
+	// validate prepare message justifications
 	for _, rcj := range data.RoundChangeJustification {
 		if err := p.validateRoundChangeJustification(rcj, data, signedMessage); err != nil {
 			return fmt.Errorf("round change justification invalid: %w", err)
@@ -94,10 +97,10 @@ func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.S
 		return errors.New("change round justification sequence is wrong")
 	}
 	if signedMessage.Message.Round <= rcj.Message.Round {
-		return errors.New("round is wrong")
+		return errors.New("change round justification round lower or equal to message round")
 	}
 	if roundChangeData.PreparedRound != rcj.Message.Round {
-		return errors.New("round is wrong")
+		return errors.New("change round prepared round not equal to justification msg round")
 	}
 	if !bytes.Equal(signedMessage.Message.Identifier, rcj.Message.Identifier) {
 		return errors.New("change round justification msg identifier not equal to msg identifier not equal to instance identifier")

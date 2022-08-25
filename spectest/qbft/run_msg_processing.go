@@ -147,8 +147,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	if len(test.ExpectedError) == 0 {
 		require.NoError(t, lastErr)
-	} else if mappedExpectedError, ok := errorsMap[test.ExpectedError]; ok {
-		require.Equal(t, mappedExpectedError, lastErr.Error())
+	} else if mappedLastErr, ok := errorsMap[lastErr.Error()]; ok {
+		require.Equal(t, test.ExpectedError, mappedLastErr)
 	} else {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	}
@@ -166,7 +166,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	require.Equal(t, len(test.OutputMessages), len(outputMessages))
 
 	for i, outputMessage := range outputMessages {
-		r1, _ := test.OutputMessages[i].GetRoot()
+		msg1 := test.OutputMessages[i]
+		r1, _ := msg1.GetRoot()
 
 		msg2 := &specqbft.SignedMessage{}
 		require.NoError(t, msg2.Decode(outputMessage.Data))

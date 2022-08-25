@@ -44,7 +44,7 @@ func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver Leader
 			return errors.Wrap(err, "proposalData invalid")
 		}
 
-		if err := Justify(share, state, signedMessage.Message.Round, proposalData); err != nil {
+		if err := Justify(share, state, signedMessage.Message.Round, proposalData.RoundChangeJustification, proposalData.PrepareJustification, proposalData.Data); err != nil {
 			return fmt.Errorf("proposal not justified: %w", err)
 		}
 
@@ -67,13 +67,13 @@ func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver Leader
 // 			∨ received a quorum of valid <PREPARE, λi, pr, value> messages such that:
 // 				(pr, value) = HighestPrepared(Qrc)
 // TODO: move its tests to this package
-func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, proposalData *specqbft.ProposalData) error {
+func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, roundChanges, prepares []*specqbft.SignedMessage, proposedValue []byte) error {
 	// TODO: add value check
 	if round == 1 {
 		return nil
 	}
 
-	for _, rc := range proposalData.RoundChangeJustification {
+	for _, rc := range roundChanges {
 		// TODO: refactor
 		if err := pipelines.Combine(
 			signedmsg.BasicMsgValidation(),
@@ -87,7 +87,7 @@ func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, propo
 		}
 	}
 
-	if quorum, _, _ := signedmsg.HasQuorum(share, proposalData.RoundChangeJustification); !quorum {
+	if quorum, _, _ := signedmsg.HasQuorum(share, roundChanges); !quorum {
 		return errors.New("change round has not quorum")
 	}
 
@@ -103,7 +103,7 @@ func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, propo
 			}
 		}
 		return false, nil
-	}(proposalData.RoundChangeJustification)
+	}(roundChanges)
 	if err != nil {
 		return fmt.Errorf("could not calculate if previously prepared: %w", err)
 	}
@@ -112,12 +112,12 @@ func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, propo
 		return nil
 	}
 
-	if quorum, _, _ := signedmsg.HasQuorum(share, proposalData.PrepareJustification); !quorum {
+	if quorum, _, _ := signedmsg.HasQuorum(share, prepares); !quorum {
 		return errors.New("prepares has no quorum")
 	}
 
 	// get a round change data for which there is a justification for the highest previously prepared round
-	highest, err := highestPrepared(proposalData.RoundChangeJustification)
+	highest, err := highestPrepared(roundChanges)
 	if err != nil {
 		return errors.Wrap(err, "could not get highest prepared")
 	}
@@ -132,11 +132,11 @@ func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, propo
 	}
 
 	// proposed value must equal highest prepared value
-	if !bytes.Equal(proposalData.Data, highestData.PreparedValue) {
+	if !bytes.Equal(proposedValue, highestData.PreparedValue) {
 		return errors.New("proposed data doesn't match highest prepared")
 	}
 
-	for _, rcj := range proposalData.PrepareJustification {
+	for _, rcj := range prepares {
 		if err := validateRoundChangeJustification(
 			rcj,
 			state.GetHeight(),

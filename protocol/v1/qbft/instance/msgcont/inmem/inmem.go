@@ -138,7 +138,8 @@ func (c *messagesContainer) OverrideMessages(msg *specqbft.SignedMessage, data [
 }
 
 func (c *messagesContainer) PartialChangeRoundQuorum(stateRound specqbft.Round) (found bool, lowestChangeRound specqbft.Round) {
-	lowestChangeRound = specqbft.Round(100000) // just a random really large round number
+	seenLowestChangeRound := false
+	lowestChangeRound = 0
 	foundMsgs := make(map[spectypes.OperatorID]*specqbft.SignedMessage)
 	quorumCount := 0
 
@@ -161,8 +162,9 @@ func (c *messagesContainer) PartialChangeRoundQuorum(stateRound specqbft.Round) 
 			}
 
 			// recalculate lowest
-			if foundMsgs[signer].Message.Round < lowestChangeRound {
+			if !seenLowestChangeRound || foundMsgs[signer].Message.Round < lowestChangeRound {
 				lowestChangeRound = msg.Message.Round
+				seenLowestChangeRound = true
 			}
 		}
 	}

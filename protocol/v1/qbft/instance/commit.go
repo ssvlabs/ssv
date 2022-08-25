@@ -13,14 +13,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // CommitMsgPipeline - the main commit msg pipeline
 func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	validationPipeline := i.CommitMsgValidationPipeline()
 	return pipelines.Combine(
-		signedmsg.ProposalExists(i.State()),
 		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
 			if err := validationPipeline.Run(signedMessage); err != nil {
 				return fmt.Errorf("invalid commit message: %w", err)
