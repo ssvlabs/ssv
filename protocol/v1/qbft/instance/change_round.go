@@ -105,7 +105,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				return
 			}
 
-			prepared, highest, e := i.HighestPrepared(i.State().GetRound())
+			prepared, highest, e := i.HighestPrepared(signedMessage.Message.Round)
 			if e != nil {
 				err = e
 				return
@@ -116,7 +116,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				PrepareJustification:     highest.RoundChangeJustification,
 			}
 
-			if prepared {
+			if !prepared {
 				proposalData.Data = i.State().GetInputValue()
 				logger.Info("broadcasting proposal as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
@@ -226,7 +226,7 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (prepared bool, highest
 					∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 	*/
 
-	roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round)
+	roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound())
 	for _, msg := range roundChanges {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
@@ -237,8 +237,8 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (prepared bool, highest
 			continue
 		}
 
-		noPrevProposal := i.State().GetProposalAcceptedForCurrentRound() == nil && round == msg.Message.Round
-		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && msg.Message.Round > round
+		noPrevProposal := i.State().GetProposalAcceptedForCurrentRound() == nil && i.State().GetRound() == round
+		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && round > i.State().GetRound()
 
 		if !noPrevProposal && !prevProposal {
 			continue
