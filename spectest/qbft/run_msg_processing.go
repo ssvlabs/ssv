@@ -166,7 +166,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	require.Equal(t, len(test.OutputMessages), len(outputMessages))
 
 	for i, outputMessage := range outputMessages {
-		r1, _ := test.OutputMessages[i].GetRoot()
+		msg1 := test.OutputMessages[i]
+		r1, _ := msg1.GetRoot()
 
 		msg2 := &specqbft.SignedMessage{}
 		require.NoError(t, msg2.Decode(outputMessage.Data))

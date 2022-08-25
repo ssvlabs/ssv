@@ -105,9 +105,13 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				return
 			}
 
-			prepared, highest, e := i.HighestPrepared(signedMessage.Message.Round)
+			highest, e := i.HighestPrepared(signedMessage.Message.Round)
 			if e != nil {
 				err = e
+				return
+			}
+
+			if highest == nil {
 				return
 			}
 
@@ -116,7 +120,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				PrepareJustification:     highest.RoundChangeJustification,
 			}
 
-			if !prepared {
+			if !highest.Prepared() {
 				proposalData.Data = i.State().GetInputValue()
 				logger.Info("broadcasting proposal as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
@@ -190,6 +194,7 @@ func (i *Instance) BroadcastChangeRound() error {
 }
 
 // JustifyRoundChange see below
+// TODO: consider removing
 func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 	// ### Algorithm 4 IBFTController pseudocode for process pi: message justification
 	//	predicate JustifyRoundChange(Qrc) return
@@ -197,11 +202,12 @@ func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 	//			(pr, pv) = HighestPrepared(Qrc)
 
-	prepared, _, err := i.HighestPrepared(round)
+	highest, err := i.HighestPrepared(round)
 	if err != nil {
 		return err
 	}
-	if !prepared && i.isPrepared() {
+
+	if (highest == nil || !highest.Prepared()) && i.isPrepared() {
 		return errors.New("highest prepared doesn't match prepared state")
 	}
 
@@ -215,7 +221,7 @@ func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 }
 
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
-func (i *Instance) HighestPrepared(round specqbft.Round) (prepared bool, highestPrepared *specqbft.RoundChangeData, err error) {
+func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specqbft.RoundChangeData, err error) {
 	/**
 	### Algorithm 4 IBFTController pseudocode for process pi: message justification
 		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
@@ -230,7 +236,7 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (prepared bool, highest
 	for _, msg := range roundChanges {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
 		if err := proposal.Justify(i.ValidatorShare, i.State(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
@@ -244,9 +250,9 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (prepared bool, highest
 			continue
 		}
 
-		return true, candidateChangeData, nil
+		return candidateChangeData, nil
 	}
-	return false, nil, nil
+	return nil, nil
 }
 
 func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {

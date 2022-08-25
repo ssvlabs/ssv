@@ -692,6 +692,7 @@ func TestRoundChangeJustification(t *testing.T) {
 		require.NoError(t, err)
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg4, changeRoundData4.PreparedValue)
 
+		instance.State().Round.Store(specqbft.Round(2))
 		// test no previous prepared round with round change quorum (with justification)
 		require.NoError(t, instance.JustifyRoundChange(2))
 	})
@@ -711,6 +712,7 @@ func TestHighestPrepared(t *testing.T) {
 		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIDs},
 	}
 	instance.state.Height.Store(specqbft.Height(1))
+	instance.state.Round.Store(specqbft.Round(3))
 
 	consensusMessage1 := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
@@ -772,18 +774,20 @@ func TestHighestPrepared(t *testing.T) {
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIDs[2:3], secretKeys[operatorIDs[2]], msg2), roundChangeData.PreparedValue)
 
 	// test one higher than other
-	prepared, highest, err := instance.HighestPrepared(3)
+	highest, err := instance.HighestPrepared(3)
 	require.NoError(t, err)
-	require.True(t, prepared)
+	require.NotNil(t, highest)
+	require.True(t, highest.Prepared())
 	require.EqualValues(t, specqbft.Round(2), highest.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 
 	// test 2 equals
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIDs[2:3], secretKeys[operatorIDs[2]], msg2), roundChangeData.PreparedValue)
 
-	prepared, highest, err = instance.HighestPrepared(3)
+	highest, err = instance.HighestPrepared(3)
 	require.NoError(t, err)
-	require.True(t, prepared)
+	require.NotNil(t, highest)
+	require.True(t, highest.Prepared())
 	require.EqualValues(t, specqbft.Round(2), highest.PreparedRound)
 	require.EqualValues(t, append(inputValue, []byte("highest")...), highest.PreparedValue)
 }
