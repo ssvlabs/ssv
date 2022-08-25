@@ -1,9 +1,7 @@
 package topics
 
 import (
-	"bytes"
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -25,10 +23,6 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
 		}
-		if bytes.Equal([]byte(p), []byte(self)) {
-			reportValidationResult(validationResultSelf)
-			return pubsub.ValidationAccept
-		}
 		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
 			// can't decode message
@@ -41,23 +35,24 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			return pubsub.ValidationReject
 		}
 		pmsg.ValidatorData = *msg
+		return pubsub.ValidationAccept
 		// check decided topic
-		currentTopic := pmsg.GetTopic()
-		currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
-		if msg.MsgType == spectypes.SSVDecidedMsgType {
-			if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
-				return pubsub.ValidationAccept
-			}
-		}
-		topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
-		for _, tp := range topics {
-			if tp == currentTopicBaseName {
-				reportValidationResult(validationResultValid)
-				return pubsub.ValidationAccept
-			}
-		}
-		reportValidationResult(validationResultTopic)
-		return pubsub.ValidationReject
+		//currentTopic := pmsg.GetTopic()
+		//currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
+		//if msg.MsgType == spectypes.SSVDecidedMsgType {
+		//	if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
+		//		return pubsub.ValidationAccept
+		//	}
+		//}
+		//topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
+		//for _, tp := range topics {
+		//	if tp == currentTopicBaseName {
+		//		reportValidationResult(validationResultValid)
+		//		return pubsub.ValidationAccept
+		//	}
+		//}
+		//reportValidationResult(validationResultTopic)
+		//return pubsub.ValidationReject
 	}
 }
 
