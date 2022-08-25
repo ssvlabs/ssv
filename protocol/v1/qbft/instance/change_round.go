@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -43,14 +44,14 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 			}
 			return nil
 		}),
-		i.ChangeRoundPartialQuorumMsgPipeline(),
 		i.changeRoundFullQuorumMsgPipeline(),
+		i.ChangeRoundPartialQuorumMsgPipeline(),
 	)
 }
 
 // ChangeRoundMsgValidationPipeline - the main change round msg validation pipeline
 func (i *Instance) ChangeRoundMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.ChangeRoundMsgValidationPipeline(i.ValidatorShare, i.State().GetIdentifier(), i.State().GetHeight())
+	return i.fork.ChangeRoundMsgValidationPipeline(i.ValidatorShare, i.State())
 }
 
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipelines.SignedMessagePipeline {
@@ -72,8 +73,8 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
-		msgs := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(signedMessage.Message.Round)
-		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, msgs)
+		roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound())
+		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, roundChanges)
 
 		// change round if quorum reached
 		if !quorum {
@@ -104,26 +105,26 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				return
 			}
 
-			notPrepared, highest, e := i.HighestPrepared(signedMessage.Message.Round)
+			highest, e := i.HighestPrepared(signedMessage.Message.Round)
 			if e != nil {
 				err = e
 				return
 			}
 
-			var proposalData *specqbft.ProposalData
+			if highest == nil {
+				return
+			}
 
-			if notPrepared {
-				proposalData = &specqbft.ProposalData{
-					Data:                     i.State().GetInputValue(),
-					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
-				}
+			proposalData := &specqbft.ProposalData{
+				RoundChangeJustification: roundChanges,
+				PrepareJustification:     highest.RoundChangeJustification,
+			}
+
+			if !highest.Prepared() {
+				proposalData.Data = i.State().GetInputValue()
 				logger.Info("broadcasting proposal as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
-				proposalData = &specqbft.ProposalData{
-					Data:                     highest.PreparedValue,
-					RoundChangeJustification: i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound()),
-					PrepareJustification:     highest.RoundChangeJustification,
-				}
+				proposalData.Data = highest.PreparedValue
 				logger.Info("broadcasting proposal as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
@@ -193,6 +194,7 @@ func (i *Instance) BroadcastChangeRound() error {
 }
 
 // JustifyRoundChange see below
+// TODO: consider removing
 func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 	// ### Algorithm 4 IBFTController pseudocode for process pi: message justification
 	//	predicate JustifyRoundChange(Qrc) return
@@ -200,11 +202,12 @@ func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 	//		∨ received a quorum of valid ⟨PREPARE, λi, pr, pv⟩ messages such that:
 	//			(pr, pv) = HighestPrepared(Qrc)
 
-	notPrepared, _, err := i.HighestPrepared(round)
+	highest, err := i.HighestPrepared(round)
 	if err != nil {
 		return err
 	}
-	if notPrepared && i.isPrepared() {
+
+	if (highest == nil || !highest.Prepared()) && i.isPrepared() {
 		return errors.New("highest prepared doesn't match prepared state")
 	}
 
@@ -218,7 +221,7 @@ func (i *Instance) JustifyRoundChange(round specqbft.Round) error {
 }
 
 // HighestPrepared is slightly changed to also include a returned flag to indicate if all change round messages have prj = ⊥ ∧ pvj = ⊥
-func (i *Instance) HighestPrepared(round specqbft.Round) (notPrepared bool, highestPrepared *specqbft.RoundChangeData, err error) {
+func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specqbft.RoundChangeData, err error) {
 	/**
 	### Algorithm 4 IBFTController pseudocode for process pi: message justification
 		Helper function that returns a tuple (pr, pv) where pr and pv are, respectively,
@@ -229,26 +232,27 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (notPrepared bool, high
 					∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 	*/
 
-	notPrepared = true
-	for _, msg := range i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(round) {
+	roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound())
+	for _, msg := range roundChanges {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
-			return false, nil, err
+			return nil, err
 		}
 
-		// compare to highest found
-		if candidateChangeData.PreparedValue != nil && len(candidateChangeData.PreparedValue) > 0 {
-			notPrepared = false
-			if highestPrepared != nil {
-				if candidateChangeData.PreparedRound > highestPrepared.PreparedRound {
-					highestPrepared = candidateChangeData
-				}
-			} else {
-				highestPrepared = candidateChangeData
-			}
+		if err := proposal.Justify(i.ValidatorShare, i.State(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
+			continue
 		}
+
+		noPrevProposal := i.State().GetProposalAcceptedForCurrentRound() == nil && i.State().GetRound() == round
+		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && round > i.State().GetRound()
+
+		if !noPrevProposal && !prevProposal {
+			continue
+		}
+
+		return candidateChangeData, nil
 	}
-	return notPrepared, highestPrepared, nil
+	return nil, nil
 }
 
 func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {

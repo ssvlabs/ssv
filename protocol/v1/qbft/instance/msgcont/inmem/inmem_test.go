@@ -53,7 +53,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 				protocoltesting.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(0)),
 			},
 			false,
-			100000,
+			0,
 		},
 		{
 			"lowest 7",
@@ -69,7 +69,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 			"not found",
 			[]*specqbft.SignedMessage{},
 			false,
-			100000,
+			0,
 		},
 		{
 			"duplicate msgs from same peer, no quorum",

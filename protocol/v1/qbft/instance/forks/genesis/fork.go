@@ -78,12 +78,12 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, state *qb
 }
 
 // ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateIdentifiers(identifier[:]),
-		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
 	)

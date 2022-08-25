@@ -94,7 +94,7 @@ func TestJustifyProposalAfterChangeRoundPrepared(t *testing.T) {
 			Data:       value,
 		})
 		instance.containersMap[specqbft.ProposalMsgType].AddMessage(msg, roundChangeData.PreparedValue)
-		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{Data: value})
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, nil, nil, value)
 		require.EqualError(t, err, "change round has not quorum")
 	})
 
@@ -105,20 +105,14 @@ func TestJustifyProposalAfterChangeRoundPrepared(t *testing.T) {
 		msg = SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], roundChangeMessage)
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
-		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
-			Data:                     value,
-			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
-			PrepareJustification:     prepareMessages,
-		})
+		roundChanges := instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2)
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, roundChanges, prepareMessages, value)
 		require.NoError(t, err)
 	})
 
 	t.Run("wrong value, unjustified", func(t *testing.T) {
-		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
-			Data:                     wrongValue,
-			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
-			PrepareJustification:     prepareMessages,
-		})
+		roundChanges := instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2)
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, roundChanges, prepareMessages, wrongValue)
 		require.EqualError(t, err, "proposed data doesn't match highest prepared")
 	})
 }
@@ -167,7 +161,7 @@ func TestJustifyProposalAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// no quorum achieved, can't justify
-		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, nil, nil, nil)
 		require.EqualError(t, err, "change round has not quorum")
 	})
 
@@ -177,17 +171,14 @@ func TestJustifyProposalAfterChangeRoundNoPrepare(t *testing.T) {
 		instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(msg, roundChangeData.PreparedValue)
 
 		// quorum achieved, can justify
-		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
-			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
-		})
+		roundChanges := instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2)
+		err := proposal.Justify(instance.ValidatorShare, instance.State(), 2, roundChanges, nil, nil)
 		require.NoError(t, err)
 	})
 
 	t.Run("any value can be in proposal", func(t *testing.T) {
-		require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
-			Data:                     []byte("wrong value"),
-			RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
-		}))
+		roundChanges := instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2)
+		require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 2, roundChanges, nil, []byte("wrong value")))
 	})
 }
 
@@ -272,11 +263,11 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	instance.state.PreparedValue.Store([]byte(nil))
 	instance.state.PreparedRound.Store(specqbft.Round(0))
 
-	require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 1, &specqbft.ProposalData{}))
+	require.NoError(t, proposal.Justify(instance.ValidatorShare, instance.State(), 1, nil, nil, nil))
 
 	// try to justify round 2 without round change
 	instance.State().Round.Store(specqbft.Round(2))
-	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, nil, nil, nil)
 	require.EqualError(t, err, "change round has not quorum")
 
 	// test no change round quorum
@@ -300,7 +291,7 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[1:2], secretKeys[operatorIds[1]], msg), roundChangeData.PreparedValue)
 
-	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{})
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, nil, nil, nil)
 	require.EqualError(t, err, "change round has not quorum")
 
 	// test with quorum of change round
@@ -314,9 +305,8 @@ func TestInstance_JustifyProposal(t *testing.T) {
 	require.NoError(t, err)
 	instance.containersMap[specqbft.RoundChangeMsgType].AddMessage(SignMsg(t, operatorIds[2:3], secretKeys[operatorIds[2]], msg), roundChangeData.PreparedValue)
 
-	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, &specqbft.ProposalData{
-		RoundChangeJustification: instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2),
-	})
+	roundChanges := instance.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(2)
+	err = proposal.Justify(instance.ValidatorShare, instance.State(), 2, roundChanges, nil, nil)
 	require.NoError(t, err)
 }
 

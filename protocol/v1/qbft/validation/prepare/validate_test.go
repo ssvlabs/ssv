@@ -190,7 +190,7 @@ func TestValidateProposal(t *testing.T) {
 				Signers:   []spectypes.OperatorID{},
 			},
 			nil,
-			"did not receive proposal for this round",
+			"no proposal accepted for prepare",
 		},
 	}
 

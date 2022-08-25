@@ -31,7 +31,7 @@ func ValidateProposal(state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("validate proposal", func(signedMessage *specqbft.SignedMessage) error {
 		proposedMsg := state.GetProposalAcceptedForCurrentRound()
 		if proposedMsg == nil {
-			return fmt.Errorf("did not receive proposal for this round")
+			return fmt.Errorf("no proposal accepted for prepare")
 		}
 
 		proposedData, err := proposedMsg.Message.GetProposalData()
