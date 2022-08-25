@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	defaultIPColocationWeight = -32.0
+	defaultIPColocationWeight = -35.11
 	// defaultOneEpochDuration is slots-per-epoch * slot-duration
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
@@ -33,8 +33,8 @@ const (
 
 var (
 	// ipColocationThreshold defines the max peers that can live on the same IP
-	// 8 by default, should be tweaked in tests and therefore this is a var rather than const
-	ipColocationThreshold = 8
+	// 10 by default, should be tweaked in tests and therefore this is a var rather than const
+	ipColocationThreshold = 10
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -114,7 +114,7 @@ func scoreDecay(totalDurationDecay time.Duration, oneEpochDuration time.Duration
 func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
-		TopicScoreCap: 32.0,
+		TopicScoreCap: 32.72,
 		AppSpecificScore: func(p peer.ID) float64 {
 			return 0
 		},
@@ -131,11 +131,12 @@ func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
 		BehaviourPenaltyDecay:       scoreDecay(cfg.Scoring.OneEpochDuration*10, cfg.Scoring.OneEpochDuration),
 		DecayInterval:               cfg.Scoring.OneEpochDuration,
 		DecayToZero:                 decayToZero,
-		RetainScore:                 cfg.Scoring.OneEpochDuration * 10,
+		// RetainScore changed to 5 epochs (100 epochs in ETH),
+		// as we don't want to ban honest peers for so long
+		RetainScore:                 cfg.Scoring.OneEpochDuration * 5,
 	}
 }
 
-//
 //func appSpecificScore(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(p peer.ID) float64 {
 //	return func(p peer.ID) float64 {
 //		// TODO: complete
