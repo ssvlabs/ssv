@@ -147,8 +147,8 @@ func runMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 	if len(test.ExpectedError) == 0 {
 		require.NoError(t, lastErr)
-	} else if mappedExpectedError, ok := errorsMap[test.ExpectedError]; ok {
-		require.Equal(t, mappedExpectedError, lastErr.Error())
+	} else if mappedLastErr, ok := errorsMap[lastErr.Error()]; ok {
+		require.Equal(t, test.ExpectedError, mappedLastErr)
 	} else {
 		require.EqualError(t, lastErr, test.ExpectedError)
 	}

@@ -21,7 +21,6 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 	validationPipeline := i.PrepareMsgValidationPipeline()
 
 	return pipelines.Combine(
-		signedmsg.ProposalExists(i.State()),
 		pipelines.WrapFunc(validationPipeline.Name(), func(signedMessage *specqbft.SignedMessage) error {
 			if err := validationPipeline.Run(signedMessage); err != nil {
 				return fmt.Errorf("invalid prepare message: %w", err)
