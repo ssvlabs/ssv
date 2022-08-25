@@ -15,10 +15,9 @@ var (
 
 	// gsMaxIHaveLength is max number for ihave messages to send
 	// decreased the default (5000) to avoid ihave floods
-	gsMaxIHaveLength = 1500
+	gsMaxIHaveLength = 2500
 	// gsMaxIHaveMessages is the max number for ihave message to accept from a peer within a heartbeat
-	// increased default (10) to avoid multiple ihave messages
-	gsMaxIHaveMessages = 32
+	gsMaxIHaveMessages = 10
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
 	gsMcacheLen = 6
 	// gsMcacheGossip number of windows to gossip about
