@@ -93,7 +93,7 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) {
 	logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
 
 	// Sign, aggregate and broadcast signature
-	if err := qbftCtrl.PostConsensusDutyExecution(logger, seqNumber, decidedValue, signaturesCount, duty); err != nil {
+	if err := qbftCtrl.PostConsensusDutyExecution(logger, seqNumber, decidedValue, signaturesCount, duty.Type); err != nil {
 		logger.Error("could not execute post consensus duty", zap.Error(err))
 		return
 	}
