@@ -143,7 +143,7 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error {
+func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// get operator pk for sig
 	pk, err := t.share.OperatorSharePubKey()
 	if err != nil {
@@ -151,16 +151,26 @@ func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbf
 	}
 
 	retValueStruct := &beaconprotocol.DutyData{}
-	if duty.Type != spectypes.BNRoleAttester {
+	if role != spectypes.BNRoleAttester {
 		return errors.New("unsupported role, can't sign")
 	}
-
 	s := &spec.AttestationData{}
 	if err := s.UnmarshalSSZ(decidedValue); err != nil {
 		return errors.Wrap(err, "failed to marshal attestation")
 	}
 
-	signedAttestation, _, err := t.beaconSigner.SignAttestation(s, duty, pk.Serialize())
+	cd := &spectypes.ConsensusData{
+		Duty: &spectypes.Duty{
+			Type: spectypes.BNRoleAttester,
+		},
+		AttestationData:           s,
+		BlockData:                 nil,
+		AggregateAndProof:         nil,
+		SyncCommitteeBlockRoot:    spec.Root{},
+		SyncCommitteeContribution: nil,
+	}
+
+	signedAttestation, _, err := t.beaconSigner.SignAttestation(cd.AttestationData, cd.Duty, pk.Serialize())
 	if err != nil {
 		return errors.Wrap(err, "failed to sign attestation")
 	}
