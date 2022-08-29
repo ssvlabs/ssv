@@ -35,7 +35,7 @@ type IController interface {
 	ProcessPostConsensusMessage(msg *specssv.SignedPartialSignatureMessage) error
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-	PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error
+	PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty spectypes.BeaconRole) error
 
 	// OnFork called when fork occur.
 	OnFork(forkVersion forksprotocol.ForkVersion) error
