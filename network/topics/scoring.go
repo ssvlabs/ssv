@@ -17,9 +17,9 @@ const (
 	defaultOneEpochDuration = (12 * time.Second) * 32
 
 	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 8
+	subnetsTotalWeight = 4.0
 	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
-	decidedTopicWeight = 0.7
+	decidedTopicWeight = 0.5
 	// maxInMeshScore describes the max score a peer can attain from being in the mesh
 	maxInMeshScore = 10
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
