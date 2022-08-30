@@ -129,6 +129,10 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		go func() {
 			err := h.processIncomingNodeInfo(pid, ni)
 			if err != nil {
+				if err == errPeerWasFiltered {
+					logger.Debug("peer was filtered")
+					return
+				}
 				logger.Warn("could not process node info", zap.Error(err))
 			}
 		}()
