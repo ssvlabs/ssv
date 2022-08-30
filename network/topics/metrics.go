@@ -51,10 +51,7 @@ type msgValidationResult string
 
 var (
 	validationResultNoData   msgValidationResult = "no_data"
-	validationResultSelf     msgValidationResult = "self"
 	validationResultEncoding msgValidationResult = "encoding"
-	validationResultTopic    msgValidationResult = "topic"
-	validationResultValid    msgValidationResult = "valid"
 )
 
 func reportValidationResult(result msgValidationResult) {
