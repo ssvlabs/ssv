@@ -71,7 +71,7 @@ func (ws *wsServer) Start(addr string) error {
 		zap.String("addr", addr),
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
 
-	// TODO: fix linter
+	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 	// nolint: gosec
 	err := http.ListenAndServe(addr, ws.router)
 	if err != nil {
