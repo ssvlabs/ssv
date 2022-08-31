@@ -197,7 +197,7 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 		FirstMessageDeliveriesCap:       23,
 		MeshMessageDeliveriesWeight:     meshWeight,
 		MeshMessageDeliveriesDecay:      scoreDecay(decayEpoch*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
-		MeshMessageDeliveriesCap:        float64(blocksPerEpoch * uint64(decayEpoch)) / 5.0,
+		MeshMessageDeliveriesCap:        float64(blocksPerEpoch*uint64(decayEpoch)) / 2.0,
 		MeshMessageDeliveriesThreshold:  float64(blocksPerEpoch*uint64(decayEpoch)) / 100.0,
 		MeshMessageDeliveriesWindow:     2 * time.Second,
 		MeshMessageDeliveriesActivation: 4 * cfg.Scoring.OneEpochDuration,
