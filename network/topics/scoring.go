@@ -197,8 +197,8 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 		FirstMessageDeliveriesCap:       23,
 		MeshMessageDeliveriesWeight:     meshWeight,
 		MeshMessageDeliveriesDecay:      scoreDecay(decayEpoch*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration),
-		MeshMessageDeliveriesCap:        float64(blocksPerEpoch * uint64(decayEpoch)),
-		MeshMessageDeliveriesThreshold:  float64(blocksPerEpoch*uint64(decayEpoch)) / 10,
+		MeshMessageDeliveriesCap:        float64(blocksPerEpoch * uint64(decayEpoch)) / 5.0,
+		MeshMessageDeliveriesThreshold:  float64(blocksPerEpoch*uint64(decayEpoch)) / 100.0,
 		MeshMessageDeliveriesWindow:     2 * time.Second,
 		MeshMessageDeliveriesActivation: 4 * cfg.Scoring.OneEpochDuration,
 		MeshFailurePenaltyWeight:        meshWeight,
@@ -253,7 +253,8 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreP
 	if err != nil {
 		return nil, err
 	}
-	meshWeight := -scoreByWeight(topicWeight, meshThreshold)
+	//meshWeight := -scoreByWeight(topicWeight, meshThreshold)
+	meshWeight := -37.2
 	meshCap := 4 * meshThreshold
 	//invalidDecayPeriod := 50 * cfg.Scoring.OneEpochDuration
 	return &pubsub.TopicScoreParams{
