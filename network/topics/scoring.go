@@ -178,6 +178,8 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 	decayEpoch := time.Duration(5)
 	activeValidators, _, err := cfg.GetValidatorStats()
 	if err != nil || activeValidators < 200 {
+		// using minimum of 200 validators
+		// TODO: if there less active validators we should return nil
 		activeValidators = 200
 	}
 	blocksPerEpoch := activeValidators / 2 // assuming only half of the validators are sending messages
@@ -216,6 +218,8 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreParams, error) {
 	activeValidators, _, err := cfg.GetValidatorStats()
 	if err != nil || activeValidators < 200 {
+		// using minimum of 200 validators
+		// TODO: if there less active validators we should return nil
 		activeValidators = 200
 	}
 	subnetCount := uint64(f.Subnets())
@@ -225,8 +229,10 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreP
 	// Determine the amount of validators expected in a subnet in a single slot.
 	numPerSlot := time.Duration(subnetWeight / uint64(16))
 	if numPerSlot == 0 {
-		numPerSlot = 2
+		// using minimum of 2
+		// TODO: if zero we should return nil
 		//return nil, errors.New("got invalid num per slot: 0")
+		numPerSlot = 2
 	}
 	//comsPerSlot := committeeCountPerSlot(activeValidators)
 	//exceedsThreshold := comsPerSlot >= 2*subnetCount/uint64(32)
@@ -238,8 +244,10 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreP
 	//}
 	rate := numPerSlot * 2 / time.Duration(gsD)
 	if rate == 0 {
-		rate = 1
+		// using minimum of 1
+		// TODO: if zero we should return nil
 		//return nil, errors.New("got invalid rate: 0")
+		rate = 1
 	}
 	// Determine expected first deliveries based on the message rate.
 	firstMessageCap, err := decayLimit(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration), float64(rate))
@@ -253,9 +261,10 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreP
 	if err != nil {
 		return nil, err
 	}
+	// TODO: uncomment
 	//meshWeight := -scoreByWeight(topicWeight, meshThreshold)
 	meshWeight := -37.2
-	meshCap := 4 * meshThreshold
+	meshCap := 10.0 * meshThreshold
 	//invalidDecayPeriod := 50 * cfg.Scoring.OneEpochDuration
 	return &pubsub.TopicScoreParams{
 		TopicWeight:                     topicWeight,
@@ -305,13 +314,13 @@ func decayLimit(decayRate, rate float64) (float64, error) {
 	return rate / (1 - decayRate), nil
 }
 
-// provides the relevant score by the provided weight and threshold.
-func scoreByWeight(weight, threshold float64) float64 {
-	return maxScore() / (weight * threshold * threshold)
-}
+//// provides the relevant score by the provided weight and threshold.
+//func scoreByWeight(weight, threshold float64) float64 {
+//	return maxScore() / (weight * threshold * threshold)
+//}
 
-// maxScore attainable by a peer.
-func maxScore() float64 {
-	totalWeight := decidedTopicWeight + subnetsTotalWeight
-	return (maxInMeshScore + maxFirstDeliveryScore) * totalWeight
-}
+//// maxScore attainable by a peer.
+//func maxScore() float64 {
+//	totalWeight := decidedTopicWeight + subnetsTotalWeight
+//	return (maxInMeshScore + maxFirstDeliveryScore) * totalWeight
+//}
