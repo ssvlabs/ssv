@@ -177,8 +177,8 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 	inMeshTime := cfg.Scoring.OneEpochDuration
 	decayEpoch := time.Duration(5)
 	activeValidators, _, err := cfg.GetValidatorStats()
-	if err != nil {
-		activeValidators = 1000
+	if err != nil || activeValidators < 200 {
+		activeValidators = 200
 	}
 	blocksPerEpoch := activeValidators / 2 // assuming only half of the validators are sending messages
 	meshWeight := -0.717
@@ -215,17 +215,18 @@ func decidedTopicScoreParams(cfg *PububConfig, f forks.Fork) *pubsub.TopicScoreP
 // https://gist.github.com/blacktemplar/5c1862cb3f0e32a1a7fb0b25e79e6e2c
 func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreParams, error) {
 	activeValidators, _, err := cfg.GetValidatorStats()
-	if err == nil {
-		activeValidators = 1000
+	if err != nil || activeValidators < 200 {
+		activeValidators = 200
 	}
 	subnetCount := uint64(f.Subnets())
 	// Get weight for each specific subnet.
 	topicWeight := subnetsTotalWeight / float64(subnetCount)
 	subnetWeight := activeValidators / subnetCount
 	// Determine the amount of validators expected in a subnet in a single slot.
-	numPerSlot := time.Duration(subnetWeight / uint64(32))
+	numPerSlot := time.Duration(subnetWeight / uint64(16))
 	if numPerSlot == 0 {
-		return nil, errors.New("got invalid num per slot: 0")
+		numPerSlot = 2
+		//return nil, errors.New("got invalid num per slot: 0")
 	}
 	//comsPerSlot := committeeCountPerSlot(activeValidators)
 	//exceedsThreshold := comsPerSlot >= 2*subnetCount/uint64(32)
@@ -237,7 +238,8 @@ func subnetTopicScoreParams(cfg *PububConfig, f forks.Fork) (*pubsub.TopicScoreP
 	//}
 	rate := numPerSlot * 2 / time.Duration(gsD)
 	if rate == 0 {
-		return nil, errors.New("got invalid rate: 0")
+		rate = 1
+		//return nil, errors.New("got invalid rate: 0")
 	}
 	// Determine expected first deliveries based on the message rate.
 	firstMessageCap, err := decayLimit(scoreDecay(firstDecay*cfg.Scoring.OneEpochDuration, cfg.Scoring.OneEpochDuration), float64(rate))
