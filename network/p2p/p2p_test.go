@@ -175,18 +175,6 @@ func (r *dummyRouter) Route(message spectypes.SSVMessage) {
 		zap.Uint64("count", c))
 }
 
-func dummyMsgs(h int, pks ...string) ([]*spectypes.SSVMessage, error) {
-	var msgs []*spectypes.SSVMessage
-	for _, pk := range pks {
-		msg, err := dummyMsg(pk, h)
-		if err != nil {
-			return nil, err
-		}
-		msgs = append(msgs, msg)
-	}
-	return msgs, nil
-}
-
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
