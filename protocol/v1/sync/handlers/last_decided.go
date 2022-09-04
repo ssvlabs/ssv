@@ -11,7 +11,7 @@ import (
 )
 
 // LastDecidedHandler handler for last-decided protocol
-// TODO: add msg validation
+// TODO: add msg validation and report scores
 func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {

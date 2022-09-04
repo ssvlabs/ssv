@@ -15,7 +15,7 @@ import (
 )
 
 // HistoryHandler handler for decided history protocol
-// TODO: add msg validation
+// TODO: add msg validation and report scores
 func HistoryHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {

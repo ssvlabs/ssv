@@ -5,21 +5,20 @@ import (
 	"encoding/hex"
 	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/network"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest"
-
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -33,7 +32,6 @@ func TestGetMaxPeers(t *testing.T) {
 	require.Equal(t, 16, n.getMaxPeers(n.fork.DecidedTopic()))
 }
 
-// TODO: fix dummy messages and check that are really sent and received by peers
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
@@ -42,7 +40,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
-	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, pks, forksprotocol.GenesisForkVersion)
+	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, forksprotocol.GenesisForkVersion, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -102,9 +100,79 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 }
 
-func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []string, forkVersion forksprotocol.ForkVersion) (*LocalNet, []*dummyRouter, error) {
-	logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
-	//logger := zap.L()
+func TestP2pNetwork_Stream(t *testing.T) {
+	n := 12
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
+
+	ln, _, err := createNetworkAndSubscribe(ctx, t, n, forksprotocol.GenesisForkVersion, pkHex)
+	require.NoError(t, err)
+	require.Len(t, ln.Nodes, n)
+
+	pk, err := hex.DecodeString(pkHex)
+	require.NoError(t, err)
+	mid := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	rounds := []specqbft.Round{
+		1, 1, 1,
+		1, 2, 2,
+		3, 3, 1,
+		1, 1, 1,
+	}
+	heights := []specqbft.Height{
+		0, 0, 2,
+		10, 20, 20,
+		23, 23, 1,
+		1, 1, 1,
+	}
+	msgCounter := int64(0)
+	for i, node := range ln.Nodes {
+		registerHandler(node, mid, heights[i], rounds[i], &msgCounter)
+	}
+
+	<-time.After(time.Second)
+
+	node := ln.Nodes[0]
+	res, err := node.LastChangeRound(mid, specqbft.Height(0))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(res), 5)
+	require.Less(t, len(res), 7)
+	require.GreaterOrEqual(t, msgCounter, int64(9))
+}
+
+func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
+	node.RegisterHandlers(&protcolp2p.SyncHandler{
+		Protocol: protcolp2p.LastChangeRoundProtocol,
+		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
+			atomic.AddInt64(counter, 1)
+			sm := specqbft.SignedMessage{
+				Signature: []byte("xxx"),
+				Signers:   []spectypes.OperatorID{1, 2, 3},
+				Message: &specqbft.Message{
+					MsgType:    specqbft.RoundChangeMsgType,
+					Height:     height,
+					Round:      round,
+					Identifier: mid[:],
+					Data:       []byte("dummy change round message"),
+				},
+			}
+			data, err := sm.Encode()
+			if err != nil {
+				return nil, err
+			}
+			return &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   mid,
+				Data:    data,
+			}, nil
+		},
+	})
+}
+
+func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
+	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
+	logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
 		return logger.With(zap.String("who", who))
 	}
@@ -119,7 +187,6 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, pks []s
 	logger.Debug("created local network")
 
 	routers := make([]*dummyRouter, n)
-
 	// for now, skip routers for v0
 	//if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
