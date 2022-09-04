@@ -11,7 +11,7 @@ const (
 	historyProtocol     = "/ssv/sync/decided/history/0.0.1"
 
 	peersForSync            = 10
-	peersForLastChangeRound = 5
+	peersForLastChangeRound = 10
 )
 
 // ProtocolID returns the protocol id of the given protocol,
