@@ -177,10 +177,7 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 	if peerCount > len(peers) {
 		peerCount = len(peers)
 	} else {
-		// TODO: remove logs
-		n.logger.Debug("peers before shuffle", zap.Any("peers", peers))
 		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
-		n.logger.Debug("peers after shuffle", zap.Any("peers", peers))
 	}
 	return peers[:peerCount], nil
 }
@@ -212,7 +209,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		}
 		mid := msgID(raw)
 		if distinct[mid] {
-			logger.Debug("duplicated sync msg", zap.String("mid", mid))
+			//logger.Debug("duplicated sync msg", zap.String("mid", mid))
 			continue
 		}
 		distinct[mid] = true
