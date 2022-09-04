@@ -192,7 +192,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
 			return nil
 		} else if stage.GetHeight() < msg.Message.Height {
-			logger.Debug("got change round message of an newer decided",
+			logger.Debug("got change round message from higher sequence",
 				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
 		}
 		err := c.GetCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)

@@ -2,7 +2,6 @@ package genesis
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
@@ -82,7 +81,7 @@ func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, stat
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		//signedmsg.ValidateSequenceNumber(state.GetHeight()),
 		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
