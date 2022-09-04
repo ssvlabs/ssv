@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"encoding/hex"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"math/rand"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -173,12 +174,15 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		n.logger.Debug("could not find peers", zap.Any("topics", topics))
 		return nil, nil
 	}
-	// TODO: shuffle peers
-	i := peerCount
-	if i > len(peers) {
-		i = len(peers)
+	if peerCount > len(peers) {
+		peerCount = len(peers)
+	} else {
+		// TODO: remove logs
+		n.logger.Debug("peers before shuffle", zap.Any("peers", peers))
+		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
+		n.logger.Debug("peers after shuffle", zap.Any("peers", peers))
 	}
-	return peers[:i], nil
+	return peers[:peerCount], nil
 }
 
 func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {

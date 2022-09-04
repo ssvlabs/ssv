@@ -50,6 +50,8 @@ func (n *p2pNetwork) Setup() error {
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
+	// set a seed for rand values
+	rand.Seed(time.Now().UnixNano())
 
 	n.logger.Info("configuring p2p network service")
 
