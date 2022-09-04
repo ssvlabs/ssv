@@ -201,6 +201,8 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		return nil, err
 	}
 	plogger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	msgID := n.fork.MsgID()
+	distinct := make(map[string]bool, 0)
 	for _, pid := range peers {
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
@@ -208,6 +210,11 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 			logger.Debug("could not make stream request", zap.Error(err))
 			continue
 		}
+		mid := msgID(raw)
+		if distinct[mid] {
+			continue
+		}
+		distinct[mid] = true
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))
