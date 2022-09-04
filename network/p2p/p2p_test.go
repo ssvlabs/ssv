@@ -136,7 +136,8 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	node := ln.Nodes[0]
 	res, err := node.LastChangeRound(mid, specqbft.Height(0))
 	require.NoError(t, err)
-	require.Len(t, res, 6)
+	require.GreaterOrEqual(t, len(res), 5)
+	require.Less(t, len(res), 7)
 	require.GreaterOrEqual(t, msgCounter, int64(9))
 }
 
