@@ -199,7 +199,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 	}
 	plogger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
 	msgID := n.fork.MsgID()
-	distinct := make(map[string]bool, 0)
+	distinct := make(map[string]bool)
 	for _, pid := range peers {
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
