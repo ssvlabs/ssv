@@ -276,6 +276,15 @@ func (i *Instance) roundTimeoutSeconds() time.Duration {
 	return time.Duration(float64(time.Second) * roundTimeout)
 }
 
+func (i *Instance) HighestRoundTimeoutSeconds() time.Duration {
+	round := i.State().GetRound()
+	if round < 6 {
+		return 0
+	}
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(round-4))
+	return time.Duration(float64(time.Second) * roundTimeout)
+}
+
 // UpdateChangeRoundMessage if round for specific signer is higher than local msg
 func UpdateChangeRoundMessage(logger *zap.Logger, changeRoundStorage qbftstorage.ChangeRoundStore, msg *specqbft.SignedMessage) error {
 	local, err := changeRoundStorage.GetLastChangeRoundMsg(msg.Message.Identifier, msg.GetSigners()...) // assume 1 signer
