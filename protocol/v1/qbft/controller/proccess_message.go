@@ -34,6 +34,12 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 		}
 	}
 
+	if !c.ReadMode { // checks for f+1 msg with higher height. if so, trigger sync
+		if signedMessage.Message.Height > c.SignatureState.getHeight() {
+			return c.processHigherHeightMsg(signedMessage)
+		}
+	}
+
 	if c.GetCurrentInstance() == nil {
 		return errors.New("current instance is nil")
 	}

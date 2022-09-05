@@ -293,6 +293,34 @@ func TestConsumeMessages(t *testing.T) {
 			specqbft.Height(10),
 			nil,
 		},
+		{
+			"no_running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			0,
+			specqbft.Height(1),
+			nil,
+		},
+		{
+			"running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			0,
+			specqbft.Height(1),
+			generateInstance(1, 1, qbft.RoundStateNotStarted),
+		},
 	}
 
 	for _, test := range tests {

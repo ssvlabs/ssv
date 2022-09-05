@@ -32,6 +32,8 @@ type MsgQueue interface {
 	Add(msg *spectypes.SSVMessage)
 	// Peek returns the first n messages for an index
 	Peek(n int, idx Index) []*spectypes.SSVMessage
+	// PopWithIterator looping through all indexes and return true when relevant and pop
+	PopWithIterator(n int, iterator func(index Index) bool) []*spectypes.SSVMessage
 	// Pop clears and returns the first n messages for an index
 	Pop(n int, idx Index) []*spectypes.SSVMessage
 	// PopIndices clears and returns the first n messages for indices that are created on demand using the iterator
@@ -178,6 +180,16 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 	return msgs
 }
 
+// PopWithIterator looping through all indexes and return true when relevant and pop
+func (q *queue) PopWithIterator(n int, iterator func(index Index) bool) []*spectypes.SSVMessage {
+	for k := range q.items {
+		if iterator(k) {
+			return q.Pop(n, k)
+		}
+	}
+	return nil
+}
+
 // Pop messages by index with a desired amount of messages to pop,
 // defaults to the all the messages in the index.
 func (q *queue) Pop(n int, idx Index) []*spectypes.SSVMessage {
@@ -288,8 +300,11 @@ func DefaultMsgIndexer() Indexer {
 // DefaultMsgIndex is the default msg index
 func DefaultMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
 	return Index{
-		Mt:  mt,
-		ID:  mid.String(),
-		Cmt: -1,
+		Name: "",
+		Mt:   mt,
+		ID:   mid.String(),
+		H:    0,
+		S:    0,
+		Cmt:  -1,
 	}
 }

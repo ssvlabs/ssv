@@ -135,7 +135,7 @@ func (t *testIBFT) GetIdentifier() []byte {
 	return t.identifier
 }
 
-func (t *testIBFT) NextSeqNumber() (specqbft.Height, error) {
+func (t *testIBFT) NextHeightNumber() (specqbft.Height, error) {
 	return 0, nil
 }
 
