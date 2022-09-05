@@ -296,11 +296,11 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"no_running_instance_higher_height",
 			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
 			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
 			0,
