@@ -170,6 +170,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		ForkVersion:                forkVersion,
 		SyncRateLimit:              time.Second * 5,
 		SignatureCollectionTimeout: time.Second * 5,
+		MinPeers:                   2,
 		ReadMode:                   false,
 		FullNode:                   false,
 		DutyRoles:                  []spectypes.BeaconRole{attesterRoleType},

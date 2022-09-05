@@ -21,7 +21,7 @@ type IController interface {
 
 	// NextSeqNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() (specqbft.Height, error)
+	NextHeightNumber() (specqbft.Height, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol.Node

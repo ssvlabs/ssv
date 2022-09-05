@@ -138,7 +138,7 @@ loop:
 	}
 
 	ibftc := r.validators[3].(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
-	nextSeq, err := ibftc.NextSeqNumber()
+	nextSeq, err := ibftc.NextHeightNumber()
 	if err != nil {
 		r.logger.Error("node #4 could not get state", zap.Int64("highest decided", int64(nextSeq)-1))
 		return errors.New("node #4 could not get state")
