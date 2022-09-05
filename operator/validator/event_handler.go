@@ -86,11 +86,12 @@ func (c *controller) handleOperatorRemovalEvent(
 		}
 	}
 
-	if od.OwnerAddress != event.OwnerAddress {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match operator owner address with provided event owner address"),
-		}
-	}
+	// this check is deprecated, since the validation is happening on the contract side
+	//if od.OwnerAddress != event.OwnerAddress {
+	//	return nil, &abiparser.MalformedEventError{
+	//		Err: errors.New("could not match operator owner address with provided event owner address"),
+	//	}
+	//}
 
 	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
 	logFields := make([]zap.Field, 0)
@@ -194,11 +195,12 @@ func (c *controller) handleValidatorRemovalEvent(
 		}
 	}
 
-	if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not match validator owner address with provided event owner address"),
-		}
-	}
+	// this check is deprecated, since the validation is happening on the contract side
+	//if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+	//	return nil, &abiparser.MalformedEventError{
+	//		Err: errors.New("could not match validator owner address with provided event owner address"),
+	//	}
+	//}
 
 	// remove decided messages
 	messageID := spectypes.NewMsgID(validatorShare.PublicKey.Serialize(), spectypes.BNRoleAttester)
