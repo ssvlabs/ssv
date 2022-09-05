@@ -276,6 +276,7 @@ func (i *Instance) roundTimeoutSeconds() time.Duration {
 	return time.Duration(float64(time.Second) * roundTimeout)
 }
 
+// HighestRoundTimeoutSeconds implements Instancer
 func (i *Instance) HighestRoundTimeoutSeconds() time.Duration {
 	round := i.State().GetRound()
 	if round < 6 {
