@@ -81,6 +81,12 @@ func (s *Share) PartialThresholdSize() int {
 	return int(math.Ceil(float64(s.CommitteeSize()) * 1 / 3))
 }
 
+// HasPartialQuorum returns true if at least f+1 items present (cnt is the number of items). It assumes nothing about those items, not their type or structure.
+// https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/main/dafny/spec/L1/node_auxiliary_functions.dfy#L244
+func (s *Share) HasPartialQuorum(cnt int) bool {
+	return cnt >= s.PartialThresholdSize()
+}
+
 // OperatorSharePubKey returns the operator's public key based on the node id
 func (s *Share) OperatorSharePubKey() (*bls.PublicKey, error) {
 	if val, found := s.Committee[s.NodeID]; found {

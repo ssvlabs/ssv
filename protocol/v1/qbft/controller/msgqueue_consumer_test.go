@@ -160,7 +160,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
-			2,
+			1,
 			specqbft.Height(0),
 			generateInstance(0, 1, qbft.RoundStateChangeRound),
 		},
@@ -226,7 +226,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			2,
+			1,
 			specqbft.Height(1),
 			nil,
 		},
@@ -241,7 +241,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			2,
+			1,
 			specqbft.Height(1),
 			generateInstance(1, 1, qbft.RoundStateProposal),
 		},
@@ -292,6 +292,34 @@ func TestConsumeMessages(t *testing.T) {
 			1, // only "signed_index" for decided in height 10
 			specqbft.Height(10),
 			nil,
+		},
+		{
+			"no_running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			0,
+			specqbft.Height(1),
+			nil,
+		},
+		{
+			"running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			0,
+			specqbft.Height(1),
+			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 	}
 
@@ -349,13 +377,14 @@ func TestConsumeMessages(t *testing.T) {
 						signedMsg := new(specqbft.SignedMessage)
 						require.NoError(t, signedMsg.Decode(msg.Data))
 
-						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
-						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
-						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
 						ctrl.Logger.Debug("msg info",
 							zap.Int("type", int(signedMsg.Message.MsgType)),
 							zap.Uint64("h", uint64(signedMsg.Message.Height)),
 						)
+
+						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
+						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
+						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
 					}
 					processed++
 					ctrl.Logger.Debug("processed", zap.Int("processed", processed), zap.Int("total", len(test.expected)))

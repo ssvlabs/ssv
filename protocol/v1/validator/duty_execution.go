@@ -2,13 +2,12 @@ package validator
 
 import (
 	"encoding/hex"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *spectypes.Duty) (controller.IController, int, []byte, specqbft.Height, error) {
@@ -42,7 +41,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 	}
 
 	// calculate next seq
-	height, err := qbftCtrl.NextSeqNumber()
+	height, err := qbftCtrl.NextHeightNumber()
 	if err != nil {
 		return nil, 0, nil, 0, errors.Wrap(err, "failed to calculate next sequence number")
 	}

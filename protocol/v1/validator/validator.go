@@ -41,6 +41,7 @@ type Options struct {
 	KeyManager                 spectypes.KeyManager
 	SyncRateLimit              time.Duration
 	SignatureCollectionTimeout time.Duration
+	MinPeers                   int
 	ReadMode                   bool
 	FullNode                   bool
 	NewDecidedHandler          controller.NewDecidedHandler
@@ -175,6 +176,7 @@ func setupIbftController(role spectypes.BeaconRole, logger *zap.Logger, opt *Opt
 		KeyManager:        opt.KeyManager,
 		SyncRateLimit:     opt.SyncRateLimit,
 		SigTimeout:        opt.SignatureCollectionTimeout,
+		MinPeers:          opt.MinPeers,
 		ReadMode:          opt.ReadMode,
 		FullNode:          opt.FullNode,
 		NewDecidedHandler: opt.NewDecidedHandler,

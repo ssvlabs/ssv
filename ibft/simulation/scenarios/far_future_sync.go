@@ -73,7 +73,7 @@ loop:
 		fmt.Printf("error initializing ibft")
 	}
 
-	nextSeq, err := nodes[3].NextSeqNumber()
+	nextSeq, err := nodes[3].NextHeightNumber()
 	if err != nil {
 		r.logger.Error("node #4 could not get state")
 	} else {
