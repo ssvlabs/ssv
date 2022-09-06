@@ -32,6 +32,14 @@ func TestTopicScoreParams(t *testing.T) {
 			nil,
 		},
 		{
+			"decided topic 51k validators",
+			func() *Options {
+				opts := NewDecidedTopicOpts(51000, 128)
+				return &opts
+			},
+			nil,
+		},
+		{
 			"subnet topic 1k validators",
 			func() *Options {
 				opts := NewSubnetTopicOpts(1000, 128)
@@ -48,9 +56,9 @@ func TestTopicScoreParams(t *testing.T) {
 			nil,
 		},
 		{
-			"subnet topic 100k validators",
+			"subnet topic 51k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(100000, 128)
+				opts := NewSubnetTopicOpts(51000, 128)
 				return &opts
 			},
 			nil,
@@ -60,13 +68,18 @@ func TestTopicScoreParams(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			opts := test.opts()
+			//raw, err := json.MarshalIndent(&opts, "", "\t")
+			raw, err := json.Marshal(&opts)
+			require.NoError(t, err)
+			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
 			topicScoreParams, err := TopicParams(*opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
-			raw, err := json.Marshal(topicScoreParams)
+			//raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
+			raw, err = json.Marshal(topicScoreParams)
 			require.NoError(t, err)
 			require.NotNil(t, raw)
-			t.Log("topic score params:\n", string(raw))
+			t.Logf("[%s] topic score params:\n%s", test.name, string(raw))
 		})
 	}
 }
@@ -94,6 +107,7 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 		RetainScore:                 psp.RetainScore,
 		SeenMsgTTL:                  psp.SeenMsgTTL,
 	}
+	//raw, err := json.MarshalIndent(&cp, "", "\t")
 	raw, err := json.Marshal(&cp)
 	if err != nil {
 		return "", err

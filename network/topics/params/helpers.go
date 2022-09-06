@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// provides the relevant score by the provided weight and threshold.
+// scoreByWeight provides the relevant score by the provided weight and threshold.
 func scoreByWeight(maxScore float64, weight, threshold float64) float64 {
 	return maxScore / (weight * threshold * threshold)
 }
