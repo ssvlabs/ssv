@@ -1,4 +1,4 @@
-package scores
+package params
 
 import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"

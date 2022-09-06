@@ -3,44 +3,18 @@ package topics
 import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/scores"
+	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 	"time"
 )
 
-const (
-	defaultIPColocationWeight = -35.11
-	// defaultOneEpochDuration is slots-per-epoch * slot-duration
-	defaultOneEpochDuration = (12 * time.Second) * 32
-
-	// subnetsTotalWeight specifies the total scoring weight that we apply to subnets all-together,
-	subnetsTotalWeight = 4.0
-	// decidedTopicWeight specifies the scoring weight that we apply to decided topic
-	decidedTopicWeight = 0.5
-	// maxInMeshScore describes the max score a peer can attain from being in the mesh
-	maxInMeshScore = 10
-	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
-	maxFirstDeliveryScore = 40
-	// decayToZero specifies the terminal value that we will use when decaying
-	// a value.
-	decayToZero = 0.01
-	// dampeningFactor reduces the amount by which the various thresholds and caps are created.
-	dampeningFactor = 90
-)
-
-var (
-	// ipColocationThreshold defines the max peers that can live on the same IP
-	// 10 by default, should be tweaked in tests and therefore this is a var rather than const
-	ipColocationThreshold = 10
-)
-
 // DefaultScoringConfig returns the default scoring config
 func DefaultScoringConfig() *ScoringConfig {
 	return &ScoringConfig{
-		IPColocationWeight: defaultIPColocationWeight,
-		OneEpochDuration:   defaultOneEpochDuration,
+		IPColocationWeight: -35.11,
+		OneEpochDuration:   (12 * time.Second) * 32,
 	}
 }
 
@@ -91,66 +65,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 	}
 }
 
-//
-//// peerScoreThresholds returns the thresholds to use for peer scoring
-//func peerScoreThresholds() *pubsub.PeerScoreThresholds {
-//	return &pubsub.PeerScoreThresholds{
-//		GossipThreshold:             -4000,
-//		PublishThreshold:            -8000,
-//		GraylistThreshold:           -16000,
-//		AcceptPXThreshold:           100,
-//		OpportunisticGraftThreshold: 5,
-//	}
-//}
-//
-//// determines the decay rate from the provided time period till
-//// the decayToZero value. Ex: ( 1 -> 0.01)
-//func scoreDecay(totalDecayDuration time.Duration, decayIntervalDuration time.Duration) float64 {
-//	ticks := float64(totalDecayDuration / decayIntervalDuration)
-//	return math.Pow(decayToZero, 1/float64(ticks))
-//}
-//
-//// peerScoreParams returns peer score params in the router level
-//func peerScoreParams(cfg *PububConfig) *pubsub.PeerScoreParams {
-//	scores.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
-//	return &pubsub.PeerScoreParams{
-//		Topics:        make(map[string]*pubsub.TopicScoreParams),
-//		TopicScoreCap: 32.72,
-//		AppSpecificScore: func(p peer.ID) float64 {
-//			return 0
-//		},
-//		AppSpecificWeight:           0,
-//		IPColocationFactorWeight:    cfg.Scoring.IPColocationWeight,
-//		IPColocationFactorThreshold: ipColocationThreshold,
-//		IPColocationFactorWhitelist: cfg.Scoring.IPWhilelist,
-//		BehaviourPenaltyWeight:      -8.0,
-//		BehaviourPenaltyThreshold:   6,
-//		SeenMsgTTL:                  cfg.MsgIDCacheTTL,
-//		BehaviourPenaltyDecay:       scoreDecay(cfg.Scoring.OneEpochDuration*5, cfg.Scoring.OneEpochDuration),
-//		DecayInterval:               cfg.Scoring.OneEpochDuration,
-//		DecayToZero:                 decayToZero,
-//		// RetainScore changed to 5 epochs (100 epochs in ETH),
-//		// as we don't want to ban honest peers for so long
-//		RetainScore: cfg.Scoring.OneEpochDuration * 5,
-//	}
-//}
-
-//func appSpecificScore(logger *zap.Logger, scoreIdx peers.ScoreIndex) func(p peer.ID) float64 {
-//	return func(p peer.ID) float64 {
-//		// TODO: complete
-//		scores, err := scoreIdx.GetScore(p, "")
-//		if err != nil {
-//			logger.Warn("could not get score for peer", zap.String("peer", p.String()), zap.Error(err))
-//			return 0.0
-//		}
-//		var res float64
-//		for _, s := range scores {
-//			res += s.Value
-//		}
-//		return res
-//	}
-//}
-
 // topicScoreParams factory for creating scoring params for topics
 func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
 	decidedTopic := f.GetTopicFullName(f.DecidedTopic())
@@ -160,19 +74,19 @@ func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.Topic
 			cfg.Logger.Debug("could not read stats: active validators")
 			return nil
 		}
-		var opts scores.Options
+		var opts params.Options
 		switch t {
 		case decidedTopic:
-			opts = scores.NewDecidedTopicOpts(int(activeValidators), f.Subnets())
+			opts = params.NewDecidedTopicOpts(int(activeValidators), f.Subnets())
 		default:
-			opts = scores.NewSubnetTopicOpts(int(activeValidators), f.Subnets())
+			opts = params.NewSubnetTopicOpts(int(activeValidators), f.Subnets())
 		}
-		params, err := scores.TopicParams(opts)
+		tp, err := params.TopicParams(opts)
 		if err != nil {
 			cfg.Logger.Debug("ignoring topic score params", zap.String("topic", t), zap.Error(err))
 			return nil
 		}
-		return params
+		return tp
 	}
 }
 

@@ -5,7 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/scores"
+	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -33,7 +33,7 @@ var (
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
-	msgIDCacheTTL = gsHeartbeatInterval * 550
+	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
 
 // PububConfig is the needed config to instantiate pubsub
@@ -116,7 +116,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithValidateQueueSize(cfg.ValidationQueueSize),
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
-		pubsub.WithGossipSubParams(gossipSubParam()),
+		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
@@ -131,8 +131,8 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
-		peerScoreParams := scores.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
-		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, scores.PeerScoreThresholds()),
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
+		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, error) {

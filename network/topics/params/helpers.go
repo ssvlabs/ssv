@@ -1,4 +1,4 @@
-package scores
+package params
 
 import (
 	"github.com/pkg/errors"
