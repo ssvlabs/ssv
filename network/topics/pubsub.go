@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/topics/scores"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -130,7 +131,8 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
-		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams(cfg), peerScoreThresholds()),
+		peerScoreParams := scores.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
+		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, scores.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, error) {
