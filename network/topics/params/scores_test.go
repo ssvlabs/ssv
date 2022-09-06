@@ -47,6 +47,14 @@ func TestTopicScoreParams(t *testing.T) {
 			},
 			nil,
 		},
+		{
+			"subnet topic 100k validators",
+			func() *Options {
+				opts := NewSubnetTopicOpts(100000, 128)
+				return &opts
+			},
+			nil,
+		},
 	}
 
 	for _, test := range tests {

@@ -145,9 +145,9 @@ func (mr *MockControllerMockRecorder) GetAllValidatorShares() *gomock.Call {
 }
 
 // GetValidatorStats mocks base method
-func (m *MockController) GetValidatorStats() (uint64, uint64, error) {
+func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	m.ctrl.T.Helper()
-	return 2, 2, nil
+	return 2, 2, 2, nil
 }
 
 // GetValidatorStats indicates an expected call of GetValidatorStats

@@ -234,7 +234,7 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 			Logger.Fatal("failed to start eth1", zap.Error(err))
 		}
-		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, error) {
+		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
 		if err := p2pNet.Setup(); err != nil {

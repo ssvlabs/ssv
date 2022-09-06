@@ -69,7 +69,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
 	decidedTopic := f.GetTopicFullName(f.DecidedTopic())
 	return func(t string) *pubsub.TopicScoreParams {
-		activeValidators, _, err := cfg.GetValidatorStats()
+		totalValidators, _, _, err := cfg.GetValidatorStats()
 		if err != nil {
 			cfg.Logger.Debug("could not read stats: active validators")
 			return nil
@@ -77,9 +77,9 @@ func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.Topic
 		var opts params.Options
 		switch t {
 		case decidedTopic:
-			opts = params.NewDecidedTopicOpts(int(activeValidators), f.Subnets())
+			opts = params.NewDecidedTopicOpts(int(totalValidators), f.Subnets())
 		default:
-			opts = params.NewSubnetTopicOpts(int(activeValidators), f.Subnets())
+			opts = params.NewSubnetTopicOpts(int(totalValidators), f.Subnets())
 		}
 		tp, err := params.TopicParams(opts)
 		if err != nil {

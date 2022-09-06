@@ -135,9 +135,9 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
 		if cfg.GetValidatorStats == nil {
-			cfg.GetValidatorStats = func() (uint64, uint64, error) {
+			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				// default in case it was not injected
-				return 1000, 25, nil
+				return 100, 100, 10, nil
 			}
 		}
 		topicScoreFactory = topicScoreParams(cfg, fork)

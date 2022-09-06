@@ -86,8 +86,9 @@ type Controller interface {
 	OnFork(forkVersion forksprotocol.ForkVersion) error
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
+	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
-	GetValidatorStats() (uint64, uint64, error)
+	GetValidatorStats() (uint64, uint64, uint64, error)
 }
 
 // controller implements Controller
@@ -241,18 +242,22 @@ func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 	return c.collection.GetAllValidatorShares()
 }
 
-func (c *controller) GetValidatorStats() (uint64, uint64, error) {
+func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	allShares, err := c.collection.GetAllValidatorShares()
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
-	operatorShares := 0
+	operatorShares := uint64(0)
+	active := uint64(0)
 	for _, s := range allShares {
 		if ok := s.IsOperatorShare(c.operatorPubKey); ok {
 			operatorShares++
 		}
+		if s.Metadata.IsActive() {
+			active++
+		}
 	}
-	return uint64(len(allShares)), uint64(operatorShares), nil
+	return uint64(len(allShares)), active, operatorShares, nil
 }
 
 func (c *controller) handleRouterMessages() {
