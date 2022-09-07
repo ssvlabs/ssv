@@ -253,7 +253,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.IsOperatorShare(c.operatorPubKey); ok {
 			operatorShares++
 		}
-		if s.Metadata.IsActive() {
+		if s.HasMetadata() && s.Metadata.IsActive() {
 			active++
 		}
 	}
