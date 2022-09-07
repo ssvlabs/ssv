@@ -8,7 +8,8 @@ import (
 )
 
 const (
-	gossipThreshold = -4000
+	gossipThreshold              = -4000
+	defaultIPColocationThreshold = 10 // TODO: check a lower value such as in ETH (3)
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
@@ -27,8 +28,8 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 	if oneEpoch == 0 {
 		oneEpoch = oneEpochDuration
 	}
-	topicScoreCap := 32.72 // TODO: topicScoreCap = maxPositiveScore / 2
-	behaviourPenaltyThreshold := 6.0
+	topicScoreCap := 32.72            // TODO: topicScoreCap = maxPositiveScore / 2
+	behaviourPenaltyThreshold := 16.0 // using a larger threshold than ETH (6) to reduce the effect of behavioural penalty
 	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, oneEpoch)
 	targetVal, _ := decayConvergence(behaviourPenaltyDecay, 8.0) // TODO: rate is hard-coded
 	targetVal = targetVal - behaviourPenaltyThreshold
@@ -38,13 +39,13 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 		ipColocationWeight = -topicScoreCap
 	}
 	if ipColocationThreshold == 0 {
-		ipColocationThreshold = 3
+		ipColocationThreshold = defaultIPColocationThreshold
 	}
 	return &pubsub.PeerScoreParams{
 		Topics:        make(map[string]*pubsub.TopicScoreParams),
 		TopicScoreCap: topicScoreCap,
 		AppSpecificScore: func(p peer.ID) float64 {
-			// TODO: expose
+			// TODO: implement
 			return 0
 		},
 		AppSpecificWeight:           1,
@@ -57,6 +58,8 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 		BehaviourPenaltyDecay:       behaviourPenaltyDecay,
 		DecayInterval:               oneEpoch,
 		DecayToZero:                 decayToZero,
-		RetainScore:                 oneEpoch * 100,
+		// RetainScore is the time to remember counters for a disconnected peer
+		// TODO: ETH uses 100 epoch, we reduced it to 10 until scoring will be more mature
+		RetainScore: oneEpoch * 10,
 	}
 }
