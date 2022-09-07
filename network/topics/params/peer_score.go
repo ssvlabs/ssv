@@ -28,10 +28,12 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 	if oneEpoch == 0 {
 		oneEpoch = oneEpochDuration
 	}
-	topicScoreCap := 32.72            // TODO: topicScoreCap = maxPositiveScore / 2
+	// TODO: topicScoreCap = maxPositiveScore / 2
+	topicScoreCap := 32.72
 	behaviourPenaltyThreshold := 16.0 // using a larger threshold than ETH (6) to reduce the effect of behavioural penalty
 	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, oneEpoch)
-	targetVal, _ := decayConvergence(behaviourPenaltyDecay, 8.0) // TODO: rate is hard-coded
+	// TODO: rate (10.0) should be injected to this function
+	targetVal, _ := decayConvergence(behaviourPenaltyDecay, 10.0/slotsPerEpoch)
 	targetVal = targetVal - behaviourPenaltyThreshold
 	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
