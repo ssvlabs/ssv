@@ -9,7 +9,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -56,7 +55,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon commit msg", func(signedMessage *specqbft.SignedMessage) error {
-		quorum, commitMsgs, err := commitQuorumForCurrentRoundValue(signedMessage.Message.Round, i.ValidatorShare, i.ContainersMap[specqbft.CommitMsgType], signedMessage.Message.Data)
+		quorum, commitMsgs, err := i.commitQuorumForRoundValue(signedMessage.Message.Data, signedMessage.Message.Round)
 		if err != nil {
 			return fmt.Errorf("could not calculate commit quorum: %w", err)
 		}
@@ -86,6 +85,12 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
+// returns true if there is a quorum for the current round for this provided value
+func (i *Instance) commitQuorumForRoundValue(value []byte, round specqbft.Round) (bool, []*specqbft.SignedMessage, error) {
+	signers, msgs := longestUniqueSignersForRoundAndValue(i.ContainersMap[specqbft.CommitMsgType], round, value)
+	return len(signers)*3 >= i.ValidatorShare.CommitteeSize()*2, msgs, nil
+}
+
 func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if len(msgs) == 0 {
 		return nil, fmt.Errorf("can't aggregate zero commit msgs")
@@ -102,12 +107,6 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 		}
 	}
 	return ret, nil
-}
-
-// returns true if there is a quorum for the current round for this provided value
-func commitQuorumForCurrentRoundValue(msgRound specqbft.Round, share *beacon.Share, commitMsgContainer msgcont.MessageContainer, value []byte) (bool, []*specqbft.SignedMessage, error) {
-	signers, msgs := longestUniqueSignersForRoundAndValue(commitMsgContainer, msgRound, value)
-	return share.HasQuorum(len(signers)), msgs, nil
 }
 
 func longestUniqueSignersForRoundAndValue(container msgcont.MessageContainer, round specqbft.Round, value []byte) ([]spectypes.OperatorID, []*specqbft.SignedMessage) {
