@@ -69,11 +69,14 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
 	decidedTopic := f.GetTopicFullName(f.DecidedTopic())
 	return func(t string) *pubsub.TopicScoreParams {
-		totalValidators, _, _, err := cfg.GetValidatorStats()
+		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
 			cfg.Logger.Debug("could not read stats: active validators")
 			return nil
 		}
+		logger := cfg.Logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
+			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
+		logger.Debug("got validator stats for score params")
 		var opts params.Options
 		switch t {
 		case decidedTopic:
@@ -83,7 +86,7 @@ func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.Topic
 		}
 		tp, err := params.TopicParams(opts)
 		if err != nil {
-			cfg.Logger.Debug("ignoring topic score params", zap.String("topic", t), zap.Error(err))
+			logger.Debug("ignoring topic score params", zap.Error(err))
 			return nil
 		}
 		return tp
