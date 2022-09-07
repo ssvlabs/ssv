@@ -53,7 +53,7 @@ func ValidateProposalMsg(share *beacon.Share, state *qbft.State, resolver Leader
 		proposalAcceptedForCurrentRound := state.GetProposalAcceptedForCurrentRound()
 		round := state.GetRound()
 		if (proposalAcceptedForCurrentRound == nil && signedMessage.Message.Round == round) ||
-			(proposalAcceptedForCurrentRound != nil && signedMessage.Message.Round > round) {
+			signedMessage.Message.Round > state.GetRound() {
 			return nil
 		}
 		return errors.New("proposal is not valid with current state")
