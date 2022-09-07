@@ -121,6 +121,7 @@ func NewDecidedTopicOpts(activeValidators, subnets int) Options {
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
 func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	opts := NewOpts(activeValidators, subnets)
+	opts.defaults()
 	opts.Topic.TopicWeight = subnetTopicsWeight / float64(opts.Network.Subnets)
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
 	valMsgsPerEpoch := 9.0
@@ -181,6 +182,8 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	if opts.Topic.InvalidMsgDecayTime > 0 {
 		params.InvalidMessageDeliveriesWeight = -opts.maxScore() / opts.Topic.TopicWeight
 		params.InvalidMessageDeliveriesDecay = scoreDecay(opts.Topic.InvalidMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
+	} else {
+		params.InvalidMessageDeliveriesDecay = 0.1
 	}
 
 	return params, nil
