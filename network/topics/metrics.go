@@ -7,42 +7,49 @@ import (
 )
 
 var (
-	metricsPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:pubsub:trace",
 		Help: "Traces of pubsub messages",
 	}, []string{"type"})
-	metricsPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:pubsub:msg:validation",
 		Help: "Traces of pubsub message validation results",
 	}, []string{"type"})
-	metricsPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
 	}, []string{"topic"})
-	metricsPubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricPubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
 	}, []string{"topic"})
-	metricsPubsubActiveMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	metricPubsubActiveMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:msg:val:active",
 		Help: "Count active message validation",
 	}, []string{"topic"})
+	metricPubsubPeerScoreInspect = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:inspect",
+		Help: "Gauge for negative peer scores",
+	}, []string{"pid"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsPubsubTrace); err != nil {
+	if err := prometheus.Register(metricPubsubTrace); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPubsubMsgValidationResults); err != nil {
+	if err := prometheus.Register(metricPubsubMsgValidationResults); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPubsubOutbound); err != nil {
+	if err := prometheus.Register(metricPubsubOutbound); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPubsubInbound); err != nil {
+	if err := prometheus.Register(metricPubsubInbound); err != nil {
 		log.Println("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsPubsubActiveMsgValidation); err != nil {
+	if err := prometheus.Register(metricPubsubActiveMsgValidation); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricPubsubPeerScoreInspect); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
@@ -55,5 +62,5 @@ var (
 )
 
 func reportValidationResult(result msgValidationResult) {
-	metricsPubsubMsgValidationResults.WithLabelValues(string(result)).Inc()
+	metricPubsubMsgValidationResults.WithLabelValues(string(result)).Inc()
 }

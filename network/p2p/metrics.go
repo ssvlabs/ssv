@@ -49,14 +49,16 @@ var unknown = "unknown"
 
 func (n *p2pNetwork) reportAllPeers() {
 	pids := n.host.Network().Peers()
-	var ids []string
+	n.logger.Debug("connected peers status",
+		zap.Int("count", len(pids)))
+	MetricsAllConnectedPeers.Set(float64(len(pids)))
+}
+
+func (n *p2pNetwork) reportPeerIdentities() {
+	pids := n.host.Network().Peers()
 	for _, pid := range pids {
-		ids = append(ids, pid.String())
 		n.reportPeerIdentity(pid)
 	}
-	n.logger.Debug("connected peers status",
-		zap.Int("count", len(ids)))
-	MetricsAllConnectedPeers.Set(float64(len(ids)))
 }
 
 func (n *p2pNetwork) reportTopics() {

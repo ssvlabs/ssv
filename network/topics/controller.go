@@ -134,7 +134,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 	err = tc.Publish(ctx, data)
 	if err == nil {
-		metricsPubsubOutbound.WithLabelValues(name).Inc()
+		metricPubsubOutbound.WithLabelValues(name).Inc()
 	}
 	return err
 }
@@ -274,7 +274,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Warn("got empty message from subscription")
 			continue
 		}
-		metricsPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
+		metricPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
@@ -325,9 +325,10 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 	tc.topic = topic
 	if ctrl.scoreParamsFactory != nil {
 		if p := ctrl.scoreParamsFactory(name); p != nil {
+			ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
 			if err := topic.SetScoreParams(p); err != nil {
 				//ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
-				return errors.Wrap(err, "could not set topic score params")
+				return errors.Wrapf(err, "could not set topic score params for topic %s", name)
 			}
 		}
 	}
