@@ -30,7 +30,7 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 	}
 
 	maxPositiveScore := (maxInMeshScore + maxFirstDeliveryScore) * (decidedTopicWeight + subnetTopicsWeight)
-	topicScoreCap := maxPositiveScore / 2.0
+	topicScoreCap := maxPositiveScore / 4.0 // ETH divides by 2, we use lower value to reduce cap
 
 	behaviourPenaltyThreshold := 10.0 // using a larger threshold than ETH (6) to reduce the effect of behavioural penalty
 	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, oneEpoch)
