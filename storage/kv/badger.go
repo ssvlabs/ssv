@@ -132,6 +132,26 @@ func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
 	})
 }
 
+// DeleteByPrefix all items with this prefix
+func (b *BadgerDb) DeleteByPrefix(prefix []byte) error {
+	count := 0
+	err := b.db.Update(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+
+		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
+			k := it.Item().Key()
+			// This won't disrupt the iterator, as the iterator keeps its view from when the tx began
+			if err := txn.Delete(k); err != nil {
+				return err
+			}
+			count++
+		}
+		return nil
+	})
+	return err
+}
+
 // GetAll returns all the items of a given collection
 func (b *BadgerDb) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
