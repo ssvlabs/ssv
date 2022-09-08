@@ -17,8 +17,8 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
-		metricsPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
-		defer metricsPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
+		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
+		defer metricPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
 		if len(pmsg.GetData()) == 0 {
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject

@@ -40,7 +40,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//}
 			logger.Debug("peer scores", zap.String("peer", pid.String()),
 				zap.Any("peerScores", peerScores))
-			metricsPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
+			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 			if peerScores.Score < float64(0) {
 				negativeCount++
 			} else if peerScores.Score > float64(0) {

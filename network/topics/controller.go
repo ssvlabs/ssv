@@ -134,7 +134,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 	err = tc.Publish(ctx, data)
 	if err == nil {
-		metricsPubsubOutbound.WithLabelValues(name).Inc()
+		metricPubsubOutbound.WithLabelValues(name).Inc()
 	}
 	return err
 }
@@ -274,7 +274,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Warn("got empty message from subscription")
 			continue
 		}
-		metricsPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
+		metricPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}

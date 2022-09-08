@@ -42,7 +42,7 @@ func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
 
 // report reports metric
 func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
-	metricsPubsubTrace.WithLabelValues(evt.GetType().String()).Inc()
+	metricPubsubTrace.WithLabelValues(evt.GetType().String()).Inc()
 }
 
 // log prints event to log
