@@ -48,6 +48,7 @@ type Options struct {
 	KeyManager        spectypes.KeyManager
 	SyncRateLimit     time.Duration
 	SigTimeout        time.Duration
+	MinPeers          int
 	ReadMode          bool
 	FullNode          bool
 	NewDecidedHandler NewDecidedHandler
@@ -68,17 +69,18 @@ const (
 type Controller struct {
 	Ctx context.Context
 
-	currentInstance    instance.Instancer
-	Logger             *zap.Logger
-	InstanceStorage    qbftstorage.InstanceStore
-	ChangeRoundStorage qbftstorage.ChangeRoundStore
-	Network            p2pprotocol.Network
-	InstanceConfig     *qbft.InstanceConfig
-	ValidatorShare     *beaconprotocol.Share
-	Identifier         []byte
-	Fork               forks.Fork
-	Beacon             beaconprotocol.Beacon
-	KeyManager         spectypes.KeyManager
+	currentInstance        instance.Instancer
+	Logger                 *zap.Logger
+	InstanceStorage        qbftstorage.InstanceStore
+	ChangeRoundStorage     qbftstorage.ChangeRoundStore
+	Network                p2pprotocol.Network
+	InstanceConfig         *qbft.InstanceConfig
+	ValidatorShare         *beaconprotocol.Share
+	Identifier             []byte
+	Fork                   forks.Fork
+	Beacon                 beaconprotocol.Beacon
+	KeyManager             spectypes.KeyManager
+	HigherReceivedMessages *specqbft.MsgContainer
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -110,20 +112,22 @@ func New(opts Options) IController {
 	fork := forksfactory.NewFork(opts.Version)
 
 	ctrl := &Controller{
-		Ctx:                opts.Context,
-		InstanceStorage:    opts.Storage,
-		ChangeRoundStorage: opts.Storage,
-		Logger:             logger,
-		Network:            opts.Network,
-		InstanceConfig:     opts.InstanceConfig,
-		ValidatorShare:     opts.ValidatorShare,
-		Identifier:         opts.Identifier,
-		Fork:               fork,
-		Beacon:             opts.Beacon,
-		KeyManager:         opts.KeyManager,
-		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		Ctx:                    opts.Context,
+		InstanceStorage:        opts.Storage,
+		ChangeRoundStorage:     opts.Storage,
+		Logger:                 logger,
+		Network:                opts.Network,
+		InstanceConfig:         opts.InstanceConfig,
+		ValidatorShare:         opts.ValidatorShare,
+		Identifier:             opts.Identifier,
+		Fork:                   fork,
+		Beacon:                 opts.Beacon,
+		KeyManager:             opts.KeyManager,
+		SignatureState:         SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		HigherReceivedMessages: specqbft.NewMsgContainer(),
 
 		SyncRateLimit: opts.SyncRateLimit,
+		MinPeers:      opts.MinPeers,
 
 		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
@@ -207,6 +211,13 @@ func (c *Controller) Init() error {
 	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
 		c.Logger.Info("start qbft ctrl handler init")
 		go c.StartQueueConsumer(c.MessageHandler)
+
+		height, err := c.NextHeightNumber()
+		if err != nil {
+			c.Logger.Error("failed to get next height number", zap.Error(err))
+		}
+		c.SignatureState.setHeight(height) // make sure ctrl is set with the right height
+
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
@@ -225,9 +236,8 @@ func (c *Controller) Init() error {
 	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
-		minPeers := 1
-		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
+		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
 			return err
 		}
 		c.Logger.Debug("found enough peers")
@@ -325,7 +335,7 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 	if cInstance != nil {
 		currentState := cInstance.State()
 		if currentState != nil {
-			fields = append(fields, zap.String("stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
+			fields = append(fields, zap.String("instance stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("instance height", uint32(currentState.GetHeight())), zap.Uint32("instance round", uint32(currentState.GetRound())))
 		}
 	}
 	fields = append(fields,

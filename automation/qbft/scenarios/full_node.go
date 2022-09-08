@@ -186,6 +186,7 @@ func createShareAndValidators(
 			Beacon:                     nil,
 			SyncRateLimit:              time.Millisecond * 10,
 			SignatureCollectionTimeout: time.Second * 5,
+			MinPeers:                   2,
 			ReadMode:                   i >= committeeNodes,
 			FullNode:                   i >= regularNodes,
 			DutyRoles:                  []spectypes.BeaconRole{spectypes.BNRoleAttester},

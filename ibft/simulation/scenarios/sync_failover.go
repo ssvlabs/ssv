@@ -89,7 +89,7 @@ loop:
 		}
 	}
 
-	nextSeq, err := nodes[3].NextSeqNumber()
+	nextSeq, err := nodes[3].NextHeightNumber()
 	if err != nil {
 		sf.logger.Error("node #4 could not get state", zap.Error(err))
 	} else {

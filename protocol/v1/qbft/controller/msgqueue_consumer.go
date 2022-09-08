@@ -68,7 +68,11 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			c.Logger.Debug("process by state is done")
 			continue
 		}
-		if processed := c.processDefault(handler, identifier, lastHeight); processed {
+		if processed := c.processHigherHeight(handler, identifier, lastHeight); processed {
+			c.Logger.Debug("process higher height is done")
+			continue
+		}
+		if processed := c.processLateCommit(handler, identifier, lastHeight); processed {
 			c.Logger.Debug("process default is done")
 			continue
 		}
@@ -152,9 +156,25 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 	return true // msg processed
 }
 
-// processDefault this phase is to allow late commit and decided msg's
+// processHigherHeight fetch any message with higher height than last height
+func (c *Controller) processHigherHeight(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
+	msgs := c.Q.PopWithIterator(1, func(index msgqueue.Index) bool {
+		return index.ID == identifier && index.H > lastHeight
+	})
+
+	if len(msgs) > 0 {
+		err := handler(msgs[0])
+		if err != nil {
+			c.Logger.Warn("could not handle msg", zap.Error(err))
+		}
+		return true
+	}
+	return false
+}
+
+// processLateCommit this phase is to allow late commit and decided msg's
 // we allow late commit and decided up to 1 height back. (only to support pre fork. after fork no need to support previews height)
-func (c *Controller) processDefault(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
+func (c *Controller) processLateCommit(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	iterator := msgqueue.NewIndexIterator().
 		Add(func() msgqueue.Index {
 			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)

@@ -52,6 +52,7 @@ type ControllerOptions struct {
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncRateLimit       time.Duration `yaml:"HistorySyncRateLimit" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
+	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
@@ -178,6 +179,7 @@ func NewController(options ControllerOptions) Controller {
 		DutyRoles:                  options.DutyRoles,
 		SyncRateLimit:              options.HistorySyncRateLimit,
 		SignatureCollectionTimeout: options.SignatureCollectionTimeout,
+		MinPeers:                   options.MinPeers,
 		IbftStorage:                qbftStorage,
 		ReadMode:                   false, // set to false for committee validators. if non committee, we set validator with true value
 		FullNode:                   options.FullNode,

@@ -128,7 +128,7 @@ func (r *farFutureSyncScenario) Execute(ctx *runner.ScenarioContext) error {
 	}
 
 	for i, ibftc := range r.validators[3].(*validator.Validator).Ibfts() {
-		nextSeq, err := ibftc.NextSeqNumber()
+		nextSeq, err := ibftc.NextHeightNumber()
 		if err != nil {
 			r.logger.Error("node #4 could not get state", zap.Int64("index", int64(i)))
 			return errors.New("node #4 could not get state")

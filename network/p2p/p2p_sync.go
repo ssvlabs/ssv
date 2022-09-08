@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"encoding/hex"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"math/rand"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -173,12 +174,12 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		n.logger.Debug("could not find peers", zap.Any("topics", topics))
 		return nil, nil
 	}
-	// TODO: shuffle peers
-	i := peerCount
-	if i > len(peers) {
-		i = len(peers)
+	if peerCount > len(peers) {
+		peerCount = len(peers)
+	} else {
+		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
 	}
-	return peers[:i], nil
+	return peers[:peerCount], nil
 }
 
 func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
@@ -197,6 +198,8 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		return nil, err
 	}
 	plogger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	msgID := n.fork.MsgID()
+	distinct := make(map[string]bool)
 	for _, pid := range peers {
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
@@ -204,6 +207,12 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 			logger.Debug("could not make stream request", zap.Error(err))
 			continue
 		}
+		mid := msgID(raw)
+		if distinct[mid] {
+			//logger.Debug("duplicated sync msg", zap.String("mid", mid))
+			continue
+		}
+		distinct[mid] = true
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))
