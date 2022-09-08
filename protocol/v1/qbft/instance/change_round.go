@@ -281,7 +281,7 @@ func (i *Instance) HighestRoundTimeoutSeconds() time.Duration {
 	if round < 6 {
 		return 0
 	}
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(round-4))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(round-3))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }
 
