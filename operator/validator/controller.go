@@ -84,6 +84,11 @@ type Controller interface {
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	OnFork(forkVersion forksprotocol.ForkVersion) error
+	// GetValidatorStats returns stats of validators, including the following:
+	//  - the amount of validators in the network
+	//  - the amount of active validators (i.e. not slashed or existed)
+	//  - the amount of validators assigned to this operator
+	GetValidatorStats() (uint64, uint64, uint64, error)
 }
 
 // controller implements Controller
@@ -214,10 +219,6 @@ func NewController(options ControllerOptions) Controller {
 		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
 	}
 
-	if err := ctrl.setupNetworkHandlers(); err != nil {
-		ctrl.logger.Panic("could not initialize shares", zap.Error(err))
-	}
-
 	return &ctrl
 }
 
@@ -239,6 +240,24 @@ func (c *controller) setupNetworkHandlers() error {
 
 func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
 	return c.collection.GetAllValidatorShares()
+}
+
+func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
+	allShares, err := c.collection.GetAllValidatorShares()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	operatorShares := uint64(0)
+	active := uint64(0)
+	for _, s := range allShares {
+		if ok := s.IsOperatorShare(c.operatorPubKey); ok {
+			operatorShares++
+		}
+		if s.HasMetadata() && s.Metadata.IsActive() {
+			active++
+		}
+	}
+	return uint64(len(allShares)), active, operatorShares, nil
 }
 
 func (c *controller) handleRouterMessages() {
@@ -366,6 +385,10 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers() {
+	// first, set stream handlers
+	if err := c.setupNetworkHandlers(); err != nil {
+		c.logger.Panic("could not register stream handlers", zap.Error(err))
+	}
 	c.network.UseMessageRouter(c.messageRouter)
 	go c.handleRouterMessages()
 	c.messageWorker.UseHandler(c.handleWorkerMessages)

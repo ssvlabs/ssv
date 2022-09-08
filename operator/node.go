@@ -133,8 +133,8 @@ func (n *operatorNode) Start() error {
 		}
 	}()
 
-	n.validatorsCtrl.StartValidators()
 	n.validatorsCtrl.StartNetworkHandlers()
+	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()

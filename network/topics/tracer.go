@@ -42,7 +42,7 @@ func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
 
 // report reports metric
 func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
-	metricsPubsubTrace.WithLabelValues(evt.GetType().String()).Inc()
+	metricPubsubTrace.WithLabelValues(evt.GetType().String()).Inc()
 }
 
 // log prints event to log
@@ -66,6 +66,7 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 		}
 		fields = append(fields, zap.String("msgID", hex.EncodeToString(msg.GetMessageID())))
 		fields = append(fields, zap.String("topic", msg.GetTopic()))
+		fields = append(fields, zap.String("reason", msg.GetReason()))
 	case ps_pb.TraceEvent_DUPLICATE_MESSAGE:
 		msg := evt.GetDuplicateMessage()
 		pid, err := peer.IDFromBytes(msg.GetReceivedFrom())
