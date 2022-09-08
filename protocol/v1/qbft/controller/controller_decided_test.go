@@ -461,6 +461,14 @@ func TestSyncAfterDecided(t *testing.T) {
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	})
 
+	encoded, err := decidedMsg.Encode()
+	require.NoError(t, err)
+	decidedSSVMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   identifier,
+		Data:    encoded,
+	}
+
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier[:], decidedMsg))
 	network.SetGetHistoryHandler(generateGetHistoryHandler(t, sks, uids, identifier[:], 4, 10))
@@ -482,7 +490,7 @@ func TestSyncAfterDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, highest.Message.Height)
 
-	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
+	require.NoError(t, i1.(*Controller).MessageHandler(decidedSSVMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
 	highest, err = i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
@@ -510,6 +518,13 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 		Identifier: identifier[:],
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	})
+	encoded, err := decidedMsg.Encode()
+	require.NoError(t, err)
+	decidedSSVMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVDecidedMsgType,
+		MsgID:   identifier,
+		Data:    encoded,
+	}
 
 	network := protocolp2p.NewMockNetwork(zap.L(), pi, 10)
 	network.SetLastDecidedHandler(generateLastDecidedHandler(t, identifier[:], decidedMsg))
@@ -526,7 +541,7 @@ func TestSyncFromScratchAfterDecided(t *testing.T) {
 
 	_ = populatedIbft(2, identifier[:], network, qbftstorage.PopulatedStorage(t, sks, 3, 10), sks, nodes, newTestKeyManager())
 
-	require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
+	require.NoError(t, i1.(*Controller).MessageHandler(decidedSSVMsg))
 
 	time.Sleep(time.Millisecond * 500) // wait for sync to complete
 	highest, err := i1.(*Controller).DecidedStrategy.GetLastDecided(identifier[:])
