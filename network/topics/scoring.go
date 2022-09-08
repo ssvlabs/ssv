@@ -22,9 +22,6 @@ func DefaultScoringConfig() *ScoringConfig {
 // TODO: finalize once validation is in place
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
-		sum := 0.0
-		positiveCount := 0
-		negativeCount := 0
 		for pid, peerScores := range scores {
 			//scores := []*peers.NodeScore{
 			//	{
@@ -41,12 +38,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			logger.Debug("peer scores", zap.String("peer", pid.String()),
 				zap.Any("peerScores", peerScores))
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
-			if peerScores.Score < float64(0) {
-				negativeCount++
-			} else if peerScores.Score > float64(0) {
-				positiveCount++
-			}
-			sum += peerScores.Score
 			//err := scoreIdx.Score(pid, scores...)
 			//if err != nil {
 			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
@@ -55,13 +46,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
-		if len(scores) > 0 {
-			metricPubsubPeerScoreAverage.Set(sum / float64(len(scores)))
-		} else {
-			metricPubsubPeerScoreAverage.Set(0.0)
-		}
-		metricPubsubPeerScorePositive.Set(float64(positiveCount))
-		metricPubsubPeerScoreNegative.Set(float64(negativeCount))
 	}
 }
 
