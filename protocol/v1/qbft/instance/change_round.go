@@ -107,11 +107,18 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 
 			highest, e := i.HighestPrepared(signedMessage.Message.Round)
 			if e != nil {
+				i.Logger.Debug("could not get highest prepared",
+					zap.Uint64("round", uint64(signedMessage.Message.Round)),
+					zap.Error(e),
+				)
 				err = e
 				return
 			}
 
 			if highest == nil {
+				i.Logger.Debug("highest prepared is nil",
+					zap.Uint64("round", uint64(signedMessage.Message.Round)),
+				)
 				return
 			}
 
@@ -236,10 +243,18 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 	for _, msg := range roundChanges {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
+			i.Logger.Debug("could not get round change data",
+				zap.Uint64("round", uint64(round)),
+				zap.Error(err),
+			)
 			return nil, err
 		}
 
 		if err := proposal.Justify(i.ValidatorShare, i.State(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
+			i.Logger.Debug("could not justify proposal",
+				zap.Uint64("round", uint64(round)),
+				zap.Error(err),
+			)
 			continue
 		}
 
@@ -247,11 +262,22 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && round > i.State().GetRound()
 
 		if !noPrevProposal && !prevProposal {
+			i.Logger.Debug("round change could not be the highest",
+				zap.Bool("noPrevProposal", noPrevProposal),
+				zap.Bool("prevProposal", prevProposal),
+			)
 			continue
 		}
 
+		i.Logger.Debug("found highest prepared",
+			zap.Uint64("round", uint64(round)),
+		)
 		return candidateChangeData, nil
 	}
+
+	i.Logger.Debug("not found highest prepared",
+		zap.Uint64("round", uint64(round)),
+	)
 	return nil, nil
 }
 
