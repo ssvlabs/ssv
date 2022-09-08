@@ -27,7 +27,6 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 			}
 			return nil
 		}),
-		signedmsg.ValidateSequenceNumber(i.State().GetHeight()),
 		pipelines.WrapFunc("add change round msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid change round message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
