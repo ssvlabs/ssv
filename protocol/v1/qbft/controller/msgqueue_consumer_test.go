@@ -45,7 +45,7 @@ func TestConsumeMessages(t *testing.T) {
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
 	}
-	ctrl.SignatureState.setHeight(0)
+	ctrl.setHeight(0)
 
 	tests := []struct {
 		name            string
@@ -329,8 +329,8 @@ func TestConsumeMessages(t *testing.T) {
 			ctrl.Ctx = ctx
 			ctrl.setCurrentInstance(test.currentInstance)
 			ctrl.SignatureState = SignatureState{}
-			ctrl.SignatureState.setHeight(test.lastHeight)
 			ctrl.SignatureState.duty = &spectypes.Duty{Slot: 1}
+			ctrl.setHeight(test.lastHeight)
 
 			// populating msg's
 			for _, msg := range test.msgs {

@@ -60,7 +60,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid next instance start",
 			instance2.ControllerStartInstanceOptions{
-				SeqNumber: 11,
+				Height: 11,
 			},
 			&beacon.Share{
 				NodeID:    1,
@@ -75,7 +75,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"valid first instance",
 			instance2.ControllerStartInstanceOptions{
-				SeqNumber: 0,
+				Height: 0,
 			},
 			&beacon.Share{
 				NodeID:    1,
@@ -116,7 +116,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"sequence skips",
 			instance2.ControllerStartInstanceOptions{
-				SeqNumber: 12,
+				Height: 12,
 			},
 			&beacon.Share{
 				NodeID:    1,
@@ -131,7 +131,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"past instance",
 			instance2.ControllerStartInstanceOptions{
-				SeqNumber: 10,
+				Height: 10,
 			},
 			&beacon.Share{
 				NodeID:    1,
@@ -146,7 +146,7 @@ func TestCanStartNewInstance(t *testing.T) {
 		{
 			"didn't finish current instance",
 			instance2.ControllerStartInstanceOptions{
-				SeqNumber: 11,
+				Height: 11,
 			},
 			&beacon.Share{
 				NodeID:    1,
@@ -198,7 +198,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			// i.instances = test.prevInstances
 			instanceOpts, err := i.instanceOptionsFromStartOptions(test.opts)
 			require.NoError(t, err)
-			// instanceOpts.SeqNumber = test.seqNumber
+			// instanceOpts.Height = test.seqNumber
 			err = i.canStartNewInstance(*instanceOpts)
 
 			if len(test.expectedError) > 0 {

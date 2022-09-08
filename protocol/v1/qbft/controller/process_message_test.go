@@ -5,7 +5,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/types"
 	"go.uber.org/atomic"
@@ -195,7 +194,7 @@ func TestProcessHigherHeightMsg(t *testing.T) {
 	height.Store(specqbft.Height(1)) // set ctrl to height 1
 	state.Height = height
 	ctrl.currentInstance = &InstanceMock{state: state}
-	ctrl.SignatureState = SignatureState{height: height}
+	ctrl.setHeight(specqbft.Height(1))
 
 	msgs := []*specqbft.SignedMessage{
 		SignMsg(t, 2, sks[2], &specqbft.Message{
@@ -323,12 +322,12 @@ func NewDecidedStrategyMock(db qbftstorage.QBFTStore, decided *specqbft.SignedMe
 	}
 }
 
-func (d DecidedStrategyMock) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+func (d DecidedStrategyMock) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
 	_, err := d.UpdateDecided(d.sincDecided) // mock sync
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return d.db.SaveDecided(d.sincDecided)
+	return nil, d.db.SaveDecided(d.sincDecided)
 }
 
 func (d DecidedStrategyMock) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

@@ -179,9 +179,9 @@ func (r *farFutureSyncScenario) startNode(val validator.IValidator, seqNumber sp
 
 	for _, ibftc := range ibftControllers {
 		res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-			Logger:    r.logger,
-			SeqNumber: seqNumber,
-			Value:     []byte("value"),
+			Logger: r.logger,
+			Height: seqNumber,
+			Value:  []byte("value"),
 		})
 
 		if err != nil {

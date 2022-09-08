@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (c *Controller) processHigherHeightMsg(msg *specqbft.SignedMessage) error {
+func (c *Controller) processHigherHeightMsg(logger *zap.Logger, msg *specqbft.SignedMessage) error {
 	if err := pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.ValidateIdentifiers(c.Identifier),
@@ -26,7 +26,7 @@ func (c *Controller) processHigherHeightMsg(msg *specqbft.SignedMessage) error {
 		// clean once f+1 achieved
 		c.HigherReceivedMessages.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{} // TODO need to add clean func to container
 
-		c.Logger.Debug("f+1 higher height, trigger decided sync", zap.Int("toHeight", lowestHeight))
+		logger.Debug("f+1 higher height, trigger decided sync", zap.Int("toHeight", lowestHeight))
 		if err := c.syncDecided(msg, nil); err != nil {
 			return errors.Wrap(err, "failed to sync decided")
 		}

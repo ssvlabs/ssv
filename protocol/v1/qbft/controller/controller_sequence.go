@@ -77,7 +77,7 @@ func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerSta
 		Network:         c.Network,
 		Config:          c.InstanceConfig,
 		Identifier:      c.Identifier,
-		Height:          opts.SeqNumber,
+		Height:          opts.Height,
 		Fork:            c.Fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
 		SSVSigner:       c.KeyManager,

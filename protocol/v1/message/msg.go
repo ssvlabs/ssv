@@ -9,7 +9,18 @@ const (
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
 func MsgTypeToString(mt spectypes.MsgType) string {
-	return ""
+	switch mt {
+	case spectypes.SSVConsensusMsgType:
+		return "consensus"
+	case spectypes.SSVDecidedMsgType:
+		return "decided"
+	case spectypes.SSVPartialSignatureMsgType:
+		return "partialSignature"
+	case spectypes.DKGMsgType:
+		return "dkg"
+	default:
+		return ""
+	}
 }
 
 // ToMessageID extension for spec msg id, returns spec messageID

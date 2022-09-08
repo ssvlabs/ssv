@@ -79,11 +79,6 @@ func (v0 *testFork) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	return v0.instance.CommitMsgPipeline()
 }
 
-// DecidedMsgPipeline is a specific full processing pipeline for a decided msg
-func (v0 *testFork) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
-	return v0.instance.DecidedMsgPipeline()
-}
-
 // changeRoundMsgValidationPipeline is a msg validation ONLY pipeline for a change round msg
 func (v0 *testFork) ChangeRoundMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(

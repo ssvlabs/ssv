@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/sync"
 )
@@ -29,7 +28,7 @@ const (
 // in light mode, the node doesn't save history, only last/highest decided messages.
 type Decided interface {
 	// Sync performs a sync with the other peers in the network
-	Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error
+	Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage) ([]*specqbft.SignedMessage, error)
 	// UpdateDecided updates the given decided message and returns the updated version (could include new signers)
 	UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error)
 	// GetDecided returns historical decided messages

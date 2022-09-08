@@ -12,9 +12,9 @@ import (
 
 // ControllerStartInstanceOptions defines type for Controller instance options
 type ControllerStartInstanceOptions struct {
-	Logger    *zap.Logger
-	SeqNumber specqbft.Height
-	Value     []byte
+	Logger *zap.Logger
+	Height specqbft.Height
+	Value  []byte
 	// RequireMinPeers flag to require minimum peers before starting an instance
 	// useful for tests where we want (sometimes) to avoid networking
 	RequireMinPeers bool
@@ -34,7 +34,6 @@ type Instancer interface {
 	Stop()
 	State() *qbft.State
 	Containers() map[specqbft.MessageType]msgcont.MessageContainer
-	ForceDecide(msg *specqbft.SignedMessage)
 	GetStageChan() chan qbft.RoundState
 	CommittedAggregatedMsg() (*specqbft.SignedMessage, error)
 	GetCommittedAggSSVMessage() (spectypes.SSVMessage, error)

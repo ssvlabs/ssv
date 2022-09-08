@@ -11,7 +11,6 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/commit"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +23,8 @@ func TestQBFTMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
+		//resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/qbft_sync_v0.2.1/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
@@ -90,7 +90,7 @@ func testsToRun() map[string]struct{} {
 	tests := make(map[string]struct{})
 
 	testsBrokenInSpec := map[string]struct{}{
-		commit.FutureDecided().TestName(): {},
+		//commit.FutureDecided().TestName(): {},
 	}
 
 	for _, testItem := range spectest.AllTests {

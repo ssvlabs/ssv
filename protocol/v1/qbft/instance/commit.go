@@ -49,26 +49,6 @@ func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 	)
 }
 
-// DecidedMsgPipeline is the main pipeline for decided msgs
-func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
-	return pipelines.Combine(
-		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
-			i.Logger.Info("received valid decided message for round",
-				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
-				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-
-			commitData, err := signedMessage.Message.GetCommitData()
-			if err != nil {
-				return err
-			}
-			i.containersMap[specqbft.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
-			return nil
-		}),
-		i.uponCommitMsg(),
-	)
-}
-
 /**
 upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ messages do:
 	set timer i to stopped

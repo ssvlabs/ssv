@@ -144,9 +144,9 @@ func (r *f1MultiRoundScenario) startNode(val validator.IValidator, net network.P
 		}
 
 		res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-			Logger:    r.logger,
-			SeqNumber: 1,
-			Value:     []byte("value"),
+			Logger: r.logger,
+			Height: 1,
+			Value:  []byte("value"),
 		})
 
 		if err != nil {

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -44,7 +43,6 @@ type SignatureState struct {
 	state      atomic.Int32
 	signatures map[spectypes.OperatorID][]byte
 
-	height                     atomic.Value // specqbft.Height
 	SignatureCollectionTimeout time.Duration
 	sigCount                   int
 	root                       []byte
@@ -52,21 +50,8 @@ type SignatureState struct {
 	duty                       *spectypes.Duty
 }
 
-func (s *SignatureState) getHeight() specqbft.Height {
-	if height, ok := s.height.Load().(specqbft.Height); ok {
-		return height
-	}
-
-	return specqbft.Height(0)
-}
-
-func (s *SignatureState) setHeight(height specqbft.Height) {
-	s.height.Store(height)
-}
-
-func (s *SignatureState) start(logger *zap.Logger, height specqbft.Height, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *spectypes.Duty) {
+func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *spectypes.Duty) {
 	// set var's
-	s.setHeight(height)
 	s.sigCount = signaturesCount
 	s.root = root
 	s.valueStruct = valueStruct

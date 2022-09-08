@@ -14,9 +14,9 @@ func startNode(val validator.IValidator, h specqbft.Height, value []byte, logger
 
 	for _, ibftc := range ibftControllers {
 		res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-			Logger:    logger,
-			SeqNumber: h,
-			Value:     value,
+			Logger: logger,
+			Height: h,
+			Value:  value,
 		})
 
 		if err != nil {

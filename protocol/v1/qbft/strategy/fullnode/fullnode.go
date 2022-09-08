@@ -12,7 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/sync/history"
@@ -36,34 +35,34 @@ func NewFullNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 	}
 }
 
-func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
 	logger := f.logger.With(zap.String("identifier", hex.EncodeToString(identifier)))
 	logger.Debug("syncing decided")
 	highest, sender, localHeight, err := f.decidedFetcher.GetLastDecided(ctx, message.ToMessageID(identifier), func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
 		return from, nil
 	})
 	if err != nil {
-		return errors.Wrap(err, "could not get last decided from peers")
+		return nil, errors.Wrap(err, "could not get last decided from peers")
 	}
 	//logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
 	//	zap.Any("highest", highest), zap.Any("to", to))
 	if highest == nil {
 		//logger.Debug("could not find highest decided from peers")
 		if to == nil {
-			return nil
+			return nil, nil
 		}
 		highest = to
 	}
 	if localHeight >= highest.Message.Height {
 		logger.Debug("local height is equal or higher than remote")
-		return nil
+		return nil, nil
 	}
 
 	counterProcessed := int64(0)
 	handleDecided := func(msg *specqbft.SignedMessage) error {
-		if err := pip.Run(msg); err != nil {
-			return errors.Wrap(err, "invalid msg")
-		}
+		//if err := pip.Run(msg); err != nil { TODO need to fix!!!
+		//	return errors.Wrap(err, "invalid msg")
+		//}
 		_, err := f.updateDecidedHistory(msg)
 		if err != nil {
 			return errors.Wrap(err, "could not save decided history")
@@ -75,16 +74,16 @@ func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqb
 	// a special case where no need to sync
 	if localHeight+1 == highest.Message.Height {
 		if err := handleDecided(highest); err != nil {
-			return err
+			return nil, err
 		}
 		_, err = f.UpdateDecided(highest)
-		return err
+		return nil, err
 	}
 
 	if len(sender) > 0 {
 		err = f.historySyncer.SyncRange(ctx, message.ToMessageID(identifier), handleDecided, localHeight, highest.Message.Height, sender)
 		if err != nil {
-			return errors.Wrap(err, "could not complete sync")
+			return nil, errors.Wrap(err, "could not complete sync")
 		}
 	}
 	if specqbft.Height(counterProcessed) < highest.Message.Height-localHeight {
@@ -96,7 +95,7 @@ func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqb
 
 	_, err = f.UpdateDecided(highest)
 
-	return err
+	return nil, err
 }
 
 func (f *fullNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

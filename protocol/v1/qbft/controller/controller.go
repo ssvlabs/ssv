@@ -2,6 +2,9 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -89,11 +92,13 @@ type Controller struct {
 	// signature
 	SignatureState SignatureState
 
-	// flags
-	State uint32
-
+	// config
 	SyncRateLimit time.Duration
 	MinPeers      int
+
+	// state
+	State  uint32
+	height atomic.Value // specqbft.Height
 
 	// flags
 	ReadMode bool
@@ -155,7 +160,6 @@ func New(opts Options) IController {
 
 	// set flags
 	ctrl.State = NotStarted
-
 	return ctrl
 }
 
@@ -199,9 +203,38 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 func (c *Controller) syncDecided(from, to *specqbft.SignedMessage) error {
 	c.ForkLock.Lock()
-	fork, decidedStrategy := c.Fork, c.DecidedStrategy
+	decidedStrategy := c.DecidedStrategy
 	c.ForkLock.Unlock()
-	return decidedStrategy.Sync(c.Ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
+	msgs, err := decidedStrategy.Sync(c.Ctx, c.Identifier, from, to)
+	if err != nil {
+		return err
+	}
+	return c.handleSyncMessages(msgs)
+}
+
+func (c *Controller) handleSyncMessages(msgs []*specqbft.SignedMessage) error {
+	c.Logger.Debug(fmt.Sprintf("recivied %d msgs from sync", len(msgs)))
+	for _, syncMsg := range msgs {
+		if err := pipelines.Combine( // TODO need to move it into sync?
+			signedmsg.BasicMsgValidation(),
+			signedmsg.ValidateIdentifiers(c.Identifier)).Run(syncMsg); err != nil {
+			c.Logger.Warn("invalid sync msg", zap.Error(err))
+			continue
+		}
+		encoded, err := syncMsg.Encode() // TODo move to better place
+		if err != nil {
+			c.Logger.Warn("failed to encode sync msg", zap.Error(err))
+			continue
+		}
+		if err := c.ProcessMsg(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVDecidedMsgType, // sync only for decided msg type
+			MsgID:   message.ToMessageID(syncMsg.Message.Identifier),
+			Data:    encoded,
+		}); err != nil {
+			c.Logger.Warn("failed to process sync msg", zap.Error(err))
+		}
+	}
+	return nil
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -210,13 +243,14 @@ func (c *Controller) Init() error {
 	// checks if notStarted. if so, preform init handlers and set state to new state
 	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
 		c.Logger.Info("start qbft ctrl handler init")
+
 		go c.StartQueueConsumer(c.MessageHandler)
 
-		height, err := c.NextHeightNumber()
+		height, err := c.highestKnownDecided()
 		if err != nil {
 			c.Logger.Error("failed to get next height number", zap.Error(err))
 		}
-		c.SignatureState.setHeight(height) // make sure ctrl is set with the right height
+		c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
@@ -296,7 +330,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
+	c.setHeight(opts.Height)                                                                 // update once height determent
 	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
 	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
 		c.Logger.Warn("could not clean change round", zap.Error(err))
@@ -350,7 +384,7 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 // MessageHandler process message from queue,
 func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType, spectypes.SSVDecidedMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
@@ -363,12 +397,12 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
-	case spectypes.SSVDecidedMsgType:
-		signedMsg := &specqbft.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
-		}
-		return c.processDecidedMessage(signedMsg)
+	/*case spectypes.SSVDecidedMsgType:
+	signedMsg := &specqbft.SignedMessage{}
+	if err := signedMsg.Decode(msg.GetData()); err != nil {
+		return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
+	}
+	return c.processDecidedMessage(signedMsg)*/
 	case message.SSVSyncMsgType:
 		panic("need to implement!")
 	}
@@ -386,4 +420,23 @@ func (c *Controller) GetNodeMode() strategy.Mode {
 		return strategy.ModeFullNode
 	}
 	return strategy.ModeLightNode
+}
+
+// getHeight return current ctrl height
+func (c *Controller) getHeight() specqbft.Height {
+	if height, ok := c.height.Load().(specqbft.Height); ok {
+		return height
+	}
+
+	return specqbft.Height(0)
+}
+
+// setHeight set ctrl current height
+func (c *Controller) setHeight(height specqbft.Height) {
+	c.height.Store(height)
+}
+
+// setHeight set ctrl current height
+func (c *Controller) bumpHeight() {
+	c.height.Store(c.getHeight() + 1)
 }

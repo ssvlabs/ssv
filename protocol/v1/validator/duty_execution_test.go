@@ -90,7 +90,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				ValidatorCommitteeIndex: 0,
 			}
 
-			_, signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(node.logger, duty)
+			_, signaturesCount, decidedByts, err := node.comeToConsensusOnInputValue(node.logger, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
@@ -188,7 +188,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 			// TODO: do for all ibfts
 			for role, ibft := range validator.Ibfts() {
-				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, role)
+				err := ibft.PostConsensusDutyExecution(validator.logger, test.expectedAttestationDataByts, test.expectedSignaturesCount, role)
 				if len(test.expectedError) > 0 {
 					require.EqualError(t, err, test.expectedError)
 				} else {

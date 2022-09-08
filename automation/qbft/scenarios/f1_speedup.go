@@ -183,9 +183,9 @@ func (r *f1SpeedupScenario) startNode(val validator.IValidator) error {
 	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    r.logger,
-		SeqNumber: 1,
-		Value:     []byte("value"),
+		Logger: r.logger,
+		Height: 1,
+		Value:  []byte("value"),
 	})
 
 	if err != nil {

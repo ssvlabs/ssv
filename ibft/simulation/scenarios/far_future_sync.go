@@ -83,9 +83,9 @@ loop:
 
 func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber specqbft.Height) {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    r.logger,
-		SeqNumber: seqNumber,
-		Value:     []byte("value"),
+		Logger: r.logger,
+		Height: seqNumber,
+		Value:  []byte("value"),
 	})
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))

@@ -425,9 +425,9 @@ func TestForceDecided(t *testing.T) {
 	}()
 
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
-		Logger:    zap.L(),
-		SeqNumber: 4,
-		Value:     commitDataToBytes(t, &specqbft.CommitData{Data: messageData}),
+		Logger: zap.L(),
+		Height: 4,
+		Value:  commitDataToBytes(t, &specqbft.CommitData{Data: messageData}),
 	})
 	require.NoError(t, err)
 	require.True(t, res.Decided)

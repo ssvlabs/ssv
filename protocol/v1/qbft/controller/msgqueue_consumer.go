@@ -58,7 +58,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 		if c.SignatureState.duty != nil {
 			lastSlot = c.SignatureState.duty.Slot
 		}
-		lastHeight := c.SignatureState.getHeight()
+		lastHeight := c.getHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
 			c.Logger.Debug("process none running instance is done")
