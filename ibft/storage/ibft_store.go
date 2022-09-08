@@ -158,7 +158,7 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(decidedKey)...)
-	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+	if err := i.db.DeleteByPrefix(prefix); err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
 	if err := i.delete(highestKey, msgID[:]); err != nil {
@@ -246,7 +246,7 @@ func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	prefix := i.prefix
 	prefix = append(prefix, identifier[:]...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
-	if err := i.db.RemoveAllByCollection(prefix); err != nil {
+	if err := i.db.DeleteByPrefix(prefix); err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
 	return nil
