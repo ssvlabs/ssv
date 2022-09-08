@@ -540,3 +540,6 @@ func (i *InstanceMock) ResetRoundTimer() {}
 func (i *InstanceMock) BroadcastChangeRound() error {
 	panic("not implemented")
 }
+func (i *InstanceMock) HighestRoundTimeoutSeconds() time.Duration {
+	return 0
+}
