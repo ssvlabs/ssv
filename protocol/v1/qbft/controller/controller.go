@@ -104,6 +104,8 @@ type Controller struct {
 	DecidedFactory    *factory.Factory
 	DecidedStrategy   strategy.Decided
 	newDecidedHandler NewDecidedHandler
+
+	highestRoundCtxCancel context.CancelFunc
 }
 
 // New is the constructor of Controller
