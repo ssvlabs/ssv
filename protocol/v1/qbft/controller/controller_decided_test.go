@@ -421,7 +421,14 @@ func TestForceDecided(t *testing.T) {
 		}
 		decidedMsg := testingprotocol.AggregateSign(t, sks, signers, commitMessage)
 
-		require.NoError(t, i1.(*Controller).processDecidedMessage(decidedMsg))
+		encoded, err := decidedMsg.Encode()
+		require.NoError(t, err)
+		ssvMsg := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVDecidedMsgType,
+			MsgID:   identifier,
+			Data:    encoded,
+		}
+		require.NoError(t, i1.(*Controller).MessageHandler(ssvMsg))
 	}()
 
 	res, err := i1.StartInstance(instance.ControllerStartInstanceOptions{
