@@ -44,10 +44,10 @@ func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqb
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get last decided from peers")
 	}
-	//logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
-	//	zap.Any("highest", highest), zap.Any("to", to))
+	logger.Debug("highest decided", zap.Int64("local", int64(localHeight)),
+		zap.Any("highest", highest), zap.Any("to", to))
 	if highest == nil {
-		//logger.Debug("could not find highest decided from peers")
+		logger.Debug("could not find highest decided from peers")
 		if to == nil {
 			return nil, nil
 		}
@@ -58,26 +58,15 @@ func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqb
 		return nil, nil
 	}
 
-	counterProcessed := int64(0)
+	res := make([]*specqbft.SignedMessage, 0)
 	handleDecided := func(msg *specqbft.SignedMessage) error {
-		//if err := pip.Run(msg); err != nil { TODO need to fix!!!
-		//	return errors.Wrap(err, "invalid msg")
-		//}
-		_, err := f.updateDecidedHistory(msg)
-		if err != nil {
-			return errors.Wrap(err, "could not save decided history")
-		}
-		counterProcessed++
+		res = append(res, msg)
 		return nil
 	}
 
 	// a special case where no need to sync
 	if localHeight+1 == highest.Message.Height {
-		if err := handleDecided(highest); err != nil {
-			return nil, err
-		}
-		_, err = f.UpdateDecided(highest)
-		return nil, err
+		return []*specqbft.SignedMessage{highest}, err
 	}
 
 	if len(sender) > 0 {
@@ -86,16 +75,15 @@ func (f *fullNode) Sync(ctx context.Context, identifier []byte, from, to *specqb
 			return nil, errors.Wrap(err, "could not complete sync")
 		}
 	}
-	if specqbft.Height(counterProcessed) < highest.Message.Height-localHeight {
+	if specqbft.Height(len(res)) < highest.Message.Height-localHeight {
 		logger.Warn("not all messages were saved in range",
-			zap.Int64("processed", counterProcessed),
+			zap.Int("processed", len(res)),
 			zap.Int64("from", int64(localHeight)),
 			zap.Int64("to", int64(highest.Message.Height)))
 	}
 
-	_, err = f.UpdateDecided(highest)
-
-	return nil, err
+	res = append(res, highest)
+	return res, err
 }
 
 func (f *fullNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

@@ -267,7 +267,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 
 	if err := p.Run(msg); err != nil {
 		if errors.Is(err, signedmsg.ErrWrongRound) {
-			i.Logger.Debug(fmt.Sprintf("message %d round (%d) does not equal state round (%d)", msg.Message.MsgType, msg.Message.Round, i.State().GetRound()))
+			i.Logger.Debug(fmt.Sprintf("message type %d,  round (%d) does not equal state round (%d)", msg.Message.MsgType, msg.Message.Round, i.State().GetRound()))
 		}
 		return false, err
 	}

@@ -245,13 +245,7 @@ func (c *Controller) Init() error {
 		c.Logger.Info("start qbft ctrl handler init")
 
 		go c.StartQueueConsumer(c.MessageHandler)
-
-		height, err := c.highestKnownDecided()
-		if err != nil {
-			c.Logger.Error("failed to get next height number", zap.Error(err))
-		}
-		c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
-
+		c.setInitialHeight()
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
@@ -298,7 +292,7 @@ func (c *Controller) Init() error {
 		atomic.StoreUint32(&c.State, Ready)
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		c.Logger.Info("iBFT implementation init finished")
+		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.getHeight())))
 	}
 
 	return nil
@@ -420,6 +414,19 @@ func (c *Controller) GetNodeMode() strategy.Mode {
 		return strategy.ModeFullNode
 	}
 	return strategy.ModeLightNode
+}
+
+// setInitialHeight fetch height decided and set height. if not found set first height
+func (c *Controller) setInitialHeight() {
+	height, err := c.highestKnownDecided()
+	if err != nil {
+		c.Logger.Error("failed to get next height number", zap.Error(err))
+	}
+	if height == nil {
+		c.setHeight(specqbft.FirstHeight)
+		return
+	}
+	c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
 }
 
 // getHeight return current ctrl height

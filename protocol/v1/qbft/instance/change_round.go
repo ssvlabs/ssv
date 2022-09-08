@@ -112,6 +112,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			}
 
 			if highest == nil {
+				i.Logger.Warn("no height for leader")
 				return
 			}
 
@@ -240,6 +241,7 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 		}
 
 		if err := proposal.Justify(i.ValidatorShare, i.State(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
+			i.Logger.Warn("round change not justified", zap.Error(err))
 			continue
 		}
 
@@ -247,6 +249,7 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && round > i.State().GetRound()
 
 		if !noPrevProposal && !prevProposal {
+			i.Logger.Warn("round change noPrev or prev", zap.Bool("noPrevProposal", noPrevProposal), zap.Bool("prevProposal", prevProposal))
 			continue
 		}
 
