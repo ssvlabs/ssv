@@ -277,6 +277,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 
 	if !n.cfg.PubSubScoring {

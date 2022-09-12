@@ -2,8 +2,11 @@ package topics
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/topics/params"
+	"github.com/bloxapp/ssv/utils/async"
 	"github.com/libp2p/go-libp2p-core/discovery"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -31,7 +34,7 @@ var (
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
 	scoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
-	msgIDCacheTTL = gsHeartbeatInterval * 550
+	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
 
 // PububConfig is the needed config to instantiate pubsub
@@ -54,23 +57,15 @@ type PububConfig struct {
 	ValidationQueueSize int
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
+
+	GetValidatorStats network.GetValidatorStats
 }
 
 // ScoringConfig is the configuration for peer scoring
 type ScoringConfig struct {
 	IPWhilelist        []*net.IPNet
 	IPColocationWeight float64
-	AppSpecificWeight  float64
 	OneEpochDuration   time.Duration
-}
-
-// DefaultScoringConfig returns the default scoring config
-func DefaultScoringConfig() *ScoringConfig {
-	return &ScoringConfig{
-		IPColocationWeight: defaultIPColocationWeight,
-		AppSpecificWeight:  defaultAppSpecificWeight,
-		OneEpochDuration:   defaultOneEpochDuration,
-	}
 }
 
 // PubsubBundle includes the pubsub router, plus involved components
@@ -122,7 +117,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithValidateQueueSize(cfg.ValidationQueueSize),
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
-		pubsub.WithGossipSubParams(gossipSubParam()),
+		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
@@ -133,11 +128,24 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		psOpts = append(psOpts, pubsub.WithDiscovery(cfg.Discovery))
 	}
 
+	var topicScoreFactory func(string) *pubsub.TopicScoreParams
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
 		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
-		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams(cfg), peerScoreThresholds()),
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
+		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
+		async.Interval(ctx, time.Hour, func() {
+			// reset peer scores metric every hour because it has a label for peer ID which can grow infinitely
+			metricPubsubPeerScoreInspect.Reset()
+		})
+		if cfg.GetValidatorStats == nil {
+			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+				// default in case it was not injected
+				return 100, 100, 10, nil
+			}
+		}
+		topicScoreFactory = topicScoreParams(cfg, fork)
 	}
 
 	if cfg.MsgIDHandler != nil {
@@ -155,7 +163,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, nil)
+	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

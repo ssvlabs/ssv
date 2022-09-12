@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,6 +24,25 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
+
+func TestHighestRoundTimeoutSeconds(t *testing.T) {
+	round := atomic.Value{}
+	round.Store(specqbft.Round(6))
+	instance := &Instance{
+		Logger: zap.L(),
+		Config: qbft.DefaultConsensusParams(),
+		State: &qbft.State{
+			Round: round,
+		},
+	}
+
+	require.Equal(t, time.Duration(0), instance.HighestRoundTimeoutSeconds())
+	instance.GetState().Round.Store(specqbft.Round(7))
+	require.Equal(t, time.Second*81, instance.HighestRoundTimeoutSeconds())
+	round.Store(specqbft.Round(10))
+	instance.GetState().Round.Store(specqbft.Round(10))
+	require.Equal(t, time.Second*(27+(60*36)), instance.HighestRoundTimeoutSeconds())
+}
 
 type testFork struct {
 	instance *Instance

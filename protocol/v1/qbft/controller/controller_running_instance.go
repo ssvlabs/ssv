@@ -1,7 +1,10 @@
 package controller
 
 import (
+	"context"
 	"encoding/hex"
+	"time"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
@@ -127,6 +130,10 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 			logger = logger.With(zap.Uint64("instanceHeight", uint64(s.GetHeight())))
 		}
 	}
+	if c.highestRoundCtxCancel != nil {
+		c.highestRoundCtxCancel()
+		c.highestRoundCtxCancel = nil
+	}
 	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
@@ -165,16 +172,39 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 		return false, nil
 	case qbft.RoundStateChangeRound:
 		// set time for next round change
-		c.GetCurrentInstance().ResetRoundTimer()
+		currentInstance := c.GetCurrentInstance()
+		currentInstance.ResetRoundTimer()
 		// broadcast round change
-		if err := c.GetCurrentInstance().BroadcastChangeRound(); err != nil {
-			c.Logger.Error("could not broadcast round change message", zap.Error(err))
+		if err := currentInstance.BroadcastChangeRound(); err != nil {
+			c.Logger.Warn("could not broadcast round change message", zap.Error(err))
+		}
+		highestRoundTimeout := currentInstance.HighestRoundTimeoutSeconds()
+		if highestRoundTimeout > 0 {
+			ctx, cancel := context.WithCancel(c.Ctx)
+			c.highestRoundCtxCancel = cancel
+			go c.highestRound(ctx, highestRoundTimeout)
 		}
 	case qbft.RoundStateStopped:
 		c.Logger.Info("current iBFT instance stopped, nilling currentInstance")
 		return true, nil
 	}
 	return false, nil
+}
+
+func (c *Controller) highestRound(ctx context.Context, highestRoundTimeout time.Duration) {
+	ticker := time.NewTicker(highestRoundTimeout)
+	for {
+		select {
+		case <-ticker.C:
+			currentInstance := c.GetCurrentInstance()
+			if currentInstance == nil {
+				return
+			}
+			go c.fastChangeRoundCatchup(currentInstance)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
