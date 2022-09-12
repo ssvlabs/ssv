@@ -60,7 +60,7 @@ func UpdateLastDecided(logger *zap.Logger, store qbftstorage.DecidedMsgStore, si
 		}
 		highest = msg
 	}
-	logger = logger.With(zap.Int64("height", int64(highest.Message.Height)),
+	logger = logger.With(zap.Int64("update decided height", int64(highest.Message.Height)),
 		zap.String("identifier", message.ToMessageID(highest.Message.Identifier).String()), zap.Any("signers", highest.Signers))
 	if err := store.SaveLastDecided(highest); err != nil {
 		return highest, errors.Wrap(err, "could not save last decided")

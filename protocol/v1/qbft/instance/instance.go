@@ -93,7 +93,7 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 func NewInstance(opts *Options) Instancer {
 	messageID := message.ToMessageID(opts.Identifier)
 	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateNotStarted))
-	logger := opts.Logger.With(zap.Uint64("height", uint64(opts.Height)))
+	logger := opts.Logger.With(zap.Uint64("instance height", uint64(opts.Height)))
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	ret := &Instance{

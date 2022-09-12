@@ -14,7 +14,7 @@ import (
 
 func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) (bool, error) {
 	logger := c.Logger.With(zap.Int("type", int(signedMessage.Message.MsgType)),
-		zap.Int64("height", int64(signedMessage.Message.Height)),
+		zap.Int64("new msg height", int64(signedMessage.Message.Height)),
 		zap.Int64("round", int64(signedMessage.Message.Round)),
 		zap.Any("sender", signedMessage.GetSigners()))
 
@@ -36,7 +36,7 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 
 	logger.Debug("process consensus message")
 	if signedMessage.Message.Height == c.GetHeight() {
-		return c.processMsgCurrentInstance(signedMessage)
+		return c.processMsgCurrentInstance(logger, signedMessage)
 	} else if signedMessage.Message.Height > c.GetHeight() {
 		return c.processFutureMsg(logger, signedMessage)
 	} else {
@@ -44,7 +44,7 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 	}
 }
 
-func (c *Controller) processMsgCurrentInstance(msg *specqbft.SignedMessage) (bool, error) {
+func (c *Controller) processMsgCurrentInstance(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
 	if c.GetCurrentInstance() != nil {
 		decided, err := c.GetCurrentInstance().ProcessMsg(msg)
 		if err != nil {
@@ -54,7 +54,7 @@ func (c *Controller) processMsgCurrentInstance(msg *specqbft.SignedMessage) (boo
 	}
 
 	if c.isDecidedMsg(msg) { // in case instance already got consensus and closed and no new instance began, need to try update late decided&commit
-		return c.uponFutureDecided(c.Logger, msg)
+		return c.uponFutureDecided(logger, msg)
 	} else if msg.Message.MsgType == specqbft.CommitMsgType {
 		return c.processCommitMsg(c.Logger, msg)
 	}

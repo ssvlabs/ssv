@@ -45,7 +45,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 		return nil, 0, nil, errors.Wrap(err, "failed to calculate next sequence number")
 	}
 
-	logger.Debug("start instance", zap.Int64("height", int64(height)))
+	logger.Debug("start instance", zap.Int64("with height", int64(height)))
 	result, err := qbftCtrl.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:          logger,
 		Height:          height,
