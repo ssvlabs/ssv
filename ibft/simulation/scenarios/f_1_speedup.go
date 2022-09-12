@@ -77,7 +77,7 @@ func (r *f1Speedup) startNode(node ibft.IController, index uint64) {
 		Logger: r.logger,
 		Height: 1,
 		Value:  []byte("value"),
-	})
+	}, nil)
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {

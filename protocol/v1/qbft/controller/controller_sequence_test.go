@@ -170,7 +170,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			i.CurrentInstanceLock = currentInstanceLock
 			i.ForkLock = &sync.Mutex{}
 			if test.currentInstance != nil {
-				i.setCurrentInstance(test.currentInstance)
+				i.SetCurrentInstance(test.currentInstance)
 			}
 			if test.storage != nil {
 				i.InstanceStorage = test.storage

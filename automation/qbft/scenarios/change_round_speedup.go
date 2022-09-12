@@ -151,7 +151,7 @@ func (r *changeRoundSpeedupScenario) startNode(val validator.IValidator, net net
 			Logger: r.logger,
 			Height: 1,
 			Value:  []byte("value"),
-		})
+		}, nil)
 
 		if err != nil {
 			r.logger.Error("instance returned error", zap.Error(err))

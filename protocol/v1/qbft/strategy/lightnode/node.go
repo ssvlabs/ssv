@@ -44,7 +44,10 @@ func (ln *lightNode) Sync(ctx context.Context, identifier []byte, from, to *spec
 		}
 		to = highest
 	}
-	return []*specqbft.SignedMessage{to}, nil
+	if to != nil {
+		return []*specqbft.SignedMessage{to}, nil
+	}
+	return []*specqbft.SignedMessage{}, nil
 }
 
 func (ln *lightNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

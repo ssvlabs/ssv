@@ -32,7 +32,7 @@ type Instancer interface {
 	Init()
 	Start(inputValue []byte) error
 	Stop()
-	State() *qbft.State
+	GetState() *qbft.State
 	Containers() map[specqbft.MessageType]msgcont.MessageContainer
 	GetStageChan() chan qbft.RoundState
 	CommittedAggregatedMsg() (*specqbft.SignedMessage, error)

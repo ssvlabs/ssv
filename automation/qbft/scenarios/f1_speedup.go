@@ -186,7 +186,7 @@ func (r *f1SpeedupScenario) startNode(val validator.IValidator) error {
 		Logger: r.logger,
 		Height: 1,
 		Value:  []byte("value"),
-	})
+	}, nil)
 
 	if err != nil {
 		return err

@@ -37,7 +37,7 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return err
 			}
-			i.containersMap[specqbft.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.PreparedValue)
+			i.ContainersMap[specqbft.RoundChangeMsgType].AddMessage(signedMessage, changeRoundData.PreparedValue)
 
 			if err := UpdateChangeRoundMessage(i.Logger, i.changeRoundStore, signedMessage); err != nil {
 				i.Logger.Warn("failed to update change round msg in storage", zap.Error(err))
@@ -51,12 +51,12 @@ func (i *Instance) ChangeRoundMsgPipeline() pipelines.SignedMessagePipeline {
 
 // ChangeRoundMsgValidationPipeline - the main change round msg validation pipeline
 func (i *Instance) ChangeRoundMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.ChangeRoundMsgValidationPipeline(i.ValidatorShare, i.State())
+	return i.fork.ChangeRoundMsgValidationPipeline(i.ValidatorShare, i.GetState())
 }
 
 func (i *Instance) changeRoundFullQuorumMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.CombineQuiet(
-		signedmsg.ValidateRound(i.State().GetRound()),
+		signedmsg.ValidateRound(i.GetState().GetRound()),
 		i.uponChangeRoundFullQuorum(),
 	)
 }
@@ -73,7 +73,7 @@ upon receiving a quorum Qrc of valid ⟨ROUND-CHANGE, λi, ri, −, −⟩ messa
 func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round full quorum", func(signedMessage *specqbft.SignedMessage) error {
 		var err error
-		roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound())
+		roundChanges := i.ContainersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.GetState().GetRound())
 		quorum, msgsCount, committeeSize := signedmsg.HasQuorum(i.ValidatorShare, roundChanges)
 
 		// change round if quorum reached
@@ -122,7 +122,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 			}
 
 			if !highest.Prepared() {
-				proposalData.Data = i.State().GetInputValue()
+				proposalData.Data = i.GetState().GetInputValue()
 				logger.Info("broadcasting proposal as leader after round change with input value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			} else {
 				proposalData.Data = highest.PreparedValue
@@ -131,7 +131,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 
 			// send proposal msg
 			var broadcastMsg specqbft.Message
-			broadcastMsg, err = i.generateProposalMessage(proposalData)
+			broadcastMsg, err = i.GenerateProposalMessage(proposalData)
 			if err != nil {
 				return
 			}
@@ -161,12 +161,12 @@ func (i *Instance) actOnExistingProposal(signedMessage *specqbft.SignedMessage) 
 func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	// prepare justificationMsg and sig
 	data := &specqbft.RoundChangeData{
-		PreparedValue: i.State().GetPreparedValue(),
-		PreparedRound: i.State().GetPreparedRound(),
+		PreparedValue: i.GetState().GetPreparedValue(),
+		PreparedRound: i.GetState().GetPreparedRound(),
 	}
 	if i.isPrepared() {
-		quorum, msgs := i.containersMap[specqbft.PrepareMsgType].QuorumAchieved(i.State().GetPreparedRound(), i.State().GetPreparedValue())
-		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.State()))
+		quorum, msgs := i.ContainersMap[specqbft.PrepareMsgType].QuorumAchieved(i.GetState().GetPreparedRound(), i.GetState().GetPreparedValue())
+		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.GetState()))
 
 		data.RoundChangeJustification = msgs
 	}
@@ -175,7 +175,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 func (i *Instance) uponChangeRoundTrigger() {
-	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.State().GetRound())))
+	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.GetState().GetRound())))
 	// bump round
 	i.BumpRound()
 	// mark stage
@@ -184,7 +184,7 @@ func (i *Instance) uponChangeRoundTrigger() {
 
 // BroadcastChangeRound will broadcast a change round message.
 func (i *Instance) BroadcastChangeRound() error {
-	broadcastMsg, err := i.generateChangeRoundMessage()
+	broadcastMsg, err := i.GenerateChangeRoundMessage()
 	if err != nil {
 		return err
 	}
@@ -233,20 +233,20 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 					∀⟨ROUND-CHANGE, λi, round, prj, pvj⟩ ∈ Qrc : prj = ⊥ ∨ pr ≥ prj
 	*/
 
-	roundChanges := i.containersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.State().GetRound())
+	roundChanges := i.ContainersMap[specqbft.RoundChangeMsgType].ReadOnlyMessagesByRound(i.GetState().GetRound())
 	for _, msg := range roundChanges {
 		candidateChangeData, err := msg.Message.GetRoundChangeData()
 		if err != nil {
 			return nil, err
 		}
 
-		if err := proposal.Justify(i.ValidatorShare, i.State(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
+		if err := proposal.Justify(i.ValidatorShare, i.GetState(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
 			i.Logger.Warn("round change not justified", zap.Error(err))
 			continue
 		}
 
-		noPrevProposal := i.State().GetProposalAcceptedForCurrentRound() == nil && i.State().GetRound() == round
-		prevProposal := i.State().GetProposalAcceptedForCurrentRound() != nil && round > i.State().GetRound()
+		noPrevProposal := i.GetState().GetProposalAcceptedForCurrentRound() == nil && i.GetState().GetRound() == round
+		prevProposal := i.GetState().GetProposalAcceptedForCurrentRound() != nil && round > i.GetState().GetRound()
 
 		if !noPrevProposal && !prevProposal {
 			i.Logger.Warn("round change noPrev or prev", zap.Bool("noPrevProposal", noPrevProposal), zap.Bool("prevProposal", prevProposal))
@@ -258,23 +258,24 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 	return nil, nil
 }
 
-func (i *Instance) generateChangeRoundMessage() (*specqbft.Message, error) {
+// GenerateChangeRoundMessage return change round msg
+func (i *Instance) GenerateChangeRoundMessage() (*specqbft.Message, error) {
 	roundChange, err := i.roundChangeInputValue()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create round change data for round")
 	}
-	identifier := i.State().GetIdentifier()
+	identifier := i.GetState().GetIdentifier()
 	return &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
-		Height:     i.State().GetHeight(),
-		Round:      i.State().GetRound(),
+		Height:     i.GetState().GetHeight(),
+		Round:      i.GetState().GetRound(),
 		Identifier: identifier[:],
 		Data:       roundChange,
 	}, nil
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.State().GetRound()))
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.GetState().GetRound()))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }
 

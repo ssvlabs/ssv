@@ -17,7 +17,7 @@ func startNode(val validator.IValidator, h specqbft.Height, value []byte, logger
 			Logger: logger,
 			Height: h,
 			Value:  value,
-		})
+		}, nil)
 
 		if err != nil {
 			return err

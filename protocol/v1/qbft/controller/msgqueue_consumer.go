@@ -58,7 +58,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 		if c.SignatureState.duty != nil {
 			lastSlot = c.SignatureState.duty.Slot
 		}
-		lastHeight := c.getHeight()
+		lastHeight := c.GetHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
 			c.Logger.Debug("process none running instance is done")
@@ -138,7 +138,7 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 
 	var msg *spectypes.SSVMessage
 
-	currentState := currentInstance.State()
+	currentState := currentInstance.GetState()
 	msg = c.getNextMsgForState(currentState, identifier)
 	if msg == nil {
 		return false // no msg found

@@ -109,7 +109,7 @@ func (sf *syncFailover) startNode(node ibft.IController, index uint64, seqNumber
 		Logger: sf.logger,
 		Height: seqNumber,
 		Value:  []byte("value"),
-	})
+	}, nil)
 	if err != nil {
 		sf.logger.Error("instance returned error", zap.Error(err))
 		return nil

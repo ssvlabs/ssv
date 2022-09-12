@@ -327,7 +327,7 @@ func TestConsumeMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ctrl.Ctx = ctx
-			ctrl.setCurrentInstance(test.currentInstance)
+			ctrl.SetCurrentInstance(test.currentInstance)
 			ctrl.SignatureState = SignatureState{}
 			ctrl.SignatureState.duty = &spectypes.Duty{Slot: 1}
 			ctrl.setHeight(test.lastHeight)
@@ -517,7 +517,7 @@ func (i *InstanceMock) Start(inputValue []byte) error {
 	panic("not implemented")
 }
 func (i *InstanceMock) Stop() {}
-func (i *InstanceMock) State() *qbft.State {
+func (i *InstanceMock) GetState() *qbft.State {
 	return i.state
 }
 func (i *InstanceMock) ForceDecide(msg *specqbft.SignedMessage) {}

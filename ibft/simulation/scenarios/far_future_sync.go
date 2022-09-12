@@ -86,7 +86,7 @@ func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber
 		Logger: r.logger,
 		Height: seqNumber,
 		Value:  []byte("value"),
-	})
+	}, nil)
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {

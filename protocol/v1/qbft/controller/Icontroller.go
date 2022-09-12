@@ -17,9 +17,9 @@ type IController interface {
 	Init() error
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error)
+	StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (*instance.Result, error)
 
-	// NextSeqNumber returns the previous decided instance seq number + 1
+	// NextHeightNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
 	NextHeightNumber() (specqbft.Height, error)
 

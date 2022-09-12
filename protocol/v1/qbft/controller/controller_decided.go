@@ -13,18 +13,19 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
-func (c *Controller) uponFutureDecided(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+func (c *Controller) uponFutureDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
 	if err := c.validateDecided(msg); err != nil {
-		return errors.Wrap(err, "invalid decided msg")
+		return false, errors.Wrap(err, "invalid decided msg")
 	}
 
+	heighr := msg.Message.Height >= c.GetHeight()
 	// 1, when more than 1 instance implemented need to create new instance and add it (after fully ssv spec alignment)
 	// 2, save decided
 	updated, err := c.DecidedStrategy.UpdateDecided(msg)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if updated != nil {
+	if heighr && updated != nil { // only notify when higher or equal height updated
 		qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 		if c.newDecidedHandler != nil {
 			go c.newDecidedHandler(msg)
@@ -35,24 +36,14 @@ func (c *Controller) uponFutureDecided(logger *zap.Logger, msg *specqbft.SignedM
 		currentInstance.Stop()
 		logger.Debug("future decided received. closing instance")
 	}
-	// 4, bump ctrl height
-	c.setHeight(msg.Message.Height)
-	logger.Debug("higher decided has been updated")
-	return nil
-}
-
-func (c *Controller) uponOldDecided(logger *zap.Logger, msg *specqbft.SignedMessage) error {
-	if updated, err := c.DecidedStrategy.UpdateDecided(msg); err != nil {
-		logger.Warn("could not update decided")
-		return errors.Wrap(err, "failed to update decided")
-	} else if updated != nil {
-		logger.Debug("update old decided")
-		qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
-		if c.newDecidedHandler != nil {
-			go c.newDecidedHandler(msg)
-		}
+	// 4, set ctrl height as the new decided
+	if heighr {
+		c.setHeight(msg.Message.Height)
+		logger.Debug("higher decided has been updated")
+		return true, nil
 	}
-	return nil
+	logger.Debug("late decided has been updated")
+	return false, nil // TODO need to return "decided" false in that case?
 }
 
 // onNewDecidedMessage handles a new decided message, will be called at max twice in an epoch for a single validator.
@@ -112,8 +103,8 @@ func (c *Controller) validateDecided(msg *specqbft.SignedMessage) error {
 // 3. new message > force decide or stop instance and sync
 // 4. last decided, try to update signers
 // TODO need to be removed
-func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
-	/*if err := c.ValidateDecidedMsg(msg); err != nil {
+/* func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
+	if err := c.ValidateDecidedMsg(msg); err != nil {
 		c.Logger.Error("received invalid decided message", zap.Error(err), zap.Any("signer ids", msg.Signers))
 		return nil
 	}
@@ -163,9 +154,9 @@ func (c *Controller) processDecidedMessage(msg *specqbft.SignedMessage) error {
 			go c.newDecidedHandler(msg)
 		}
 	}
-	return err*/
+	return err
 	return nil
-}
+}*/
 
 // highestKnownDecided returns the highest known decided instance
 func (c *Controller) highestKnownDecided() (*specqbft.SignedMessage, error) {

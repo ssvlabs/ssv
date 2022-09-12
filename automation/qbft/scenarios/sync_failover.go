@@ -198,7 +198,7 @@ func (r *syncFailoverScenario) startNode(val validator.IValidator, seqNumber spe
 		Logger: r.logger,
 		Height: seqNumber,
 		Value:  []byte("value"),
-	})
+	}, nil)
 
 	if err != nil {
 		return nil, err

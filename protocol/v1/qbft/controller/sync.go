@@ -16,16 +16,35 @@ func (c *Controller) processHigherHeightMsg(logger *zap.Logger, msg *specqbft.Si
 		signedmsg.AuthorizeMsg(c.ValidatorShare)).Run(msg); err != nil {
 		return errors.Wrap(err, "invalid msg")
 	}
-	added, err := c.HigherReceivedMessages.AddIfDoesntExist(msg)
-	if err != nil {
-		return errors.Wrap(err, "could not add higher height msg")
-	}
-	ok, lowestHeight := c.f1SyncTrigger()
-	if added && ok {
-		// TODO should reset msg container? past msgs? all msgs?
-		// clean once f+1 achieved
-		c.HigherReceivedMessages.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{} // TODO need to add clean func to container
 
+	cleanContainer := specqbft.NewMsgContainer()
+	signerExists := false
+	for _, higherMsg := range c.HigherReceivedMessages.AllMessaged() {
+		if higherMsg.Message.Height <= c.GetHeight() {
+			continue
+		}
+
+		if higherMsg.GetSigners()[0] == msg.GetSigners()[0] {
+			signerExists = true
+		}
+		_, err := cleanContainer.AddIfDoesntExist(higherMsg)
+		if err != nil {
+			return errors.Wrap(err, "could not add higher height msg to clean container")
+		}
+	}
+
+	if !signerExists {
+		_, err := cleanContainer.AddIfDoesntExist(msg)
+		if err != nil {
+			return errors.Wrap(err, "could not add higher height msg")
+		}
+	}
+	c.HigherReceivedMessages.Msgs = cleanContainer.Msgs
+	ok, lowestHeight := c.f1SyncTrigger()
+	if ok {
+		/*// clean once f+1 achieved TODO spec not supporting cleaning, need to open pr for that
+		c.HigherReceivedMessages.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{} // TODO need to add clean func to container
+		*/
 		logger.Debug("f+1 higher height, trigger decided sync", zap.Int("toHeight", lowestHeight))
 		if err := c.syncDecided(msg, nil); err != nil {
 			return errors.Wrap(err, "failed to sync decided")

@@ -171,7 +171,8 @@ func (c *Controller) GetCurrentInstance() instance.Instancer {
 	return c.currentInstance
 }
 
-func (c *Controller) setCurrentInstance(instance instance.Instancer) {
+// SetCurrentInstance set the current instance
+func (c *Controller) SetCurrentInstance(instance instance.Instancer) {
 	c.CurrentInstanceLock.Lock()
 	defer c.CurrentInstanceLock.Unlock()
 
@@ -187,7 +188,7 @@ func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 	if i := c.GetCurrentInstance(); i != nil {
 		i.Stop()
-		c.setCurrentInstance(nil)
+		c.SetCurrentInstance(nil)
 	}
 	c.processAllDecided(c.MessageHandler)
 	cleared := c.Q.Clean(msgqueue.AllIndicesCleaner)
@@ -292,7 +293,7 @@ func (c *Controller) Init() error {
 		atomic.StoreUint32(&c.State, Ready)
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.getHeight())))
+		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.GetHeight())))
 	}
 
 	return nil
@@ -312,7 +313,7 @@ func (c *Controller) initialized() (bool, error) {
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.Result, err error) {
+func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (res *instance.Result, err error) {
 	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -330,7 +331,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 		c.Logger.Warn("could not clean change round", zap.Error(err))
 	}
 
-	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
+	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value, getInstance)
 	defer func() {
 		done()
 		// report error status if the instance returned error
@@ -361,7 +362,7 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 	var fields []zap.Field
 	cInstance := c.GetCurrentInstance()
 	if cInstance != nil {
-		currentState := cInstance.State()
+		currentState := cInstance.GetState()
 		if currentState != nil {
 			fields = append(fields, zap.String("instance stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("instance height", uint32(currentState.GetHeight())), zap.Uint32("instance round", uint32(currentState.GetRound())))
 		}
@@ -383,7 +384,8 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
-		return c.processConsensusMsg(signedMsg)
+		_, err := c.processConsensusMsg(signedMsg)
+		return err
 
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
@@ -391,12 +393,6 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
-	/*case spectypes.SSVDecidedMsgType:
-	signedMsg := &specqbft.SignedMessage{}
-	if err := signedMsg.Decode(msg.GetData()); err != nil {
-		return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
-	}
-	return c.processDecidedMessage(signedMsg)*/
 	case message.SSVSyncMsgType:
 		panic("need to implement!")
 	}
@@ -429,8 +425,8 @@ func (c *Controller) setInitialHeight() {
 	c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
 }
 
-// getHeight return current ctrl height
-func (c *Controller) getHeight() specqbft.Height {
+// GetHeight return current ctrl height
+func (c *Controller) GetHeight() specqbft.Height {
 	if height, ok := c.height.Load().(specqbft.Height); ok {
 		return height
 	}
@@ -441,9 +437,4 @@ func (c *Controller) getHeight() specqbft.Height {
 // setHeight set ctrl current height
 func (c *Controller) setHeight(height specqbft.Height) {
 	c.height.Store(height)
-}
-
-// setHeight set ctrl current height
-func (c *Controller) bumpHeight() {
-	c.height.Store(c.getHeight() + 1)
 }

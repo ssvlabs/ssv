@@ -87,12 +87,12 @@ import (
 //}
 //
 //// SaveCurrentInstance saves the state for the current running (not yet decided) instance
-//func (s *testStorage) SaveCurrentInstance(identifier message.Identifier, state *qbft.State) error {
+//func (s *testStorage) SaveCurrentInstance(identifier message.Identifier, state *qbft.GetState) error {
 //	return nil
 //}
 //
 //// GetCurrentInstance returns the state for the current running (not yet decided) instance
-//func (s *testStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.State, bool, error) {
+//func (s *testStorage) GetCurrentInstance(identifier message.Identifier) (*qbft.GetState, bool, error) {
 //	return nil, false, nil
 //}
 //
@@ -128,7 +128,7 @@ import (
 //	}{
 //		{
 //			"decided from future, requires sync.",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height3,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -181,7 +181,7 @@ import (
 //		},
 //		{
 //			"decided from far future, requires sync.",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height3,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -200,7 +200,7 @@ import (
 //		},
 //		{
 //			"decided from past, doesn't requires sync.",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height3,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -219,7 +219,7 @@ import (
 //		},
 //		{
 //			"decided for current",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height3,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -238,7 +238,7 @@ import (
 //		},
 //		{
 //			"decided for seq 0",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height0,
 //			}),
 
@@ -300,7 +300,7 @@ import (
 //	}{
 //		{
 //			"current instance",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height1,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -332,7 +332,7 @@ import (
 //		},
 //		{
 //			"current instance seq lower",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height1,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -344,7 +344,7 @@ import (
 //		},
 //		{
 //			"current instance seq higher",
-//			instance.NewInstanceWithState(&qbft.State{
+//			instance.NewInstanceWithState(&qbft.GetState{
 //				Height: height4,
 //			}),
 //			testingprotocol.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
@@ -407,7 +407,7 @@ func TestForceDecided(t *testing.T) {
 
 		signedProposal := testingutils.SignQBFTMsg(sks[signers[0]], signers[0], proposalMessage)
 
-		i1.(*Controller).GetCurrentInstance().State().ProposalAcceptedForCurrentRound.Store(signedProposal)
+		i1.(*Controller).GetCurrentInstance().GetState().ProposalAcceptedForCurrentRound.Store(signedProposal)
 
 		encodedCommit, err := (&specqbft.CommitData{Data: messageData}).Encode()
 		require.NoError(t, err)
@@ -435,7 +435,7 @@ func TestForceDecided(t *testing.T) {
 		Logger: zap.L(),
 		Height: 4,
 		Value:  commitDataToBytes(t, &specqbft.CommitData{Data: messageData}),
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.True(t, res.Decided)
 
@@ -663,7 +663,7 @@ func TestValidateDecidedMsg(t *testing.T) {
 //	currentInstanceLock := &sync.RWMutex{}
 //	ctrl := Controller{
 //		ValidatorShare: share,
-//		currentInstance: instance.NewInstanceWithState(&qbft.State{
+//		currentInstance: instance.NewInstanceWithState(&qbft.GetState{
 //			Identifier: id,
 //			Height:     height,
 //		}),

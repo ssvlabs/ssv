@@ -23,7 +23,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	}
 	currentInstance := c.GetCurrentInstance()
 	if currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", currentInstance.State().GetHeight())
+		return errors.Errorf("current instance (%d) is still running", currentInstance.GetState().GetHeight())
 	}
 	if !c.ValidatorShare.OperatorReady() {
 		return errors.New("operator share not ready")

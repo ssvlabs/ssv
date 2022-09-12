@@ -54,7 +54,7 @@ func (r *regular) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTStore) {
 				Logger: r.logger,
 				Height: 1,
 				Value:  []byte("value"),
-			})
+			}, nil)
 			if err != nil {
 				r.logger.Error("instance returned error", zap.Error(err))
 			} else if !res.Decided {

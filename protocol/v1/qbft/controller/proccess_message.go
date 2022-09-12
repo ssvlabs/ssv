@@ -12,7 +12,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
-func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) error {
+func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) (bool, error) {
 	logger := c.Logger.With(zap.Int("type", int(signedMessage.Message.MsgType)),
 		zap.Int64("height", int64(signedMessage.Message.Height)),
 		zap.Int64("round", int64(signedMessage.Message.Round)),
@@ -21,71 +21,64 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 	if err := pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.ValidateIdentifiers(c.Identifier)).Run(signedMessage); err != nil {
-		return errors.Wrap(err, "invalid msg")
+		return false, errors.Wrap(err, "invalid msg")
 	}
 
 	if c.ReadMode {
 		switch signedMessage.Message.MsgType {
 		case specqbft.RoundChangeMsgType:
-			return c.ProcessChangeRound(signedMessage) // read mode processing
+			return false, c.ProcessChangeRound(signedMessage) // read mode processing
 		case specqbft.CommitMsgType: // read mode supported
 		default: // other types not supported in read mode
-			return nil
+			return false, nil
 		}
 	}
 
 	logger.Debug("process consensus message")
-	if signedMessage.Message.Height == c.getHeight() {
+	if signedMessage.Message.Height == c.GetHeight() {
 		return c.processMsgCurrentInstance(signedMessage)
-	} else if signedMessage.Message.Height > c.getHeight() {
+	} else if signedMessage.Message.Height > c.GetHeight() {
 		return c.processFutureMsg(logger, signedMessage)
 	} else {
 		return c.processOldMsg(logger, signedMessage)
 	}
 }
 
-func (c *Controller) processMsgCurrentInstance(msg *specqbft.SignedMessage) error {
+func (c *Controller) processMsgCurrentInstance(msg *specqbft.SignedMessage) (bool, error) {
 	if c.GetCurrentInstance() != nil {
-		_, err := c.GetCurrentInstance().ProcessMsg(msg)
+		decided, err := c.GetCurrentInstance().ProcessMsg(msg)
 		if err != nil {
-			return errors.Wrap(err, "failed to process message")
+			return false, errors.Wrap(err, "failed to process message")
 		}
-		return nil
+		return decided, nil
 	}
 
-	if c.isDecidedMsg(msg) { // in case instance already got consensus and closed, need to try update late decided&commit
-		return c.uponOldDecided(c.Logger, msg)
+	if c.isDecidedMsg(msg) { // in case instance already got consensus and closed and no new instance began, need to try update late decided&commit
+		return c.uponFutureDecided(c.Logger, msg)
 	} else if msg.Message.MsgType == specqbft.CommitMsgType {
-		if _, err := c.processCommitMsg(c.Logger, msg); err != nil {
-			return errors.Wrap(err, "failed to process late commit")
-		}
+		return c.processCommitMsg(c.Logger, msg)
 	}
-	return nil
+	return false, nil
 }
 
-func (c *Controller) processFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+func (c *Controller) processFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
 	if c.isDecidedMsg(msg) {
 		return c.uponFutureDecided(logger, msg)
 	}
 	if !c.ReadMode {
-		return c.processHigherHeightMsg(logger, msg)
+		return false, c.processHigherHeightMsg(logger, msg)
 	}
-	return nil // non committee not required f+1 trigger TODO need to return error?
+	return false, nil // non committee not required f+1 trigger TODO need to return error?
 }
 
-func (c *Controller) processOldMsg(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+func (c *Controller) processOldMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
 	if c.isDecidedMsg(msg) {
-		return c.uponOldDecided(logger, msg)
+		return c.uponFutureDecided(logger, msg)
 	}
-
 	if msg.Message.MsgType == specqbft.CommitMsgType {
-		if processed, err := c.processCommitMsg(logger, msg); err != nil {
-			return errors.Wrap(err, "failed to process late commit")
-		} else if processed {
-			return nil
-		}
+		return c.processCommitMsg(logger, msg)
 	}
-	return nil
+	return false, nil
 }
 
 func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *specssv.SignedPartialSignatureMessage) error {
@@ -99,7 +92,7 @@ func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *specssv
 // and "fullSync" mode, regular process for late commit (saving all range of high msg's)
 // if height is the same as last decided msg height, update the last decided with the updated one.
 func (c *Controller) processCommitMsg(logger *zap.Logger, signedMessage *specqbft.SignedMessage) (bool, error) {
-	logger = c.Logger.With(zap.String("who", "ProcessLateCommitMsg"),
+	logger = logger.With(zap.String("who", "ProcessLateCommitMsg"),
 		zap.Uint64("seq", uint64(signedMessage.Message.Height)),
 		zap.String("identifier", message.ToMessageID(signedMessage.Message.Identifier).String()),
 		zap.Any("signers", signedMessage.GetSigners()))

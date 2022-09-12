@@ -17,7 +17,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
@@ -26,21 +26,21 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 			NodeID:      operatorIds[0],
 			OperatorIds: shareOperatorIds,
 		},
-		state:  &qbft.State{},
+		State:  &qbft.State{},
 		Logger: zap.L(),
 	}
 
-	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(specqbft.Round(0))
+	instance.GetState().Round.Store(specqbft.Round(1))
+	instance.GetState().PreparedValue.Store([]byte(nil))
+	instance.GetState().PreparedRound.Store(specqbft.Round(0))
 
 	// not prepared
 	_, err := instance.PreparedAggregatedMsg()
 	require.EqualError(t, err, "state not prepared")
 
 	// set prepared state
-	instance.State().PreparedRound.Store(specqbft.Round(1))
-	instance.State().PreparedValue.Store([]byte("value"))
+	instance.GetState().PreparedRound.Store(specqbft.Round(1))
+	instance.GetState().PreparedValue.Store([]byte("value"))
 
 	// test prepared but no msgs
 	_, err = instance.PreparedAggregatedMsg()
@@ -57,9 +57,9 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 	prepareData, err := consensusMessage1.GetPrepareData()
 	require.NoError(t, err)
 
-	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage1), prepareData.Data)
-	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage1), prepareData.Data)
-	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage1), prepareData.Data)
+	instance.ContainersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage1), prepareData.Data)
+	instance.ContainersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage1), prepareData.Data)
+	instance.ContainersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage1), prepareData.Data)
 
 	// test aggregation
 	msg, err := instance.PreparedAggregatedMsg()
@@ -73,7 +73,7 @@ func TestPreparedAggregatedMsg(t *testing.T) {
 		Identifier: []byte("Identifier"),
 		Data:       prepareDataToBytes(t, &specqbft.PrepareData{Data: []byte("value2")}),
 	}
-	instance.containersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[3:4], sks[operatorIds[3]], consensusMessage2), prepareData.Data)
+	instance.ContainersMap[specqbft.PrepareMsgType].AddMessage(SignMsg(t, operatorIds[3:4], sks[operatorIds[3]], consensusMessage2), prepareData.Data)
 	msg, err = instance.PreparedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
@@ -83,7 +83,7 @@ func TestPreparePipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		Config: qbft.DefaultConsensusParams(),
@@ -93,12 +93,12 @@ func TestPreparePipeline(t *testing.T) {
 			PublicKey:   sks[operatorIds[0]].GetPublicKey(),
 			OperatorIds: shareOperatorIds,
 		},
-		state: &qbft.State{},
+		State: &qbft.State{},
 	}
 
-	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.Identifier.Store([]byte{})
-	instance.state.Height.Store(specqbft.Height(0))
+	instance.GetState().Round.Store(specqbft.Round(1))
+	instance.GetState().Identifier.Store([]byte{})
+	instance.GetState().Height.Store(specqbft.Height(0))
 
 	instance.fork = testingFork(instance)
 	pipeline := instance.PrepareMsgPipeline()

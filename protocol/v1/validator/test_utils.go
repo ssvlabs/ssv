@@ -93,7 +93,7 @@ func (t *testIBFT) Init() error {
 	return nil
 }
 
-func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error) {
+func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (*instance.Result, error) {
 	commitData, err := (&specqbft.CommitData{Data: opts.Value}).Encode()
 	if err != nil {
 		return nil, err

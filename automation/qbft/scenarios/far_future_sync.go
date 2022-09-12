@@ -182,7 +182,7 @@ func (r *farFutureSyncScenario) startNode(val validator.IValidator, seqNumber sp
 			Logger: r.logger,
 			Height: seqNumber,
 			Value:  []byte("value"),
-		})
+		}, nil)
 
 		if err != nil {
 			return err
