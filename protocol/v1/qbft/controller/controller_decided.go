@@ -18,30 +18,31 @@ func (c *Controller) uponFutureDecided(logger *zap.Logger, msg *specqbft.SignedM
 		return false, errors.Wrap(err, "invalid decided msg")
 	}
 
-	heighr := msg.Message.Height >= c.GetHeight()
+	higher := msg.Message.Height >= c.GetHeight()
 	// 1, when more than 1 instance implemented need to create new instance and add it (after fully ssv spec alignment)
 	// 2, save decided
 	updated, err := c.DecidedStrategy.UpdateDecided(msg)
 	if err != nil {
 		return false, err
 	}
-	if heighr && updated != nil { // only notify when higher or equal height updated
-		qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
-		if c.newDecidedHandler != nil {
-			go c.newDecidedHandler(msg)
+	if higher {
+		if updated != nil { // only notify when higher or equal height updated
+			qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
+			if c.newDecidedHandler != nil {
+				go c.newDecidedHandler(msg)
+			}
 		}
-	}
-	// 3, close instance if exist
-	if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
-		currentInstance.Stop()
-		logger.Debug("future decided received. closing instance")
-	}
-	// 4, set ctrl height as the new decided
-	if heighr {
+		// 3, close instance if exist
+		if currentInstance := c.GetCurrentInstance(); currentInstance != nil {
+			currentInstance.Stop()
+			logger.Debug("future decided received. closing instance")
+		}
+		// 4, set ctrl height as the new decided
 		c.setHeight(msg.Message.Height)
 		logger.Debug("higher decided has been updated")
 		return true, nil
 	}
+
 	logger.Debug("late decided has been updated")
 	return false, nil // TODO need to return "decided" false in that case?
 }

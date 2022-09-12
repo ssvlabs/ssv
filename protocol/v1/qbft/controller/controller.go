@@ -436,5 +436,6 @@ func (c *Controller) GetHeight() specqbft.Height {
 
 // setHeight set ctrl current height
 func (c *Controller) setHeight(height specqbft.Height) {
+	c.Logger.Debug("set new ctrl height", zap.Int64("current height", int64(c.GetHeight())), zap.Int64("new height", int64(height)))
 	c.height.Store(height)
 }

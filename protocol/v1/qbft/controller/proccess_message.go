@@ -14,6 +14,7 @@ import (
 
 func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) (bool, error) {
 	logger := c.Logger.With(zap.Int("type", int(signedMessage.Message.MsgType)),
+		zap.Int64("ctrl height", int64(c.GetHeight())),
 		zap.Int64("new msg height", int64(signedMessage.Message.Height)),
 		zap.Int64("round", int64(signedMessage.Message.Round)),
 		zap.Any("sender", signedMessage.GetSigners()))
@@ -34,12 +35,14 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 		}
 	}
 
-	logger.Debug("process consensus message")
 	if signedMessage.Message.Height == c.GetHeight() {
+		logger.Debug("process consensus message same height")
 		return c.processMsgCurrentInstance(logger, signedMessage)
 	} else if signedMessage.Message.Height > c.GetHeight() {
+		logger.Debug("process consensus message higher height")
 		return c.processFutureMsg(logger, signedMessage)
 	} else {
+		logger.Debug("process consensus message lower height")
 		return c.processOldMsg(logger, signedMessage)
 	}
 }
