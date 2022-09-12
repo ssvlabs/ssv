@@ -62,8 +62,8 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 				zap.Uint64("current_round", uint64(currentRound)),
 				zap.Uint64("future_round", uint64(signedMessage.Message.Round)),
 			)
-			i.ResetRoundTimer()
 			i.bumpToRound(newRound)
+			i.ResetRoundTimer()
 		}
 
 		proposalData, err := signedMessage.Message.GetProposalData()
