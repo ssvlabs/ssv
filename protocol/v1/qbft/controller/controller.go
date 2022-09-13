@@ -240,6 +240,7 @@ func (c *Controller) Init() error {
 		time.Sleep(500 * time.Millisecond)
 		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
 		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // rollback state in order to find peers & try syncing again
 			return err
 		}
 		c.Logger.Debug("found enough peers")
@@ -259,7 +260,7 @@ func (c *Controller) Init() error {
 			}
 			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // rollback state in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
