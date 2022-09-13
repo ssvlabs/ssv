@@ -6,6 +6,7 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strconv"
 	"time"
 )
 
@@ -36,17 +37,30 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 
 // FindPeers discovers peers providing a service
 // implementation of discovery.Discoverer
-func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
-	subnet := nsToSubnet(ns)
-	if subnet < 0 {
-		dvs.logger.Debug("not a subnet", zap.String("ns", ns))
-		return nil, nil
+func (dvs *DiscV5Service) FindPeers(pctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
+	baseName := dvs.fork.GetTopicBaseName(ns)
+	if baseName == ns {
+		return nil, errors.Errorf("invalid topic: %s", ns)
+	}
+	subnet, err := strconv.Atoi(baseName)
+	if subnet < 0 || err != nil {
+		return nil, errors.Wrap(err, "not a subnet")
 	}
 	cn := make(chan peer.AddrInfo, 32)
-
-	dvs.discover(ctx, func(e PeerEvent) {
-		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.badNodeFilter, dvs.subnetFilter(uint64(subnet)))
+	var opts discovery.Options
+	if err := opts.Apply(opt...); err != nil {
+		return nil, err
+	}
+	if opts.Ttl == 0 {
+		opts.Ttl = time.Minute
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(pctx, opts.Ttl)
+		defer cancel()
+		dvs.discover(ctx, func(e PeerEvent) {
+			cn <- e.AddrInfo
+		}, time.Millisecond, dvs.badNodeFilter, dvs.subnetFilter(uint64(subnet)))
+	}()
 
 	return cn, nil
 }
