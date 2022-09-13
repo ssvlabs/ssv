@@ -68,6 +68,16 @@ const (
 	Forking
 )
 
+var stateStringMap = map[uint32]string{
+	NotStarted:        "notStarted",
+	InitiatedHandlers: "initiatedHandlers",
+	SyncedChangeRound: "syncedChangedRound",
+	WaitingForPeers:   "waitingForPeers",
+	FoundPeers:        "foundPeers",
+	Ready:             "ready",
+	Forking:           "forking",
+}
+
 // Controller implements IController interface
 type Controller struct {
 	Ctx context.Context
@@ -165,6 +175,112 @@ func New(opts Options) IController {
 	return ctrl
 }
 
+// Init sets all major processes of iBFT while blocking until completed.
+// if init fails to sync
+func (c *Controller) Init() error {
+	// checks if notStarted. if so, preform init handlers and set state to new state
+	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
+		c.Logger.Info("start qbft ctrl handler init")
+
+		go c.StartQueueConsumer(c.MessageHandler)
+		c.setInitialHeight()
+		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
+		//c.logger.Debug("managed to setup iBFT handlers")
+	}
+
+	// checks if InitiatedHandlers. if so, load change round to queue and then set state to new SyncedChangeRound
+	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, SyncedChangeRound) {
+		c.loadLastChangeRound()
+	}
+
+	// if already waiting for peers no need to redundant waiting
+	if atomic.LoadUint32(&c.State) == WaitingForPeers {
+		return ErrAlreadyRunning
+	}
+
+	// only if finished with handlers, start waiting for peers and syncing
+	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
+		// warmup to avoid network errors
+		time.Sleep(500 * time.Millisecond)
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
+		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
+			return err
+		}
+		c.Logger.Debug("found enough peers")
+
+		atomic.StoreUint32(&c.State, FoundPeers)
+
+		// IBFT sync to make sure the operator is aligned for this validator
+		knownMsg, err := c.DecidedStrategy.GetLastDecided(c.Identifier)
+		if err != nil {
+			c.Logger.Error("failed to get last known", zap.Error(err))
+		}
+		if err := c.syncDecided(knownMsg, nil); err != nil {
+			if err == ErrAlreadyRunning {
+				// don't fail if init is already running
+				c.Logger.Debug("iBFT init is already running (syncing history)")
+				return nil
+			}
+			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
+			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
+			return errors.Wrap(err, "could not sync history")
+		}
+
+		atomic.StoreUint32(&c.State, Ready)
+
+		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
+		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.GetHeight())))
+	}
+
+	return nil
+}
+
+// initialized return true is done the init process and not in forking state
+func (c *Controller) initialized() (bool, error) {
+	state := atomic.LoadUint32(&c.State)
+	switch state {
+	case Ready:
+		return true, nil
+	case Forking:
+		return false, errors.New("forking in progress")
+	default:
+		return false, errors.Errorf("controller hasn't initialized yet. current state - %s", stateStringMap[state])
+	}
+}
+
+// StartInstance - starts an ibft instance or returns error
+func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (res *instance.Result, err error) {
+	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
+	if err != nil {
+		return nil, errors.WithMessage(err, "can't generate instance options")
+	}
+
+	if err := c.canStartNewInstance(*instanceOpts); err != nil {
+		return nil, errors.WithMessage(err, "can't start new iBFT instance")
+	}
+
+	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
+
+	c.setHeight(opts.Height)                                                                 // update once height determent
+	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
+	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
+		c.Logger.Warn("could not clean change round", zap.Error(err))
+	}
+
+	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value, getInstance)
+	defer func() {
+		done()
+		// report error status if the instance returned error
+		if err != nil {
+			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, true)
+			return
+		}
+	}()
+
+	return res, err
+}
+
 // GetCurrentInstance returns current instance if exist. if not, returns nil
 func (c *Controller) GetCurrentInstance() instance.Instancer {
 	c.CurrentInstanceLock.RLock()
@@ -238,112 +354,6 @@ func (c *Controller) handleSyncMessages(msgs []*specqbft.SignedMessage) error {
 		}
 	}
 	return nil
-}
-
-// Init sets all major processes of iBFT while blocking until completed.
-// if init fails to sync
-func (c *Controller) Init() error {
-	// checks if notStarted. if so, preform init handlers and set state to new state
-	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
-		c.Logger.Info("start qbft ctrl handler init")
-
-		go c.StartQueueConsumer(c.MessageHandler)
-		c.setInitialHeight()
-		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
-		//c.logger.Debug("managed to setup iBFT handlers")
-	}
-
-	// checks if InitiatedHandlers. if so, load change round to queue and then set state to new SyncedChangeRound
-	if atomic.CompareAndSwapUint32(&c.State, InitiatedHandlers, SyncedChangeRound) {
-		c.loadLastChangeRound()
-	}
-
-	// if already waiting for peers no need to redundant waiting
-	if atomic.LoadUint32(&c.State) == WaitingForPeers {
-		return ErrAlreadyRunning
-	}
-
-	// only if finished with handlers, start waiting for peers and syncing
-	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
-		// warmup to avoid network errors
-		time.Sleep(500 * time.Millisecond)
-		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
-		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
-			return err
-		}
-		c.Logger.Debug("found enough peers")
-
-		atomic.StoreUint32(&c.State, FoundPeers)
-
-		// IBFT sync to make sure the operator is aligned for this validator
-		knownMsg, err := c.DecidedStrategy.GetLastDecided(c.Identifier)
-		if err != nil {
-			c.Logger.Error("failed to get last known", zap.Error(err))
-		}
-		if err := c.syncDecided(knownMsg, nil); err != nil {
-			if err == ErrAlreadyRunning {
-				// don't fail if init is already running
-				c.Logger.Debug("iBFT init is already running (syncing history)")
-				return nil
-			}
-			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
-			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
-			return errors.Wrap(err, "could not sync history")
-		}
-
-		atomic.StoreUint32(&c.State, Ready)
-
-		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.GetHeight())))
-	}
-
-	return nil
-}
-
-// initialized return true is done the init process and not in forking state
-func (c *Controller) initialized() (bool, error) {
-	state := atomic.LoadUint32(&c.State)
-	switch state {
-	case Ready:
-		return true, nil
-	case Forking:
-		return false, errors.New("forking in progress")
-	default:
-		return false, errors.New("iBFT hasn't initialized yet")
-	}
-}
-
-// StartInstance - starts an ibft instance or returns error
-func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (res *instance.Result, err error) {
-	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
-	if err != nil {
-		return nil, errors.WithMessage(err, "can't generate instance options")
-	}
-
-	if err := c.canStartNewInstance(*instanceOpts); err != nil {
-		return nil, errors.WithMessage(err, "can't start new iBFT instance")
-	}
-
-	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
-
-	c.setHeight(opts.Height)                                                                 // update once height determent
-	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
-	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
-		c.Logger.Warn("could not clean change round", zap.Error(err))
-	}
-
-	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value, getInstance)
-	defer func() {
-		done()
-		// report error status if the instance returned error
-		if err != nil {
-			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, true)
-			return
-		}
-	}()
-
-	return res, err
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.

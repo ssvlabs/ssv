@@ -48,6 +48,7 @@ type SignatureState struct {
 	root                       []byte
 	valueStruct                *beaconprotocol.DutyData
 	duty                       *spectypes.Duty
+	lastSlot                   spec.Slot // for queue in order the know the last slot
 }
 
 func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []byte, valueStruct *beaconprotocol.DutyData, duty *spectypes.Duty) {
@@ -56,6 +57,7 @@ func (s *SignatureState) start(logger *zap.Logger, signaturesCount int, root []b
 	s.root = root
 	s.valueStruct = valueStruct
 	s.duty = duty
+	s.lastSlot = duty.Slot
 
 	// start timer
 	s.timer = time.AfterFunc(s.SignatureCollectionTimeout, func() {
