@@ -220,8 +220,9 @@ func (n *p2pNetwork) isReady() bool {
 }
 
 // ConnectPeers finds peers for the given validator and connects with them.
+// it sends back the amount of peers that were sent to connection queue
 func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) (int, error) {
-	foundPeers, err := n.FindPeers(ctx, pk, count)
+	foundPeers, err := n.findPeers(ctx, pk, count)
 	if err != nil {
 		return 0, err
 	}
@@ -242,9 +243,10 @@ func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK,
 	return sentToQ, nil
 }
 
-// FindPeers finds peers for the given validator,
-// it looks up the local cache of subnet stats, if there are enough known peers
-func (n *p2pNetwork) FindPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) ([]peer.AddrInfo, error) {
+// findPeers finds peers for the given validator,
+// it looks up the local cache of subnet stats, if there are less then <count> known peers (with known addrs)
+// we call discovery service to lookup in the DHT.
+func (n *p2pNetwork) findPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) ([]peer.AddrInfo, error) {
 	pkHex := hex.EncodeToString(pk)
 	subnet := n.fork.ValidatorSubnet(pkHex)
 	if subnet < 0 {
