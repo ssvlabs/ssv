@@ -220,8 +220,14 @@ func (n *p2pNetwork) isReady() bool {
 }
 
 // ConnectPeers finds peers for the given validator and connects with them.
-// it sends back the amount of peers that were sent to connection queue
-func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) (int, error) {
+// it sends back the amount of peers that were sent to connection queue.
+func (n *p2pNetwork) ConnectPeers(pk spectypes.ValidatorPK, count int, timeout time.Duration) (int, error) {
+	if timeout == 0 {
+		timeout = time.Minute // default
+	}
+	ctx, cancel := context.WithTimeout(n.ctx, timeout)
+	defer cancel()
+
 	foundPeers, err := n.findPeers(ctx, pk, count)
 	if err != nil {
 		return 0, err
@@ -229,6 +235,7 @@ func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK,
 
 	q := n.connectQ
 	sentToQ := 0
+findPeersLoop:
 	for _, p := range foundPeers {
 		if !n.idx.CanConnect(p.ID) || n.idx.IsBad(p.ID) {
 			continue
@@ -236,6 +243,8 @@ func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK,
 		select {
 		case q <- p:
 			sentToQ++
+		case <-ctx.Done():
+			break findPeersLoop
 		default:
 		}
 	}

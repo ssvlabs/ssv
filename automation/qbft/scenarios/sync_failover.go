@@ -3,6 +3,7 @@ package scenarios
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -217,4 +218,8 @@ type badNetwork struct {
 
 func (b *badNetwork) Subscribe(spectypes.ValidatorPK) error {
 	return errors.New("bad network")
+}
+
+func (b *badNetwork) ConnectPeers(pk spectypes.ValidatorPK, count int, timeout time.Duration) (int, error) {
+	return 0, nil
 }

@@ -5,6 +5,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
+	"time"
 )
 
 var (
@@ -20,6 +21,9 @@ type Subscriber interface {
 	Unsubscribe(pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
+	// ConnectPeers finds peers for the given validator and connects with them.
+	// it sends back the amount of peers that were sent to connection queue.
+	ConnectPeers(pk spectypes.ValidatorPK, count int, timeout time.Duration) (int, error)
 }
 
 // Broadcaster enables to broadcast messages

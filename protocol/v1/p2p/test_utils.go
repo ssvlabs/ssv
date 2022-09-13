@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -174,6 +175,10 @@ func (m *mockNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	defer m.subscribedLock.Unlock()
 	m.subscribed[spk] = true
 	return nil
+}
+
+func (m *mockNetwork) ConnectPeers(pk spectypes.ValidatorPK, count int, timeout time.Duration) (int, error) {
+	return 0, nil
 }
 
 func (m *mockNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
