@@ -22,8 +22,13 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	if opts.Ttl == 0 {
 		opts.Ttl = time.Hour
 	}
-	subnet := nsToSubnet(ns)
-	if subnet < 0 {
+
+	baseName := dvs.fork.GetTopicBaseName(ns)
+	if baseName == ns {
+		return 0, errors.Errorf("invalid topic: %s", ns)
+	}
+	subnet, err := strconv.Atoi(baseName)
+	if subnet < 0 || err != nil {
 		dvs.logger.Debug("not a subnet", zap.String("ns", ns))
 		return opts.Ttl, nil
 	}
