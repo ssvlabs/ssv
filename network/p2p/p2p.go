@@ -3,6 +3,8 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -70,6 +72,7 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+	connectQ         chan peer.AddrInfo
 }
 
 // New creates a new p2p network
@@ -188,11 +191,12 @@ func (n *p2pNetwork) registerInitialTopics() error {
 // it will try to bootstrap discovery service, and inject a connect function.
 // the connect function checks if we can connect to the given peer and if so passing it to the backoff connector.
 func (n *p2pNetwork) startDiscovery() {
-	discoveredPeers := make(chan peer.AddrInfo, connectorQueueSize)
+	connectQ := make(chan peer.AddrInfo, connectorQueueSize)
+	n.connectQ = connectQ
 	go func() {
 		ctx, cancel := context.WithCancel(n.ctx)
 		defer cancel()
-		n.backoffConnector.Connect(ctx, discoveredPeers)
+		n.backoffConnector.Connect(ctx, connectQ)
 	}()
 	err := tasks.Retry(func() error {
 		return n.disc.Bootstrap(func(e discovery.PeerEvent) {
@@ -200,7 +204,7 @@ func (n *p2pNetwork) startDiscovery() {
 				return
 			}
 			select {
-			case discoveredPeers <- e.AddrInfo:
+			case connectQ <- e.AddrInfo:
 			default:
 				n.logger.Warn("connector queue is full, skipping new peer", zap.String("peerID", e.AddrInfo.ID.String()))
 			}
@@ -213,6 +217,91 @@ func (n *p2pNetwork) startDiscovery() {
 
 func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
+}
+
+// ConnectPeers finds peers for the given validator and connects with them.
+func (n *p2pNetwork) ConnectPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) (int, error) {
+	foundPeers, err := n.FindPeers(ctx, pk, count)
+	if err != nil {
+		return 0, err
+	}
+
+	q := n.connectQ
+	sentToQ := 0
+	for _, p := range foundPeers {
+		if !n.idx.CanConnect(p.ID) || n.idx.IsBad(p.ID) {
+			continue
+		}
+		select {
+		case q <- p:
+			sentToQ++
+		default:
+		}
+	}
+
+	return sentToQ, nil
+}
+
+// FindPeers finds peers for the given validator,
+// it looks up the local cache of subnet stats, if there are enough known peers
+func (n *p2pNetwork) FindPeers(ctx context.Context, pk spectypes.ValidatorPK, count int) ([]peer.AddrInfo, error) {
+	pkHex := hex.EncodeToString(pk)
+	subnet := n.fork.ValidatorSubnet(pkHex)
+	if subnet < 0 {
+		return nil, errors.Errorf("not a subnet: %s", pkHex)
+	}
+	var res []peer.AddrInfo
+	knownPeers := n.idx.GetSubnetPeers(subnet)
+	for _, p := range knownPeers {
+		addrs := n.host.Network().Peerstore().Addrs(p)
+		if len(addrs) == 0 {
+			continue
+		}
+		res = append(res, peer.AddrInfo{
+			ID:    p,
+			Addrs: addrs,
+		})
+	}
+	if len(res) >= count {
+		return res, nil
+	}
+
+	// didn't find enough peers locally,
+	// calling DHT to try finding peers across the network
+
+	valTopis := n.fork.ValidatorTopicID(pk)
+	if len(valTopis) == 0 {
+		return nil, errors.New("invalid public key")
+	}
+
+	cn, err := n.disc.FindPeers(ctx, valTopis[0])
+	if err != nil {
+		return nil, err
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		lctx, cancel := context.WithCancel(ctx)
+		defer func() {
+			wg.Done()
+			cancel()
+		}()
+		for {
+			select {
+			case pi := <-cn:
+				res = append(res, pi)
+				if len(res) >= count {
+					// exit once we found enough peers
+					return
+				}
+			case <-lctx.Done():
+				return
+			}
+		}
+	}()
+
+	return res, nil
 }
 
 // UpdateSubnets will update the registered subnets according to active validators
