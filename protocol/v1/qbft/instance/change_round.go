@@ -3,12 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -287,11 +287,11 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 			continue
 		}
 
-		noPrevProposal := i.GetState().GetProposalAcceptedForCurrentRound() == nil && i.GetState().GetRound() == round
-		prevProposal := i.GetState().GetProposalAcceptedForCurrentRound() != nil && round > i.GetState().GetRound()
+		currentRoundProposal := i.GetState().GetProposalAcceptedForCurrentRound() == nil && i.GetState().GetRound() == round
+		futureRoundProposal := round > i.GetState().GetRound()
 
-		if !noPrevProposal && !prevProposal {
-			i.Logger.Warn("round change noPrev or prev", zap.Bool("noPrevProposal", noPrevProposal), zap.Bool("prevProposal", prevProposal))
+		if !currentRoundProposal && !futureRoundProposal {
+			i.Logger.Warn("round change noPrev or prev", zap.Bool("currentRoundProposal", currentRoundProposal), zap.Bool("futureRoundProposal", futureRoundProposal))
 			continue
 		}
 
