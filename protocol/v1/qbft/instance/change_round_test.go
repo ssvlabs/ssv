@@ -2,6 +2,8 @@ package instance
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap/zapcore"
 	"testing"
 	"time"
 
@@ -719,6 +721,7 @@ func TestHighestPrepared(t *testing.T) {
 	inputValue := []byte("input value")
 
 	instance := &Instance{
+		Logger: logex.Build(t.Name(), zapcore.DebugLevel, nil),
 		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.RoundChangeMsgType: msgcontinmem.New(3, 2),
 		},

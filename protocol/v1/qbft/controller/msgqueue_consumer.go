@@ -206,10 +206,15 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 	height := state.GetHeight()
 	stage := qbft.RoundState(state.Stage.Load())
 
-	iterator := msgqueue.NewIndexIterator().
-		Add(func() msgqueue.Index {
-			return stateIndex(identifier, stage, height)
-		}).
+	iterator := msgqueue.NewIndexIterator()
+
+	for _, idx := range stateIndex(identifier, stage, height) {
+		iterator.Add(func() msgqueue.Index {
+			return idx
+		})
+	}
+
+	iterator.
 		Add(func() msgqueue.Index {
 			return msgqueue.DecidedMsgIndex(identifier)
 		}).
@@ -220,6 +225,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 			}
 			return indices[0]
 		})
+
 	msgs := c.Q.PopIndices(1, iterator)
 	if len(msgs) == 0 {
 		return nil
@@ -240,7 +246,7 @@ func (c *Controller) processAllDecided(handler MessageHandler) {
 	}
 }
 
-func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) msgqueue.Index {
+func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) []msgqueue.Index {
 	var res []msgqueue.Index
 	switch stage {
 	case qbft.RoundStateNotStarted:
@@ -250,13 +256,13 @@ func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height
 	case qbft.RoundStatePrepare:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
 	case qbft.RoundStateCommit:
-		return msgqueue.Index{} // qbft.RoundStateCommit stage is NEVER set
+		return []msgqueue.Index{{}} // qbft.RoundStateCommit stage is NEVER set
 	case qbft.RoundStateChangeRound:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
 		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
 	if len(res) == 0 {
-		return msgqueue.Index{}
+		return []msgqueue.Index{{}}
 	}
-	return res[0]
+	return res
 }

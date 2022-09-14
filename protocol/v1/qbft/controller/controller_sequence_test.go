@@ -98,7 +98,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			nil,
 			NotStarted,
 			nil,
-			"iBFT hasn't initialized yet",
+			"controller hasn't initialized yet. current state - notStarted",
 		},
 		{
 			"didn't finish sync",
@@ -111,7 +111,7 @@ func TestCanStartNewInstance(t *testing.T) {
 			nil,
 			InitiatedHandlers,
 			nil,
-			"iBFT hasn't initialized yet",
+			"controller hasn't initialized yet. current state - initiatedHandlers",
 		},
 		{
 			"sequence skips",

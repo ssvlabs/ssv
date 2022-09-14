@@ -116,6 +116,23 @@ func TestConsumeMessages(t *testing.T) {
 			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 		{
+			"by_state_not_started_prepare",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), 1, ctrl.Identifier, specqbft.CommitMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			1,
+			specqbft.Height(1),
+			phase0.Slot(1),
+			generateInstance(1, 1, qbft.RoundStateNotStarted),
+		},
+		{
 			"by_state_not_started_decided",
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), 1, ctrl.Identifier, specqbft.CommitMsgType),
@@ -442,7 +459,7 @@ func TestConsumeMessages(t *testing.T) {
 			require.Equal(t, test.expectedQLen, ctrl.Q.Len())
 			wg.Add(1)
 			cancel()
-			wg.Wait() // wait for queue to cancel
+			wg.Wait()                             // wait for queue to cancel
 			q.Clean(func(s msgqueue.Index) bool { // make sure queue is empty for next test
 				return true
 			})
