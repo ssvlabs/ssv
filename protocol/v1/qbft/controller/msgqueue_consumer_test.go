@@ -52,7 +52,8 @@ func TestConsumeMessages(t *testing.T) {
 		msgs            []*spectypes.SSVMessage
 		expected        []*spectypes.SSVMessage
 		expectedQLen    int
-		lastHeight      specqbft.Height
+		ctrlHeight      specqbft.Height
+		lastSlot        phase0.Slot
 		currentInstance instance.Instancer
 	}{
 		{
@@ -63,6 +64,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -73,6 +75,7 @@ func TestConsumeMessages(t *testing.T) {
 			nil,
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -83,6 +86,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -96,6 +100,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier))},
 			3,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -107,6 +112,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType)},
 			1,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 		{
@@ -120,6 +126,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateNotStarted),
 		},
 		{
@@ -134,6 +141,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
@@ -148,6 +156,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStatePrepare),
 		},
 		{
@@ -162,6 +171,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateChangeRound),
 		},
 		{
@@ -176,6 +186,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
@@ -189,6 +200,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
@@ -201,6 +213,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1), // current height
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -213,6 +226,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1), // current height
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -228,6 +242,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -243,6 +258,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			generateInstance(1, 1, qbft.RoundStateProposal),
 		},
 		{
@@ -267,6 +283,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1, // only "signed_index" for decided in height 9
 			specqbft.Height(10),
+			phase0.Slot(1),
 			generateInstance(10, 1, qbft.RoundStateChangeRound),
 		},
 		{
@@ -291,6 +308,30 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1, // only "signed_index" for decided in height 10
 			specqbft.Height(10),
+			phase0.Slot(1),
+			nil,
+		},
+		{
+			"no_running_instance_clean_old_messages",
+			[]*spectypes.SSVMessage{
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(10), message.ToMessageID(ctrl.Identifier)),
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(9), message.ToMessageID(ctrl.Identifier)),         // to be removed
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(8), message.ToMessageID(ctrl.Identifier)),         // to be removed
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // have 2 indexs. 1 poped and other stay
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // to be removed
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // to be removed
+			},
+			[]*spectypes.SSVMessage{
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(10), message.ToMessageID(ctrl.Identifier)),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+			},
+			1,
+			specqbft.Height(10),
+			phase0.Slot(10),
 			nil,
 		},
 		{
@@ -305,6 +346,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -319,6 +361,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			generateInstance(1, 1, qbft.RoundStateNotStarted),
 		},
 	}
@@ -328,9 +371,9 @@ func TestConsumeMessages(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ctrl.Ctx = ctx
 			ctrl.SetCurrentInstance(test.currentInstance)
-			ctrl.SignatureState = SignatureState{}
+			ctrl.SignatureState = SignatureState{lastSlot: test.lastSlot}
 			ctrl.SignatureState.duty = &spectypes.Duty{Slot: 1}
-			ctrl.setHeight(test.lastHeight)
+			ctrl.setHeight(test.ctrlHeight)
 
 			// populating msg's
 			for _, msg := range test.msgs {
@@ -399,7 +442,7 @@ func TestConsumeMessages(t *testing.T) {
 			require.Equal(t, test.expectedQLen, ctrl.Q.Len())
 			wg.Add(1)
 			cancel()
-			wg.Wait()                             // wait for queue to cancel
+			wg.Wait() // wait for queue to cancel
 			q.Clean(func(s msgqueue.Index) bool { // make sure queue is empty for next test
 				return true
 			})

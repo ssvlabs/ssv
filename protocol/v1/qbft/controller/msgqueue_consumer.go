@@ -75,11 +75,14 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		c.Q.Clean(func(index msgqueue.Index) bool {
+		cleaned := c.Q.Clean(func(index msgqueue.Index) bool {
 			oldHeight := index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 			oldSlot := index.S > 0 && index.S < lastSlot
 			return oldHeight || oldSlot
 		})
+		if cleaned > 0 {
+			c.Logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
+		}
 	}
 	c.Logger.Warn("queue consumer is closed")
 	return nil
@@ -241,9 +244,9 @@ func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height
 	var res []msgqueue.Index
 	switch stage {
 	case qbft.RoundStateNotStarted:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType)
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType, specqbft.PrepareMsgType) // check for prepare in case propose came before set the ctrl new height
 	case qbft.RoundStateProposal:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType) // looking for propose in case is leader
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType)
 	case qbft.RoundStatePrepare:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
 	case qbft.RoundStateCommit:

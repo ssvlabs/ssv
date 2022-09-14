@@ -113,7 +113,10 @@ func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result,
 	idn := hex.EncodeToString(c.Identifier)
 	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
-			if k.Cmt == specqbft.CommitMsgType && k.H == height {
+			if k.Mt == spectypes.SSVPartialSignatureMsgType && k.H == height { // need post consensus msgs
+				return false
+			}
+			if k.Cmt == specqbft.CommitMsgType && k.H == height { // need late commit
 				return false
 			}
 			return true
@@ -192,6 +195,7 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 }
 
 func (c *Controller) highestRound(ctx context.Context, highestRoundTimeout time.Duration) {
+	c.Logger.Debug("starting highest round")
 	ticker := time.NewTicker(highestRoundTimeout)
 	for {
 		select {
