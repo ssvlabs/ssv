@@ -45,8 +45,12 @@ func (c *Controller) processHigherHeightMsg(logger *zap.Logger, msg *specqbft.Si
 		/*// clean once f+1 achieved TODO spec not supporting cleaning, need to open pr for that
 		c.HigherReceivedMessages.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{} // TODO need to add clean func to container
 		*/
+		knownDecided, err := c.DecidedStrategy.GetLastDecided(c.GetIdentifier())
+		if err != nil {
+			return errors.Wrap(err, "failed to get known decided")
+		}
 		logger.Debug("f+1 higher height, trigger decided sync", zap.Int("toHeight", lowestHeight))
-		if err := c.syncDecided(msg, nil); err != nil {
+		if err := c.syncDecided(knownDecided, nil); err != nil {
 			return errors.Wrap(err, "failed to sync decided")
 		}
 	}
