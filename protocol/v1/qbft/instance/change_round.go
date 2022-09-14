@@ -205,6 +205,8 @@ func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedM
 		ids = append(ids, msg.GetSigners()...)
 	}
 	aggSig = aggregatedSig.Serialize()
+
+	i.Logger.Debug("change round deprecated justification", zap.Any("signers", ids))
 	return []*specqbft.SignedMessage{{
 		Signature: aggSig,
 		Signers:   ids,

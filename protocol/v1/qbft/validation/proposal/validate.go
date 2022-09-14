@@ -3,6 +3,8 @@ package proposal
 import (
 	"bytes"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -144,6 +146,7 @@ func Justify(share *beacon.Share, state *qbft.State, round specqbft.Round, round
 			highestData.PreparedValue,
 			share,
 		); err != nil {
+			logex.GetLogger().Debug("validate change round justification error", zap.Error(err))
 			return fmt.Errorf("signed prepare not valid")
 		}
 	}
