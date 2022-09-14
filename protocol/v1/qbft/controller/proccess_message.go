@@ -35,20 +35,20 @@ func (c *Controller) processConsensusMsg(signedMessage *specqbft.SignedMessage) 
 		}
 	}
 
-	if signedMessage.Message.Height == c.GetHeight() {
-		logger.Debug("process consensus message same height")
-		return c.processMsgCurrentInstance(logger, signedMessage)
+	if c.isDecidedMsg(signedMessage) {
+		logger.Debug("process decided message")
+		return c.uponDecided(logger, signedMessage)
 	} else if signedMessage.Message.Height > c.GetHeight() {
 		logger.Debug("process consensus message higher height")
 		return c.processFutureMsg(logger, signedMessage)
 	} else {
-		logger.Debug("process consensus message lower height")
-		return c.processOldMsg(logger, signedMessage)
+		logger.Debug("process consensus message same or lower height", zap.Bool("same height", signedMessage.Message.Height == c.GetHeight()))
+		return c.UponExistingInstanceMsg(logger, signedMessage)
 	}
 }
 
-func (c *Controller) processMsgCurrentInstance(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
-	if c.GetCurrentInstance() != nil {
+func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
+	if c.GetCurrentInstance() != nil && c.GetCurrentInstance().GetState().GetHeight() == msg.Message.Height { // only for the instance with the same height as msg
 		decided, err := c.GetCurrentInstance().ProcessMsg(msg)
 		if err != nil {
 			return false, errors.Wrap(err, "failed to process message")
@@ -56,32 +56,17 @@ func (c *Controller) processMsgCurrentInstance(logger *zap.Logger, msg *specqbft
 		return decided, nil
 	}
 
-	if c.isDecidedMsg(msg) { // in case instance already got consensus and closed and no new instance began, need to try update late decided&commit
-		return c.uponFutureDecided(logger, msg)
-	} else if msg.Message.MsgType == specqbft.CommitMsgType {
-		return c.processCommitMsg(c.Logger, msg)
+	if msg.Message.MsgType == specqbft.CommitMsgType {
+		return c.processCommitMsg(logger, msg)
 	}
 	return false, nil
 }
 
 func (c *Controller) processFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
-	if c.isDecidedMsg(msg) {
-		return c.uponFutureDecided(logger, msg)
+	if c.ReadMode {
+		return false, nil // non committee not required f+1 trigger TODO need to return error?
 	}
-	if !c.ReadMode {
-		return false, c.processHigherHeightMsg(logger, msg)
-	}
-	return false, nil // non committee not required f+1 trigger TODO need to return error?
-}
-
-func (c *Controller) processOldMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
-	if c.isDecidedMsg(msg) {
-		return c.uponFutureDecided(logger, msg)
-	}
-	if msg.Message.MsgType == specqbft.CommitMsgType {
-		return c.processCommitMsg(logger, msg)
-	}
-	return false, nil
+	return false, c.processHigherHeightMsg(logger, msg)
 }
 
 func (c *Controller) processPostConsensusSig(signedPostConsensusMessage *specssv.SignedPartialSignatureMessage) error {

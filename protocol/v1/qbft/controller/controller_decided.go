@@ -13,14 +13,15 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 )
 
-func (c *Controller) uponFutureDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
+func (c *Controller) uponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (bool, error) {
 	if err := c.validateDecided(msg); err != nil {
 		return false, errors.Wrap(err, "invalid decided msg")
 	}
 
 	higher := msg.Message.Height >= c.GetHeight()
+
 	// 1, when more than 1 instance implemented need to create new instance and add it (after fully ssv spec alignment)
-	// 2, save decided
+	// 2, update decided
 	updated, err := c.DecidedStrategy.UpdateDecided(msg)
 	if err != nil {
 		return false, err
