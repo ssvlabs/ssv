@@ -208,7 +208,9 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 
 	iterator := msgqueue.NewIndexIterator()
 
-	for _, idx := range stateIndex(identifier, stage, height) {
+	stats := stateIndex(identifier, stage, height)
+	for i := 0; i < len(stats); i++ {
+		idx := stats[i]
 		iterator.Add(func() msgqueue.Index {
 			return idx
 		})
