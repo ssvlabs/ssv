@@ -158,9 +158,11 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(decidedKey)...)
-	if err := i.db.DeleteByPrefix(prefix); err != nil {
+	n, err := i.db.DeleteByPrefix(prefix)
+	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
+	i.logger.Debug("removed decided", zap.Int("count", n))
 	if err := i.delete(highestKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
@@ -246,9 +248,25 @@ func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	prefix := i.prefix
 	prefix = append(prefix, identifier[:]...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
-	if err := i.db.DeleteByPrefix(prefix); err != nil {
-		return errors.Wrap(err, "failed to remove decided")
+	n, err := i.db.DeleteByPrefix(prefix)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove last change round")
 	}
+	i.logger.Debug("removed last change round", zap.Int("count", n))
+	return nil
+}
+
+func (i *ibftStorage) CleanAllChangeRound() error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	prefix := i.prefix
+	prefix = append(prefix, []byte(lastChangeRoundKey)...)
+	n, err := i.db.DeleteByPrefix(prefix)
+	if err != nil {
+		return errors.Wrap(err, "failed to remove change round")
+	}
+	i.logger.Debug("removed change round", zap.Int("count", n))
 	return nil
 }
 
