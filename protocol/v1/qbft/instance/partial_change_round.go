@@ -26,6 +26,8 @@ func (i *Instance) uponChangeRoundPartialQuorum() pipelines.SignedMessagePipelin
 	return pipelines.WrapFunc("upon change round partial quorum", func(_ *specqbft.SignedMessage) error {
 		foundPartialQuorum, lowestChangeRound := i.ContainersMap[specqbft.RoundChangeMsgType].PartialChangeRoundQuorum(i.GetState().GetRound())
 		if foundPartialQuorum && lowestChangeRound > i.GetState().GetRound() {
+
+			i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
 			i.bumpToRound(lowestChangeRound)
 
 			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", uint64(i.GetState().GetRound())))
