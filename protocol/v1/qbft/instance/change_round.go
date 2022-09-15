@@ -3,8 +3,6 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
@@ -182,7 +180,7 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 }
 
 // handleDeprecatedPrepareJustification return aggregated change round justification for v0.3.1 version TODO should be removed in v0.3.3
-func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
+/*func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
 	var justificationMsg *specqbft.Message
 	var aggSig []byte
 	var aggregatedSig *bls.Sign
@@ -212,7 +210,7 @@ func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedM
 		Signers:   ids,
 		Message:   justificationMsg,
 	}}, nil
-}
+}*/
 
 func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.GetState().GetRound())))
