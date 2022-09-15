@@ -241,7 +241,7 @@ func TestProcessHigherHeightMsg(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, last)
 	require.Equal(t, specqbft.Height(1), last.Message.Height)
-	require.Equal(t, 1, len(ctrl.HigherReceivedMessages.AllMessaged()))
+	require.Equal(t, 2, len(ctrl.HigherReceivedMessages.AllMessaged()))
 }
 
 func newInMemDb() basedb.IDb {
