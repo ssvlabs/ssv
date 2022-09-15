@@ -170,7 +170,9 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	if i.isPrepared() {
 		quorum, msgs := i.ContainersMap[specqbft.PrepareMsgType].QuorumAchieved(i.GetState().GetPreparedRound(), i.GetState().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.GetState()))
-
+		if len(msgs) == 0 {
+			return nil, errors.New("could not find prepare messages")
+		}
 		// temp solution in order to support backwards compatibility. TODO need to remove in version tag v0.3.3
 		roundChangeJustification, err := i.handleDeprecatedPrepareJustification(msgs)
 		if err != nil {
