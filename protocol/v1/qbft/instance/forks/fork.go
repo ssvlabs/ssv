@@ -22,4 +22,6 @@ type msgValidation interface {
 	CommitMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
 	// ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
 	ChangeRoundMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
+	// DecidedMsgValidationPipeline is the validation pipeline for decided messages
+	DecidedMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline
 }

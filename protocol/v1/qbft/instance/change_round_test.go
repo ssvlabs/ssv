@@ -94,6 +94,17 @@ func (v0 *testFork) CommitMsgValidationPipeline(share *beacon.Share, state *qbft
 	)
 }
 
+// DecidedMsgValidationPipeline is a pipeline for decided message validation.
+func (v0 *testFork) DecidedMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.AuthorizeMsg(share),
+	)
+}
+
 // CommitMsgPipeline is the full processing msg pipeline for a commit msg
 func (v0 *testFork) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 	return v0.instance.CommitMsgPipeline()

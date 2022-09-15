@@ -70,10 +70,12 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, state *qb
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.ValidateRound(state.GetRound()),
 		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
-		commit.ValidateProposal(state),
+		commit.ValidateCommitData(),
 		signedmsg.AuthorizeMsg(share),
+		commit.ValidateMsgSigners(),
+		signedmsg.ValidateRound(state.GetRound()),
+		commit.ValidateProposal(state),
 	)
 }
 
@@ -86,5 +88,18 @@ func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, stat
 		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
+	)
+}
+
+// DecidedMsgValidationPipeline is the validation pipeline for decided messages.
+func (g *ForkGenesis) DecidedMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		signedmsg.BasicMsgValidation(),
+		commit.ValidateDecidedQuorum(share),
+		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
+		commit.ValidateCommitData(),
+		signedmsg.AuthorizeMsg(share),
 	)
 }

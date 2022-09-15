@@ -52,7 +52,7 @@ func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 // DecidedMsgPipeline is the main pipeline for decided msgs
 func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		i.CommitMsgValidationPipeline(),
+		i.DecidedMsgValidationPipeline(),
 		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid decided message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -65,7 +65,26 @@ func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
 			i.containersMap[specqbft.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
 			return nil
 		}),
-		i.uponCommitMsg(),
+		i.uponDecidedMsg(),
+	)
+}
+
+// DecidedMsgValidationPipeline is the commit msg validation pipeline.
+func (i *Instance) DecidedMsgValidationPipeline() pipelines.SignedMessagePipeline {
+	return pipelines.Combine(
+		i.fork.DecidedMsgValidationPipeline(i.ValidatorShare, i.State()),
+		pipelines.WrapFunc("add decided msg", func(signedMessage *specqbft.SignedMessage) error {
+			i.Logger.Info("received valid decided message for round",
+				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
+				zap.Uint64("round", uint64(signedMessage.Message.Round)))
+
+			commitData, err := signedMessage.Message.GetCommitData()
+			if err != nil {
+				return fmt.Errorf("could not get msg commit data: %w", err)
+			}
+			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
+			return nil
+		}),
 	)
 }
 
@@ -103,6 +122,23 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		})
 
 		return onceErr
+	})
+}
+
+func (i *Instance) uponDecidedMsg() pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("upon decided msg", func(signedMessage *specqbft.SignedMessage) error {
+		i.processCommitQuorumOnce.Do(func() {
+			i.Logger.Info("decided iBFT instance",
+				zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())),
+				zap.Uint64("round", uint64(i.State().GetRound())),
+			)
+
+			i.decidedMsg = signedMessage
+			// mark instance commit
+			i.ProcessStageChange(qbft.RoundStateDecided)
+		})
+
+		return nil
 	})
 }
 
