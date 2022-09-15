@@ -162,7 +162,8 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-	i.logger.Debug("removed decided", zap.Int("count", n))
+	i.logger.Debug("removed decided", zap.Int("count", n),
+		zap.String("identifier", hex.EncodeToString(msgID)))
 	if err := i.delete(highestKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
@@ -252,7 +253,8 @@ func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to remove last change round")
 	}
-	i.logger.Debug("removed last change round", zap.Int("count", n))
+	i.logger.Debug("removed last change round", zap.Int("count", n),
+		zap.String("identifier", hex.EncodeToString(identifier)))
 	return nil
 }
 
