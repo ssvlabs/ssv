@@ -3,6 +3,8 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
@@ -129,6 +131,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				logger.Info("broadcasting proposal as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
+			logger.Debug("PROPOSAL GENERATE", zap.Any("", proposalData))
 			// send proposal msg
 			var broadcastMsg specqbft.Message
 			broadcastMsg, err = i.GenerateProposalMessage(proposalData)
@@ -168,19 +171,19 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 		quorum, msgs := i.ContainersMap[specqbft.PrepareMsgType].QuorumAchieved(i.GetState().GetPreparedRound(), i.GetState().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.GetState()))
 
-		/*// temp solution in order to support backwards compatibility. TODO need to remove in version tag v0.3.3
-		RoundChangeJustification, err := i.handleDeprecatedPrepareJustification(msgs)
+		// temp solution in order to support backwards compatibility. TODO need to remove in version tag v0.3.3
+		roundChangeJustification, err := i.handleDeprecatedPrepareJustification(msgs)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to get change round justification")
-		}*/
-		data.RoundChangeJustification = msgs
+		}
+		data.RoundChangeJustification = roundChangeJustification
 	}
 
 	return json.Marshal(data)
 }
 
 // handleDeprecatedPrepareJustification return aggregated change round justification for v0.3.1 version TODO should be removed in v0.3.3
-/*func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
+func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
 	var justificationMsg *specqbft.Message
 	var aggSig []byte
 	var aggregatedSig *bls.Sign
@@ -204,13 +207,12 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	}
 	aggSig = aggregatedSig.Serialize()
 
-	i.Logger.Debug("change round deprecated justification", zap.Any("signers", ids))
 	return []*specqbft.SignedMessage{{
 		Signature: aggSig,
 		Signers:   ids,
 		Message:   justificationMsg,
 	}}, nil
-}*/
+}
 
 func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.GetState().GetRound())))

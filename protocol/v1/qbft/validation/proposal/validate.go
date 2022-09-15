@@ -213,16 +213,16 @@ func validateRoundChangeJustification(
 	}
 
 	// support old version tag v0.3.1 TODO need to remove and check singleSigner only on version tag v0.3.3
-	/*qourum := share.HasQuorum(len(signedPrepare.GetSigners()))
+	qourum := share.HasQuorum(len(signedPrepare.GetSigners()))
 	singleSigner := len(signedPrepare.GetSigners()) == 1
 	if !qourum && !singleSigner {
 		return errors.New("prepare msg allows 1 signer")
 	}
-	*/
+
 	// TODO need to return on version v0.3.3
-	if len(signedPrepare.GetSigners()) != 1 {
+	/*if len(signedPrepare.GetSigners()) != 1 {
 		return errors.New("prepare msg allows 1 signer")
-	}
+	}*/
 
 	// validateJustification justification signature
 	pksMap, err := share.PubKeysByID(signedPrepare.GetSigners())
