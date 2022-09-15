@@ -216,6 +216,8 @@ func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedM
 
 func (i *Instance) uponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.GetState().GetRound())))
+	// reset proposal for round
+	i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
 	// bump round
 	i.BumpRound()
 	// mark stage

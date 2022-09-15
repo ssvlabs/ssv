@@ -58,6 +58,7 @@ func RunMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	ErrorHandling(t, test.ExpectedError, lastErr)
 
 	encode, _ := mappedInstance.State.Encode()
+	fmt.Println("instance root -")
 	fmt.Println(string(encode)) // TODO REMOVE AFTER
 	mappedRoot, err := mappedInstance.State.GetRoot()
 	require.NoError(t, err)

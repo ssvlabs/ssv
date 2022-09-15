@@ -2,7 +2,6 @@ package instance
 
 import (
 	"context"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +40,6 @@ loop:
 	ResetRoundTimer will reset the current timer (including stopping the previous one)
 */
 func (i *Instance) ResetRoundTimer() {
-	i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
 	// stat new timer
 	roundTimeout := i.roundTimeoutSeconds()
 	i.roundTimer.Reset(roundTimeout)

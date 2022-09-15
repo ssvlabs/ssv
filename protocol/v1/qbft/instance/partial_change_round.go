@@ -31,8 +31,6 @@ func (i *Instance) uponChangeRoundPartialQuorum() pipelines.SignedMessagePipelin
 			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", uint64(i.GetState().GetRound())))
 			i.ProcessStageChange(qbft.RoundStateChangeRound)
 
-			i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
-
 			if err := i.BroadcastChangeRound(); err != nil {
 				return errors.Wrap(err, "failed finding partial change round quorum")
 			}
