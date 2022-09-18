@@ -117,7 +117,7 @@ func (q *queue) Add(msg *spectypes.SSVMessage) {
 		}
 		msgs = ByConsensusMsgType().Combine(ByRound()).Add(msgs, mc)
 		q.items[idx] = msgs
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt)), strconv.Itoa(int(idx.S)), strconv.Itoa(int(idx.H))).Inc()
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Inc()
 	}
 	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
@@ -128,7 +128,7 @@ func (q *queue) Purge(idx Index) int64 {
 
 	size := len(q.items[idx])
 	delete(q.items, idx)
-	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt)), strconv.Itoa(int(idx.S)), strconv.Itoa(int(idx.H))).Sub(float64(size))
+	metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 
 	return int64(size)
 }
@@ -144,7 +144,7 @@ func (q *queue) Clean(cleaners ...Cleaner) int64 {
 			if cleaner(idx) {
 				size := len(q.items[idx])
 				atomic.AddInt64(&cleaned, int64(size))
-				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt)), strconv.Itoa(int(idx.S)), strconv.Itoa(int(idx.H))).Sub(float64(size))
+				metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(size))
 				return true
 			}
 		}
@@ -216,7 +216,7 @@ func (q *queue) Pop(n int, idx Index) []*spectypes.SSVMessage {
 		}
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {
-		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt)), strconv.Itoa(int(idx.S)), strconv.Itoa(int(idx.H))).Sub(float64(nMsgs))
+		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Sub(float64(nMsgs))
 	}
 	return msgs
 }
