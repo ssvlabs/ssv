@@ -18,15 +18,13 @@ func (c *Controller) uponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		return false, errors.Wrap(err, "invalid decided msg")
 	}
 
-	higher := msg.Message.Height >= c.GetHeight()
-
 	// 1, when more than 1 instance implemented need to create new instance and add it (after fully ssv spec alignment)
 	// 2, update decided
 	updated, err := c.DecidedStrategy.UpdateDecided(msg)
 	if err != nil {
 		return false, err
 	}
-	if higher {
+	if msg.Message.Height >= c.GetHeight() {
 		if updated != nil { // only notify when higher or equal height updated
 			qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 			if c.newDecidedHandler != nil {
@@ -41,7 +39,7 @@ func (c *Controller) uponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		// 4, set ctrl height as the new decided
 		c.setHeight(msg.Message.Height)
 		logger.Debug("higher decided has been updated")
-		return true, nil
+		return msg.Message.Height > c.GetHeight(), nil
 	}
 
 	logger.Debug("late decided has been updated")
