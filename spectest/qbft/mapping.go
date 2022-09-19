@@ -61,7 +61,7 @@ func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identi
 		Fork:                   forksfactory.NewFork(version),
 		Beacon:                 beacon,
 		KeyManager:             beacon.KeyManager,
-		HigherReceivedMessages: qbft2.NewMsgContainer(),
+		HigherReceivedMessages: make(map[types.OperatorID]qbft2.Height),
 		CurrentInstanceLock:    &sync.RWMutex{},
 		ForkLock:               &sync.Mutex{},
 		SignatureState: controller.SignatureState{
@@ -81,11 +81,6 @@ func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identi
 
 // GetControllerRoot return controller root by spec
 func GetControllerRoot(t *testing.T, c *controller.Controller, storedInstances []instance.Instancer) ([]byte, error) {
-	higherReceivedMessages := make(map[types.OperatorID]qbft2.Height)
-	for _, highMsg := range c.HigherReceivedMessages.AllMessaged() {
-		higherReceivedMessages[highMsg.GetSigners()[0]] = highMsg.Message.Height
-	}
-
 	rootStruct := struct {
 		Identifier             []byte
 		Height                 qbft2.Height
@@ -97,7 +92,7 @@ func GetControllerRoot(t *testing.T, c *controller.Controller, storedInstances [
 		Identifier:             c.Identifier,
 		Height:                 c.GetHeight(),
 		InstanceRoots:          make([][]byte, len(storedInstances)),
-		HigherReceivedMessages: higherReceivedMessages,
+		HigherReceivedMessages: c.HigherReceivedMessages,
 		Domain:                 types2.GetDefaultDomain(), // might need to be dynamic
 		Share:                  toSpecShare(c.ValidatorShare),
 	}

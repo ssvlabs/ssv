@@ -165,7 +165,7 @@ func TestProcessHigherHeightMsg(t *testing.T) {
 		ValidatorShare:         share,
 		Logger:                 logex.GetLogger(),
 		Identifier:             identifier[:],
-		HigherReceivedMessages: specqbft.NewMsgContainer(),
+		HigherReceivedMessages: make(map[spectypes.OperatorID]specqbft.Height),
 		ForkLock:               &sync.Mutex{},
 		CurrentInstanceLock:    &sync.RWMutex{},
 		Fork:                   forksfactory.NewFork(forksprotocol.GenesisForkVersion),
@@ -241,7 +241,7 @@ func TestProcessHigherHeightMsg(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, last)
 	require.Equal(t, specqbft.Height(1), last.Message.Height)
-	require.Equal(t, 2, len(ctrl.HigherReceivedMessages.AllMessaged()))
+	require.Equal(t, 2, len(ctrl.HigherReceivedMessages))
 }
 
 func newInMemDb() basedb.IDb {

@@ -6,14 +6,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"go.uber.org/zap"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+
+	"github.com/patrickmn/go-cache"
+	"go.uber.org/zap"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -39,6 +39,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	defer cancel()
 
 	identifier := hex.EncodeToString(c.Identifier)
+	higherCache := cache.New(time.Second*12, time.Second*24)
 
 	for ctx.Err() == nil {
 		time.Sleep(interval)
@@ -65,7 +66,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			c.Logger.Debug("process by state is done")
 			continue
 		}
-		if processed := c.processHigherHeight(handler, identifier, lastHeight); processed {
+		if processed := c.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			c.Logger.Debug("process higher height is done")
 			continue
 		}
@@ -157,8 +158,15 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 }
 
 // processHigherHeight fetch any message with higher height than last height
-func (c *Controller) processHigherHeight(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
-	msgs := c.Q.PopWithIterator(1, func(index msgqueue.Index) bool {
+func (c *Controller) processHigherHeight(handler MessageHandler, identifier string, lastHeight specqbft.Height, higherCache *cache.Cache) bool {
+	msgs := c.Q.WithIterator(1, true, func(index msgqueue.Index) bool {
+		key := index.String()
+		if _, found := higherCache.Get(key); !found {
+			higherCache.Set(key, 0, cache.DefaultExpiration)
+		} else {
+			return false // skip msg
+		}
+
 		return index.ID == identifier && index.H > lastHeight
 	})
 

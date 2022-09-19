@@ -93,7 +93,7 @@ type Controller struct {
 	Fork                   forks.Fork
 	Beacon                 beaconprotocol.Beacon
 	KeyManager             spectypes.KeyManager
-	HigherReceivedMessages *specqbft.MsgContainer
+	HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -141,7 +141,7 @@ func New(opts Options) IController {
 		Beacon:                 opts.Beacon,
 		KeyManager:             opts.KeyManager,
 		SignatureState:         SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
-		HigherReceivedMessages: specqbft.NewMsgContainer(),
+		HigherReceivedMessages: make(map[spectypes.OperatorID]specqbft.Height, len(opts.ValidatorShare.Committee)),
 
 		SyncRateLimit: opts.SyncRateLimit,
 		MinPeers:      opts.MinPeers,
@@ -263,7 +263,7 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions,
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	//c.setHeight(opts.Height)                                                                 // update once height determent
+	c.setHeight(opts.Height)                                                                 // update once height determent
 	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
 	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
 		c.Logger.Warn("could not clean change round", zap.Error(err))
@@ -397,12 +397,7 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
-		decided, err := c.processConsensusMsg(signedMsg)
-		if decided {
-			c.Logger.Debug("DECIDED", zap.Int64("h", int64(signedMsg.Message.Height)))
-			c.setHeight(signedMsg.Message.Height)
-		}
-
+		_, err := c.processConsensusMsg(signedMsg)
 		return err
 
 	case spectypes.SSVPartialSignatureMsgType:
@@ -440,7 +435,7 @@ func (c *Controller) setInitialHeight() {
 		c.setHeight(specqbft.FirstHeight)
 		return
 	}
-	c.setHeight(height.Message.Height + 1) // make sure ctrl is set with the right height
+	c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
 }
 
 // GetHeight return current ctrl height
