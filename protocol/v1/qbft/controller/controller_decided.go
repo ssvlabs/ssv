@@ -24,8 +24,8 @@ func (c *Controller) uponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 	if err != nil {
 		return false, err
 	}
-	if msg.Message.Height >= c.GetHeight() {
-		if updated != nil { // only notify when higher or equal height updated
+	if msg.Message.Height >= c.GetHeight() { // only when higher or equal height updated
+		if updated != nil {
 			qbft.ReportDecided(hex.EncodeToString(message.ToMessageID(msg.Message.Identifier).GetPubKey()), updated)
 			if c.newDecidedHandler != nil {
 				go c.newDecidedHandler(msg)
@@ -39,7 +39,7 @@ func (c *Controller) uponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		// 4, set ctrl height as the new decided
 		c.setHeight(msg.Message.Height)
 		logger.Debug("higher decided has been updated")
-		return msg.Message.Height > c.GetHeight(), nil
+		return true, nil
 	}
 
 	logger.Debug("late decided has been updated")
