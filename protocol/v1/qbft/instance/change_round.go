@@ -95,7 +95,7 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 		}
 
 		i.processChangeRoundQuorumOnce.Do(func() {
-			i.ProcessStageChange(qbft.RoundStateNotStarted)
+			i.ProcessStageChange(qbft.RoundStateReady)
 			logger := i.Logger.With(zap.Uint64("round", uint64(signedMessage.Message.Round)),
 				zap.Bool("is_leader", i.IsLeader()),
 				zap.Uint64("leader", i.ThisRoundLeader()),

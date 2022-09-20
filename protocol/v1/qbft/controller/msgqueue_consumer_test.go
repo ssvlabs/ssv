@@ -113,7 +113,7 @@ func TestConsumeMessages(t *testing.T) {
 			1,
 			specqbft.Height(1),
 			phase0.Slot(1),
-			generateInstance(1, 1, qbft.RoundStateNotStarted),
+			generateInstance(1, 1, qbft.RoundStateReady),
 		},
 		{
 			"by_state_not_started_prepare",
@@ -127,10 +127,10 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
 			},
-			1,
+			2,
 			specqbft.Height(1),
 			phase0.Slot(1),
-			generateInstance(1, 1, qbft.RoundStateNotStarted),
+			generateInstance(1, 1, qbft.RoundStateReady),
 		},
 		{
 			"by_state_not_started_decided",
@@ -144,7 +144,7 @@ func TestConsumeMessages(t *testing.T) {
 			1,
 			specqbft.Height(0),
 			phase0.Slot(1),
-			generateInstance(0, 1, qbft.RoundStateNotStarted),
+			generateInstance(0, 1, qbft.RoundStateReady),
 		},
 		{
 			"by_state_Proposal",
@@ -179,14 +179,16 @@ func TestConsumeMessages(t *testing.T) {
 		{
 			"by_state_change_round",
 			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // higher is peek and not pop
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
 			},
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
-			1,
+			2,
 			specqbft.Height(0),
 			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateChangeRound),
@@ -257,7 +259,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			1,
+			2,
 			specqbft.Height(1),
 			phase0.Slot(1),
 			nil,
@@ -273,7 +275,7 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
 			},
-			1,
+			2,
 			specqbft.Height(1),
 			phase0.Slot(1),
 			generateInstance(1, 1, qbft.RoundStateProposal),
@@ -357,11 +359,8 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
-			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
-			},
-			0,
+			[]*spectypes.SSVMessage{}, // higher msgs are peek and not pop
+			1,
 			specqbft.Height(1),
 			phase0.Slot(1),
 			nil,
@@ -372,14 +371,11 @@ func TestConsumeMessages(t *testing.T) {
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 			},
-			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
-			},
-			0,
+			[]*spectypes.SSVMessage{}, // higher msgs are peek and not pop
+			1,
 			specqbft.Height(1),
 			phase0.Slot(1),
-			generateInstance(1, 1, qbft.RoundStateNotStarted),
+			generateInstance(1, 1, qbft.RoundStateReady),
 		},
 	}
 

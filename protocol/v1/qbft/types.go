@@ -12,13 +12,14 @@ type RoundState int32
 
 // RoundState values
 const (
-	RoundStateNotStarted  RoundState = 0
-	RoundStateProposal    RoundState = 1
-	RoundStatePrepare     RoundState = 2
-	RoundStateCommit      RoundState = 3
-	RoundStateChangeRound RoundState = 4
-	RoundStateDecided     RoundState = 5
-	RoundStateStopped     RoundState = 6
+	RoundStateNotStarted RoundState = iota
+	RoundStateReady
+	RoundStateProposal
+	RoundStatePrepare
+	RoundStateCommit
+	RoundStateChangeRound
+	RoundStateDecided
+	RoundStateStopped
 )
 
 // RoundStateName represents the map of the round state names

@@ -175,7 +175,9 @@ func (i *Instance) Start(inputValue []byte) error {
 	messageID := message.ToMessageID(i.GetState().GetIdentifier())
 	i.Logger.Info("Node is starting iBFT instance", zap.String("identifier", hex.EncodeToString(i.GetState().GetIdentifier())))
 	i.GetState().InputValue.Store(inputValue)
-	i.GetState().Round.Store(specqbft.Round(1)) // start from 1
+	i.GetState().Round.Store(specqbft.Round(1))           // start from 1
+	i.GetState().Stage.Store(int32(qbft.RoundStateReady)) // for the queue to process by state only from this point
+	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateReady))
 	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)
 
 	i.Logger.Debug("state", zap.Uint64("round", uint64(i.GetState().GetRound())))

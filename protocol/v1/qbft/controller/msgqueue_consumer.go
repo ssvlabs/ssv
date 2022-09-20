@@ -257,7 +257,7 @@ func (c *Controller) processAllDecided(handler MessageHandler) {
 func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) []msgqueue.Index {
 	var res []msgqueue.Index
 	switch stage {
-	case qbft.RoundStateNotStarted:
+	case qbft.RoundStateReady:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType, specqbft.PrepareMsgType) // check for prepare in case propose came before set the ctrl new height
 	case qbft.RoundStateProposal:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType)

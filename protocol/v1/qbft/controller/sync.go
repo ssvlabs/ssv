@@ -18,7 +18,8 @@ func (c *Controller) processHigherHeightMsg(logger *zap.Logger, msg *specqbft.Si
 	}
 
 	if !c.verifyAndAddHigherHeightMsg(msg) {
-		return errors.New("discarded future msg") // remove error? need it?
+		//return errors.New("discarded future msg") // remove error? need it?
+		return nil
 	}
 
 	ok := c.f1SyncTrigger()
