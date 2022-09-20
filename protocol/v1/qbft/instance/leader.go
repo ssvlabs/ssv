@@ -9,7 +9,7 @@ func (i *Instance) IsLeader() bool {
 
 // ThisRoundLeader returns the round leader
 func (i *Instance) ThisRoundLeader() uint64 {
-	return i.RoundLeader(i.State().GetRound())
+	return i.RoundLeader(i.GetState().GetRound())
 }
 
 // RoundLeader checks the round leader

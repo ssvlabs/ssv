@@ -36,7 +36,6 @@ type MockNetwork interface {
 	Start(ctx context.Context)
 	SetLastDecidedHandler(lastDecidedHandler EventHandler)
 	SetGetHistoryHandler(getHistoryHandler EventHandler)
-	GetBroadcastMessages() []spectypes.SSVMessage
 }
 
 // EventHandler represents a function that handles a message event
@@ -80,6 +79,8 @@ type mockNetwork struct {
 
 	lastDecidedReady chan struct{}
 	getHistoryReady  chan struct{}
+
+	calledDecidedSyncCnt int
 }
 
 // NewMockNetwork creates a new instance of MockNetwork
@@ -268,6 +269,9 @@ func (m *mockNetwork) LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
 	//m.lock.Lock()
 	//defer m.lock.Unlock()
 
+	m.logger.Debug("CALL SYNC")
+	m.calledDecidedSyncCnt++
+
 	spk := hex.EncodeToString(mid.GetPubKey())
 	topic := spk
 
@@ -297,7 +301,6 @@ func (m *mockNetwork) LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
 			return nil, err
 		}
 	}
-
 	return m.PollLastDecidedMessages(), nil
 }
 
@@ -379,11 +382,10 @@ func (m *mockNetwork) PushMsg(e MockMessageEvent) {
 }
 
 func (m *mockNetwork) PollLastDecidedMessages() []SyncResult {
-	<-m.lastDecidedReady
+	//<-m.lastDecidedReady // TODO NO being called, need to fix!
 
 	m.lastDecidedResultsLock.Lock()
 	defer m.lastDecidedResultsLock.Unlock()
-
 	return m.lastDecidedResults
 }
 
@@ -428,6 +430,14 @@ func (m *mockNetwork) GetBroadcastMessages() []spectypes.SSVMessage {
 	defer m.broadcastMessagesLock.Unlock()
 
 	return m.broadcastMessages
+}
+
+func (m *mockNetwork) CalledDecidedSyncCnt() int {
+	return m.calledDecidedSyncCnt
+}
+
+func (m *mockNetwork) SetCalledDecidedSyncCnt(i int) {
+	m.calledDecidedSyncCnt = i
 }
 
 // GenPeerID generates a new network key

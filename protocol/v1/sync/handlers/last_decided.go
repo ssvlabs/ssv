@@ -29,7 +29,7 @@ func LastDecidedHandler(plogger *zap.Logger, store qbftstorage.DecidedMsgStore, 
 		} else {
 			msgID := msg.GetID()
 			res, err := store.GetLastDecided(msgID[:])
-			//logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
+			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}
 

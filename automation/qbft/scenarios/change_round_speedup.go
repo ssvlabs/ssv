@@ -148,10 +148,10 @@ func (r *changeRoundSpeedupScenario) startNode(val validator.IValidator, net net
 		}
 
 		res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-			Logger:    r.logger,
-			SeqNumber: 1,
-			Value:     []byte("value"),
-		})
+			Logger: r.logger,
+			Height: 1,
+			Value:  []byte("value"),
+		}, nil)
 
 		if err != nil {
 			r.logger.Error("instance returned error", zap.Error(err))

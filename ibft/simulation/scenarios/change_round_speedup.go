@@ -65,10 +65,10 @@ func (r *changeRoundSpeedup) Start(nodes []ibft.IController, _ []qbftstorage.QBF
 
 func (r *changeRoundSpeedup) startNode(node ibft.IController, index uint64) {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    r.logger,
-		SeqNumber: 1,
-		Value:     []byte("value"),
-	})
+		Logger: r.logger,
+		Height: 1,
+		Value:  []byte("value"),
+	}, nil)
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {

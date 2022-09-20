@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func runMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
+// RunMsgSpecTest runs spec test type MsgSpecTest
+func RunMsgSpecTest(t *testing.T, test *spectests.MsgSpecTest) {
 	var lastErr error
 
 	for i, messageBytes := range test.EncodedMessages {

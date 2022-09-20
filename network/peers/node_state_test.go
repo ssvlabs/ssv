@@ -22,7 +22,7 @@ func TestNodeStates(t *testing.T) {
 		pids = append(pids, pid)
 	}
 
-	t.Run("State", func(t *testing.T) {
+	t.Run("GetState", func(t *testing.T) {
 		ns := newNodeStates(time.Minute)
 
 		require.Equal(t, StateUnknown, ns.State(pids[0]))

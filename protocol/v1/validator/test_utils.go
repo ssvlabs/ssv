@@ -93,7 +93,7 @@ func (t *testIBFT) Init() error {
 	return nil
 }
 
-func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error) {
+func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (*instance.Result, error) {
 	commitData, err := (&specqbft.CommitData{Data: opts.Value}).Encode()
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
+func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// get operator pk for sig
 	pk, err := t.share.OperatorSharePubKey()
 	if err != nil {

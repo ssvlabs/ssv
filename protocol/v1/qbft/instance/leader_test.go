@@ -31,12 +31,12 @@ func TestLeaderCalculation(t *testing.T) {
 		Round: round,
 	}
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		Config:         qbft.DefaultConsensusParams(),
 		ValidatorShare: share,
-		state:          state,
+		State:          state,
 		LeaderSelector: roundrobin.New(share, state),
 	}
 
@@ -44,7 +44,7 @@ func TestLeaderCalculation(t *testing.T) {
 		t.Run(fmt.Sprintf("round %d", i), func(t *testing.T) {
 			instance.BumpRound()
 			require.EqualValues(t, operatorIds[i%4], instance.ThisRoundLeader())
-			require.EqualValues(t, uint64(i+1), instance.State().GetRound())
+			require.EqualValues(t, uint64(i+1), instance.GetState().GetRound())
 
 			if instance.ThisRoundLeader() == uint64(operatorIds[0]) {
 				require.True(t, instance.IsLeader())

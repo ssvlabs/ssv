@@ -87,6 +87,7 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 			continue
 		}
 		if sm == nil {
+			s.logger.Warn("failed to extract sync msg - sm is nil")
 			continue
 		}
 	signedMsgLoop:
@@ -96,9 +97,10 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 				continue signedMsgLoop
 			}
 			if err := handler(signedMsg); err != nil {
-				s.logger.Warn("could not save decided", zap.Error(err), zap.Int64("height", int64(height)))
+				s.logger.Warn("could not add decided with handler", zap.Error(err), zap.Int64("height", int64(height)))
 				continue
 			}
+			s.logger.Debug("mark sync msg as visited", zap.Int64("h", int64(height)))
 			visited[height] = true
 		}
 	}
