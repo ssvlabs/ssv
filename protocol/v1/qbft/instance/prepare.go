@@ -35,7 +35,7 @@ func (i *Instance) PrepareMsgPipeline() pipelines.SignedMessagePipeline {
 // PrepareMsgValidationPipeline is the prepare msg validation pipeline.
 func (i *Instance) PrepareMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.State()),
+		i.fork.PrepareMsgValidationPipeline(i.ValidatorShare, i.GetState()),
 		pipelines.WrapFunc("add prepare msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid prepare message from round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -45,7 +45,7 @@ func (i *Instance) PrepareMsgValidationPipeline() pipelines.SignedMessagePipelin
 			if err != nil {
 				return fmt.Errorf("could not get prepare data: %w", err)
 			}
-			i.containersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
+			i.ContainersMap[specqbft.PrepareMsgType].AddMessage(signedMessage, prepareMsg.Data)
 			return nil
 		}),
 	)
@@ -57,7 +57,7 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 		return nil, errors.New("state not prepared")
 	}
 
-	msgs := i.containersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.State().GetPreparedRound())
+	msgs := i.ContainersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.GetState().GetPreparedRound())
 	if len(msgs) == 0 {
 		return nil, errors.New("no prepare msgs")
 	}
@@ -69,8 +69,8 @@ func (i *Instance) PreparedAggregatedMsg() (*specqbft.SignedMessage, error) {
 			i.Logger.Warn("failed to get prepare data", zap.Error(err))
 			continue
 		}
-		if !bytes.Equal(p.Data, i.State().GetPreparedValue()) {
-			i.Logger.Warn("prepared value is not equal to prepare data", zap.String("stateValue", hex.EncodeToString(i.State().GetPreparedValue())), zap.String("prepareData", hex.EncodeToString(p.Data)))
+		if !bytes.Equal(p.Data, i.GetState().GetPreparedValue()) {
+			i.Logger.Warn("prepared value is not equal to prepare data", zap.String("stateValue", hex.EncodeToString(i.GetState().GetPreparedValue())), zap.String("prepareData", hex.EncodeToString(p.Data)))
 			continue
 		}
 		if ret == nil {
@@ -99,7 +99,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			return err
 		}
 
-		if quorum, _, _ := signedmsg.HasQuorum(i.ValidatorShare, i.containersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.State().GetRound())); !quorum {
+		if quorum, _, _ := signedmsg.HasQuorum(i.ValidatorShare, i.ContainersMap[specqbft.PrepareMsgType].ReadOnlyMessagesByRound(i.GetState().GetRound())); !quorum {
 			return nil
 		}
 
@@ -112,15 +112,15 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 		var errorPrp error
 		i.processPrepareQuorumOnce.Do(func() {
 			i.Logger.Info("prepared instance",
-				zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())), zap.Any("round", i.State().GetRound()))
+				zap.String("identifier", hex.EncodeToString(i.GetState().GetIdentifier())), zap.Any("round", i.GetState().GetRound()))
 
 			// set prepared state
-			i.State().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
-			i.State().PreparedRound.Store(i.State().GetRound())
+			i.GetState().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
+			i.GetState().PreparedRound.Store(i.GetState().GetRound())
 			i.ProcessStageChange(qbft.RoundStatePrepare)
 
 			// send commit msg
-			broadcastMsg, err := i.generateCommitMessage(i.State().GetPreparedValue())
+			broadcastMsg, err := i.GenerateCommitMessage(i.GetState().GetPreparedValue())
 			if err != nil {
 				return
 			}
@@ -136,7 +136,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 
 // nolint:unused
 func (i *Instance) didSendCommitForHeightAndRound() bool {
-	for _, msg := range i.containersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(i.State().GetRound()) {
+	for _, msg := range i.ContainersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(i.GetState().GetRound()) {
 		if msg.MatchedSigners([]spectypes.OperatorID{i.ValidatorShare.NodeID}) {
 			return true
 		}
@@ -144,7 +144,8 @@ func (i *Instance) didSendCommitForHeightAndRound() bool {
 	return false
 }
 
-func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, error) {
+// GeneratePrepareMessage returns prepare msg
+func (i *Instance) GeneratePrepareMessage(value []byte) (*specqbft.Message, error) {
 	prepareMsg := &specqbft.PrepareData{Data: value}
 	encodedPrepare, err := prepareMsg.Encode()
 	if err != nil {
@@ -153,14 +154,14 @@ func (i *Instance) generatePrepareMessage(value []byte) (*specqbft.Message, erro
 
 	return &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
-		Height:     i.State().GetHeight(),
-		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Height:     i.GetState().GetHeight(),
+		Round:      i.GetState().GetRound(),
+		Identifier: i.GetState().GetIdentifier(),
 		Data:       encodedPrepare,
 	}, nil
 }
 
 // isPrepared returns true if instance prepared
 func (i *Instance) isPrepared() bool {
-	return len(i.State().GetPreparedValue()) > 0
+	return len(i.GetState().GetPreparedValue()) > 0
 }

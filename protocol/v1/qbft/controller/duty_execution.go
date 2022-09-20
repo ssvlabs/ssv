@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -79,9 +78,9 @@ func (c *Controller) broadcastSignature() error {
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty *spectypes.Duty) error {
+func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// sign input value and broadcast
-	sig, root, valueStruct, err := c.signDuty(decidedValue, duty)
+	sig, root, valueStruct, duty, err := c.signDuty(logger, decidedValue, role)
 	if err != nil {
 		return errors.Wrap(err, "failed to sign input data")
 	}
@@ -89,17 +88,17 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specq
 	if err != nil {
 		return errors.Wrap(err, "failed to generate sig message")
 	}
-	if err := c.signAndBroadcast(psm); err != nil {
+	if err := c.signAndBroadcast(logger, psm); err != nil {
 		return errors.Wrap(err, "failed to sign and broadcast post consensus")
 	}
 
 	//	start timer, clear new map and set var's
-	c.SignatureState.start(c.Logger, height, signaturesCount, root, valueStruct, duty)
+	c.SignatureState.start(c.Logger, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 
 // signAndBroadcast checks and adds the signed message to the appropriate round state type
-func (c *Controller) signAndBroadcast(psm specssv.PartialSignatureMessages) error {
+func (c *Controller) signAndBroadcast(logger *zap.Logger, psm specssv.PartialSignatureMessages) error {
 	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
 		return errors.Wrap(err, "failed to get operator share pubkey")
@@ -129,7 +128,7 @@ func (c *Controller) signAndBroadcast(psm specssv.PartialSignatureMessages) erro
 	if err := c.Network.Broadcast(ssvMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
-	c.Logger.Info("broadcasting partial signature post consensus")
+	logger.Info("broadcasting partial signature post consensus")
 	return nil
 }
 

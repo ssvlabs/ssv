@@ -12,7 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/sync/lastdecided"
@@ -34,22 +33,21 @@ func NewLightNodeStrategy(logger *zap.Logger, store qbftstorage.DecidedMsgStore,
 	}
 }
 
-func (ln *lightNode) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage, pip pipelines.SignedMessagePipeline) error {
+func (ln *lightNode) Sync(ctx context.Context, identifier []byte, from, to *specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
 	if to == nil {
 		ln.logger.Debug("syncing decided", zap.String("identifier", hex.EncodeToString(identifier)))
 		highest, _, _, err := ln.decidedFetcher.GetLastDecided(ctx, message.ToMessageID(identifier), func(i spectypes.MessageID) (*specqbft.SignedMessage, error) {
 			return from, nil
 		})
 		if err != nil {
-			return errors.Wrap(err, "could not get last decided from peers")
+			return nil, errors.Wrap(err, "could not get last decided from peers")
 		}
 		to = highest
 	}
 	if to != nil {
-		_, err := ln.UpdateDecided(to)
-		return errors.Wrap(err, "could not save decided")
+		return []*specqbft.SignedMessage{to}, nil
 	}
-	return nil
+	return []*specqbft.SignedMessage{}, nil
 }
 
 func (ln *lightNode) UpdateDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

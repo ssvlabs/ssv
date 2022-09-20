@@ -43,4 +43,5 @@ var errorsMap = map[string]string{
 	"invalid round change message: could not get roundChange data : could not decode round change data from message: invalid character '\\x01' looking for beginning of value":           "round change msg invalid: could not get roundChange data : could not decode round change data from message: invalid character '\\x01' looking for beginning of value",
 	"invalid commit message: did not receive proposal for this round":                                                                                                                    "did not receive proposal for this round",
 	"invalid prepare message: no proposal accepted for prepare":                                                                                                                          "no proposal accepted for prepare",
+	"can't start new iBFT instance: current instance (0) is still running":                                                                                                               "can't start new QBFT instance: previous instance hasn't Decided",
 }

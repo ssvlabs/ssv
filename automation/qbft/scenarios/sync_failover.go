@@ -195,10 +195,10 @@ func (r *syncFailoverScenario) startNode(val validator.IValidator, seqNumber spe
 	ibftc := val.(*validator.Validator).Ibfts()[spectypes.BNRoleAttester]
 
 	res, err := ibftc.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    r.logger,
-		SeqNumber: seqNumber,
-		Value:     []byte("value"),
-	})
+		Logger: r.logger,
+		Height: seqNumber,
+		Value:  []byte("value"),
+	}, nil)
 
 	if err != nil {
 		return nil, err

@@ -33,7 +33,7 @@ func (i *Instance) CommitMsgPipeline() pipelines.SignedMessagePipeline {
 // CommitMsgValidationPipeline is the commit msg validation pipeline.
 func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
-		i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.State()),
+		i.fork.CommitMsgValidationPipeline(i.ValidatorShare, i.GetState()),
 		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
 			i.Logger.Info("received valid commit message for round",
 				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
@@ -43,29 +43,9 @@ func (i *Instance) CommitMsgValidationPipeline() pipelines.SignedMessagePipeline
 			if err != nil {
 				return fmt.Errorf("could not get msg commit data: %w", err)
 			}
-			i.containersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
+			i.ContainersMap[specqbft.CommitMsgType].AddMessage(signedMessage, commitData.Data)
 			return nil
 		}),
-	)
-}
-
-// DecidedMsgPipeline is the main pipeline for decided msgs
-func (i *Instance) DecidedMsgPipeline() pipelines.SignedMessagePipeline {
-	return pipelines.Combine(
-		i.CommitMsgValidationPipeline(),
-		pipelines.WrapFunc("add commit msg", func(signedMessage *specqbft.SignedMessage) error {
-			i.Logger.Info("received valid decided message for round",
-				zap.Any("sender_ibft_id", signedMessage.GetSigners()),
-				zap.Uint64("round", uint64(signedMessage.Message.Round)))
-
-			commitData, err := signedMessage.Message.GetCommitData()
-			if err != nil {
-				return err
-			}
-			i.containersMap[specqbft.CommitMsgType].OverrideMessages(signedMessage, commitData.Data)
-			return nil
-		}),
-		i.uponCommitMsg(),
 	)
 }
 
@@ -76,7 +56,7 @@ upon receiving a quorum Qcommit of valid ⟨COMMIT, λi, round, value⟩ message
 */
 func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon commit msg", func(signedMessage *specqbft.SignedMessage) error {
-		quorum, commitMsgs, err := commitQuorumForCurrentRoundValue(i.State(), i.ValidatorShare, i.containersMap[specqbft.CommitMsgType], signedMessage.Message.Data)
+		quorum, commitMsgs, err := commitQuorumForCurrentRoundValue(signedMessage.Message.Round, i.ValidatorShare, i.ContainersMap[specqbft.CommitMsgType], signedMessage.Message.Data)
 		if err != nil {
 			return fmt.Errorf("could not calculate commit quorum: %w", err)
 		}
@@ -87,8 +67,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 		var onceErr error
 		i.processCommitQuorumOnce.Do(func() {
 			i.Logger.Info("commit iBFT instance",
-				zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())),
-				zap.Uint64("round", uint64(i.State().GetRound())),
+				zap.String("identifier", hex.EncodeToString(i.GetState().GetIdentifier())),
+				zap.Uint64("round", uint64(i.GetState().GetRound())),
 				zap.Int("got_votes", len(commitMsgs)))
 
 			agg, err := aggregateCommitMsgs(commitMsgs)
@@ -125,9 +105,9 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 }
 
 // returns true if there is a quorum for the current round for this provided value
-func commitQuorumForCurrentRoundValue(state *qbft.State, share *beacon.Share, commitMsgContainer msgcont.MessageContainer, value []byte) (bool, []*specqbft.SignedMessage, error) {
-	signers, msgs := longestUniqueSignersForRoundAndValue(commitMsgContainer, state.GetRound(), value)
-	return len(signers)*3 >= share.CommitteeSize()*2, msgs, nil
+func commitQuorumForCurrentRoundValue(msgRound specqbft.Round, share *beacon.Share, commitMsgContainer msgcont.MessageContainer, value []byte) (bool, []*specqbft.SignedMessage, error) {
+	signers, msgs := longestUniqueSignersForRoundAndValue(commitMsgContainer, msgRound, value)
+	return share.HasQuorum(len(signers)), msgs, nil
 }
 
 func longestUniqueSignersForRoundAndValue(container msgcont.MessageContainer, round specqbft.Round, value []byte) ([]spectypes.OperatorID, []*specqbft.SignedMessage) {
@@ -172,7 +152,8 @@ func longestUniqueSignersForRoundAndValue(container msgcont.MessageContainer, ro
 	return signersRet, msgsRet
 }
 
-func (i *Instance) generateCommitMessage(value []byte) (*specqbft.Message, error) {
+// GenerateCommitMessage returns commit msg
+func (i *Instance) GenerateCommitMessage(value []byte) (*specqbft.Message, error) {
 	commitMsg := &specqbft.CommitData{Data: value}
 	encodedCommitMsg, err := commitMsg.Encode()
 	if err != nil {
@@ -181,9 +162,9 @@ func (i *Instance) generateCommitMessage(value []byte) (*specqbft.Message, error
 
 	return &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
-		Height:     i.State().GetHeight(),
-		Round:      i.State().GetRound(),
-		Identifier: i.State().GetIdentifier(),
+		Height:     i.GetState().GetHeight(),
+		Round:      i.GetState().GetRound(),
+		Identifier: i.GetState().GetIdentifier(),
 		Data:       encodedCommitMsg,
 	}, nil
 }

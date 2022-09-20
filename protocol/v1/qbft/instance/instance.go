@@ -48,17 +48,17 @@ type Options struct {
 // Instance defines the instance attributes
 type Instance struct {
 	ValidatorShare *beaconprotocol.Share
-	state          *qbft.State
+	State          *qbft.State
 	network        protcolp2p.Network
 	LeaderSelector leader.Selector
 	Config         *qbft.InstanceConfig
 	roundTimer     *roundtimer.RoundTimer
 	Logger         *zap.Logger
 	fork           forks.Fork
-	ssvSigner      spectypes.SSVSigner
+	SsvSigner      spectypes.SSVSigner
 
 	// messages
-	containersMap map[specqbft.MessageType]msgcont.MessageContainer
+	ContainersMap map[specqbft.MessageType]msgcont.MessageContainer
 	decidedMsg    *specqbft.SignedMessage
 
 	// channels
@@ -85,7 +85,7 @@ type Instance struct {
 // NewInstanceWithState used for testing, not PROD!
 func NewInstanceWithState(state *qbft.State) Instancer {
 	return &Instance{
-		state: state,
+		State: state,
 	}
 }
 
@@ -93,19 +93,19 @@ func NewInstanceWithState(state *qbft.State) Instancer {
 func NewInstance(opts *Options) Instancer {
 	messageID := message.ToMessageID(opts.Identifier)
 	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateNotStarted))
-	logger := opts.Logger.With(zap.Uint64("seq_num", uint64(opts.Height)))
+	logger := opts.Logger.With(zap.Uint64("instance height", uint64(opts.Height)))
 	ctx, cancelCtx := context.WithCancel(context.Background())
 
 	ret := &Instance{
 		ctx:            ctx,
 		cancelCtx:      cancelCtx,
 		ValidatorShare: opts.ValidatorShare,
-		state:          generateState(opts),
+		State:          GenerateState(opts),
 		network:        opts.Network,
 		LeaderSelector: opts.LeaderSelector,
 		Config:         opts.Config,
 		Logger:         logger,
-		ssvSigner:      opts.SSVSigner,
+		SsvSigner:      opts.SSVSigner,
 
 		roundTimer: roundtimer.New(ctx, logger.With(zap.String("who", "RoundTimer"))),
 
@@ -123,7 +123,7 @@ func NewInstance(opts *Options) Instancer {
 		stopped: *atomic.NewBool(false),
 	}
 
-	ret.containersMap = map[specqbft.MessageType]msgcont.MessageContainer{
+	ret.ContainersMap = map[specqbft.MessageType]msgcont.MessageContainer{
 		specqbft.ProposalMsgType:    msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 		specqbft.PrepareMsgType:     msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
 		specqbft.CommitMsgType:      msgcontinmem.New(uint64(opts.ValidatorShare.ThresholdSize()), uint64(opts.ValidatorShare.PartialThresholdSize())),
@@ -144,14 +144,14 @@ func (i *Instance) Init() {
 	})
 }
 
-// State returns instance state
-func (i *Instance) State() *qbft.State {
-	return i.state
+// GetState returns instance state
+func (i *Instance) GetState() *qbft.State {
+	return i.State
 }
 
 // Containers returns map of containers
 func (i *Instance) Containers() map[specqbft.MessageType]msgcont.MessageContainer {
-	return i.containersMap
+	return i.ContainersMap
 }
 
 // Start implements the Algorithm 1 IBFTController pseudocode for process pi: constants, state variables, and ancillary procedures
@@ -160,7 +160,7 @@ func (i *Instance) Containers() map[specqbft.MessageType]msgcont.MessageContaine
 // 	ri ← 1
 // 	pri ← ⊥
 // 	pvi ← ⊥
-// 	inputV aluei ← value
+// 	inputValue i ← value
 // 	if leader(hi, ri) = pi then
 // 		broadcast ⟨PROPOSAL, λi, ri, inputV aluei⟩ message
 // 		set timer to running and expire after t(ri)
@@ -172,13 +172,15 @@ func (i *Instance) Start(inputValue []byte) error {
 		return errors.New("input value is nil")
 	}
 
-	messageID := message.ToMessageID(i.State().GetIdentifier())
-	i.Logger.Info("Node is starting iBFT instance", zap.String("identifier", hex.EncodeToString(i.State().GetIdentifier())))
-	i.State().InputValue.Store(inputValue)
-	i.State().Round.Store(specqbft.Round(1)) // start from 1
+	messageID := message.ToMessageID(i.GetState().GetIdentifier())
+	i.Logger.Info("Node is starting iBFT instance", zap.String("identifier", hex.EncodeToString(i.GetState().GetIdentifier())))
+	i.GetState().InputValue.Store(inputValue)
+	i.GetState().Round.Store(specqbft.Round(1))           // start from 1
+	i.GetState().Stage.Store(int32(qbft.RoundStateReady)) // for the queue to process by state only from this point
+	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateReady))
 	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)
 
-	i.Logger.Debug("state", zap.Uint64("height", uint64(i.State().GetHeight())), zap.Uint64("round", uint64(i.State().GetRound())))
+	i.Logger.Debug("state", zap.Uint64("round", uint64(i.GetState().GetRound())))
 	if i.IsLeader() {
 		go func() {
 			i.Logger.Info("Node is leader for round 1")
@@ -188,8 +190,8 @@ func (i *Instance) Start(inputValue []byte) error {
 			// Waiting will allow a more stable msg receiving for all parties.
 			time.Sleep(time.Duration(i.Config.LeaderProposalDelaySeconds))
 
-			msg, err := i.generateProposalMessage(&specqbft.ProposalData{
-				Data: i.State().GetInputValue(),
+			msg, err := i.GenerateProposalMessage(&specqbft.ProposalData{
+				Data: i.GetState().GetInputValue(),
 			})
 			if err != nil {
 				i.Logger.Warn("failed to generate proposal message", zap.Error(err))
@@ -203,14 +205,6 @@ func (i *Instance) Start(inputValue []byte) error {
 	}
 	i.ResetRoundTimer() // TODO could be race condition with message process?
 	return nil
-}
-
-// ForceDecide will attempt to decide the instance with provided decided signed msg.
-func (i *Instance) ForceDecide(msg *specqbft.SignedMessage) {
-	i.Logger.Info("trying to force instance decision.")
-	if err := i.DecidedMsgPipeline().Run(msg); err != nil {
-		i.Logger.Error("force decided pipeline error", zap.Error(err))
-	}
 }
 
 // Stop will trigger a stopped for the entire instance
@@ -275,35 +269,35 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 
 	if err := p.Run(msg); err != nil {
 		if errors.Is(err, signedmsg.ErrWrongRound) {
-			i.Logger.Debug(fmt.Sprintf("message %d round (%d) does not equal state round (%d)", msg.Message.MsgType, msg.Message.Round, i.State().GetRound()))
+			i.Logger.Debug(fmt.Sprintf("message type %d,  round (%d) does not equal state round (%d)", msg.Message.MsgType, msg.Message.Round, i.GetState().GetRound()))
 		}
 		return false, err
 	}
 
-	if i.State().Stage.Load() == int32(qbft.RoundStateDecided) { // TODO better way to compare? (:Niv)
-		return true, nil // TODO that's the right decidedValue? (:Niv)
+	if i.GetState().Stage.Load() == int32(qbft.RoundStateDecided) {
+		return true, nil
 	}
 	return false, nil
 }
 
 // BumpRound is used to set bump round by 1
 func (i *Instance) BumpRound() {
-	i.bumpToRound(i.State().GetRound() + 1)
+	i.bumpToRound(i.GetState().GetRound() + 1)
 }
 
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.processChangeRoundQuorumOnce = &sync.Once{}
 	i.processPrepareQuorumOnce = &sync.Once{}
 	newRound := round
-	i.State().Round.Store(newRound)
-	messageID := message.ToMessageID(i.State().GetIdentifier())
+	i.GetState().Round.Store(newRound)
+	messageID := message.ToMessageID(i.GetState().GetIdentifier())
 	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newRound))
 }
 
 // ProcessStageChange set the state's round state and pushed the new state into the state channel
 func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 	// in order to prevent race condition between timer timeout and decided state. once decided we need to prevent any other new state
-	currentStage := i.State().Stage.Load()
+	currentStage := i.GetState().Stage.Load()
 	if currentStage == int32(qbft.RoundStateStopped) {
 		return
 	}
@@ -311,10 +305,10 @@ func (i *Instance) ProcessStageChange(stage qbft.RoundState) {
 		return
 	}
 
-	messageID := message.ToMessageID(i.State().GetIdentifier())
+	messageID := message.ToMessageID(i.GetState().GetIdentifier())
 	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(stage))
 
-	i.State().Stage.Store(int32(stage))
+	i.GetState().Stage.Store(int32(stage))
 
 	// blocking send to channel
 	i.stageChanCloseChan.Lock()
@@ -344,7 +338,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 		return errors.Wrap(err, "could not find operator pk for signing msg")
 	}
 
-	sigByts, err := i.ssvSigner.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+	sigByts, err := i.SsvSigner.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
 	if err != nil {
 		return err
 	}
@@ -366,7 +360,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
+		MsgID:   message.ToMessageID(i.GetState().GetIdentifier()),
 		Data:    encodedMsg,
 	}
 	if i.network != nil {
@@ -386,7 +380,7 @@ func (i *Instance) setLastChangeRoundMsg(msg *specqbft.SignedMessage) {
 
 // CommittedAggregatedMsg returns a signed message for the state's committed value with the max known signatures
 func (i *Instance) CommittedAggregatedMsg() (*specqbft.SignedMessage, error) {
-	if i.State() == nil {
+	if i.GetState() == nil {
 		return nil, errors.New("missing instance state")
 	}
 	if i.decidedMsg != nil {
@@ -407,7 +401,7 @@ func (i *Instance) GetCommittedAggSSVMessage() (spectypes.SSVMessage, error) {
 	}
 	ssvMsg := spectypes.SSVMessage{
 		MsgType: spectypes.SSVDecidedMsgType,
-		MsgID:   message.ToMessageID(i.State().GetIdentifier()),
+		MsgID:   message.ToMessageID(i.GetState().GetIdentifier()),
 		Data:    encodedAgg,
 	}
 	return ssvMsg, nil
@@ -421,7 +415,8 @@ func (i *Instance) setFork(fork forks.Fork) {
 	//i.fork.Apply(i)
 }
 
-func generateState(opts *Options) *qbft.State {
+// GenerateState return generated state
+func GenerateState(opts *Options) *qbft.State {
 	var identifier, height, round, preparedRound, preparedValue, iv, proposalReceivedForCurrentRound atomic.Value
 	height.Store(opts.Height)
 	round.Store(specqbft.Round(0))

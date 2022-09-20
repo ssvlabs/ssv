@@ -30,7 +30,7 @@ type IDb interface {
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
 	Delete(prefix []byte, key []byte) error
-	DeleteByPrefix(prefix []byte) error
+	DeleteByPrefix(prefix []byte) (int, error)
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error

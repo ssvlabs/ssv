@@ -32,7 +32,7 @@ func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 			if err != nil {
 				return fmt.Errorf("could not get proposal data: %w", err)
 			}
-			i.containersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
+			i.ContainersMap[specqbft.ProposalMsgType].AddMessage(signedMessage, proposalData.Data)
 
 			return nil
 		}),
@@ -41,7 +41,7 @@ func (i *Instance) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 }
 
 func (i *Instance) proposalMsgValidationPipeline() pipelines.SignedMessagePipeline {
-	return i.fork.ProposalMsgValidationPipeline(i.ValidatorShare, i.State(), i.RoundLeader)
+	return i.fork.ProposalMsgValidationPipeline(i.ValidatorShare, i.GetState(), i.RoundLeader)
 }
 
 /*
@@ -53,17 +53,17 @@ upon receiving a valid ⟨PROPOSAL, λi, ri, value⟩ message m from leader(λi,
 */
 func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon proposal msg", func(signedMessage *specqbft.SignedMessage) error {
-		i.State().ProposalAcceptedForCurrentRound.Store(signedMessage)
+		i.GetState().ProposalAcceptedForCurrentRound.Store(signedMessage)
 
 		newRound := signedMessage.Message.Round
 
-		if currentRound := i.State().GetRound(); signedMessage.Message.Round > currentRound {
+		if currentRound := i.GetState().GetRound(); signedMessage.Message.Round > currentRound {
 			i.Logger.Debug("received future justified proposal, bumping into its round and resetting timer",
 				zap.Uint64("current_round", uint64(currentRound)),
 				zap.Uint64("future_round", uint64(signedMessage.Message.Round)),
 			)
-			i.ResetRoundTimer()
 			i.bumpToRound(newRound)
+			i.ResetRoundTimer()
 		}
 
 		proposalData, err := signedMessage.Message.GetProposalData()
@@ -75,7 +75,7 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 		i.ProcessStageChange(qbft.RoundStateProposal)
 
 		// broadcast prepare msg
-		broadcastMsg, err := i.generatePrepareMessage(proposalData.Data)
+		broadcastMsg, err := i.GeneratePrepareMessage(proposalData.Data)
 		if err != nil {
 			return errors.Wrap(err, "could not create prepare msg")
 		}
@@ -87,23 +87,24 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 	})
 }
 
-func (i *Instance) generateProposalMessage(proposalMsg *specqbft.ProposalData) (specqbft.Message, error) {
+// GenerateProposalMessage returns proposal msg
+func (i *Instance) GenerateProposalMessage(proposalMsg *specqbft.ProposalData) (specqbft.Message, error) {
 	proposalEncodedMsg, err := proposalMsg.Encode()
 	if err != nil {
 		return specqbft.Message{}, errors.Wrap(err, "failed to encoded proposal message")
 	}
-	identifier := i.State().GetIdentifier()
+	identifier := i.GetState().GetIdentifier()
 	return specqbft.Message{
 		MsgType:    specqbft.ProposalMsgType,
-		Height:     i.State().GetHeight(),
-		Round:      i.State().GetRound(),
+		Height:     i.GetState().GetHeight(),
+		Round:      i.GetState().GetRound(),
 		Identifier: identifier[:],
 		Data:       proposalEncodedMsg,
 	}, nil
 }
 
 func (i *Instance) checkExistingProposal(round specqbft.Round) (bool, *specqbft.SignedMessage, error) {
-	msgs := i.containersMap[specqbft.ProposalMsgType].ReadOnlyMessagesByRound(round)
+	msgs := i.ContainersMap[specqbft.ProposalMsgType].ReadOnlyMessagesByRound(round)
 	if len(msgs) == 1 {
 		return true, msgs[0], nil
 	} else if len(msgs) > 1 {

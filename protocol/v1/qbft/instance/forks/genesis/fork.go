@@ -70,7 +70,7 @@ func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, state *qb
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
-		signedmsg.ValidateRound(state.GetRound()),
+		//signedmsg.ValidateRound(state.GetRound()), // TODO - should we validate the round? aren't all round commit messages should be processed as they might decide the instance? (from spec)
 		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
 		commit.ValidateProposal(state),
 		signedmsg.AuthorizeMsg(share),

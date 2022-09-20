@@ -133,15 +133,11 @@ func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
 }
 
 // DeleteByPrefix all items with this prefix
-func (b *BadgerDb) DeleteByPrefix(prefix []byte) error {
+func (b *BadgerDb) DeleteByPrefix(prefix []byte) (int, error) {
 	count := 0
 	err := b.db.Update(func(txn *badger.Txn) error {
-		it := txn.NewIterator(badger.DefaultIteratorOptions)
-		defer it.Close()
-
-		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
-			k := it.Item().Key()
-			// This won't disrupt the iterator, as the iterator keeps its view from when the tx began
+		rawKeys := b.listRawKeys(prefix, txn)
+		for _, k := range rawKeys {
 			if err := txn.Delete(k); err != nil {
 				return err
 			}
@@ -149,7 +145,7 @@ func (b *BadgerDb) DeleteByPrefix(prefix []byte) error {
 		}
 		return nil
 	})
-	return err
+	return count, err
 }
 
 // GetAll returns all the items of a given collection

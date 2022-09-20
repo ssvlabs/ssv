@@ -24,6 +24,7 @@ var (
 		migrationCleanOperatorNodeRegistryData,
 		migrationCleanExporterRegistryData,
 		migrationCleanValidatorRegistryData,
+		migrationCleanSyncOffset,
 	}
 )
 

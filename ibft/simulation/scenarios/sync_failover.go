@@ -106,10 +106,10 @@ loop:
 
 func (sf *syncFailover) startNode(node ibft.IController, index uint64, seqNumber specqbft.Height) *specqbft.SignedMessage {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    sf.logger,
-		SeqNumber: seqNumber,
-		Value:     []byte("value"),
-	})
+		Logger: sf.logger,
+		Height: seqNumber,
+		Value:  []byte("value"),
+	}, nil)
 	if err != nil {
 		sf.logger.Error("instance returned error", zap.Error(err))
 		return nil

@@ -90,7 +90,7 @@ func TestConsensusOnInputValue(t *testing.T) {
 				ValidatorCommitteeIndex: 0,
 			}
 
-			_, signaturesCount, decidedByts, _, err := node.comeToConsensusOnInputValue(node.logger, duty)
+			_, signaturesCount, decidedByts, err := node.comeToConsensusOnInputValue(node.logger, duty)
 			if !test.decided {
 				require.EqualError(t, err, test.expectedError)
 				return
@@ -161,17 +161,6 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			// wait for for listeners to spin up
 			time.Sleep(time.Millisecond * 100)
 
-			duty := &spectypes.Duty{
-				Type:                    spectypes.BNRoleAttester,
-				PubKey:                  spec.BLSPubKey{},
-				Slot:                    0,
-				ValidatorIndex:          0,
-				CommitteeIndex:          0,
-				CommitteeLength:         0,
-				CommitteesAtSlot:        0,
-				ValidatorCommitteeIndex: 0,
-			}
-
 			// send sigs
 			for index, sig := range test.sigs {
 				signedMessage := &specqbft.SignedMessage{
@@ -198,8 +187,8 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 			}
 
 			// TODO: do for all ibfts
-			for _, ibft := range validator.Ibfts() {
-				err := ibft.PostConsensusDutyExecution(validator.logger, 0, test.expectedAttestationDataByts, test.expectedSignaturesCount, duty)
+			for role, ibft := range validator.Ibfts() {
+				err := ibft.PostConsensusDutyExecution(validator.logger, test.expectedAttestationDataByts, test.expectedSignaturesCount, role)
 				if len(test.expectedError) > 0 {
 					require.EqualError(t, err, test.expectedError)
 				} else {

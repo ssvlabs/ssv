@@ -109,3 +109,8 @@ func GetLoggerLevelValue(loggerLevel string) (zapcore.Level, error) {
 func iso3339CleanTime(t time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05.000000Z")
 }
+
+// Reset the once init for logger
+func Reset() {
+	once = sync.Once{}
+}
