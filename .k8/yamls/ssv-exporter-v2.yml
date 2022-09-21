@@ -99,8 +99,8 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
-            cpu: 1000m
-            memory: 1024Mi
+            cpu: 3000m
+            memory: 4096Mi
         command: ["make", "start-node"]
         ports:
         - containerPort: 12008
