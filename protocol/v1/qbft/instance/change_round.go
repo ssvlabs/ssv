@@ -131,7 +131,6 @@ func (i *Instance) uponChangeRoundFullQuorum() pipelines.SignedMessagePipeline {
 				logger.Info("broadcasting proposal as leader after round change with justified prepare value", zap.String("value", fmt.Sprintf("%x", proposalData.Data)))
 			}
 
-			logger.Debug("PROPOSAL GENERATE", zap.Any("", proposalData))
 			// send proposal msg
 			var broadcastMsg specqbft.Message
 			broadcastMsg, err = i.GenerateProposalMessage(proposalData)
@@ -285,7 +284,6 @@ func (i *Instance) HighestPrepared(round specqbft.Round) (highestPrepared *specq
 		}
 
 		if err := proposal.Justify(i.ValidatorShare, i.GetState(), msg.Message.Round, roundChanges, candidateChangeData.RoundChangeJustification, candidateChangeData.PreparedValue); err != nil {
-			i.Logger.Warn("round change not justified", zap.Error(err))
 			continue
 		}
 
