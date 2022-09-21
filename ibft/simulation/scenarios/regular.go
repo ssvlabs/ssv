@@ -51,10 +51,10 @@ func (r *regular) Start(nodes []ibft.IController, dbs []qbftstorage.QBFTStore) {
 		go func(node ibft.IController, index uint64) {
 			defer wg.Done()
 			res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-				Logger:    r.logger,
-				SeqNumber: 1,
-				Value:     []byte("value"),
-			})
+				Logger: r.logger,
+				Height: 1,
+				Value:  []byte("value"),
+			}, nil)
 			if err != nil {
 				r.logger.Error("instance returned error", zap.Error(err))
 			} else if !res.Decided {

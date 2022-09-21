@@ -1,6 +1,7 @@
 package msgqueue
 
 import (
+	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strconv"
 	"sync"
@@ -32,6 +33,8 @@ type MsgQueue interface {
 	Add(msg *spectypes.SSVMessage)
 	// Peek returns the first n messages for an index
 	Peek(n int, idx Index) []*spectypes.SSVMessage
+	// WithIterator looping through all indexes and return true when relevant and pop
+	WithIterator(n int, peek bool, iterator func(index Index) bool) []*spectypes.SSVMessage
 	// Pop clears and returns the first n messages for an index
 	Pop(n int, idx Index) []*spectypes.SSVMessage
 	// PopIndices clears and returns the first n messages for indices that are created on demand using the iterator
@@ -86,6 +89,10 @@ type Index struct {
 	S spec.Slot
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
 	Cmt specqbft.MessageType
+}
+
+func (i *Index) String() string {
+	return fmt.Sprintf("%s-%d-%s-%d-%d-%d", i.Name, i.Mt, i.ID, i.H, i.S, i.Cmt)
 }
 
 // queue implements MsgQueue
@@ -176,6 +183,19 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 	}
 
 	return msgs
+}
+
+// WithIterator looping through all indexes and return true when relevant and pop
+func (q *queue) WithIterator(n int, peek bool, iterator func(index Index) bool) []*spectypes.SSVMessage {
+	for k := range q.items {
+		if iterator(k) {
+			if peek {
+				return q.Peek(n, k)
+			}
+			return q.Pop(n, k)
+		}
+	}
+	return nil
 }
 
 // Pop messages by index with a desired amount of messages to pop,
@@ -288,8 +308,11 @@ func DefaultMsgIndexer() Indexer {
 // DefaultMsgIndex is the default msg index
 func DefaultMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
 	return Index{
-		Mt:  mt,
-		ID:  mid.String(),
-		Cmt: -1,
+		Name: "",
+		Mt:   mt,
+		ID:   mid.String(),
+		H:    0,
+		S:    0,
+		Cmt:  -1,
 	}
 }

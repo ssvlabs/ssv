@@ -23,7 +23,7 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	}
 	currentInstance := c.GetCurrentInstance()
 	if currentInstance != nil {
-		return errors.Errorf("current instance (%d) is still running", currentInstance.State().GetHeight())
+		return errors.Errorf("current instance (%d) is still running", currentInstance.GetState().GetHeight())
 	}
 	if !c.ValidatorShare.OperatorReady() {
 		return errors.New("operator share not ready")
@@ -47,9 +47,8 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	}
 
 	if opts.RequireMinPeers {
-		minPeers := 1
-		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := protcolp2p.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
+		if err := protcolp2p.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
 			return err
 		}
 		c.Logger.Debug("found enough peers")
@@ -58,9 +57,9 @@ func (c *Controller) canStartNewInstance(opts instance.Options) error {
 	return nil
 }
 
-// NextSeqNumber returns the previous decided instance seq number + 1
+// NextHeightNumber returns the previous decided instance seq number + 1
 // In case it's the first instance it returns 0
-func (c *Controller) NextSeqNumber() (specqbft.Height, error) {
+func (c *Controller) NextHeightNumber() (specqbft.Height, error) {
 	knownDecided, err := c.highestKnownDecided()
 	if err != nil {
 		return 0, err
@@ -78,7 +77,7 @@ func (c *Controller) instanceOptionsFromStartOptions(opts instance.ControllerSta
 		Network:         c.Network,
 		Config:          c.InstanceConfig,
 		Identifier:      c.Identifier,
-		Height:          opts.SeqNumber,
+		Height:          opts.Height,
 		Fork:            c.Fork.InstanceFork(),
 		RequireMinPeers: opts.RequireMinPeers,
 		SSVSigner:       c.KeyManager,

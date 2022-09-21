@@ -10,7 +10,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/forks"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/changeround"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/preprepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/commit"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/prepare"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/proposal"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
@@ -34,16 +36,16 @@ func (g *ForkGenesis) VersionName() string {
 	return forksprotocol.GenesisForkVersion.String()
 }
 
-// PrePrepareMsgValidationPipeline is the validation pipeline for pre-prepare messages
-func (g *ForkGenesis) PrePrepareMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader preprepare.LeaderResolver) pipelines.SignedMessagePipeline {
+// ProposalMsgValidationPipeline is the validation pipeline for proposal messages
+func (g *ForkGenesis) ProposalMsgValidationPipeline(share *beacon.Share, state *qbft.State, roundLeader proposal.LeaderResolver) pipelines.SignedMessagePipeline {
 	identifier := state.GetIdentifier()
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.ProposalMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(identifier[:]),
 		signedmsg.AuthorizeMsg(share),
-		preprepare.ValidatePrePrepareMsg(roundLeader),
+		proposal.ValidateProposalMsg(share, state, roundLeader),
 	)
 }
 
@@ -53,30 +55,35 @@ func (g *ForkGenesis) PrepareMsgValidationPipeline(share *beacon.Share, state *q
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.PrepareMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
 		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateRound(state.GetRound()),
+		signedmsg.ValidateIdentifiers(identifier[:]),
+		prepare.ValidateProposal(state),
+		prepare.ValidatePrepareMsgSigners(),
 		signedmsg.AuthorizeMsg(share),
 	)
 }
 
 // CommitMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) CommitMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.CommitMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
-		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		//signedmsg.ValidateRound(state.GetRound()), // TODO - should we validate the round? aren't all round commit messages should be processed as they might decide the instance? (from spec)
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
+		commit.ValidateProposal(state),
 		signedmsg.AuthorizeMsg(share),
 	)
 }
 
 // ChangeRoundMsgValidationPipeline is the validation pipeline for commit messages
-func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, identifier []byte, height specqbft.Height) pipelines.SignedMessagePipeline {
+func (g *ForkGenesis) ChangeRoundMsgValidationPipeline(share *beacon.Share, state *qbft.State) pipelines.SignedMessagePipeline {
 	return pipelines.Combine(
 		signedmsg.BasicMsgValidation(),
 		signedmsg.MsgTypeCheck(specqbft.RoundChangeMsgType),
-		signedmsg.ValidateLambdas(identifier[:]),
-		signedmsg.ValidateSequenceNumber(height),
+		signedmsg.ValidateSequenceNumber(state.GetHeight()),
+		signedmsg.ValidateIdentifiers(state.GetIdentifier()),
 		signedmsg.AuthorizeMsg(share),
 		changeround.Validate(share),
 	)

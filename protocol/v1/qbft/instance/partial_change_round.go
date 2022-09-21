@@ -5,6 +5,8 @@ import (
 	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
@@ -22,13 +24,14 @@ func (i *Instance) ChangeRoundPartialQuorumMsgPipeline() pipelines.SignedMessage
 //		broadcast ⟨ROUND-CHANGE, λi, ri, pri, pvi⟩
 func (i *Instance) uponChangeRoundPartialQuorum() pipelines.SignedMessagePipeline {
 	return pipelines.WrapFunc("upon change round partial quorum", func(_ *specqbft.SignedMessage) error {
-		foundPartialQuorum, lowestChangeRound := i.containersMap[specqbft.RoundChangeMsgType].PartialChangeRoundQuorum(i.State().GetRound())
-		if foundPartialQuorum {
+		foundPartialQuorum, lowestChangeRound := i.ContainersMap[specqbft.RoundChangeMsgType].PartialChangeRoundQuorum(i.GetState().GetRound())
+		if foundPartialQuorum && lowestChangeRound > i.GetState().GetRound() {
+
+			i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
 			i.bumpToRound(lowestChangeRound)
 
-			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", uint64(i.State().GetRound())))
-			i.ResetRoundTimer()
-			//i.ProcessStageChange(qbft.RoundStateChangeRound)
+			i.Logger.Info("found f+1 change round quorum, bumped round", zap.Uint64("new round", uint64(i.GetState().GetRound())))
+			i.ProcessStageChange(qbft.RoundStateChangeRound)
 
 			if err := i.BroadcastChangeRound(); err != nil {
 				return errors.Wrap(err, "failed finding partial change round quorum")

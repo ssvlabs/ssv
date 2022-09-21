@@ -187,7 +187,6 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
-	logger := n.logger.With(zap.String("topic", topic))
 	if n.msgRouter == nil {
 		n.logger.Warn("msg router is not configured")
 		return nil
@@ -195,14 +194,16 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	if msg == nil {
 		return nil
 	}
-	ssvMsg, err := n.fork.DecodeNetworkMsg(msg.GetData())
-	if err != nil {
-		logger.Warn("could not decode message", zap.Error(err))
-		// TODO: handle..
-		return nil
+
+	var ssvMsg *spectypes.SSVMessage
+	if msg.ValidatorData != nil {
+		m, ok := msg.ValidatorData.(spectypes.SSVMessage)
+		if ok {
+			ssvMsg = &m
+		}
 	}
 	if ssvMsg == nil {
-		return nil
+		return errors.New("message was not decoded")
 	}
 	//logger = withIncomingMsgFields(logger, msg, ssvMsg)
 	//logger.Debug("incoming pubsub message", zap.String("topic", topic),

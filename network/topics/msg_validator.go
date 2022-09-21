@@ -1,9 +1,7 @@
 package topics
 
 import (
-	"bytes"
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -19,15 +17,11 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
-		metricsPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
-		defer metricsPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
+		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
+		defer metricPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
 		if len(pmsg.GetData()) == 0 {
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
-		}
-		if bytes.Equal([]byte(p), []byte(self)) {
-			reportValidationResult(validationResultSelf)
-			return pubsub.ValidationAccept
 		}
 		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
@@ -36,23 +30,29 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
+		if msg == nil {
+			reportValidationResult(validationResultEncoding)
+			return pubsub.ValidationReject
+		}
+		pmsg.ValidatorData = *msg
+		return pubsub.ValidationAccept
 		// check decided topic
-		currentTopic := pmsg.GetTopic()
-		currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
-		if msg.MsgType == spectypes.SSVDecidedMsgType {
-			if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
-				return pubsub.ValidationAccept
-			}
-		}
-		topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
-		for _, tp := range topics {
-			if tp == currentTopicBaseName {
-				reportValidationResult(validationResultValid)
-				return pubsub.ValidationAccept
-			}
-		}
-		reportValidationResult(validationResultTopic)
-		return pubsub.ValidationReject
+		//currentTopic := pmsg.GetTopic()
+		//currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
+		//if msg.MsgType == spectypes.SSVDecidedMsgType {
+		//	if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
+		//		return pubsub.ValidationAccept
+		//	}
+		//}
+		//topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
+		//for _, tp := range topics {
+		//	if tp == currentTopicBaseName {
+		//		reportValidationResult(validationResultValid)
+		//		return pubsub.ValidationAccept
+		//	}
+		//}
+		//reportValidationResult(validationResultTopic)
+		//return pubsub.ValidationReject
 	}
 }
 

@@ -17,11 +17,11 @@ type IController interface {
 	Init() error
 
 	// StartInstance starts a new instance by the given options
-	StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error)
+	StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (*instance.Result, error)
 
-	// NextSeqNumber returns the previous decided instance seq number + 1
+	// NextHeightNumber returns the previous decided instance seq number + 1
 	// In case it's the first instance it returns 0
-	NextSeqNumber() (specqbft.Height, error)
+	NextHeightNumber() (specqbft.Height, error)
 
 	// GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
 	GetIBFTCommittee() map[spectypes.OperatorID]*beaconprotocol.Node
@@ -35,7 +35,7 @@ type IController interface {
 	ProcessPostConsensusMessage(msg *specssv.SignedPartialSignatureMessage) error
 
 	// PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-	PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, duty spectypes.BeaconRole) error
+	PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, duty spectypes.BeaconRole) error
 
 	// OnFork called when fork occur.
 	OnFork(forkVersion forksprotocol.ForkVersion) error

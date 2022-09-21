@@ -53,7 +53,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 				protocoltesting.SignMsg(t, secretKeys, uids[1:2], generateConsensusMsg(0)),
 			},
 			false,
-			100000,
+			0,
 		},
 		{
 			"lowest 7",
@@ -69,7 +69,7 @@ func TestFindPartialChangeRound(t *testing.T) {
 			"not found",
 			[]*specqbft.SignedMessage{},
 			false,
-			100000,
+			0,
 		},
 		{
 			"duplicate msgs from same peer, no quorum",
@@ -163,18 +163,7 @@ func TestMessagesContainer_AddMessage(t *testing.T) {
 			Data:       []byte{1, 1, 1, 1},
 		},
 		Signature: nil,
-		Signers:   []spectypes.OperatorID{4, 5},
-	}, nil)
-	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
-	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)
-	c.AddMessage(&specqbft.SignedMessage{
-		Message: &specqbft.Message{
-			Round:      1,
-			Identifier: nil,
-			Data:       []byte{1, 1, 1, 1},
-		},
-		Signature: nil,
-		Signers:   []spectypes.OperatorID{4},
+		Signers:   []spectypes.OperatorID{1, 2, 3, 4},
 	}, nil)
 	require.Len(t, c.ReadOnlyMessagesByRound(1), 1)
 	require.Len(t, c.ReadOnlyMessagesByRound(2), 0)

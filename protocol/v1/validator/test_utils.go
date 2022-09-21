@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"sync"
 	"testing"
 
@@ -26,6 +25,7 @@ import (
 	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v1/utils/threshold"
 )
 
@@ -93,7 +93,7 @@ func (t *testIBFT) Init() error {
 	return nil
 }
 
-func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions) (*instance.Result, error) {
+func (t *testIBFT) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (*instance.Result, error) {
 	commitData, err := (&specqbft.CommitData{Data: opts.Value}).Encode()
 	if err != nil {
 		return nil, err
@@ -135,7 +135,7 @@ func (t *testIBFT) GetIdentifier() []byte {
 	return t.identifier
 }
 
-func (t *testIBFT) NextSeqNumber() (specqbft.Height, error) {
+func (t *testIBFT) NextHeightNumber() (specqbft.Height, error) {
 	return 0, nil
 }
 
@@ -143,7 +143,7 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
+func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// get operator pk for sig
 	pk, err := t.share.OperatorSharePubKey()
 	if err != nil {

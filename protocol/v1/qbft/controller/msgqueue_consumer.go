@@ -6,14 +6,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"go.uber.org/zap"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+
+	"github.com/patrickmn/go-cache"
+	"go.uber.org/zap"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -39,6 +39,7 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 	defer cancel()
 
 	identifier := hex.EncodeToString(c.Identifier)
+	higherCache := cache.New(time.Second*12, time.Second*24)
 
 	for ctx.Err() == nil {
 		time.Sleep(interval)
@@ -54,11 +55,8 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			continue
 		}
 
-		lastSlot := spec.Slot(0) // no slot 0.
-		if c.SignatureState.duty != nil {
-			lastSlot = c.SignatureState.duty.Slot
-		}
-		lastHeight := c.SignatureState.getHeight()
+		lastSlot := c.SignatureState.lastSlot // no slot - 0.
+		lastHeight := c.GetHeight()
 
 		if processed := c.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
 			c.Logger.Debug("process none running instance is done")
@@ -68,17 +66,24 @@ func (c *Controller) ConsumeQueue(handler MessageHandler, interval time.Duration
 			c.Logger.Debug("process by state is done")
 			continue
 		}
-		if processed := c.processDefault(handler, identifier, lastHeight); processed {
+		if processed := c.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
+			c.Logger.Debug("process higher height is done")
+			continue
+		}
+		if processed := c.processLateCommit(handler, identifier, lastHeight); processed {
 			c.Logger.Debug("process default is done")
 			continue
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		c.Q.Clean(func(index msgqueue.Index) bool {
+		cleaned := c.Q.Clean(func(index msgqueue.Index) bool {
 			oldHeight := index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 			oldSlot := index.S > 0 && index.S < lastSlot
 			return oldHeight || oldSlot
 		})
+		if cleaned > 0 {
+			c.Logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
+		}
 	}
 	c.Logger.Warn("queue consumer is closed")
 	return nil
@@ -134,7 +139,7 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 
 	var msg *spectypes.SSVMessage
 
-	currentState := currentInstance.State()
+	currentState := currentInstance.GetState()
 	msg = c.getNextMsgForState(currentState, identifier)
 	if msg == nil {
 		return false // no msg found
@@ -152,9 +157,32 @@ func (c *Controller) processByState(handler MessageHandler, identifier string) b
 	return true // msg processed
 }
 
-// processDefault this phase is to allow late commit and decided msg's
+// processHigherHeight fetch any message with higher height than last height
+func (c *Controller) processHigherHeight(handler MessageHandler, identifier string, lastHeight specqbft.Height, higherCache *cache.Cache) bool {
+	msgs := c.Q.WithIterator(1, true, func(index msgqueue.Index) bool {
+		key := index.String()
+		if _, found := higherCache.Get(key); !found {
+			higherCache.Set(key, 0, cache.DefaultExpiration)
+		} else {
+			return false // skip msg
+		}
+
+		return index.ID == identifier && index.H > lastHeight
+	})
+
+	if len(msgs) > 0 {
+		err := handler(msgs[0])
+		if err != nil {
+			c.Logger.Warn("could not handle msg", zap.Error(err))
+		}
+		return true
+	}
+	return false
+}
+
+// processLateCommit this phase is to allow late commit and decided msg's
 // we allow late commit and decided up to 1 height back. (only to support pre fork. after fork no need to support previews height)
-func (c *Controller) processDefault(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
+func (c *Controller) processLateCommit(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	iterator := msgqueue.NewIndexIterator().
 		Add(func() msgqueue.Index {
 			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
@@ -186,10 +214,15 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 	height := state.GetHeight()
 	stage := qbft.RoundState(state.Stage.Load())
 
-	iterator := msgqueue.NewIndexIterator().
-		Add(func() msgqueue.Index {
-			return stateIndex(identifier, stage, height)
-		}).
+	iterator := msgqueue.NewIndexIterator()
+
+	stats := stateIndex(identifier, stage, height)
+
+	for _, idx := range stats {
+		iterator.AddIndex(idx)
+	}
+
+	iterator.
 		Add(func() msgqueue.Index {
 			return msgqueue.DecidedMsgIndex(identifier)
 		}).
@@ -200,6 +233,7 @@ func (c *Controller) getNextMsgForState(state *qbft.State, identifier string) *s
 			}
 			return indices[0]
 		})
+
 	msgs := c.Q.PopIndices(1, iterator)
 	if len(msgs) == 0 {
 		return nil
@@ -220,23 +254,23 @@ func (c *Controller) processAllDecided(handler MessageHandler) {
 	}
 }
 
-func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) msgqueue.Index {
+func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) []msgqueue.Index {
 	var res []msgqueue.Index
 	switch stage {
-	case qbft.RoundStateNotStarted:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType)
-	case qbft.RoundStatePrePrepare:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType) // looking for propose in case is leader
+	case qbft.RoundStateReady:
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType, specqbft.PrepareMsgType) // check for prepare in case propose came before set the ctrl new height
+	case qbft.RoundStateProposal:
+		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType)
 	case qbft.RoundStatePrepare:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
 	case qbft.RoundStateCommit:
-		return msgqueue.Index{} // qbft.RoundStateCommit stage is NEVER set
+		return []msgqueue.Index{{}} // qbft.RoundStateCommit stage is NEVER set
 	case qbft.RoundStateChangeRound:
 		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
 		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
 	}
 	if len(res) == 0 {
-		return msgqueue.Index{}
+		return []msgqueue.Index{{}}
 	}
-	return res[0]
+	return res
 }

@@ -105,6 +105,8 @@ func (n *bootNode) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p", handler.httpHandler)
 
+	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
+	// nolint: gosec
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", 5000), mux); err != nil {
 		log.Fatalf("Failed to start server %v", err)
 	}

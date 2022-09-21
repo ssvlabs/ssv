@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -79,7 +78,7 @@ func (c *Controller) broadcastSignature() error {
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
-func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specqbft.Height, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
+func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// sign input value and broadcast
 	sig, root, valueStruct, duty, err := c.signDuty(logger, decidedValue, role)
 	if err != nil {
@@ -94,7 +93,7 @@ func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, height specq
 	}
 
 	//	start timer, clear new map and set var's
-	c.SignatureState.start(c.Logger, height, signaturesCount, root, valueStruct, duty)
+	c.SignatureState.start(c.Logger, signaturesCount, root, valueStruct, duty)
 	return nil
 }
 

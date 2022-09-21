@@ -1,10 +1,13 @@
 package controller
 
 import (
+	"context"
 	"encoding/hex"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -18,11 +21,11 @@ import (
 
 // startInstanceWithOptions will start an iBFT instance with the provided options.
 // Does not pre-check instance validity and start validity!
-func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte) (*instance.Result, error) {
+func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, value []byte, getInstance func(instance instance.Instancer)) (*instance.Result, error) {
 	newInstance := instance.NewInstance(instanceOpts)
-	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(c.ValidatorShare, newInstance.State())
+	newInstance.(*instance.Instance).LeaderSelector = roundrobin.New(c.ValidatorShare, newInstance.GetState())
 
-	c.setCurrentInstance(newInstance)
+	c.SetCurrentInstance(newInstance)
 
 	newInstance.Init()
 	stageChan := newInstance.GetStageChan()
@@ -32,8 +35,12 @@ func (c *Controller) startInstanceWithOptions(instanceOpts *instance.Options, va
 		return nil, errors.WithMessage(err, "could not start iBFT instance")
 	}
 
+	if getInstance != nil { // for spec test only!
+		getInstance(newInstance)
+	}
+
 	messageID := message.ToMessageID(c.Identifier)
-	metricsCurrentSequence.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newInstance.State().GetHeight()))
+	metricsCurrentSequence.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(newInstance.GetState().GetHeight()))
 
 	// catch up if we can
 	go c.fastChangeRoundCatchup(newInstance)
@@ -76,9 +83,9 @@ instanceLoop:
 	var seq specqbft.Height
 	if c.GetCurrentInstance() != nil {
 		// saves seq as instance will be cleared
-		seq = c.GetCurrentInstance().State().GetHeight()
+		seq = c.GetCurrentInstance().GetState().GetHeight()
 		// when main instance loop breaks, nil current instance
-		c.setCurrentInstance(nil)
+		c.SetCurrentInstance(nil)
 	}
 	c.Logger.Debug("iBFT instance result loop stopped")
 
@@ -106,7 +113,10 @@ func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result,
 	idn := hex.EncodeToString(c.Identifier)
 	c.Q.Clean(func(k msgqueue.Index) bool {
 		if k.ID == idn && k.H <= height {
-			if k.Cmt == specqbft.CommitMsgType && k.H == height {
+			if k.Mt == spectypes.SSVPartialSignatureMsgType && k.H == height { // need post consensus msgs
+				return false
+			}
+			if k.Cmt == specqbft.CommitMsgType && k.H == height { // need late commit
 				return false
 			}
 			return true
@@ -119,14 +129,18 @@ func (c *Controller) afterInstance(height specqbft.Height, res *instance.Result,
 func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 	logger := c.Logger.With()
 	if ci := c.GetCurrentInstance(); ci != nil {
-		if s := ci.State(); s != nil {
+		if s := ci.GetState(); s != nil {
 			logger = logger.With(zap.Uint64("instanceHeight", uint64(s.GetHeight())))
 		}
+	}
+	if c.highestRoundCtxCancel != nil {
+		c.highestRoundCtxCancel()
+		c.highestRoundCtxCancel = nil
 	}
 	logger.Debug("instance stage has been changed!", zap.String("stage", qbft.RoundStateName[int32(stage)]))
 	switch stage {
 	case qbft.RoundStatePrepare:
-		if err := c.InstanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.GetCurrentInstance().State()); err != nil {
+		if err := c.InstanceStorage.SaveCurrentInstance(c.GetIdentifier(), c.GetCurrentInstance().GetState()); err != nil {
 			return true, errors.Wrap(err, "could not save prepare msg to storage")
 		}
 	case qbft.RoundStateDecided:
@@ -161,16 +175,40 @@ func (c *Controller) instanceStageChange(stage qbft.RoundState) (bool, error) {
 		return false, nil
 	case qbft.RoundStateChangeRound:
 		// set time for next round change
-		c.GetCurrentInstance().ResetRoundTimer()
+		currentInstance := c.GetCurrentInstance()
+		currentInstance.ResetRoundTimer()
 		// broadcast round change
-		if err := c.GetCurrentInstance().BroadcastChangeRound(); err != nil {
-			c.Logger.Error("could not broadcast round change message", zap.Error(err))
+		if err := currentInstance.BroadcastChangeRound(); err != nil {
+			c.Logger.Warn("could not broadcast round change message", zap.Error(err))
+		}
+		highestRoundTimeout := currentInstance.HighestRoundTimeoutSeconds()
+		if highestRoundTimeout > 0 {
+			ctx, cancel := context.WithCancel(c.Ctx)
+			c.highestRoundCtxCancel = cancel
+			go c.highestRound(ctx, highestRoundTimeout)
 		}
 	case qbft.RoundStateStopped:
 		c.Logger.Info("current iBFT instance stopped, nilling currentInstance")
 		return true, nil
 	}
 	return false, nil
+}
+
+func (c *Controller) highestRound(ctx context.Context, highestRoundTimeout time.Duration) {
+	c.Logger.Debug("starting highest round")
+	ticker := time.NewTicker(highestRoundTimeout)
+	for {
+		select {
+		case <-ticker.C:
+			currentInstance := c.GetCurrentInstance()
+			if currentInstance == nil {
+				return
+			}
+			go c.fastChangeRoundCatchup(currentInstance)
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // fastChangeRoundCatchup fetches the latest change round (if one exists) from every peer to try and fast sync forward.
@@ -182,21 +220,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		if ctxErr := c.Ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
-		currentInstance := c.GetCurrentInstance()
-		if currentInstance == nil {
-			return errors.New("current instance is nil")
-		}
-		logger := c.Logger.With(zap.Uint64("msgHeight", uint64(msg.Message.Height)))
-		if stage := currentInstance.State(); stage != nil && stage.GetHeight() > msg.Message.Height {
-			logger.Debug("change round message is old, ignoring",
-				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
-			return nil
-		} else if stage.GetHeight() < msg.Message.Height {
-			logger.Debug("got change round message of an newer decided",
-				zap.Uint64("currentHeight", uint64(stage.GetHeight())))
-		}
-		err := c.GetCurrentInstance().ChangeRoundMsgValidationPipeline().Run(msg)
-		if err != nil {
+		if err := signedmsg.BasicMsgValidation().Run(msg); err != nil {
 			return errors.Wrap(err, "invalid msg")
 		}
 		encodedMsg, err := msg.Encode()
@@ -212,7 +236,7 @@ func (c *Controller) fastChangeRoundCatchup(instance instance.Instancer) {
 		return nil
 	}
 
-	h := instance.State().GetHeight()
+	h := instance.GetState().GetHeight()
 	err := f.GetChangeRoundMessages(message.ToMessageID(c.Identifier), h, handler)
 
 	if err != nil {

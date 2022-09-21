@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,6 +10,7 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont/inmem"
@@ -28,19 +28,19 @@ func TestAggregatedMsg(t *testing.T) {
 	msg1 := SignMsg(t, operatorIds[:1], sks[operatorIds[0]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 	msg2 := SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 	msg3 := SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitData,
 	})
 
@@ -106,12 +106,12 @@ func TestCommittedAggregatedMsg(t *testing.T) {
 func committedAggregatedMsg(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.CommitMsgType: inmem.New(3, 2),
 		},
 		Config:         qbft.DefaultConsensusParams(),
 		ValidatorShare: &beacon.Share{Committee: nodes, OperatorIds: shareOperatorIds},
-		state: &qbft.State{
+		State: &qbft.State{
 			Round:         qbft.NewRound(specqbft.Round(1)),
 			PreparedValue: qbft.NewByteValue([]byte(nil)),
 			PreparedRound: qbft.NewRound(specqbft.Round(0)),
@@ -123,8 +123,8 @@ func committedAggregatedMsg(t *testing.T) {
 	require.EqualError(t, err, "missing decided message")
 
 	// set prepared state
-	instance.State().PreparedRound.Store(specqbft.Round(1))
-	instance.State().PreparedValue.Store([]byte("value"))
+	instance.GetState().PreparedRound.Store(specqbft.Round(1))
+	instance.GetState().PreparedValue.Store([]byte("value"))
 
 	// test prepared but no committed msgs
 	_, err = instance.CommittedAggregatedMsg()
@@ -134,18 +134,18 @@ func committedAggregatedMsg(t *testing.T) {
 	consensusMessage := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value")}),
 	}
 
 	commitData, err := consensusMessage.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage), commitData.Data)
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage), commitData.Data)
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage), commitData.Data)
+	instance.ContainersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[:1], sks[operatorIds[0]], consensusMessage), commitData.Data)
+	instance.ContainersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[1:2], sks[operatorIds[1]], consensusMessage), commitData.Data)
+	instance.ContainersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], consensusMessage), commitData.Data)
 
-	instance.decidedMsg, err = AggregateMessages(instance.containersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(3))
+	instance.decidedMsg, err = AggregateMessages(instance.ContainersMap[specqbft.CommitMsgType].ReadOnlyMessagesByRound(3))
 	require.NoError(t, err)
 
 	// test aggregation
@@ -157,14 +157,14 @@ func committedAggregatedMsg(t *testing.T) {
 	m := &specqbft.Message{
 		MsgType:    specqbft.CommitMsgType,
 		Round:      3,
-		Identifier: []byte("Lambda"),
+		Identifier: []byte("Identifier"),
 		Data:       commitDataToBytes(t, &specqbft.CommitData{Data: []byte("value2")}),
 	}
 
 	commitData, err = m.GetCommitData()
 	require.NoError(t, err)
 
-	instance.containersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], m), commitData.Data)
+	instance.ContainersMap[specqbft.CommitMsgType].AddMessage(SignMsg(t, operatorIds[2:3], sks[operatorIds[2]], m), commitData.Data)
 	msg, err = instance.CommittedAggregatedMsg()
 	require.NoError(t, err)
 	require.ElementsMatch(t, operatorIds[:3], msg.Signers)
@@ -178,20 +178,20 @@ func TestCommitPipeline(t *testing.T) {
 	sks, nodes, operatorIds, shareOperatorIds := GenerateNodes(4)
 
 	instance := &Instance{
-		containersMap: map[specqbft.MessageType]msgcont.MessageContainer{
+		ContainersMap: map[specqbft.MessageType]msgcont.MessageContainer{
 			specqbft.PrepareMsgType: inmem.New(3, 2),
 		},
 		ValidatorShare: &beacon.Share{Committee: nodes, PublicKey: sks[operatorIds[0]].GetPublicKey(), OperatorIds: shareOperatorIds},
-		state:          &qbft.State{},
+		State:          &qbft.State{},
 	}
 
-	instance.state.Round.Store(specqbft.Round(1))
-	instance.state.PreparedValue.Store([]byte(nil))
-	instance.state.PreparedRound.Store(specqbft.Round(0))
+	instance.GetState().Round.Store(specqbft.Round(1))
+	instance.GetState().PreparedValue.Store([]byte(nil))
+	instance.GetState().PreparedRound.Store(specqbft.Round(0))
 
 	instance.setFork(testingFork(instance))
 	pipeline := instance.CommitMsgPipeline()
-	require.EqualValues(t, "combination of: combination of: basic msg validation, type check, lambda, sequence, authorize, , add commit msg, if first pipeline non error, continue to second, ", pipeline.Name())
+	require.EqualValues(t, "combination of: combination of: combination of: basic msg validation, type check, identifier, sequence, authorize, , add commit msg, , upon commit msg, ", pipeline.Name())
 }
 
 // AggregateMessages will aggregate given msgs or return error

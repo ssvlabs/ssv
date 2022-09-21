@@ -12,19 +12,20 @@ type RoundState int32
 
 // RoundState values
 const (
-	RoundStateNotStarted  RoundState = 0
-	RoundStatePrePrepare  RoundState = 1
-	RoundStatePrepare     RoundState = 2
-	RoundStateCommit      RoundState = 3
-	RoundStateChangeRound RoundState = 4
-	RoundStateDecided     RoundState = 5
-	RoundStateStopped     RoundState = 6
+	RoundStateNotStarted RoundState = iota
+	RoundStateReady
+	RoundStateProposal
+	RoundStatePrepare
+	RoundStateCommit
+	RoundStateChangeRound
+	RoundStateDecided
+	RoundStateStopped
 )
 
 // RoundStateName represents the map of the round state names
 var RoundStateName = map[int32]string{
 	0: "NotStarted",
-	1: "PrePrepare",
+	1: "Proposal",
 	2: "Prepare",
 	3: "Commit",
 	4: "ChangeRound",
@@ -35,36 +36,39 @@ var RoundStateName = map[int32]string{
 // State holds an iBFT state, thread safe
 type State struct {
 	Stage atomic.Int32 // RoundState
-	// lambda is an instance unique identifier, much like a block hash in a blockchain
+	// Identifier is an instance unique identifier, much like a block hash in a blockchain
 	Identifier atomic.Value // []byte
 	// Height is an incremental number for each instance, much like a block number would be in a blockchain
-	Height        atomic.Value // specqbft.Height
-	InputValue    atomic.Value // []byte
-	Round         atomic.Value // specqbft.Round
-	PreparedRound atomic.Value // specqbft.Round
-	PreparedValue atomic.Value // []byte
+	Height                          atomic.Value // specqbft.Height
+	InputValue                      atomic.Value // []byte
+	Round                           atomic.Value // specqbft.Round
+	PreparedRound                   atomic.Value // specqbft.Round
+	PreparedValue                   atomic.Value // []byte
+	ProposalAcceptedForCurrentRound atomic.Value // *specqbft.SignedMessage
 }
 
 type unsafeState struct {
-	Stage         int32
-	Identifier    []byte
-	Height        specqbft.Height
-	InputValue    []byte
-	Round         specqbft.Round
-	PreparedRound specqbft.Round
-	PreparedValue []byte
+	Stage                           int32
+	Identifier                      []byte
+	Height                          specqbft.Height
+	InputValue                      []byte
+	Round                           specqbft.Round
+	PreparedRound                   specqbft.Round
+	PreparedValue                   []byte
+	ProposalAcceptedForCurrentRound *specqbft.SignedMessage
 }
 
 // MarshalJSON implements marshaling interface
 func (s *State) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&unsafeState{
-		Stage:         s.Stage.Load(),
-		Identifier:    s.GetIdentifier(),
-		Height:        s.GetHeight(),
-		InputValue:    s.GetInputValue(),
-		Round:         s.GetRound(),
-		PreparedRound: s.GetPreparedRound(),
-		PreparedValue: s.GetPreparedValue(),
+		Stage:                           s.Stage.Load(),
+		Identifier:                      s.GetIdentifier(),
+		Height:                          s.GetHeight(),
+		InputValue:                      s.GetInputValue(),
+		Round:                           s.GetRound(),
+		PreparedRound:                   s.GetPreparedRound(),
+		PreparedValue:                   s.GetPreparedValue(),
+		ProposalAcceptedForCurrentRound: s.GetProposalAcceptedForCurrentRound(),
 	})
 }
 
@@ -82,6 +86,7 @@ func (s *State) UnmarshalJSON(data []byte) error {
 	s.Round.Store(d.Round)
 	s.PreparedRound.Store(d.PreparedRound)
 	s.PreparedValue.Store(d.PreparedValue)
+	s.ProposalAcceptedForCurrentRound.Store(d.ProposalAcceptedForCurrentRound)
 
 	return nil
 }
@@ -152,6 +157,15 @@ func (s *State) GetPreparedValue() []byte {
 	return nil
 }
 
+// GetProposalAcceptedForCurrentRound returns proposal accepted for current round
+func (s *State) GetProposalAcceptedForCurrentRound() *specqbft.SignedMessage {
+	if value, ok := s.ProposalAcceptedForCurrentRound.Load().(*specqbft.SignedMessage); ok {
+		return value
+	}
+
+	return nil
+}
+
 // NewByteValue returns a new byte value
 func NewByteValue(val []byte) atomic.Value {
 	value := atomic.Value{}
@@ -161,14 +175,14 @@ func NewByteValue(val []byte) atomic.Value {
 
 // InstanceConfig is the configuration of the instance
 type InstanceConfig struct {
-	RoundChangeDurationSeconds   float32
-	LeaderPreprepareDelaySeconds float32
+	RoundChangeDurationSeconds float32
+	LeaderProposalDelaySeconds float32
 }
 
 //DefaultConsensusParams returns the default round change duration time
 func DefaultConsensusParams() *InstanceConfig {
 	return &InstanceConfig{
-		RoundChangeDurationSeconds:   3,
-		LeaderPreprepareDelaySeconds: 1,
+		RoundChangeDurationSeconds: 3,
+		LeaderProposalDelaySeconds: 1,
 	}
 }

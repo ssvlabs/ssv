@@ -73,7 +73,7 @@ loop:
 		fmt.Printf("error initializing ibft")
 	}
 
-	nextSeq, err := nodes[3].NextSeqNumber()
+	nextSeq, err := nodes[3].NextHeightNumber()
 	if err != nil {
 		r.logger.Error("node #4 could not get state")
 	} else {
@@ -83,10 +83,10 @@ loop:
 
 func (r *farFutureSync) startNode(node ibft.IController, index uint64, seqNumber specqbft.Height) {
 	res, err := node.StartInstance(ibftinstance.ControllerStartInstanceOptions{
-		Logger:    r.logger,
-		SeqNumber: seqNumber,
-		Value:     []byte("value"),
-	})
+		Logger: r.logger,
+		Height: seqNumber,
+		Value:  []byte("value"),
+	}, nil)
 	if err != nil {
 		r.logger.Error("instance returned error", zap.Error(err))
 	} else if !res.Decided {

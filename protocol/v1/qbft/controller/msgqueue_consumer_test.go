@@ -45,14 +45,15 @@ func TestConsumeMessages(t *testing.T) {
 		CurrentInstanceLock: currentInstanceLock,
 		ForkLock:            &sync.Mutex{},
 	}
-	ctrl.SignatureState.setHeight(0)
+	ctrl.setHeight(0)
 
 	tests := []struct {
 		name            string
 		msgs            []*spectypes.SSVMessage
 		expected        []*spectypes.SSVMessage
 		expectedQLen    int
-		lastHeight      specqbft.Height
+		ctrlHeight      specqbft.Height
+		lastSlot        phase0.Slot
 		currentInstance instance.Instancer
 	}{
 		{
@@ -63,6 +64,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -73,6 +75,7 @@ func TestConsumeMessages(t *testing.T) {
 			nil,
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -83,6 +86,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 0, ctrl.Identifier, specqbft.CommitMsgType)},
 			0,
 			specqbft.Height(2),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -96,6 +100,7 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(1), message.ToMessageID(ctrl.Identifier))},
 			3,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -107,7 +112,25 @@ func TestConsumeMessages(t *testing.T) {
 			[]*spectypes.SSVMessage{generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.ProposalMsgType)},
 			1,
 			specqbft.Height(1),
-			generateInstance(1, 1, qbft.RoundStateNotStarted),
+			phase0.Slot(1),
+			generateInstance(1, 1, qbft.RoundStateReady),
+		},
+		{
+			"by_state_not_started_prepare",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), 1, ctrl.Identifier, specqbft.CommitMsgType),
+			},
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			2,
+			specqbft.Height(1),
+			phase0.Slot(1),
+			generateInstance(1, 1, qbft.RoundStateReady),
 		},
 		{
 			"by_state_not_started_decided",
@@ -120,10 +143,11 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStateNotStarted),
+			phase0.Slot(1),
+			generateInstance(0, 1, qbft.RoundStateReady),
 		},
 		{
-			"by_state_PrePrepare",
+			"by_state_Proposal",
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),     // verify priority is right
@@ -134,7 +158,8 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			phase0.Slot(1),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"by_state_prepare",
@@ -148,20 +173,24 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStatePrepare),
 		},
 		{
 			"by_state_change_round",
 			[]*spectypes.SSVMessage{
-				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // verify priority is right
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType), // higher is peek and not pop
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // verify priority is right
 			},
 			[]*spectypes.SSVMessage{
 				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), specqbft.Round(1), ctrl.Identifier, specqbft.RoundChangeMsgType),
 			},
 			2,
 			specqbft.Height(0),
+			phase0.Slot(1),
 			generateInstance(0, 1, qbft.RoundStateChangeRound),
 		},
 		{
@@ -176,7 +205,8 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			phase0.Slot(1),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"by_state_no_message_pop_change_round",
@@ -189,7 +219,8 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1,
 			specqbft.Height(0),
-			generateInstance(0, 1, qbft.RoundStatePrePrepare),
+			phase0.Slot(1),
+			generateInstance(0, 1, qbft.RoundStateProposal),
 		},
 		{
 			"default_late_commit",
@@ -201,6 +232,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1), // current height
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -213,6 +245,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			0,
 			specqbft.Height(1), // current height
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -228,6 +261,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(1),
+			phase0.Slot(1),
 			nil,
 		},
 		{
@@ -243,7 +277,8 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			2,
 			specqbft.Height(1),
-			generateInstance(1, 1, qbft.RoundStatePrePrepare),
+			phase0.Slot(1),
+			generateInstance(1, 1, qbft.RoundStateProposal),
 		},
 		{
 			"instance_change_round_clean_old_messages",
@@ -267,6 +302,7 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1, // only "signed_index" for decided in height 9
 			specqbft.Height(10),
+			phase0.Slot(1),
 			generateInstance(10, 1, qbft.RoundStateChangeRound),
 		},
 		{
@@ -291,7 +327,55 @@ func TestConsumeMessages(t *testing.T) {
 			},
 			1, // only "signed_index" for decided in height 10
 			specqbft.Height(10),
+			phase0.Slot(1),
 			nil,
+		},
+		{
+			"no_running_instance_clean_old_messages",
+			[]*spectypes.SSVMessage{
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(10), message.ToMessageID(ctrl.Identifier)),
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(9), message.ToMessageID(ctrl.Identifier)),         // to be removed
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(8), message.ToMessageID(ctrl.Identifier)),         // to be removed
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // have 2 indexs. 1 poped and other stay
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(8), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // to be removed
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType), // to be removed
+			},
+			[]*spectypes.SSVMessage{
+				generatePartialSignatureMsg(t, spectypes.SSVPartialSignatureMsgType, phase0.Slot(10), message.ToMessageID(ctrl.Identifier)),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(7), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(10), specqbft.Round(1), ctrl.Identifier, specqbft.CommitMsgType),
+			},
+			1,
+			specqbft.Height(10),
+			phase0.Slot(10),
+			nil,
+		},
+		{
+			"no_running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{}, // higher msgs are peek and not pop
+			1,
+			specqbft.Height(1),
+			phase0.Slot(1),
+			nil,
+		},
+		{
+			"running_instance_higher_height",
+			[]*spectypes.SSVMessage{
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+				generateSignedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), specqbft.Round(1), ctrl.Identifier, specqbft.PrepareMsgType),
+			},
+			[]*spectypes.SSVMessage{}, // higher msgs are peek and not pop
+			1,
+			specqbft.Height(1),
+			phase0.Slot(1),
+			generateInstance(1, 1, qbft.RoundStateReady),
 		},
 	}
 
@@ -299,10 +383,10 @@ func TestConsumeMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			ctrl.Ctx = ctx
-			ctrl.setCurrentInstance(test.currentInstance)
-			ctrl.SignatureState = SignatureState{}
-			ctrl.SignatureState.setHeight(test.lastHeight)
+			ctrl.SetCurrentInstance(test.currentInstance)
+			ctrl.SignatureState = SignatureState{lastSlot: test.lastSlot}
 			ctrl.SignatureState.duty = &spectypes.Duty{Slot: 1}
+			ctrl.setHeight(test.ctrlHeight)
 
 			// populating msg's
 			for _, msg := range test.msgs {
@@ -349,13 +433,14 @@ func TestConsumeMessages(t *testing.T) {
 						signedMsg := new(specqbft.SignedMessage)
 						require.NoError(t, signedMsg.Decode(msg.Data))
 
-						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
-						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
-						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
 						ctrl.Logger.Debug("msg info",
 							zap.Int("type", int(signedMsg.Message.MsgType)),
 							zap.Uint64("h", uint64(signedMsg.Message.Height)),
 						)
+
+						require.Equal(t, testSignedMsg.Message.MsgType, signedMsg.Message.MsgType)
+						require.Equal(t, testSignedMsg.Message.Height, signedMsg.Message.Height)
+						require.Equal(t, testSignedMsg.Message.Round, signedMsg.Message.Round)
 					}
 					processed++
 					ctrl.Logger.Debug("processed", zap.Int("processed", processed), zap.Int("total", len(test.expected)))
@@ -448,7 +533,7 @@ func (i *InstanceMock) Containers() map[specqbft.MessageType]msgcont.MessageCont
 	panic("implement me")
 }
 
-func (i *InstanceMock) PrePrepareMsgPipeline() pipelines.SignedMessagePipeline {
+func (i *InstanceMock) ProposalMsgPipeline() pipelines.SignedMessagePipeline {
 	//TODO implement me
 	panic("implement me")
 }
@@ -488,7 +573,7 @@ func (i *InstanceMock) Start(inputValue []byte) error {
 	panic("not implemented")
 }
 func (i *InstanceMock) Stop() {}
-func (i *InstanceMock) State() *qbft.State {
+func (i *InstanceMock) GetState() *qbft.State {
 	return i.state
 }
 func (i *InstanceMock) ForceDecide(msg *specqbft.SignedMessage) {}
@@ -510,4 +595,7 @@ func (i *InstanceMock) ProcessMsg(msg *specqbft.SignedMessage) (bool, error) {
 func (i *InstanceMock) ResetRoundTimer() {}
 func (i *InstanceMock) BroadcastChangeRound() error {
 	panic("not implemented")
+}
+func (i *InstanceMock) HighestRoundTimeoutSeconds() time.Duration {
+	return 0
 }

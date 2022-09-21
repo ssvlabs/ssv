@@ -80,8 +80,10 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 
-	require.NoError(t, db.RemoveAllByCollection([]byte("prefix1")))
 	require.NoError(t, db.RemoveAllByCollection([]byte("prefix2")))
+	deleted, err := db.DeleteByPrefix([]byte("prefix1"))
+	require.NoError(t, err)
+	require.Equal(t, 1, deleted)
 }
 
 func TestBadgerDb_GetAll(t *testing.T) {
@@ -198,5 +200,7 @@ func getAllTest(t *testing.T, n int, db basedb.IDb) {
 		visited[string(item.Key[:])] = item.Value[:]
 	}
 	require.Equal(t, n, len(visited))
-	require.NoError(t, db.RemoveAllByCollection(prefix))
+	count, err := db.DeleteByPrefix(prefix)
+	require.NoError(t, err)
+	require.Equal(t, n, count)
 }

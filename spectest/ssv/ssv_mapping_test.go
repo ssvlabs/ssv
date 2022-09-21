@@ -170,6 +170,7 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		ForkVersion:                forkVersion,
 		SyncRateLimit:              time.Second * 5,
 		SignatureCollectionTimeout: time.Second * 5,
+		MinPeers:                   2,
 		ReadMode:                   false,
 		FullNode:                   false,
 		DutyRoles:                  []spectypes.BeaconRole{attesterRoleType},
@@ -202,19 +203,19 @@ func runMappingTest(t *testing.T, test *tests.SpecTest) {
 		mappedInstance.State = &qbft.State{
 			Share:                           test.Runner.Share,
 			ID:                              qbftCtrl.GetIdentifier(),
-			Round:                           currentInstance.State().GetRound(),
-			Height:                          currentInstance.State().GetHeight(),
-			LastPreparedRound:               currentInstance.State().GetPreparedRound(),
-			LastPreparedValue:               currentInstance.State().GetPreparedValue(),
+			Round:                           currentInstance.GetState().GetRound(),
+			Height:                          currentInstance.GetState().GetHeight(),
+			LastPreparedRound:               currentInstance.GetState().GetPreparedRound(),
+			LastPreparedValue:               currentInstance.GetState().GetPreparedValue(),
 			ProposalAcceptedForCurrentRound: nil,
-			Decided:                         decided != nil && decided.Message.Height == currentInstance.State().GetHeight(), // TODO might need to add this flag to qbftCtrl
-			DecidedValue:                    decidedValue,                                                                    // TODO allow a way to get it
+			Decided:                         decided != nil && decided.Message.Height == currentInstance.GetState().GetHeight(), // TODO might need to add this flag to qbftCtrl
+			DecidedValue:                    decidedValue,                                                                       // TODO allow a way to get it
 			ProposeContainer:                convertToSpecContainer(t, currentInstance.Containers()[qbft.ProposalMsgType]),
 			PrepareContainer:                convertToSpecContainer(t, currentInstance.Containers()[qbft.PrepareMsgType]),
 			CommitContainer:                 convertToSpecContainer(t, currentInstance.Containers()[qbft.CommitMsgType]),
 			RoundChangeContainer:            convertToSpecContainer(t, currentInstance.Containers()[qbft.RoundChangeMsgType]),
 		}
-		mappedInstance.StartValue = currentInstance.State().GetInputValue()
+		mappedInstance.StartValue = currentInstance.GetState().GetInputValue()
 	}
 
 	mappedDecidedValue := &spectypes.ConsensusData{

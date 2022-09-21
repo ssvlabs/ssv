@@ -50,6 +50,8 @@ func (n *p2pNetwork) Setup() error {
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
+	// set a seed for rand values
+	rand.Seed(time.Now().UnixNano())
 
 	n.logger.Info("configuring p2p network service")
 
@@ -264,10 +266,10 @@ func (n *p2pNetwork) setupPubsub() error {
 		Logger:   n.logger,
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
-		//MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-		//	logger := n.logger.With(zap.String("who", "MsgValidator"))
-		//	return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
-		//},
+		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
+			logger := n.logger.With(zap.String("who", "MsgValidator"))
+			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
+		},
 		MsgHandler: n.handlePubsubMessages,
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
@@ -275,6 +277,7 @@ func (n *p2pNetwork) setupPubsub() error {
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 
 	if !n.cfg.PubSubScoring {

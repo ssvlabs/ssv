@@ -1,33 +1,33 @@
-package preprepare
+package proposal
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"testing"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[uint64]*bls.SecretKey, map[uint64]*beacon.Node) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, map[spectypes.OperatorID]*beacon.Node) {
 	_ = bls.Init(bls.BLS12_381)
-	nodes := make(map[uint64]*beacon.Node)
-	sks := make(map[uint64]*bls.SecretKey)
+	nodes := make(map[spectypes.OperatorID]*beacon.Node)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
 	for i := 0; i < cnt; i++ {
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
-		nodes[uint64(i)] = &beacon.Node{
+		nodes[spectypes.OperatorID(i)] = &beacon.Node{
 			IbftID: uint64(i),
 			Pk:     sk.GetPublicKey().Serialize(),
 		}
-		sks[uint64(i)] = sk
+		sks[spectypes.OperatorID(i)] = sk
 	}
 	return sks, nodes
 }
@@ -55,8 +55,15 @@ func SignMsg(t *testing.T, id uint64, sk *bls.SecretKey, msg *specqbft.Message) 
 	return sm
 }
 
-func TestValidatePrePrepareValue(t *testing.T) {
-	sks, _ := GenerateNodes(4)
+func TestValidateProposalValue(t *testing.T) {
+	sks, nodes := GenerateNodes(4)
+	share := &beacon.Share{
+		Committee: nodes,
+	}
+
+	validPrepareMsg := &specqbft.PrepareData{Data: []byte(time.Now().Weekday().String())}
+	validEncodedPrepare, err := validPrepareMsg.Encode()
+	require.NoError(t, err)
 
 	tests := []struct {
 		name string
@@ -70,8 +77,8 @@ func TestValidatePrePrepareValue(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
-					Data:       []byte(time.Now().Weekday().String()),
+					Identifier: []byte("Identifier"),
+					Data:       validEncodedPrepare,
 				},
 				Signature: []byte{},
 				Signers:   []spectypes.OperatorID{},
@@ -84,8 +91,8 @@ func TestValidatePrePrepareValue(t *testing.T) {
 				Message: &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Round:      1,
-					Identifier: []byte("Lambda"),
-					Data:       []byte(time.Now().Weekday().String()),
+					Identifier: []byte("Identifier"),
+					Data:       validEncodedPrepare,
 				},
 				Signature: []byte{},
 				Signers:   []spectypes.OperatorID{1, 2},
@@ -97,7 +104,7 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			SignMsg(t, 2, sks[2], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
+				Identifier: []byte("Identifier"),
 				Data:       []byte("wrong value"),
 			}),
 		},
@@ -107,14 +114,17 @@ func TestValidatePrePrepareValue(t *testing.T) {
 			SignMsg(t, 1, sks[1], &specqbft.Message{
 				MsgType:    specqbft.ProposalMsgType,
 				Round:      1,
-				Identifier: []byte("Lambda"),
-				Data:       []byte(time.Now().Weekday().String()),
+				Identifier: []byte("Identifier"),
+				Data:       validEncodedPrepare,
 			}),
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			err := ValidatePrePrepareMsg(func(round specqbft.Round) uint64 {
+			state := &qbft.State{}
+			state.Round.Store(test.msg.Message.Round)
+
+			err := ValidateProposalMsg(share, state, func(round specqbft.Round) uint64 {
 				return 1
 			}).Run(test.msg)
 			if len(test.err) > 0 {

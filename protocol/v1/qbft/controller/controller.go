@@ -2,6 +2,9 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,6 +51,7 @@ type Options struct {
 	KeyManager        spectypes.KeyManager
 	SyncRateLimit     time.Duration
 	SigTimeout        time.Duration
+	MinPeers          int
 	ReadMode          bool
 	FullNode          bool
 	NewDecidedHandler NewDecidedHandler
@@ -64,21 +68,32 @@ const (
 	Forking
 )
 
+var stateStringMap = map[uint32]string{
+	NotStarted:        "notStarted",
+	InitiatedHandlers: "initiatedHandlers",
+	SyncedChangeRound: "syncedChangedRound",
+	WaitingForPeers:   "waitingForPeers",
+	FoundPeers:        "foundPeers",
+	Ready:             "ready",
+	Forking:           "forking",
+}
+
 // Controller implements IController interface
 type Controller struct {
 	Ctx context.Context
 
-	currentInstance    instance.Instancer
-	Logger             *zap.Logger
-	InstanceStorage    qbftstorage.InstanceStore
-	ChangeRoundStorage qbftstorage.ChangeRoundStore
-	Network            p2pprotocol.Network
-	InstanceConfig     *qbft.InstanceConfig
-	ValidatorShare     *beaconprotocol.Share
-	Identifier         []byte
-	Fork               forks.Fork
-	Beacon             beaconprotocol.Beacon
-	KeyManager         spectypes.KeyManager
+	currentInstance        instance.Instancer
+	Logger                 *zap.Logger
+	InstanceStorage        qbftstorage.InstanceStore
+	ChangeRoundStorage     qbftstorage.ChangeRoundStore
+	Network                p2pprotocol.Network
+	InstanceConfig         *qbft.InstanceConfig
+	ValidatorShare         *beaconprotocol.Share
+	Identifier             []byte
+	Fork                   forks.Fork
+	Beacon                 beaconprotocol.Beacon
+	KeyManager             spectypes.KeyManager
+	HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
 
 	// lockers
 	CurrentInstanceLock *sync.RWMutex // not locker interface in order to avoid casting to RWMutex
@@ -87,11 +102,13 @@ type Controller struct {
 	// signature
 	SignatureState SignatureState
 
-	// flags
-	State uint32
-
+	// config
 	SyncRateLimit time.Duration
 	MinPeers      int
+
+	// state
+	State  uint32
+	height atomic.Value // specqbft.Height
 
 	// flags
 	ReadMode bool
@@ -102,6 +119,8 @@ type Controller struct {
 	DecidedFactory    *factory.Factory
 	DecidedStrategy   strategy.Decided
 	newDecidedHandler NewDecidedHandler
+
+	highestRoundCtxCancel context.CancelFunc
 }
 
 // New is the constructor of Controller
@@ -110,20 +129,22 @@ func New(opts Options) IController {
 	fork := forksfactory.NewFork(opts.Version)
 
 	ctrl := &Controller{
-		Ctx:                opts.Context,
-		InstanceStorage:    opts.Storage,
-		ChangeRoundStorage: opts.Storage,
-		Logger:             logger,
-		Network:            opts.Network,
-		InstanceConfig:     opts.InstanceConfig,
-		ValidatorShare:     opts.ValidatorShare,
-		Identifier:         opts.Identifier,
-		Fork:               fork,
-		Beacon:             opts.Beacon,
-		KeyManager:         opts.KeyManager,
-		SignatureState:     SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		Ctx:                    opts.Context,
+		InstanceStorage:        opts.Storage,
+		ChangeRoundStorage:     opts.Storage,
+		Logger:                 logger,
+		Network:                opts.Network,
+		InstanceConfig:         opts.InstanceConfig,
+		ValidatorShare:         opts.ValidatorShare,
+		Identifier:             opts.Identifier,
+		Fork:                   fork,
+		Beacon:                 opts.Beacon,
+		KeyManager:             opts.KeyManager,
+		SignatureState:         SignatureState{SignatureCollectionTimeout: opts.SigTimeout},
+		HigherReceivedMessages: make(map[spectypes.OperatorID]specqbft.Height, len(opts.ValidatorShare.Committee)),
 
 		SyncRateLimit: opts.SyncRateLimit,
+		MinPeers:      opts.MinPeers,
 
 		ReadMode: opts.ReadMode,
 		fullNode: opts.FullNode,
@@ -151,53 +172,7 @@ func New(opts Options) IController {
 
 	// set flags
 	ctrl.State = NotStarted
-
 	return ctrl
-}
-
-// GetCurrentInstance returns current instance if exist. if not, returns nil
-func (c *Controller) GetCurrentInstance() instance.Instancer {
-	c.CurrentInstanceLock.RLock()
-	defer c.CurrentInstanceLock.RUnlock()
-
-	return c.currentInstance
-}
-
-func (c *Controller) setCurrentInstance(instance instance.Instancer) {
-	c.CurrentInstanceLock.Lock()
-	defer c.CurrentInstanceLock.Unlock()
-
-	c.currentInstance = instance
-}
-
-// OnFork called upon fork, it will make sure all decided messages were processed
-// before clearing the entire msg queue.
-// it also recreates the fork instance and decided strategy with the new fork version
-func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	atomic.StoreUint32(&c.State, Forking)
-	defer atomic.StoreUint32(&c.State, Ready)
-
-	if i := c.GetCurrentInstance(); i != nil {
-		i.Stop()
-		c.setCurrentInstance(nil)
-	}
-	c.processAllDecided(c.MessageHandler)
-	cleared := c.Q.Clean(msgqueue.AllIndicesCleaner)
-	c.Logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
-
-	// get new QBFT controller fork and update decidedStrategy
-	c.ForkLock.Lock()
-	defer c.ForkLock.Unlock()
-	c.Fork = forksfactory.NewFork(forkVersion)
-	c.DecidedStrategy = c.DecidedFactory.GetStrategy()
-	return nil
-}
-
-func (c *Controller) syncDecided(from, to *specqbft.SignedMessage) error {
-	c.ForkLock.Lock()
-	fork, decidedStrategy := c.Fork, c.DecidedStrategy
-	c.ForkLock.Unlock()
-	return decidedStrategy.Sync(c.Ctx, c.Identifier, from, to, fork.ValidateDecidedMsg(c.ValidatorShare))
 }
 
 // Init sets all major processes of iBFT while blocking until completed.
@@ -206,7 +181,9 @@ func (c *Controller) Init() error {
 	// checks if notStarted. if so, preform init handlers and set state to new state
 	if atomic.CompareAndSwapUint32(&c.State, NotStarted, InitiatedHandlers) {
 		c.Logger.Info("start qbft ctrl handler init")
+
 		go c.StartQueueConsumer(c.MessageHandler)
+		c.setInitialHeight()
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, false)
 		//c.logger.Debug("managed to setup iBFT handlers")
 	}
@@ -225,9 +202,9 @@ func (c *Controller) Init() error {
 	if atomic.CompareAndSwapUint32(&c.State, SyncedChangeRound, WaitingForPeers) {
 		// warmup to avoid network errors
 		time.Sleep(500 * time.Millisecond)
-		minPeers := 1
-		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", minPeers))
-		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), minPeers, time.Millisecond*500); err != nil {
+		c.Logger.Debug("waiting for min peers...", zap.Int("min peers", c.MinPeers))
+		if err := p2pprotocol.WaitForMinPeers(c.Ctx, c.Logger, c.Network, c.ValidatorShare.PublicKey.Serialize(), c.MinPeers, time.Millisecond*500); err != nil {
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // rollback state in order to find peers & try syncing again
 			return err
 		}
 		c.Logger.Debug("found enough peers")
@@ -247,14 +224,14 @@ func (c *Controller) Init() error {
 			}
 			c.Logger.Warn("iBFT implementation init failed to sync history", zap.Error(err))
 			ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), false, true)
-			atomic.StoreUint32(&c.State, SyncedChangeRound) // in order to find peers & try syncing again
+			atomic.StoreUint32(&c.State, SyncedChangeRound) // rollback state in order to find peers & try syncing again
 			return errors.Wrap(err, "could not sync history")
 		}
 
 		atomic.StoreUint32(&c.State, Ready)
 
 		ReportIBFTStatus(c.ValidatorShare.PublicKey.SerializeToHexStr(), true, false)
-		c.Logger.Info("iBFT implementation init finished")
+		c.Logger.Info("iBFT implementation init finished", zap.Int64("height", int64(c.GetHeight())))
 	}
 
 	return nil
@@ -269,12 +246,12 @@ func (c *Controller) initialized() (bool, error) {
 	case Forking:
 		return false, errors.New("forking in progress")
 	default:
-		return false, errors.New("iBFT hasn't initialized yet")
+		return false, errors.Errorf("controller hasn't initialized yet. current state - %s", stateStringMap[state])
 	}
 }
 
 // StartInstance - starts an ibft instance or returns error
-func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions) (res *instance.Result, err error) {
+func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (res *instance.Result, err error) {
 	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")
@@ -286,13 +263,13 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 
 	done := reportIBFTInstanceStart(c.ValidatorShare.PublicKey.SerializeToHexStr())
 
-	c.SignatureState.setHeight(opts.SeqNumber)                                               // update sig state once height determent
+	c.setHeight(opts.Height)                                                                 // update once height determent
 	instanceOpts.ChangeRoundStore = c.ChangeRoundStorage                                     // in order to set the last change round msg
 	if err := instanceOpts.ChangeRoundStore.CleanLastChangeRound(c.Identifier); err != nil { // clean previews last change round msg's (TODO place in instance?)
 		c.Logger.Warn("could not clean change round", zap.Error(err))
 	}
 
-	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value)
+	res, err = c.startInstanceWithOptions(instanceOpts, opts.Value, getInstance)
 	defer func() {
 		done()
 		// report error status if the instance returned error
@@ -303,6 +280,81 @@ func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions)
 	}()
 
 	return res, err
+}
+
+// GetCurrentInstance returns current instance if exist. if not, returns nil
+func (c *Controller) GetCurrentInstance() instance.Instancer {
+	c.CurrentInstanceLock.RLock()
+	defer c.CurrentInstanceLock.RUnlock()
+
+	return c.currentInstance
+}
+
+// SetCurrentInstance set the current instance
+func (c *Controller) SetCurrentInstance(instance instance.Instancer) {
+	c.CurrentInstanceLock.Lock()
+	defer c.CurrentInstanceLock.Unlock()
+
+	c.currentInstance = instance
+}
+
+// OnFork called upon fork, it will make sure all decided messages were processed
+// before clearing the entire msg queue.
+// it also recreates the fork instance and decided strategy with the new fork version
+func (c *Controller) OnFork(forkVersion forksprotocol.ForkVersion) error {
+	atomic.StoreUint32(&c.State, Forking)
+	defer atomic.StoreUint32(&c.State, Ready)
+
+	if i := c.GetCurrentInstance(); i != nil {
+		i.Stop()
+		c.SetCurrentInstance(nil)
+	}
+	c.processAllDecided(c.MessageHandler)
+	cleared := c.Q.Clean(msgqueue.AllIndicesCleaner)
+	c.Logger.Debug("FORKING qbft controller", zap.Int64("clearedMessages", cleared))
+
+	// get new QBFT controller fork and update decidedStrategy
+	c.ForkLock.Lock()
+	defer c.ForkLock.Unlock()
+	c.Fork = forksfactory.NewFork(forkVersion)
+	c.DecidedStrategy = c.DecidedFactory.GetStrategy()
+	return nil
+}
+
+func (c *Controller) syncDecided(from, to *specqbft.SignedMessage) error {
+	c.ForkLock.Lock()
+	decidedStrategy := c.DecidedStrategy
+	c.ForkLock.Unlock()
+	msgs, err := decidedStrategy.Sync(c.Ctx, c.Identifier, from, to)
+	if err != nil {
+		return err
+	}
+	return c.handleSyncMessages(msgs)
+}
+
+func (c *Controller) handleSyncMessages(msgs []*specqbft.SignedMessage) error {
+	c.Logger.Debug(fmt.Sprintf("recivied %d msgs from sync", len(msgs)))
+	for _, syncMsg := range msgs {
+		if err := pipelines.Combine( // TODO need to move it into sync?
+			signedmsg.BasicMsgValidation(),
+			signedmsg.ValidateIdentifiers(c.Identifier)).Run(syncMsg); err != nil {
+			c.Logger.Warn("invalid sync msg", zap.Error(err))
+			continue
+		}
+		encoded, err := syncMsg.Encode() // TODo move to better place
+		if err != nil {
+			c.Logger.Warn("failed to encode sync msg", zap.Error(err))
+			continue
+		}
+		if err := c.ProcessMsg(&spectypes.SSVMessage{
+			MsgType: spectypes.SSVDecidedMsgType, // sync only for decided msg type
+			MsgID:   message.ToMessageID(syncMsg.Message.Identifier),
+			Data:    encoded,
+		}); err != nil {
+			c.Logger.Warn("failed to process sync msg", zap.Error(err))
+		}
+	}
+	return nil
 }
 
 // GetIBFTCommittee returns a map of the iBFT committee where the key is the member's id.
@@ -323,9 +375,9 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 	var fields []zap.Field
 	cInstance := c.GetCurrentInstance()
 	if cInstance != nil {
-		currentState := cInstance.State()
+		currentState := cInstance.GetState()
 		if currentState != nil {
-			fields = append(fields, zap.String("stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("height", uint32(currentState.GetHeight())), zap.Uint32("round", uint32(currentState.GetRound())))
+			fields = append(fields, zap.String("instance stage", qbft.RoundStateName[currentState.Stage.Load()]), zap.Uint32("instance height", uint32(currentState.GetHeight())), zap.Uint32("instance round", uint32(currentState.GetRound())))
 		}
 	}
 	fields = append(fields,
@@ -340,12 +392,13 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 // MessageHandler process message from queue,
 func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType, spectypes.SSVDecidedMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
 		}
-		return c.processConsensusMsg(signedMsg)
+		_, err := c.processConsensusMsg(signedMsg)
+		return err
 
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
@@ -353,12 +406,6 @@ func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		return c.processPostConsensusSig(signedMsg)
-	case spectypes.SSVDecidedMsgType:
-		signedMsg := &specqbft.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")
-		}
-		return c.processDecidedMessage(signedMsg)
 	case message.SSVSyncMsgType:
 		panic("need to implement!")
 	}
@@ -376,4 +423,32 @@ func (c *Controller) GetNodeMode() strategy.Mode {
 		return strategy.ModeFullNode
 	}
 	return strategy.ModeLightNode
+}
+
+// setInitialHeight fetch height decided and set height. if not found set first height
+func (c *Controller) setInitialHeight() {
+	height, err := c.highestKnownDecided()
+	if err != nil {
+		c.Logger.Error("failed to get next height number", zap.Error(err))
+	}
+	if height == nil {
+		c.setHeight(specqbft.FirstHeight)
+		return
+	}
+	c.setHeight(height.Message.Height) // make sure ctrl is set with the right height
+}
+
+// GetHeight return current ctrl height
+func (c *Controller) GetHeight() specqbft.Height {
+	if height, ok := c.height.Load().(specqbft.Height); ok {
+		return height
+	}
+
+	return specqbft.Height(0)
+}
+
+// setHeight set ctrl current height
+func (c *Controller) setHeight(height specqbft.Height) {
+	c.Logger.Debug("set new ctrl height", zap.Int64("current height", int64(c.GetHeight())), zap.Int64("new height", int64(height)))
+	c.height.Store(height)
 }

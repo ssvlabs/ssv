@@ -1,4 +1,4 @@
-package topics
+package params
 
 import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,26 +15,27 @@ var (
 
 	// gsMaxIHaveLength is max number for ihave messages to send
 	// decreased the default (5000) to avoid ihave floods
+	// TODO: increase to 2500
 	gsMaxIHaveLength = 1500
 	// gsMaxIHaveMessages is the max number for ihave message to accept from a peer within a heartbeat
-	// increased default (10) to avoid multiple ihave messages
+	// TODO: decrease to 10 (default)
 	gsMaxIHaveMessages = 32
 	// gsMcacheLen number of windows to retain full messages in cache for `IWANT` responses
 	gsMcacheLen = 6
 	// gsMcacheGossip number of windows to gossip about
 	gsMcacheGossip = 4
 
-	// heartbeat interval frequency of heartbeat, milliseconds
-	gsHeartbeatInterval = 700 * time.Millisecond
+	// HeartbeatInterval interval frequency of heartbeat, milliseconds
+	HeartbeatInterval = 700 * time.Millisecond
 )
 
-// creates a custom gossipsub parameter set.
-func gossipSubParam() pubsub.GossipSubParams {
+// GossipSubParams creates a gossipsub parameter set.
+func GossipSubParams() pubsub.GossipSubParams {
 	params := pubsub.DefaultGossipSubParams()
 	params.Dlo = gsDlo
 	params.Dhi = gsDhi
 	params.D = gsD
-	params.HeartbeatInterval = gsHeartbeatInterval
+	params.HeartbeatInterval = HeartbeatInterval
 	params.HistoryLength = gsMcacheLen
 	params.HistoryGossip = gsMcacheGossip
 	params.MaxIHaveLength = gsMaxIHaveLength

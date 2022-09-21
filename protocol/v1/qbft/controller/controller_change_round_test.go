@@ -13,7 +13,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
-	testing2 "github.com/bloxapp/ssv/protocol/v1/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -34,8 +34,8 @@ func TestReadModeChangeRound(t *testing.T) {
 	require.NoError(t, err)
 	changeRoundStorage := qbftStorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion)
 
-	uids := []spectypes.OperatorID{spectypes.OperatorID(1)}
-	secretKeys, _ := testing2.GenerateBLSKeys(uids...)
+	uids := []spectypes.OperatorID{1}
+	secretKeys, _ := protocoltesting.GenerateBLSKeys(uids...)
 
 	messageID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	ctrl := Controller{
@@ -62,7 +62,6 @@ func TestReadModeChangeRound(t *testing.T) {
 
 	tests := []struct {
 		name                 string
-		withPrepareValue     bool
 		shouldFailValidation bool
 		expectedHeight       specqbft.Height
 		expectedRound        specqbft.Round
@@ -71,95 +70,134 @@ func TestReadModeChangeRound(t *testing.T) {
 		{
 			"first change round (height 0)",
 			false,
-			false,
 			0,
 			1,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
 				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
-					PreparedRound:            1,
-					RoundChangeJustification: []*specqbft.SignedMessage{},
+					PreparedRound: 0,
+					PreparedValue: []byte("value"),
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     0,
+							Round:      0,
+							Identifier: ctrl.Identifier[:],
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
+						}),
+					},
 				}),
 			}),
 		},
 		{
 			"change round with higher round (height 0)",
 			false,
-			false,
 			0,
 			2,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      2,
 				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
-					PreparedRound:            2,
-					RoundChangeJustification: []*specqbft.SignedMessage{},
+					PreparedRound: 1,
+					PreparedValue: []byte("value"),
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     0,
+							Round:      1,
+							Identifier: ctrl.Identifier[:],
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
+						}),
+					},
 				}),
 			}),
 		},
 		{
 			"change round with higher height (height 1)",
 			false,
-			false,
 			1,
 			2,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
-					PreparedRound:            1,
-					RoundChangeJustification: []*specqbft.SignedMessage{},
+					PreparedRound: 1,
+					PreparedValue: []byte("value"),
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     1,
+							Round:      1,
+							Identifier: ctrl.Identifier[:],
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
+						}),
+					},
 				}),
 			}),
 		},
 		{
 			"change round with lower round (height 1)",
 			false,
-			false,
 			1,
 			2, // expecting the last one
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     1,
 				Round:      1,
 				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
-					PreparedRound:            2,
-					RoundChangeJustification: []*specqbft.SignedMessage{},
+					PreparedRound: 0,
+					PreparedValue: []byte("value"),
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     1,
+							Round:      0,
+							Identifier: ctrl.Identifier[:],
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
+						}),
+					},
 				}),
 			}),
 		},
 		{
 			"change round with lower height (height 0)",
 			false,
-			false,
 			1, // expecting the last one
 			2,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     0,
 				Round:      1,
 				Identifier: ctrl.Identifier[:],
 				Data: changeRoundDataToByte(t, &specqbft.RoundChangeData{
-					PreparedRound:            2,
-					RoundChangeJustification: []*specqbft.SignedMessage{},
+					PreparedRound: 0,
+					PreparedValue: []byte("value"),
+					RoundChangeJustification: []*specqbft.SignedMessage{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     0,
+							Round:      0,
+							Identifier: ctrl.Identifier[:],
+							Data:       prepareDataToByte(t, &specqbft.PrepareData{Data: []byte("value")}),
+						}),
+					},
 				}),
 			}),
 		},
 		{
 			"change round with prepare data",
-			true,
 			false,
 			2,
 			2,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     2,
 				Round:      2,
@@ -168,7 +206,7 @@ func TestReadModeChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 1,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
@@ -182,10 +220,9 @@ func TestReadModeChangeRound(t *testing.T) {
 		{
 			"change round with invalid prepare data",
 			true,
-			true,
 			2,
 			2,
-			testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+			protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 				MsgType:    specqbft.RoundChangeMsgType,
 				Height:     3,
 				Round:      1,
@@ -194,7 +231,7 @@ func TestReadModeChangeRound(t *testing.T) {
 					PreparedValue: []byte("value"),
 					PreparedRound: 1,
 					RoundChangeJustification: []*specqbft.SignedMessage{
-						testing2.SignMsg(t, secretKeys, []spectypes.OperatorID{spectypes.OperatorID(1)}, &specqbft.Message{
+						protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{1}, &specqbft.Message{
 							MsgType:    specqbft.PrepareMsgType,
 							Height:     2,
 							Round:      1,
@@ -223,11 +260,10 @@ func TestReadModeChangeRound(t *testing.T) {
 			require.NotNil(t, last)
 			require.Equal(t, test.expectedHeight, last.Message.Height)
 			require.Equal(t, test.expectedRound, last.Message.Round)
-			if test.withPrepareValue {
-				crd, err := last.Message.GetRoundChangeData()
-				require.NoError(t, err)
-				require.Equal(t, crd.PreparedValue, []byte("value"))
-			}
+
+			crd, err := last.Message.GetRoundChangeData()
+			require.NoError(t, err)
+			require.Equal(t, crd.PreparedValue, []byte("value"))
 		})
 	}
 }

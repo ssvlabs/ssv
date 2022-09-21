@@ -91,7 +91,7 @@ The following objects will be used by the API:
     "message": {
       "type": 3,
       "round": 1,
-      "lambda": "...",
+      "identifier": "...",
       "seq_number": 23,
       "value": "..."
     },

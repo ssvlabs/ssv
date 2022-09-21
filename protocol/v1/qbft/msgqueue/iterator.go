@@ -23,6 +23,13 @@ func (ii *IndexIterator) Add(generators ...IndexGenerator) *IndexIterator {
 	return ii
 }
 
+// AddIndex adds an index
+func (ii *IndexIterator) AddIndex(idx Index) *IndexIterator {
+	return ii.Add(func() Index {
+		return idx
+	})
+}
+
 // Next returns the next generator
 func (ii *IndexIterator) Next() IndexGenerator {
 	if ii.i >= len(ii.generators) {

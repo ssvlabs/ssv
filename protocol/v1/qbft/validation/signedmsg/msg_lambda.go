@@ -10,12 +10,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
 
-// ValidateLambdas validates current and previous lambdas
-func ValidateLambdas(lambda []byte) pipelines.SignedMessagePipeline {
-	return pipelines.WrapFunc("lambda", func(signedMessage *specqbft.SignedMessage) error {
-		if !bytes.Equal(signedMessage.Message.Identifier, lambda) {
-			return fmt.Errorf("message Lambda (%s) does not equal expected Lambda (%s)",
-				hex.EncodeToString(signedMessage.Message.Identifier), hex.EncodeToString(lambda))
+// ValidateIdentifiers validates current and previous identifiers
+func ValidateIdentifiers(identifier []byte) pipelines.SignedMessagePipeline {
+	return pipelines.WrapFunc("identifier", func(signedMessage *specqbft.SignedMessage) error {
+		if !bytes.Equal(signedMessage.Message.Identifier, identifier) {
+			return fmt.Errorf("message identifier (%s) does not equal expected identifier (%s)",
+				hex.EncodeToString(signedMessage.Message.Identifier), hex.EncodeToString(identifier))
 		}
 		return nil
 	})

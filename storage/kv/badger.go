@@ -132,6 +132,22 @@ func (b *BadgerDb) Delete(prefix []byte, key []byte) error {
 	})
 }
 
+// DeleteByPrefix all items with this prefix
+func (b *BadgerDb) DeleteByPrefix(prefix []byte) (int, error) {
+	count := 0
+	err := b.db.Update(func(txn *badger.Txn) error {
+		rawKeys := b.listRawKeys(prefix, txn)
+		for _, k := range rawKeys {
+			if err := txn.Delete(k); err != nil {
+				return err
+			}
+			count++
+		}
+		return nil
+	})
+	return count, err
+}
+
 // GetAll returns all the items of a given collection
 func (b *BadgerDb) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
