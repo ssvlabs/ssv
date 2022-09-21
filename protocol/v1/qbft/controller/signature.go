@@ -115,30 +115,32 @@ func (c *Controller) verifyPartialSignature(signature []byte, root []byte, ibftI
 }
 
 // signDuty signs the duty after iBFT came to consensus
-func (c *Controller) signDuty(decidedValue []byte, duty *spectypes.Duty) ([]byte, []byte, *beaconprotocol.DutyData, error) {
+func (c *Controller) signDuty(logger *zap.Logger, decidedValue []byte, role spectypes.BeaconRole) ([]byte, []byte, *beaconprotocol.DutyData, *spectypes.Duty, error) {
 	// get operator pk for sig
 	pk, err := c.ValidatorShare.OperatorSharePubKey()
 	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
+		return nil, nil, nil, nil, errors.Wrap(err, "could not find operator pk for signing duty")
 	}
 
 	// sign input value
 	var sig []byte
 	var root []byte
 	retValueStruct := &beaconprotocol.DutyData{}
-	switch duty.Type {
+	var duty *spectypes.Duty
+	switch role {
 	case spectypes.BNRoleAttester:
 		s := &spectypes.ConsensusData{}
 		// TODO(olegshmuelov): use SSZ decoding
 		// TODO(olegshmuelov): validate the consensus data using the spec "BeaconAttestationValueCheck"
 		if err := s.Decode(decidedValue); err != nil {
-			c.Logger.Warn("failed to decode consensus data", zap.Int("len", len(decidedValue)), zap.Error(err))
-			return nil, nil, nil, errors.Wrap(err, "failed to decode consensus data")
+			logger.Warn("failed to decode consensus data", zap.Int("len", len(decidedValue)), zap.Error(err))
+			return nil, nil, nil, nil, errors.Wrap(err, "failed to decode consensus data")
 		}
-		c.Logger.Debug("decoded consensus data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
+		logger.Debug("decoded consensus data", zap.Any("data", s), zap.Int("len", len(decidedValue)))
+		duty = s.Duty
 		signedAttestation, r, err := c.KeyManager.SignAttestation(s.AttestationData, duty, pk.Serialize())
 		if err != nil {
-			return nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
+			return nil, nil, nil, nil, errors.Wrap(err, "failed to sign attestation")
 		}
 
 		sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
@@ -148,9 +150,9 @@ func (c *Controller) signDuty(decidedValue []byte, duty *spectypes.Duty) ([]byte
 		sig = signedAttestation.Signature[:]
 		root = ensureRoot(r)
 	default:
-		return nil, nil, nil, errors.New("unsupported role, can't sign")
+		return nil, nil, nil, nil, errors.New("unsupported role, can't sign")
 	}
-	return sig, root, retValueStruct, err
+	return sig, root, retValueStruct, duty, err
 }
 
 // reconstructAndBroadcastSignature reconstructs the received signatures from other
