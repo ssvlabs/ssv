@@ -2,8 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller"
-	"github.com/bloxapp/ssv/utils/logex"
 	"io"
 	"net/http"
 	"os"
@@ -13,10 +11,12 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -81,6 +81,15 @@ func TestQBFTMapping(t *testing.T) {
 			tests[testName] = typedTest
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsgSpecTest(t, typedTest)
+			})
+		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &spectests.RoundRobinSpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				RunRoundRobinSpecTest(t, typedTest)
 			})
 			//default:
 			//	t.Fatalf("unsupported test type %s [%s]", testType, testName)
