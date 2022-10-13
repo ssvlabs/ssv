@@ -93,6 +93,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	//	}
 	//}
 
+	// TODO: check by operator ID, not operator public key
 	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
 	logFields := make([]zap.Field, 0)
 	if isOperatorEvent || c.validatorOptions.FullNode {
@@ -109,7 +110,7 @@ func (c *controller) handleOperatorRemovalEvent(
 		return logFields, nil
 	}
 
-	shares, err := c.collection.GetOperatorValidatorShares(od.PublicKey, false)
+	shares, err := c.collection.GetOperatorIDValidatorShares(event.OperatorId, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
