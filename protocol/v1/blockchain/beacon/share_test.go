@@ -75,3 +75,24 @@ func TestShare_HashOperators(t *testing.T) {
 	hashes := share.HashOperators()
 	require.Len(t, hashes, 4)
 }
+
+func TestShare_IsOperatorIDShare(t *testing.T) {
+	share := &Share{
+		OperatorIds: []uint64{1, 2, 3, 4},
+	}
+
+	require.True(t, share.IsOperatorIDShare(1))
+	require.False(t, share.IsOperatorIDShare(10))
+}
+
+func TestShare_IsOperatorShare(t *testing.T) {
+	share := &Share{
+		Operators: [][]byte{
+			{1, 1, 1, 1},
+			{2, 2, 2, 2},
+		},
+	}
+
+	require.True(t, share.IsOperatorShare(string([]byte{1, 1, 1, 1})))
+	require.False(t, share.IsOperatorShare(string([]byte{1, 2, 3, 4})))
+}

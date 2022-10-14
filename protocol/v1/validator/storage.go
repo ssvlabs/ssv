@@ -13,6 +13,7 @@ type ICollection interface {
 	GetValidatorShare(key []byte) (*beacon.Share, bool, error)
 	GetAllValidatorShares() ([]*beacon.Share, error)
 	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*beacon.Share, error)
+	GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*beacon.Share, error)
 	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beacon.Share, error)
 	DeleteValidatorShare(key []byte) error
 }

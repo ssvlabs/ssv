@@ -22,6 +22,7 @@ type ICollection interface {
 	GetValidatorShare(key []byte) (*beaconprotocol.Share, bool, error)
 	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
 	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*beaconprotocol.Share, error)
+	GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*beaconprotocol.Share, error)
 	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*beaconprotocol.Share, error)
 	DeleteValidatorShare(key []byte) error
 }
@@ -138,6 +139,30 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled b
 		}
 		if !val.Liquidated || !enabled {
 			if ok := val.IsOperatorShare(operatorPubKey); ok {
+				res = append(res, val)
+			}
+		}
+		return nil
+	})
+
+	return res, err
+}
+
+// GetOperatorIDValidatorShares returns all not liquidated validator shares belongs to operator ID.
+// TODO: check regards returning a slice of public keys instead of share objects
+func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*beaconprotocol.Share, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var res []*beaconprotocol.Share
+
+	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
+		val, err := (&beaconprotocol.Share{}).Deserialize(obj.Key, obj.Value)
+		if err != nil {
+			return errors.Wrap(err, "failed to deserialize validator")
+		}
+		if !val.Liquidated || !enabled {
+			if ok := val.IsOperatorIDShare(uint64(operatorID)); ok {
 				res = append(res, val)
 			}
 		}
