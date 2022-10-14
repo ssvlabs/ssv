@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/gob"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"math"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v1/types"
 )
 
 // PubKeys defines the type for public keys object representation
@@ -57,9 +58,20 @@ type serializedShare struct {
 }
 
 // IsOperatorShare checks whether the share belongs to operator
+// TODO: probably we need to use IsOperatorIDShare instead of IsOperatorShare everywhere
 func (s *Share) IsOperatorShare(operatorPubKey string) bool {
 	for _, pk := range s.Operators {
 		if string(pk) == operatorPubKey {
+			return true
+		}
+	}
+	return false
+}
+
+// IsOperatorIDShare checks whether the share belongs to operator ID
+func (s *Share) IsOperatorIDShare(operatorID uint64) bool {
+	for _, id := range s.OperatorIds {
+		if id == operatorID {
 			return true
 		}
 	}
