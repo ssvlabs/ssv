@@ -149,6 +149,7 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled b
 }
 
 // GetOperatorIDValidatorShares returns all not liquidated validator shares belongs to operator ID.
+// TODO: check regards returning a slice of public keys instead of share objects
 func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*beaconprotocol.Share, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
