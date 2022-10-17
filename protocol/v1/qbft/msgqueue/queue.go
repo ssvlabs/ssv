@@ -2,13 +2,13 @@ package msgqueue
 
 import (
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -187,14 +187,20 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 
 // WithIterator looping through all indexes and return true when relevant and pop
 func (q *queue) WithIterator(n int, peek bool, iterator func(index Index) bool) []*spectypes.SSVMessage {
+	q.itemsLock.RLock()
+
 	for k := range q.items {
 		if iterator(k) {
 			if peek {
+				q.itemsLock.RUnlock()
 				return q.Peek(n, k)
 			}
+			q.itemsLock.RUnlock()
 			return q.Pop(n, k)
 		}
 	}
+
+	q.itemsLock.RUnlock()
 	return nil
 }
 
