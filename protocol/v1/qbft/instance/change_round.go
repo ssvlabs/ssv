@@ -320,6 +320,7 @@ func (i *Instance) roundTimeoutSeconds() time.Duration {
 	return i.TimeoutForRound(i.GetState().GetRound())
 }
 
+// TimeoutForRound returns a timeout for a given round.
 func (i *Instance) TimeoutForRound(round specqbft.Round) time.Duration {
 	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(round))
 	return time.Duration(float64(time.Second) * roundTimeout)
