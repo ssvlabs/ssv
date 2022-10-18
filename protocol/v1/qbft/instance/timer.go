@@ -2,6 +2,7 @@ package instance
 
 import (
 	"context"
+
 	"go.uber.org/zap"
 )
 
@@ -18,7 +19,7 @@ loop:
 			break loop
 		case res := <-i.roundTimer.ResultChan():
 			if res { // timed out
-				i.uponChangeRoundTrigger()
+				i.UponChangeRoundTrigger()
 			} else { // stopped
 				i.Logger.Info("stopped timeout clock", zap.Uint64("round", uint64(i.GetState().GetRound())))
 			}

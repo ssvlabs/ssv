@@ -3,12 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -215,7 +215,8 @@ func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedM
 	}}, nil
 }
 
-func (i *Instance) uponChangeRoundTrigger() {
+// UponChangeRoundTrigger is triggered upon round change.
+func (i *Instance) UponChangeRoundTrigger() {
 	i.Logger.Info("round timeout, changing round", zap.Uint64("round", uint64(i.GetState().GetRound())))
 	// reset proposal for round
 	i.GetState().ProposalAcceptedForCurrentRound.Store((*specqbft.SignedMessage)(nil))
