@@ -3,12 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -317,7 +317,11 @@ func (i *Instance) GenerateChangeRoundMessage() (*specqbft.Message, error) {
 }
 
 func (i *Instance) roundTimeoutSeconds() time.Duration {
-	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(i.GetState().GetRound()))
+	return i.TimeoutForRound(i.GetState().GetRound())
+}
+
+func (i *Instance) TimeoutForRound(round specqbft.Round) time.Duration {
+	roundTimeout := math.Pow(float64(i.Config.RoundChangeDurationSeconds), float64(round))
 	return time.Duration(float64(time.Second) * roundTimeout)
 }
 
