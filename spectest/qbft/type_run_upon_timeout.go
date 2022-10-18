@@ -31,7 +31,7 @@ func RunUponTimeoutSpecTest(t *testing.T, test *timeout.UponTimeoutSpecTest) {
 		}
 
 		require.EqualValues(t, r+1, qbftInstance.State.Round)
-		require.Nil(t, qbftInstance.State.ProposalAcceptedForCurrentRound)
+		require.Nil(t, qbftInstance.State.ProposalAcceptedForCurrentRound.Load())
 	}
 
 	if len(test.ExpectedError) > 0 {
