@@ -51,7 +51,7 @@ var testingShare = &types.Share{
 		},
 	},
 }
-var testingInstanceStruct = &specqbft.Instance{
+var TestingInstanceStruct = &specqbft.Instance{
 	State: &specqbft.State{
 		Share:                           testingShare,
 		ID:                              []byte{1, 2, 3, 4},
@@ -98,6 +98,6 @@ var testingControllerStruct = &specqbft.Controller{
 	Height:     specqbft.Height(1),
 	Share:      testingShare,
 	StoredInstances: [specqbft.HistoricalInstanceCapacity]*specqbft.Instance{
-		testingInstanceStruct,
+		TestingInstanceStruct,
 	},
 }

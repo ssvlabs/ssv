@@ -3,8 +3,8 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv-spec/types"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"sync"
 )
