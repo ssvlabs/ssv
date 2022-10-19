@@ -1,4 +1,4 @@
-package ssv
+package commons
 
 import (
 	"fmt"
@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
 	"time"
@@ -97,4 +98,21 @@ func (na *networkAdapter) getResults(prefix string, identifier []byte) SyncResul
 		return nil
 	}
 	return results
+}
+
+func NewQBFTStorageAdapter(store qbftstorage.QBFTStore) qbft2.Storage {
+	return &storageAdapter{store: store}
+}
+
+type storageAdapter struct {
+	store qbftstorage.QBFTStore
+}
+// SaveHighestDecided saves (and potentially overrides) the highest Decided for a specific instance
+func (sa *storageAdapter) SaveHighestDecided(signedMsg *qbft2.SignedMessage) error {
+	return sa.store.SaveLastDecided(signedMsg)
+}
+
+// GetHighestDecided returns highest decided if found, nil if didn't
+func (sa *storageAdapter) GetHighestDecided(identifier []byte) (*qbft2.SignedMessage, error) {
+	return sa.store.GetLastDecided(identifier)
 }
