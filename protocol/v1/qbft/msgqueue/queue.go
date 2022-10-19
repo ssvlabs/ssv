@@ -187,11 +187,11 @@ func (q *queue) Peek(n int, idx Index) []*spectypes.SSVMessage {
 
 // WithIterator looping through all indexes and return true when relevant and pop
 func (q *queue) WithIterator(n int, peek bool, iterator func(index Index) bool) []*spectypes.SSVMessage {
-	indices := make([]Index, len(q.items))
-	i := 0
+	indices := make([]Index, 0, len(q.items))
+
 	q.itemsLock.RLock()
 	for k := range q.items {
-		indices[i] = k
+		indices = append(indices, k)
 	}
 	q.itemsLock.RUnlock()
 
