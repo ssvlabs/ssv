@@ -155,7 +155,7 @@ func (c *Controller) GetIdentifier() []byte {
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }
@@ -250,7 +250,7 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 
 	msgToBroadcast := &types.SSVMessage{
 		MsgType: types.SSVConsensusMsgType,
-		MsgID:   ControllerIdToMessageID(c.Identifier),
+		MsgID:   qbftspec.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
 	if err := c.GetConfig().GetNetwork().BroadcastDecided(msgToBroadcast); err != nil {

@@ -135,7 +135,7 @@ func CreateCommit(state *qbftspec.State, config qbftspec.IConfig, value []byte) 
 	return signedMsg, nil
 }
 
-func baseCommitValidation(
+func BaseCommitValidation(
 	config qbftspec.IConfig,
 	signedCommit *qbftspec.SignedMessage,
 	height qbftspec.Height,
@@ -172,7 +172,7 @@ func validateCommit(
 	proposedMsg *qbftspec.SignedMessage,
 	operators []*types.Operator,
 ) error {
-	if err := baseCommitValidation(config, signedCommit, height, operators); err != nil {
+	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return errors.Wrap(err, "invalid commit msg")
 	}
 
