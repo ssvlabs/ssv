@@ -19,9 +19,11 @@ func WaitForMinPeers(pctx context.Context, logger *zap.Logger, subscriber Subscr
 			logger.Warn("could not get peers of topic", zap.Error(err))
 			continue
 		}
-		if len(peers) >= minPeers {
+		n := len(peers)
+		if n >= minPeers {
 			return nil
 		}
+		logger.Debug("looking for min peers", zap.Int("expected", minPeers), zap.Int("actual", n))
 	}
 
 	return ctx.Err()
