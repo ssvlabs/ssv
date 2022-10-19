@@ -231,7 +231,8 @@ func (c *Controller) Decode(data []byte) error {
 	config := c.GetConfig()
 	for _, i := range c.StoredInstances {
 		if i != nil {
-			i.config = config
+			//  TODO-spec-align rethink if we need it
+			i.SetConfig(config)
 		}
 	}
 	return nil
