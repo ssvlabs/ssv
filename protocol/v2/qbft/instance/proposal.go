@@ -2,11 +2,12 @@ package instance
 
 import (
 	"bytes"
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
-func (i *Instance) uponProposal(signedProposal *SignedMessage, proposeMsgContainer *MsgContainer) error {
+func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeMsgContainer *qbftspec.MsgContainer) error {
 	valCheck := i.config.GetValueCheckF()
 	if err := isValidProposal(i.State, i.config, signedProposal, valCheck, i.State.Share.Committee); err != nil {
 		return errors.Wrap(err, "proposal invalid")
@@ -47,13 +48,13 @@ func (i *Instance) uponProposal(signedProposal *SignedMessage, proposeMsgContain
 }
 
 func isValidProposal(
-	state *State,
-	config IConfig,
-	signedProposal *SignedMessage,
-	valCheck ProposedValueCheckF,
+	state *qbftspec.State,
+	config qbftspec.IConfig,
+	signedProposal *qbftspec.SignedMessage,
+	valCheck qbftspec.ProposedValueCheckF,
 	operators []*types.Operator,
 ) error {
-	if signedProposal.Message.MsgType != ProposalMsgType {
+	if signedProposal.Message.MsgType != qbftspec.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
 	if signedProposal.Message.Height != state.Height {
@@ -99,20 +100,20 @@ func isValidProposal(
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
-	state *State,
-	config IConfig,
-	roundChangeMsgs []*SignedMessage,
-	prepareMsgs []*SignedMessage,
-	height Height,
-	round Round,
+	state *qbftspec.State,
+	config qbftspec.IConfig,
+	roundChangeMsgs []*qbftspec.SignedMessage,
+	prepareMsgs []*qbftspec.SignedMessage,
+	height qbftspec.Height,
+	round qbftspec.Round,
 	value []byte,
-	valCheck ProposedValueCheckF,
+	valCheck qbftspec.ProposedValueCheckF,
 ) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}
 
-	if round == FirstRound {
+	if round == qbftspec.FirstRound {
 		return nil
 	} else {
 		// check all round changes are valid for height and round
@@ -125,12 +126,12 @@ func isProposalJustification(
 		}
 
 		// check there is a quorum
-		if !HasQuorum(state.Share, roundChangeMsgs) {
+		if !qbftspec.HasQuorum(state.Share, roundChangeMsgs) {
 			return errors.New("change round has no quorum")
 		}
 
 		// previouslyPreparedF returns true if any on the round change messages have a prepared round and value
-		previouslyPrepared, err := func(rcMsgs []*SignedMessage) (bool, error) {
+		previouslyPrepared, err := func(rcMsgs []*qbftspec.SignedMessage) (bool, error) {
 			for _, rc := range rcMsgs {
 				rcData, err := rc.Message.GetRoundChangeData()
 				if err != nil {
@@ -151,7 +152,7 @@ func isProposalJustification(
 		} else {
 
 			// check prepare quorum
-			if !HasQuorum(state.Share, prepareMsgs) {
+			if !qbftspec.HasQuorum(state.Share, prepareMsgs) {
 				return errors.New("prepares has no quorum")
 			}
 
@@ -191,7 +192,7 @@ func isProposalJustification(
 	}
 }
 
-func proposer(state *State, config IConfig, round Round) types.OperatorID {
+func proposer(state *qbftspec.State, config qbftspec.IConfig, round qbftspec.Round) types.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -209,8 +210,8 @@ func proposer(state *State, config IConfig, round Round) types.OperatorID {
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *State, config IConfig, value []byte, roundChanges, prepares []*SignedMessage) (*SignedMessage, error) {
-	proposalData := &ProposalData{
+func CreateProposal(state *qbftspec.State, config qbftspec.IConfig, value []byte, roundChanges, prepares []*qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+	proposalData := &qbftspec.ProposalData{
 		Data:                     value,
 		RoundChangeJustification: roundChanges,
 		PrepareJustification:     prepares,
@@ -219,8 +220,8 @@ func CreateProposal(state *State, config IConfig, value []byte, roundChanges, pr
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode proposal data")
 	}
-	msg := &Message{
-		MsgType:    ProposalMsgType,
+	msg := &qbftspec.Message{
+		MsgType:    qbftspec.ProposalMsgType,
 		Height:     state.Height,
 		Round:      state.Round,
 		Identifier: state.ID,
@@ -231,7 +232,7 @@ func CreateProposal(state *State, config IConfig, value []byte, roundChanges, pr
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
 
-	signedMsg := &SignedMessage{
+	signedMsg := &qbftspec.SignedMessage{
 		Signature: sig,
 		Signers:   []types.OperatorID{state.Share.OperatorID},
 		Message:   msg,
