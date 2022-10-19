@@ -4,14 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *PartialSigContainer
-	PostConsensusContainer *PartialSigContainer
+	PreConsensusContainer  *ssv.PartialSigContainer
+	PostConsensusContainer *ssv.PartialSigContainer
 	RunningInstance        *qbft.Instance
 	DecidedValue           *types.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
@@ -22,8 +23,8 @@ type State struct {
 
 func NewRunnerState(quorum uint64, duty *types.Duty) *State {
 	return &State{
-		PreConsensusContainer:  NewPartialSigContainer(quorum),
-		PostConsensusContainer: NewPartialSigContainer(quorum),
+		PreConsensusContainer:  ssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: ssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
@@ -31,7 +32,7 @@ func NewRunnerState(quorum uint64, duty *types.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *PartialSigContainer, root, validatorPubKey []byte) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := container.ReconstructSignature(root, validatorPubKey)
 	if err != nil {
