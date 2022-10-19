@@ -177,7 +177,7 @@ func isReceivedProposalJustification(
 	roundChanges, prepares []*qbftspec.SignedMessage,
 	newRound qbftspec.Round,
 	value []byte,
-	valCheck ProposedValueCheckF,
+	valCheck qbftspec.ProposedValueCheckF,
 ) error {
 	if err := isProposalJustification(
 		state,
