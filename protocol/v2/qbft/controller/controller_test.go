@@ -1,15 +1,18 @@
 package controller
 
 import (
+	qbftspec "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func TestInstances_FindInstance(t *testing.T) {
 	i := InstanceContainer{
-		&Instance{State: &State{Height: 1}},
-		&Instance{State: &State{Height: 2}},
-		&Instance{State: &State{Height: 3}},
+		&instance.Instance{State: &qbftspec.State{Height: 1}},
+		&instance.Instance{State: &qbftspec.State{Height: 2}},
+		&instance.Instance{State: &qbftspec.State{Height: 3}},
 	}
 
 	t.Run("find 1", func(t *testing.T) {
@@ -26,13 +29,13 @@ func TestInstances_FindInstance(t *testing.T) {
 func TestInstances_addNewInstance(t *testing.T) {
 	t.Run("add to full", func(t *testing.T) {
 		i := InstanceContainer{
-			&Instance{State: &State{Height: 1}},
-			&Instance{State: &State{Height: 2}},
-			&Instance{State: &State{Height: 3}},
-			&Instance{State: &State{Height: 4}},
-			&Instance{State: &State{Height: 5}},
+			&instance.Instance{State: &qbftspec.State{Height: 1}},
+			&instance.Instance{State: &qbftspec.State{Height: 2}},
+			&instance.Instance{State: &qbftspec.State{Height: 3}},
+			&instance.Instance{State: &qbftspec.State{Height: 4}},
+			&instance.Instance{State: &qbftspec.State{Height: 5}},
 		}
-		i.addNewInstance(&Instance{State: &State{Height: 6}})
+		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 6}})
 
 		require.EqualValues(t, 6, i[0].State.Height)
 		require.EqualValues(t, 1, i[1].State.Height)
@@ -43,7 +46,7 @@ func TestInstances_addNewInstance(t *testing.T) {
 
 	t.Run("add to empty", func(t *testing.T) {
 		i := InstanceContainer{}
-		i.addNewInstance(&Instance{State: &State{Height: 1}})
+		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 1}})
 
 		require.EqualValues(t, 1, i[0].State.Height)
 		require.Nil(t, i[1])
@@ -54,11 +57,11 @@ func TestInstances_addNewInstance(t *testing.T) {
 
 	t.Run("add to semi full", func(t *testing.T) {
 		i := InstanceContainer{
-			&Instance{State: &State{Height: 1}},
-			&Instance{State: &State{Height: 2}},
-			&Instance{State: &State{Height: 3}},
+			&instance.Instance{State: &qbftspec.State{Height: 1}},
+			&instance.Instance{State: &qbftspec.State{Height: 2}},
+			&instance.Instance{State: &qbftspec.State{Height: 3}},
 		}
-		i.addNewInstance(&Instance{State: &State{Height: 4}})
+		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 4}})
 
 		require.EqualValues(t, 4, i[0].State.Height)
 		require.EqualValues(t, 1, i[1].State.Height)
@@ -69,7 +72,7 @@ func TestInstances_addNewInstance(t *testing.T) {
 }
 
 func TestController_Marshaling(t *testing.T) {
-	c := testingControllerStruct
+	c := qbft.TestingControllerStruct
 
 	byts, err := c.Encode()
 	require.NoError(t, err)

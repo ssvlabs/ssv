@@ -47,5 +47,6 @@ vendor/
 
 bin/
 /data/
-
+/db
 spectest/**/tests.json
+
