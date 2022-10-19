@@ -1,4 +1,4 @@
-package ssv
+package runner
 
 import (
 	"bytes"
@@ -10,6 +10,15 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
+
+// DutyRunners is a map of duty runners mapped by msg id hex.
+type DutyRunners map[types.BeaconRole]Runner
+
+// DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found
+func (ci DutyRunners) DutyRunnerForMsgID(msgID types.MessageID) Runner {
+	role := msgID.GetRoleType()
+	return ci[role]
+}
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner

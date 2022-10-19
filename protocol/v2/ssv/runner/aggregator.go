@@ -1,9 +1,8 @@
-package ssv
+package runner
 
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
@@ -12,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type ProposerRunner struct {
+type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   ssv.BeaconNode
@@ -21,7 +20,7 @@ type ProposerRunner struct {
 	valCheck qbft.ProposedValueCheckF
 }
 
-func NewProposerRunner(
+func NewAggregatorRunner(
 	beaconNetwork types.BeaconNetwork,
 	share *types.Share,
 	qbftController *qbft.Controller,
@@ -30,9 +29,9 @@ func NewProposerRunner(
 	signer types.KeyManager,
 	valCheck qbft.ProposedValueCheckF,
 ) Runner {
-	return &ProposerRunner{
+	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: types.BNRoleProposer,
+			BeaconRoleType: types.BNRoleAggregator,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
@@ -45,19 +44,19 @@ func NewProposerRunner(
 	}
 }
 
-func (r *ProposerRunner) StartNewDuty(duty *types.Duty) error {
+func (r *AggregatorRunner) StartNewDuty(duty *types.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
-func (r *ProposerRunner) HasRunningDuty() bool {
+func (r *AggregatorRunner) HasRunningDuty() bool {
 	return r.BaseRunner.HashRunningDuty()
 }
 
-func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
-		return errors.Wrap(err, "failed processing randao message")
+		return errors.Wrap(err, "failed processing selection proof message")
 	}
 
 	// quorum returns true only once (first time quorum achieved)
@@ -65,25 +64,27 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatu
 		return nil
 	}
 
-	// only 1 root, verified in basePreConsensusMsgProcessing
+	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
-	// randao is relevant only for block proposals, no need to check type
+	// reconstruct selection proof sig
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
-		return errors.Wrap(err, "could not reconstruct randao sig")
+		return errors.Wrap(err, "could not reconstruct selection proof sig")
 	}
 
 	duty := r.GetState().StartingDuty
 
+	// TODO waitToSlotTwoThirds
+
 	// get block data
-	blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, fullSig)
 	if err != nil {
-		return errors.Wrap(err, "failed to get Beacon block")
+		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
 
 	input := &types.ConsensusData{
-		Duty:      duty,
-		BlockData: blk,
+		Duty:              duty,
+		AggregateAndProof: res,
 	}
 
 	if err := r.BaseRunner.decide(r, input); err != nil {
@@ -93,7 +94,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatu
 	return nil
 }
 
-func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
+func (r *AggregatorRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -105,7 +106,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.BlockData, decidedValue.Duty.Slot, types.DomainProposer)
+	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AggregateAndProof, decidedValue.Duty.Slot, types.DomainAggregateAndProof)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
@@ -136,7 +137,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	return nil
 }
 
-func (r *ProposerRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -154,45 +155,43 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		blk := &bellatrix.SignedBeaconBlock{
-			Message:   r.GetState().DecidedValue.BlockData,
+		msg := &phase0.SignedAggregateAndProof{
+			Message:   r.GetState().DecidedValue.AggregateAndProof,
 			Signature: specSig,
 		}
-		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
-			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
+		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 	}
 	r.GetState().Finished = true
 	return nil
 }
 
-func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.Slot)
-	return []ssz.HashRoot{types.SSZUint64(epoch)}, types.DomainRandao, nil
+func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return []ssz.HashRoot{types.SSZUint64(r.GetState().StartingDuty.Slot)}, types.DomainSelectionProof, nil
 }
 
 // executeDuty steps:
-// 1) sign a partial randao sig and wait for 2f+1 partial sigs from peers
-// 2) reconstruct randao and send GetBeaconBlock to BN
-// 3) start consensus on duty + block data
-// 4) Once consensus decides, sign partial block and broadcast
-// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
-func (r *ProposerRunner) executeDuty(duty *types.Duty) error {
-	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-	msg, err := r.BaseRunner.signBeaconObject(r, types.SSZUint64(epoch), duty.Slot, types.DomainRandao)
+// 1) sign a partial selection proof and wait for 2f+1 partial sigs from peers
+// 2) reconstruct selection proof and send SubmitAggregateSelectionProof to BN
+// 3) start consensus on duty + aggregation data
+// 4) Once consensus decides, sign partial aggregation data and broadcast
+// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
+func (r *AggregatorRunner) executeDuty(duty *types.Duty) error {
+	// sign selection proof
+	msg, err := r.BaseRunner.signBeaconObject(r, types.SSZUint64(duty.Slot), duty.Slot, types.DomainSelectionProof)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
 	msgs := ssv.PartialSignatureMessages{
-		Type:     ssv.RandaoPartialSig,
+		Type:     ssv.SelectionProofPartialSig,
 		Messages: []*ssv.PartialSignatureMessage{msg},
 	}
 
 	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, types.PartialSignatureType, r.GetShare().SharePubKey)
+	signature, err := r.GetSigner().SignRoot(msg, types.PartialSignatureType, r.GetShare().SharePubKey)
 	if err != nil {
-		return errors.Wrap(err, "could not sign randao msg")
+		return errors.Wrap(err, "could not sign PartialSignatureMessage for selection proof")
 	}
 	signedPartialMsg := &ssv.SignedPartialSignatureMessage{
 		Message:   msgs,
@@ -203,7 +202,7 @@ func (r *ProposerRunner) executeDuty(duty *types.Duty) error {
 	// broadcast
 	data, err := signedPartialMsg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
+		return errors.Wrap(err, "failed to encode selection proof pre-consensus signature msg")
 	}
 	msgToBroadcast := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
@@ -211,51 +210,51 @@ func (r *ProposerRunner) executeDuty(duty *types.Duty) error {
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial randao sig")
+		return errors.Wrap(err, "can't broadcast partial selection proof sig")
 	}
 	return nil
 }
 
-func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
+func (r *AggregatorRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() ssv.Network {
+func (r *AggregatorRunner) GetNetwork() ssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() ssv.BeaconNode {
+func (r *AggregatorRunner) GetBeaconNode() ssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *ProposerRunner) GetShare() *types.Share {
+func (r *AggregatorRunner) GetShare() *types.Share {
 	return r.BaseRunner.Share
 }
 
-func (r *ProposerRunner) GetState() *State {
+func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ProposerRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *AggregatorRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() types.KeyManager {
+func (r *AggregatorRunner) GetSigner() types.KeyManager {
 	return r.signer
 }
 
 // Encode returns the encoded struct in bytes or error
-func (r *ProposerRunner) Encode() ([]byte, error) {
+func (r *AggregatorRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)
 }
 
 // Decode returns error if decoding failed
-func (r *ProposerRunner) Decode(data []byte) error {
+func (r *AggregatorRunner) Decode(data []byte) error {
 	return json.Unmarshal(data, &r)
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *ProposerRunner) GetRoot() ([]byte, error) {
+func (r *AggregatorRunner) GetRoot() ([]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode DutyRunnerState")

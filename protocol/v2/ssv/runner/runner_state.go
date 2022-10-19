@@ -1,4 +1,4 @@
-package ssv
+package runner
 
 import (
 	"crypto/sha256"
