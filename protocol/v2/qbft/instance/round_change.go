@@ -10,7 +10,7 @@ func (i *Instance) uponRoundChange(
 	instanceStartValue []byte,
 	signedRoundChange *qbftspec.SignedMessage,
 	roundChangeMsgContainer *qbftspec.MsgContainer,
-	valCheck ProposedValueCheckF,
+	valCheck qbftspec.ProposedValueCheckF,
 ) error {
 	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, signedRoundChange.Message.Round); err != nil {
 		return errors.Wrap(err, "round change msg invalid")
@@ -104,7 +104,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 	config qbftspec.IConfig,
 	signedRoundChange *qbftspec.SignedMessage,
 	roundChangeMsgContainer *qbftspec.MsgContainer,
-	valCheck ProposedValueCheckF,
+	valCheck qbftspec.ProposedValueCheckF,
 ) (*qbftspec.SignedMessage, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(state.Round)
 
@@ -137,7 +137,7 @@ func isReceivedProposalJustificationForLeadingRound(
 	config qbftspec.IConfig,
 	roundChangeMsg *qbftspec.SignedMessage,
 	roundChanges []*qbftspec.SignedMessage,
-	valCheck ProposedValueCheckF,
+	valCheck qbftspec.ProposedValueCheckF,
 	newRound qbftspec.Round,
 ) error {
 	rcData, err := roundChangeMsg.Message.GetRoundChangeData()
