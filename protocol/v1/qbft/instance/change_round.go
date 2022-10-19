@@ -3,8 +3,6 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
@@ -169,50 +167,10 @@ func (i *Instance) roundChangeInputValue() ([]byte, error) {
 	if i.isPrepared() {
 		quorum, msgs := i.ContainersMap[specqbft.PrepareMsgType].QuorumAchieved(i.GetState().GetPreparedRound(), i.GetState().GetPreparedValue())
 		i.Logger.Debug("change round - checking quorum", zap.Bool("quorum", quorum), zap.Int("msgs", len(msgs)), zap.Any("state", i.GetState()))
-		// temp solution in order to support backwards compatibility. TODO need to remove in version tag v0.3.3
-		roundChangeJustification, err := i.handleDeprecatedPrepareJustification(msgs)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get change round justification")
-		}
-		data.RoundChangeJustification = roundChangeJustification
+		data.RoundChangeJustification = msgs
 	}
 
 	return json.Marshal(data)
-}
-
-// handleDeprecatedPrepareJustification return aggregated change round justification for v0.3.1 version TODO should be removed in v0.3.3
-func (i *Instance) handleDeprecatedPrepareJustification(msgs []*specqbft.SignedMessage) ([]*specqbft.SignedMessage, error) {
-	if len(msgs) == 0 {
-		return []*specqbft.SignedMessage{}, nil
-	}
-	var justificationMsg *specqbft.Message
-	var aggSig []byte
-	var aggregatedSig *bls.Sign
-	ids := make([]spectypes.OperatorID, 0)
-
-	justificationMsg = msgs[0].Message
-	for _, msg := range msgs {
-		// add sig to aggregate
-		sig := &bls.Sign{}
-		if err := sig.Deserialize(msg.Signature); err != nil {
-			return nil, err
-		}
-		if aggregatedSig == nil {
-			aggregatedSig = sig
-		} else {
-			aggregatedSig.Add(sig)
-		}
-
-		// add id to list
-		ids = append(ids, msg.GetSigners()...)
-	}
-	aggSig = aggregatedSig.Serialize()
-
-	return []*specqbft.SignedMessage{{
-		Signature: aggSig,
-		Signers:   ids,
-		Message:   justificationMsg,
-	}}, nil
 }
 
 func (i *Instance) uponChangeRoundTrigger() {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -66,8 +67,7 @@ func RunMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 	outputMessages := p2pNet.(BroadcastMessagesGetter).GetBroadcastMessages()
 	require.Equal(t, len(test.OutputMessages), len(outputMessages))
 
-	// TODO needed for version v0.3.2. need to revert on version v0.3.3
-	/*for i, outputMessage := range outputMessages {
+	for i, outputMessage := range outputMessages {
 		msg1 := test.OutputMessages[i]
 		r1, _ := msg1.GetRoot()
 
@@ -76,5 +76,5 @@ func RunMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTes
 
 		r2, _ := msg2.GetRoot()
 		require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
-	}*/
+	}
 }

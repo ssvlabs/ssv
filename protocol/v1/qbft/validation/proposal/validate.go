@@ -3,8 +3,10 @@ package proposal
 import (
 	"bytes"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/logex"
+
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils/logex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -212,17 +214,9 @@ func validateRoundChangeJustification(
 		return errors.New("prepare data != proposed data")
 	}
 
-	// support old version tag v0.3.1 TODO need to remove and check singleSigner only on version tag v0.3.3
-	qourum := share.HasQuorum(len(signedPrepare.GetSigners()))
-	singleSigner := len(signedPrepare.GetSigners()) == 1
-	if !qourum && !singleSigner {
+	if len(signedPrepare.GetSigners()) != 1 {
 		return errors.New("prepare msg allows 1 signer")
 	}
-
-	// TODO need to return on version v0.3.3
-	/*if len(signedPrepare.GetSigners()) != 1 {
-		return errors.New("prepare msg allows 1 signer")
-	}*/
 
 	// validateJustification justification signature
 	pksMap, err := share.PubKeysByID(signedPrepare.GetSigners())

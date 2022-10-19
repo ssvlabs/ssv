@@ -116,17 +116,9 @@ func (p *validateJustification) validateRoundChangeJustification(rcj *specqbft.S
 		return errors.New("prepare data != proposed data")
 	}
 
-	// support old version tag v0.3.1 TODO need to remove and check singleSigner only on version tag v0.3.3
-	qourum := p.share.HasQuorum(len(rcj.GetSigners()))
-	singleSigner := len(rcj.GetSigners()) == 1
-	if !qourum && !singleSigner {
+	if len(rcj.GetSigners()) != 1 {
 		return errors.New("prepare msg allows 1 signer")
 	}
-
-	// TODO need to return on version v0.3.3
-	/*if len(rcj.GetSigners()) != 1 {
-		return errors.New("prepare msg allows 1 signer")
-	}*/
 
 	// validateJustification justification signature
 	pksMap, err := p.share.PubKeysByID(rcj.GetSigners())
