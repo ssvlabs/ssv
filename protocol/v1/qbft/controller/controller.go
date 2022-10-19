@@ -347,7 +347,7 @@ func (c *Controller) handleSyncMessages(msgs []*specqbft.SignedMessage) error {
 			continue
 		}
 		if err := c.ProcessMsg(&spectypes.SSVMessage{
-			MsgType: spectypes.SSVDecidedMsgType, // sync only for decided msg type
+			MsgType: message.SSVDecidedMsgType, // sync only for decided msg type
 			MsgID:   message.ToMessageID(syncMsg.Message.Identifier),
 			Data:    encoded,
 		}); err != nil {
@@ -392,7 +392,7 @@ func (c *Controller) ProcessMsg(msg *spectypes.SSVMessage) error {
 // MessageHandler process message from queue,
 func (c *Controller) MessageHandler(msg *spectypes.SSVMessage) error {
 	switch msg.GetType() {
-	case spectypes.SSVConsensusMsgType, spectypes.SSVDecidedMsgType:
+	case spectypes.SSVConsensusMsgType, message.SSVDecidedMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from SSVMessage")

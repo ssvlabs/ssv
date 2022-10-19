@@ -4,7 +4,8 @@ import spectypes "github.com/bloxapp/ssv-spec/types"
 
 // SSVSyncMsgType extension for spec msg type
 const (
-	SSVSyncMsgType spectypes.MsgType = 4
+	SSVDecidedMsgType spectypes.MsgType = 3
+	SSVSyncMsgType    spectypes.MsgType = 4
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string
@@ -12,7 +13,7 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 	switch mt {
 	case spectypes.SSVConsensusMsgType:
 		return "consensus"
-	case spectypes.SSVDecidedMsgType:
+	case SSVDecidedMsgType:
 		return "decided"
 	case spectypes.SSVPartialSignatureMsgType:
 		return "partialSignature"
