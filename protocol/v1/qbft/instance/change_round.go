@@ -3,12 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -359,7 +359,7 @@ func UpdateChangeRoundMessage(logger *zap.Logger, changeRoundStorage qbftstorage
 	} else if msg.Message.Height == lastMsg.Message.Height {
 		if msg.Message.Round <= lastMsg.Message.Round {
 			// round is not higher than last known
-			fLogger.Debug("new changeRoundMsg round is lower than last changeRoundMsg")
+			fLogger.Debug("new changeRoundMsg round is lower than or equal to last changeRoundMsg")
 			return nil
 		}
 	}
