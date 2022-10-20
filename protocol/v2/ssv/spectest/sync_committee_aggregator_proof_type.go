@@ -5,6 +5,8 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	ssv "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -13,8 +15,14 @@ import (
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks)
-	v := ssv.NewValidator(nil, nil, nil, share, nil, nil) // TODO add runners
-	//v := testingutils.BaseValidator(keySetForShare(share))
+	keySet := keySetForShare(share)
+	v := ssv.NewValidator(nil, testingutils.NewTestingBeaconNode(), nil, share, nil,
+		runner.DutyRunners{
+			types.BNRoleAttester:                  utils.AttesterRunner(keySet),
+			types.BNRoleProposer:                  utils.ProposerRunner(keySet),
+			types.BNRoleAggregator:                utils.AggregatorRunner(keySet),
+			types.BNRoleSyncCommittee:             utils.SyncCommitteeRunner(keySet),
+			types.BNRoleSyncCommitteeContribution: utils.SyncCommitteeContributionRunner(keySet)})
 	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()
