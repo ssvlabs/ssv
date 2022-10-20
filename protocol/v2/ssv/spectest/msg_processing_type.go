@@ -39,7 +39,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 		testingutils.TestingShare(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share)),
 		nil,
 		runner.DutyRunners{
-			types.BNRoleAttester: test.Runner,
+			test.Runner.GetBaseRunner().BeaconRoleType: test.Runner,
 		},
 	)
 
