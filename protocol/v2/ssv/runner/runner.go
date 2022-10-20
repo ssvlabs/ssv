@@ -34,6 +34,7 @@ type Runner interface {
 	types.Root
 	Getters
 
+	Init() error
 	StartNewDuty(duty *types.Duty) error
 	HasRunningDuty() bool
 	ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error
@@ -50,6 +51,10 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  types.BeaconNetwork
 	BeaconRoleType types.BeaconRole
+}
+
+func (b *BaseRunner) Init() error {
+	return nil
 }
 
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *types.Duty) error {

@@ -4,7 +4,9 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 )
 
@@ -13,11 +15,44 @@ import (
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
 	DutyRunners runner.DutyRunners
-	Network     ssv.Network
+	Network     Network
 	Beacon      ssv.BeaconNode
 	Storage     ssv.Storage
 	Share       *types.Share
 	Signer      types.KeyManager
+
+	// TODO: queue
+	// init
+}
+
+// TODO: remove
+type Network interface {
+	ssv.Network
+	protcolp2p.Subscriber
+}
+
+type nilNetwork struct {
+	base ssv.Network
+}
+
+func (n nilNetwork) Broadcast(message types.Encoder) error {
+	return n.base.Broadcast(message)
+}
+
+func (n nilNetwork) Subscribe(pk types.ValidatorPK) error {
+	return nil
+}
+
+func (n nilNetwork) Unsubscribe(pk types.ValidatorPK) error {
+	return nil
+}
+
+func (n nilNetwork) Peers(pk types.ValidatorPK) ([]peer.ID, error) {
+	return nil, nil
+}
+
+func newNilNetwork(network ssv.Network) Network {
+	return &nilNetwork{network}
 }
 
 func NewValidator(
@@ -28,14 +63,23 @@ func NewValidator(
 	signer types.KeyManager,
 	runners runner.DutyRunners,
 ) *Validator {
+	n, ok := network.(Network)
+	if !ok {
+		n = newNilNetwork(network)
+	}
 	return &Validator{
 		DutyRunners: runners,
-		Network:     network,
+		Network:     n,
 		Beacon:      beacon,
 		Storage:     storage,
 		Share:       share,
 		Signer:      signer,
 	}
+}
+
+func (v *Validator) Start() error {
+	// TODO
+	return nil
 }
 
 // StartDuty starts a duty for the validator
