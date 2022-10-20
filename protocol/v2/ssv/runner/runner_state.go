@@ -3,9 +3,9 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/pkg/errors"
 )
 
@@ -13,7 +13,7 @@ import (
 type State struct {
 	PreConsensusContainer  *ssv.PartialSigContainer
 	PostConsensusContainer *ssv.PartialSigContainer
-	RunningInstance        *qbft.Instance
+	RunningInstance        *instance.Instance
 	DecidedValue           *types.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *types.Duty

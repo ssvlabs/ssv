@@ -1,0 +1,304 @@
+package spectest
+
+import (
+	"encoding/json"
+	"fmt"
+	"github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
+	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/stretchr/testify/require"
+	"io"
+	"net/http"
+	"os"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestSSVMapping(t *testing.T) {
+	path, _ := os.Getwd()
+	fileName := "tests.json"
+	filePath := path + "/" + fileName
+	jsonTests, err := os.ReadFile(filePath)
+	if err != nil {
+		//resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2.6/ssv/spectest/generate/tests.json")
+		require.NoError(t, err)
+
+		defer func() {
+			require.NoError(t, resp.Body.Close())
+		}()
+
+		jsonTests, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		require.NoError(t, os.WriteFile(filePath, jsonTests, 0644))
+	}
+
+	untypedTests := map[string]interface{}{}
+	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
+		panic(err.Error())
+	}
+
+	origDomain := types.GetDefaultDomain()
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	defer func() {
+		types.SetDefaultDomain(origDomain)
+	}()
+
+	for name, test := range untypedTests {
+		logex.Reset()
+		name, test := name, test
+
+		testName := strings.Split(name, "_")[1]
+		testType := strings.Split(name, "_")[0]
+
+		fmt.Printf("--------- %s - %s \n", testType, testName)
+
+		switch testType {
+		case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &MsgProcessingSpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				RunMsgProcessing(t, typedTest)
+			})
+		case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
+			subtests := test.(map[string]interface{})["Tests"].([]interface{})
+			typedTests := make([]*MsgProcessingSpecTest, 0)
+			for _, subtest := range subtests {
+				typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
+			}
+
+			typedTest := &MultiMsgProcessingSpecTest{
+				Name:  test.(map[string]interface{})["Name"].(string),
+				Tests: typedTests,
+			}
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				typedTest.Run(t)
+			})
+		case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &messages.MsgSpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				typedTest.Run(t)
+			})
+		case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &valcheck.SpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				typedTest.Run(t)
+			})
+		case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &valcheck.MultiSpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				typedTest.Run(t)
+			})
+		case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				RunSyncCommitteeAggProof(t, typedTest)
+			})
+		case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
+			subtests := test.(map[string]interface{})["Tests"].([]interface{})
+			typedTests := make([]*StartNewRunnerDutySpecTest, 0)
+			for _, subtest := range subtests {
+				typedTests = append(typedTests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
+			}
+
+			typedTest := &MultiStartNewRunnerDutySpecTest{
+				Name:  test.(map[string]interface{})["Name"].(string),
+				Tests: typedTests,
+			}
+
+			t.Run(typedTest.TestName(), func(t *testing.T) {
+				typedTest.Run(t)
+			})
+		default:
+			t.Fatalf("unsupported test type %s [%s]", testType, testName)
+		}
+	}
+}
+
+func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
+	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
+
+	duty := &spectypes.Duty{}
+	byts, _ := json.Marshal(m["Duty"])
+	require.NoError(t, json.Unmarshal(byts, duty))
+
+	msgs := make([]*spectypes.SSVMessage, 0)
+	for _, msg := range m["Messages"].([]interface{}) {
+		byts, _ = json.Marshal(msg)
+		typedMsg := &spectypes.SSVMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		msgs = append(msgs, typedMsg)
+	}
+
+	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	for _, msg := range m["OutputMessages"].([]interface{}) {
+		byts, _ = json.Marshal(msg)
+		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		outputMsgs = append(outputMsgs, typedMsg)
+	}
+
+	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
+
+	// runner
+	runner := fixRunnerForRun(t, runnerMap, ks)
+
+	return &MsgProcessingSpecTest{
+		Name:                    m["Name"].(string),
+		Duty:                    duty,
+		Runner:                  runner,
+		Messages:                msgs,
+		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
+		DontStartDuty:           m["DontStartDuty"].(bool),
+		ExpectedError:           m["ExpectedError"].(string),
+		OutputMessages:          outputMsgs,
+	}
+}
+
+func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
+	base := &runner.BaseRunner{}
+	byts, _ := json.Marshal(baseRunner)
+	require.NoError(t, json.Unmarshal(byts, &base))
+
+	ret := baseRunnerForRole(base.BeaconRoleType, base, ks)
+	ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)
+	if ret.GetBaseRunner().State != nil {
+		if ret.GetBaseRunner().State.RunningInstance != nil {
+			ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
+		}
+	}
+	return ret
+}
+
+func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
+	switch role {
+	case spectypes.BNRoleAttester:
+		ret := utils.AttesterRunner(ks)
+		ret.(*runner.AttesterRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleAggregator:
+		ret := utils.AggregatorRunner(ks)
+		ret.(*runner.AggregatorRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleProposer:
+		ret := utils.ProposerRunner(ks)
+		ret.(*runner.ProposerRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleSyncCommittee:
+		ret := utils.SyncCommitteeRunner(ks)
+		ret.(*runner.SyncCommitteeRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleSyncCommitteeContribution:
+		ret := utils.SyncCommitteeContributionRunner(ks)
+		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
+		return ret
+	case testingutils.UnknownDutyType:
+		ret := utils.UnknownDutyTypeRunner(ks)
+		ret.(*runner.AttesterRunner).BaseRunner = base
+		return ret
+	default:
+		panic("unknown beacon role")
+	}
+}
+
+func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
+	config := testingutils.TestingConfig(ks)
+	newContr := controller.NewController(
+		contr.Identifier,
+		contr.Share,
+		testingutils.TestingConfig(ks).Domain,
+		config,
+	)
+	newContr.Height = contr.Height
+	newContr.Domain = contr.Domain
+	newContr.StoredInstances = contr.StoredInstances
+
+	for i, inst := range newContr.StoredInstances {
+		if inst == nil {
+			continue
+		}
+		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, runner.GetBaseRunner().Share)
+	}
+	return newContr
+}
+
+func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.Share) *instance.Instance {
+	newInst := instance.NewInstance(
+		contr.GetConfig(),
+		share,
+		contr.Identifier,
+		contr.Height)
+
+	newInst.State.DecidedValue = inst.State.DecidedValue
+	newInst.State.Decided = inst.State.Decided
+	newInst.State.Share = inst.State.Share
+	newInst.State.Round = inst.State.Round
+	newInst.State.Height = inst.State.Height
+	newInst.State.ProposalAcceptedForCurrentRound = inst.State.ProposalAcceptedForCurrentRound
+	newInst.State.ID = inst.State.ID
+	newInst.State.LastPreparedValue = inst.State.LastPreparedValue
+	newInst.State.LastPreparedRound = inst.State.LastPreparedRound
+	return newInst
+}
+
+func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *StartNewRunnerDutySpecTest {
+	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
+
+	duty := &spectypes.Duty{}
+	byts, _ := json.Marshal(m["Duty"])
+	require.NoError(t, json.Unmarshal(byts, duty))
+
+	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	for _, msg := range m["OutputMessages"].([]interface{}) {
+		byts, _ = json.Marshal(msg)
+		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		outputMsgs = append(outputMsgs, typedMsg)
+	}
+
+	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
+
+	runner := fixRunnerForRun(t, runnerMap, ks)
+
+	return &StartNewRunnerDutySpecTest{
+		Name:                    m["Name"].(string),
+		Duty:                    duty,
+		Runner:                  runner,
+		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
+		ExpectedError:           m["ExpectedError"].(string),
+		OutputMessages:          outputMsgs,
+	}
+}

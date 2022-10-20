@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
@@ -20,15 +21,7 @@ type AggregatorRunner struct {
 	valCheck qbft.ProposedValueCheckF
 }
 
-func NewAggregatorRunner(
-	beaconNetwork types.BeaconNetwork,
-	share *types.Share,
-	qbftController *qbft.Controller,
-	beacon ssv.BeaconNode,
-	network ssv.Network,
-	signer types.KeyManager,
-	valCheck qbft.ProposedValueCheckF,
-) Runner {
+func NewAggregatorRunner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: types.BNRoleAggregator,
