@@ -61,7 +61,8 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	}
 
 	// test output message
-	broadcastedMsgs := v.Network.(*testingutils.TestingNetwork).BroadcastedMsgs
+	net := v.Network.(ssv.Network)
+	broadcastedMsgs := net.(*testingutils.TestingNetwork).BroadcastedMsgs
 	if len(broadcastedMsgs) > 0 {
 		index := 0
 		for _, msg := range broadcastedMsgs {
