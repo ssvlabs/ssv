@@ -1,58 +1,32 @@
-package ssv
+package validator
 
 import (
+	"context"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
+	ctx context.Context
+	logger *zap.Logger
 	DutyRunners runner.DutyRunners
 	Network     Network
 	Beacon      ssv.BeaconNode
 	Storage     ssv.Storage
 	Share       *types.Share
 	Signer      types.KeyManager
+	Q 			msgqueue.MsgQueue
 
-	// TODO: queue
-	// init
-}
-
-// TODO: remove
-type Network interface {
-	ssv.Network
-	protcolp2p.Subscriber
-}
-
-type nilNetwork struct {
-	base ssv.Network
-}
-
-func (n nilNetwork) Broadcast(message types.Encoder) error {
-	return n.base.Broadcast(message)
-}
-
-func (n nilNetwork) Subscribe(pk types.ValidatorPK) error {
-	return nil
-}
-
-func (n nilNetwork) Unsubscribe(pk types.ValidatorPK) error {
-	return nil
-}
-
-func (n nilNetwork) Peers(pk types.ValidatorPK) ([]peer.ID, error) {
-	return nil, nil
-}
-
-func newNilNetwork(network ssv.Network) Network {
-	return &nilNetwork{network}
+	// TODO: move somewhere else
+	Identifier []byte
 }
 
 func NewValidator(
@@ -63,17 +37,24 @@ func NewValidator(
 	signer types.KeyManager,
 	runners runner.DutyRunners,
 ) *Validator {
+	// makes sure that we have a sufficient interface, otherwise wrap it
 	n, ok := network.(Network)
 	if !ok {
 		n = newNilNetwork(network)
 	}
+	l := zap.L() // TODO: real logger
+	// TODO: handle error
+	q, _ := msgqueue.New(l)
 	return &Validator{
+		ctx: context.Background(), // TODO: real context
+		logger: l,
 		DutyRunners: runners,
 		Network:     n,
 		Beacon:      beacon,
 		Storage:     storage,
 		Share:       share,
 		Signer:      signer,
+		Q: 			 q,
 	}
 }
 
