@@ -228,6 +228,10 @@ func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
+func (r *AggregatorRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
 func (r *AggregatorRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }

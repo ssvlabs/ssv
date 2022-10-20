@@ -179,6 +179,10 @@ func (r *AttesterRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
+func (r *AttesterRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
 func (r *AttesterRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }

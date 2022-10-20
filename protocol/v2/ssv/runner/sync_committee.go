@@ -182,6 +182,10 @@ func (r *SyncCommitteeRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
+func (r *SyncCommitteeRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
 func (r *SyncCommitteeRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }

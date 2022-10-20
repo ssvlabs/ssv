@@ -342,6 +342,10 @@ func (r *SyncCommitteeAggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
+func (r *SyncCommitteeAggregatorRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
 func (r *SyncCommitteeAggregatorRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }

@@ -229,6 +229,10 @@ func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
+func (r *ProposerRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
 func (r *ProposerRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }
