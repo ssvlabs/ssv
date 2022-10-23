@@ -2,13 +2,16 @@ package validator
 
 import (
 	"context"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync/atomic"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -26,8 +29,17 @@ type Validator struct {
 	Q 			msgqueue.MsgQueue
 
 	// TODO: move somewhere else
-	Identifier []byte
+	Identifiers [][]byte
+
+	mode int32
 }
+
+type ValidatorMode int32
+
+var (
+	ModeRW ValidatorMode = 0
+	ModeR ValidatorMode = 1
+)
 
 func NewValidator(
 	network ssv.Network,
@@ -55,11 +67,14 @@ func NewValidator(
 		Share:       share,
 		Signer:      signer,
 		Q: 			 q,
+		mode: int32(ModeRW),
 	}
 }
 
 func (v *Validator) Start() error {
-	// TODO
+	for _, identifier := range v.Identifiers {
+		go v.StartQueueConsumer(identifier, v.ProcessMessage)
+	}
 	return nil
 }
 
@@ -70,6 +85,22 @@ func (v *Validator) StartDuty(duty *types.Duty) error {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 	return dutyRunner.StartNewDuty(duty)
+}
+
+func (v *Validator) HandleMessage(msg *types.SSVMessage) {
+	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
+		err := v.ProcessMessage(msg)
+		if err != nil {
+			v.logger.Warn("could not handle msg", zap.Error(err))
+		}
+		return
+	}
+	fields := []zap.Field{
+		zap.Int("queue_len", v.Q.Len()),
+		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+	}
+	v.logger.Debug("got message, add to queue", fields...)
+	v.Q.Add(msg)
 }
 
 // ProcessMessage processes Network Message of all types
@@ -115,4 +146,14 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	}
 
 	return nil
+}
+
+// GetLastHeight returns the last height for the given identifier
+func (v *Validator) GetLastHeight(identifier []byte) qbft.Height {
+	return qbft.Height(0)
+}
+
+// GetLastSlot returns the last slot for the given identifier
+func (v *Validator) GetLastSlot(identifier []byte) phase0.Slot {
+	return phase0.Slot(0)
 }

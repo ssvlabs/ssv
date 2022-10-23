@@ -3,6 +3,7 @@ package msgqueue
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
@@ -10,7 +11,7 @@ import (
 func SignedMsgCleaner(mid spectypes.MessageID, h specqbft.Height) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
-		if k.Mt != spectypes.SSVConsensusMsgType && k.Mt != spectypes.SSVDecidedMsgType {
+		if k.Mt != spectypes.SSVConsensusMsgType && k.Mt != message.SSVDecidedMsgType {
 			return false
 		}
 		if k.ID != identifier {
@@ -28,7 +29,7 @@ func signedMsgIndexValidator(msg *spectypes.SSVMessage) *specqbft.SignedMessage 
 	if msg == nil {
 		return nil
 	}
-	if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != spectypes.SSVDecidedMsgType {
+	if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
 		return nil
 	}
 	sm := &specqbft.SignedMessage{}
@@ -68,9 +69,10 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 }
 
 // DecidedMsgIndexer is the Indexer used for decided specqbft.SignedMessage
+// TODO: identify decided messages by: 1) type commit; 2) quorum of signers
 func DecidedMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
-		if msg.MsgType != spectypes.SSVDecidedMsgType {
+		if msg.MsgType != message.SSVDecidedMsgType {
 			return Index{}
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
@@ -84,7 +86,7 @@ func DecidedMsgIndexer() Indexer {
 func DecidedMsgIndex(mid string) Index {
 	return Index{
 		Name: "decided_index",
-		Mt:   spectypes.SSVDecidedMsgType,
+		Mt:   message.SSVDecidedMsgType,
 		ID:   mid,
 		Cmt:  specqbft.CommitMsgType,
 		H:    -1,

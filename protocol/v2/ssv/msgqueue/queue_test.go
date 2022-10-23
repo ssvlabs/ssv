@@ -1,6 +1,7 @@
 package msgqueue
 
 import (
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -67,11 +68,11 @@ func TestNewMsgQueue(t *testing.T) {
 		require.NoError(t, err)
 		identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, spectypes.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
 
 		for i := 0; i <= 2; i++ {
 			height := specqbft.Height(i)
@@ -133,17 +134,19 @@ func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id spectypes.Message
 	}
 
 	signedMsg := &specssv.SignedPartialSignatureMessage{
-		Type: specssv.PostConsensusPartialSig,
-		Messages: specssv.PartialSignatureMessages{
-			&specssv.PartialSignatureMessage{
-				Slot:             slot,
-				PartialSignature: make([]byte, 96),
-				SigningRoot:      make([]byte, 32),
-				Signers:          []spectypes.OperatorID{1},
+		Message: specssv.PartialSignatureMessages{
+			Type: specssv.PostConsensusPartialSig,
+			Messages: []*specssv.PartialSignatureMessage{
+				{
+					Slot:             slot,
+					PartialSignature: make([]byte, 96),
+					SigningRoot:      make([]byte, 32),
+					Signer:           spectypes.OperatorID(1),
+				},
 			},
 		},
+		Signer: spectypes.OperatorID(1),
 		Signature: make([]byte, 96), // TODO should be msg sig and not decided sig
-		Signers:   []spectypes.OperatorID{1},
 	}
 
 	encoded, err := signedMsg.Encode()

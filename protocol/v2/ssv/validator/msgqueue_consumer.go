@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 
 	"github.com/patrickmn/go-cache"
@@ -21,30 +19,25 @@ import (
 type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(rawIdentifier []byte, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(handler, time.Millisecond*50)
+		err := v.ConsumeQueue(rawIdentifier, handler, time.Millisecond*50)
 		if err != nil {
 			v.logger.Warn("could not consume queue", zap.Error(err))
 		}
 	}
 }
 
-func (v *Validator) GetCurrentInstance() *instance.Instance {
-	// TODO implement
-	return nil
-}
-
 // ConsumeQueue consumes messages from the msgqueue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(handler MessageHandler, interval time.Duration) error {
+func (v *Validator) ConsumeQueue(rawIdentifier []byte, handler MessageHandler, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	identifier := hex.EncodeToString(v.Identifier)
+	identifier := hex.EncodeToString(rawIdentifier)
 	higherCache := cache.New(time.Second*12, time.Second*24)
 
 	for ctx.Err() == nil {
@@ -60,21 +53,19 @@ func (v *Validator) ConsumeQueue(handler MessageHandler, interval time.Duration)
 		//	time.Sleep(interval)
 		//	continue
 		//}
-		//
-		// TODO
-		lastSlot := spec.Slot(0) // v.SignatureState.lastSlot // no slot - 0.
-		lastHeight := specqbft.Height(0) // v.GetHeight()
+		lastSlot := v.GetLastSlot(rawIdentifier)
+		lastHeight := v.GetLastHeight(rawIdentifier)
 
+		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
+			v.logger.Debug("process higher height is done")
+			continue
+		}
 		if processed := v.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
 			v.logger.Debug("process none running instance is done")
 			continue
 		}
-		if processed := v.processByState(handler, identifier); processed {
+		if processed := v.processByState(handler, identifier, lastHeight); processed {
 			v.logger.Debug("process by state is done")
-			continue
-		}
-		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
-			v.logger.Debug("process higher height is done")
 			continue
 		}
 		if processed := v.processLateCommit(handler, identifier, lastHeight); processed {
@@ -103,10 +94,10 @@ func (v *Validator) processNoRunningInstance(
 	lastHeight specqbft.Height,
 	lastSlot spec.Slot,
 ) bool {
-	instance := v.GetCurrentInstance()
-	if instance != nil {
-		return false // only pop when no instance running
-	}
+	//instance := v.GetCurrentInstance()
+	//if instance != nil {
+	//	return false // only pop when no instance running
+	//}
 
 	logger := v.logger.With(
 		//zap.String("sig state", c.SignatureState.getState().toString()),
@@ -138,7 +129,7 @@ func (v *Validator) processNoRunningInstance(
 }
 
 // processByState if an instance is running -> get the state and get the relevant messages
-func (v *Validator) processByState(handler MessageHandler, identifier string) bool {
+func (v *Validator) processByState(handler MessageHandler, identifier string, height specqbft.Height) bool {
 	//currentInstance := v.GetCurrentInstance()
 	//if currentInstance == nil {
 	//	return false
@@ -147,10 +138,11 @@ func (v *Validator) processByState(handler MessageHandler, identifier string) bo
 	var msg *spectypes.SSVMessage
 
 	//currentState := currentInstance.GetState()
-	//msg = c.getNextMsgForState(currentState, identifier)
-	//if msg == nil {
-	//	return false // no msg found
-	//}
+	msg = v.getNextMsgForState(identifier, height)
+	if msg == nil {
+		return false // no msg found
+	}
+	v.logger.Debug("queue found message by state")
 	//v.logger.Debug("queue found message for state",
 	//	zap.Int32("stage", currentState.Stage.Load()),
 	//	zap.Int32("seq", int32(currentState.GetHeight())),
@@ -217,15 +209,12 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 }
 
 // getNextMsgForState return msgs depended on the current instance stage
-func (v *Validator) getNextMsgForState(state *qbft.State, identifier string) *spectypes.SSVMessage {
-	height := state.GetHeight()
-	stage := qbft.RoundState(state.Stage.Load())
-
+func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height) *spectypes.SSVMessage {
 	iterator := msgqueue.NewIndexIterator()
 
-	stats := stateIndex(identifier, stage, height)
-
-	for _, idx := range stats {
+	idxs := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height,
+		specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType)
+	for _, idx := range idxs {
 		iterator.AddIndex(idx)
 	}
 
@@ -245,6 +234,7 @@ func (v *Validator) getNextMsgForState(state *qbft.State, identifier string) *sp
 	if len(msgs) == 0 {
 		return nil
 	}
+
 	return msgs[0]
 }
 
@@ -259,25 +249,4 @@ func (v *Validator) processAllDecided(handler MessageHandler, identifier []byte)
 		}
 		msgs = v.Q.Pop(1, idx)
 	}
-}
-
-func stateIndex(identifier string, stage qbft.RoundState, height specqbft.Height) []msgqueue.Index {
-	var res []msgqueue.Index
-	switch stage {
-	case qbft.RoundStateReady:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.ProposalMsgType, specqbft.PrepareMsgType) // check for prepare in case propose came before set the ctrl new height
-	case qbft.RoundStateProposal:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.PrepareMsgType)
-	case qbft.RoundStatePrepare:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.CommitMsgType)
-	case qbft.RoundStateCommit:
-		return []msgqueue.Index{{}} // qbft.RoundStateCommit stage is NEVER set
-	case qbft.RoundStateChangeRound:
-		res = msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
-		//case qbft.RoundStateDecided: needs to pop decided msgs in all cases not only by state
-	}
-	if len(res) == 0 {
-		return []msgqueue.Index{{}}
-	}
-	return res
 }
