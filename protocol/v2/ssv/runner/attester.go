@@ -104,6 +104,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 		return nil
 	}
 
+	duty := r.GetState().DecidedValue.Duty
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -111,8 +113,6 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-
-		duty := r.GetState().DecidedValue.Duty
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -128,6 +128,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 		}
 	}
 	r.GetState().Finished = true
+	r.GetState().LastSlot = duty.Slot
+
 	return nil
 }
 

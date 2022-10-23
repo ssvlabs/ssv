@@ -153,6 +153,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedM
 	}
 
 	runner.GetBaseRunner().State.DecidedValue = decidedValue
+	runner.GetBaseRunner().State.LastHeight =	decidedMsg.Message.Height
 
 	return true, decidedValue, nil
 }

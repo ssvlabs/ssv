@@ -3,6 +3,8 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -19,6 +21,8 @@ type State struct {
 	StartingDuty *types.Duty
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	LastSlot phase0.Slot
+	LastHeight qbft.Height // TODO: move somewhere else?
 }
 
 func NewRunnerState(quorum uint64, duty *types.Duty) *State {

@@ -17,15 +17,28 @@ import (
 
 // GetLastHeight returns the last height for the given identifier
 func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	// TODO: implement
-	return specqbft.Height(0)
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return specqbft.Height(0)
+	}
+	state := r.GetBaseRunner().State
+	if state == nil {
+		return specqbft.Height(0)
+	}
+	return state.LastHeight
 }
 
 // GetLastSlot returns the last slot for the given identifier
 func (v *Validator) GetLastSlot(identifier spectypes.MessageID) spec.Slot {
-	//v.DutyRunners.DutyRunnerForMsgID(identifier).GetBaseRunner()
-	// TODO: implement
-	return spec.Slot(0)
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return spec.Slot(0)
+	}
+	state := r.GetBaseRunner().State
+	if state == nil {
+		return spec.Slot(0)
+	}
+	return state.LastSlot
 }
 
 // MessageHandler process the msg. return error if exist

@@ -131,6 +131,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialS
 		}
 	}
 	r.GetState().Finished = true
+	r.GetState().LastSlot = r.GetState().DecidedValue.Duty.Slot
+
 	return nil
 }
 
