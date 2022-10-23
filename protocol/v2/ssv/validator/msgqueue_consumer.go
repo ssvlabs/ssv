@@ -15,16 +15,29 @@ import (
 	"go.uber.org/zap"
 )
 
+// GetLastHeight returns the last height for the given identifier
+func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
+	// TODO: implement
+	return specqbft.Height(0)
+}
+
+// GetLastSlot returns the last slot for the given identifier
+func (v *Validator) GetLastSlot(identifier spectypes.MessageID) spec.Slot {
+	//v.DutyRunners.DutyRunnerForMsgID(identifier).GetBaseRunner()
+	// TODO: implement
+	return spec.Slot(0)
+}
+
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(rawIdentifier []byte, handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(msgId spectypes.MessageID, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(rawIdentifier, handler, time.Millisecond*50)
+		err := v.ConsumeQueue(msgId, handler, time.Millisecond*50)
 		if err != nil {
 			v.logger.Warn("could not consume queue", zap.Error(err))
 		}
@@ -33,11 +46,11 @@ func (v *Validator) StartQueueConsumer(rawIdentifier []byte, handler MessageHand
 
 // ConsumeQueue consumes messages from the msgqueue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(rawIdentifier []byte, handler MessageHandler, interval time.Duration) error {
+func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandler, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	identifier := hex.EncodeToString(rawIdentifier)
+	identifier := msgId.String()
 	higherCache := cache.New(time.Second*12, time.Second*24)
 
 	for ctx.Err() == nil {
@@ -45,24 +58,27 @@ func (v *Validator) ConsumeQueue(rawIdentifier []byte, handler MessageHandler, i
 
 		// no msg's in the queue
 		if v.Q.Len() == 0 {
+			// no msg's at all. need to prevent cpu usage in query
 			time.Sleep(interval)
-			continue // no msg's at all. need to prevent cpu usage in query
+			continue
 		}
 		//// avoid process messages on fork
 		//if atomic.LoadUint32(&v.State) == Forking {
 		//	time.Sleep(interval)
 		//	continue
 		//}
-		lastSlot := v.GetLastSlot(rawIdentifier)
-		lastHeight := v.GetLastHeight(rawIdentifier)
+		lastSlot := v.GetLastSlot(msgId)
+		lastHeight := v.GetLastHeight(msgId)
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			v.logger.Debug("process higher height is done")
 			continue
 		}
-		if processed := v.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
-			v.logger.Debug("process none running instance is done")
-			continue
+		if !v.DutyRunners.DutyRunnerForMsgID(msgId).HasRunningDuty() {
+			if processed := v.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
+				v.logger.Debug("process none running instance is done")
+				continue
+			}
 		}
 		if processed := v.processByState(handler, identifier, lastHeight); processed {
 			v.logger.Debug("process by state is done")

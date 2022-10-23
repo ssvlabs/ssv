@@ -16,9 +16,22 @@ import (
 type DutyRunners map[types.BeaconRole]Runner
 
 // DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found
-func (ci DutyRunners) DutyRunnerForMsgID(msgID types.MessageID) Runner {
+func (dr DutyRunners) DutyRunnerForMsgID(msgID types.MessageID) Runner {
 	role := msgID.GetRoleType()
-	return ci[role]
+	return dr[role]
+}
+
+func (dr DutyRunners) Identifiers() []types.MessageID {
+	var identifiers []types.MessageID
+	for _, r := range dr {
+		share := r.GetBaseRunner().Share
+		if share == nil { // TODO: handle missing share?
+			continue
+		}
+		i := types.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, r.GetBaseRunner().BeaconRoleType)
+		identifiers = append(identifiers, i)
+	}
+	return identifiers
 }
 
 type Getters interface {

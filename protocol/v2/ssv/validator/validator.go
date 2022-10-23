@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
@@ -19,18 +18,21 @@ import (
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
 	ctx context.Context
+	cancel context.CancelFunc
 	logger *zap.Logger
+
 	DutyRunners runner.DutyRunners
-	Network     Network
-	Beacon      ssv.BeaconNode
-	Storage     ssv.Storage
+
 	Share       *types.Share
+	Beacon      ssv.BeaconNode
 	Signer      types.KeyManager
+
+	Storage     ssv.Storage // TODO: change?
+	Network     Network
+
 	Q 			msgqueue.MsgQueue
 
-	// TODO: move somewhere else
-	Identifiers [][]byte
-
+	identifiers []types.MessageID
 	mode int32
 }
 
@@ -49,16 +51,21 @@ func NewValidator(
 	signer types.KeyManager,
 	runners runner.DutyRunners,
 ) *Validator {
+	ctx, cancel := context.WithCancel(context.Background()) // TODO: pass context
+	l := zap.L() // TODO: real logger
+	q, _ := msgqueue.New(l) // TODO: handle error
 	// makes sure that we have a sufficient interface, otherwise wrap it
 	n, ok := network.(Network)
 	if !ok {
 		n = newNilNetwork(network)
 	}
-	l := zap.L() // TODO: real logger
-	// TODO: handle error
-	q, _ := msgqueue.New(l)
+	//s, ok := storage.(qbft.Storage)
+	//if !ok {
+	//	l.Warn("incompatible storage") // TODO: handle
+	//}
 	return &Validator{
-		ctx: context.Background(), // TODO: real context
+		ctx: ctx,
+		cancel: cancel,
 		logger: l,
 		DutyRunners: runners,
 		Network:     n,
@@ -67,14 +74,24 @@ func NewValidator(
 		Share:       share,
 		Signer:      signer,
 		Q: 			 q,
+		identifiers: runners.Identifiers(),
 		mode: int32(ModeRW),
 	}
 }
 
 func (v *Validator) Start() error {
-	for _, identifier := range v.Identifiers {
+	for _, identifier := range v.identifiers {
 		go v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
+	return nil
+}
+
+func (v *Validator) Stop() error {
+	v.cancel()
+	// clear the msg q
+	v.Q.Clean(func(index msgqueue.Index) bool {
+		return true
+	})
 	return nil
 }
 
@@ -146,14 +163,4 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	}
 
 	return nil
-}
-
-// GetLastHeight returns the last height for the given identifier
-func (v *Validator) GetLastHeight(identifier []byte) qbft.Height {
-	return qbft.Height(0)
-}
-
-// GetLastSlot returns the last slot for the given identifier
-func (v *Validator) GetLastSlot(identifier []byte) phase0.Slot {
-	return phase0.Slot(0)
 }
