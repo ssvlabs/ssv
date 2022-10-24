@@ -5,7 +5,9 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	validator2 "github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v2/commons"
 	validator3 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"sync"
 	"time"
 
@@ -31,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -141,12 +142,11 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	validatorOptions := &validator3.Options{ //TODO add vars
-		Network: nil,
-		Beacon:  nil,
-		Storage: nil,
-		Share:   nil,
-		Signer:  nil,
-		Runners: nil,
+		Network: commons.NewSSVNetworkAdapter(options.Network),
+		Beacon:  commons.NewBeaconAdapter(options.Beacon),
+		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
+		Share:   nil,                                        // set per validator
+		Signer:  options.KeyManager,
 	}
 
 	ctrl := controller{

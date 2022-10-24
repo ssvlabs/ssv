@@ -6,6 +6,8 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	types2 "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
@@ -17,10 +19,9 @@ type Options struct {
 	logger  *zap.Logger
 	Network ssv.Network
 	Beacon  ssv.BeaconNode
-	Storage ssv.Storage
+	Storage qbft.Storage
 	Share   *types.Share
 	Signer  types.KeyManager
-	Runners runner.DutyRunners
 }
 
 func (o *Options) defaults() {
@@ -37,13 +38,16 @@ type Validator struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
+	Identifier []byte
+	DomainType types.DomainType
+
 	DutyRunners runner.DutyRunners
 
 	Share  *types.Share
 	Beacon ssv.BeaconNode
 	Signer types.KeyManager
 
-	Storage ssv.Storage // TODO: change?
+	Storage qbft.Storage // TODO: change?
 	Network Network
 
 	Q msgqueue.MsgQueue
@@ -77,19 +81,25 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	q, _ = msgqueue.New(options.logger) // TODO: handle error
 	//}
 
-	return &Validator{
-		ctx:         ctx,
-		cancel:      cancel,
-		logger:      options.logger,
-		DutyRunners: options.Runners,
-		Network:     n,
-		Beacon:      options.Beacon,
-		Storage:     s,
-		Share:       options.Share,
-		Signer:      options.Signer,
-		Q:           q,
-		mode:        int32(ModeRW),
+	identifier := types.NewMsgID(options.Share.ValidatorPubKey, types.BNRoleAttester)
+	v := &Validator{
+		ctx:        ctx,
+		cancel:     cancel,
+		logger:     options.logger,
+		Identifier: identifier[:],
+		DomainType: types2.GetDefaultDomain(),
+		Network:    n,
+		Beacon:     options.Beacon,
+		Storage:    options.Storage,
+		Share:      options.Share,
+		Signer:     options.Signer,
+		Q:          q,
+		mode:       int32(ModeRW),
 	}
+
+	v.setupRunners()
+
+	return v
 }
 
 func (v *Validator) Start() error {
@@ -180,4 +190,29 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	}
 
 	return nil
+}
+
+func (v *Validator) setupRunners() {
+	config := &qbft.Config{
+		Signer:    v.Signer,
+		SigningPK: v.Share.ValidatorPubKey, // TODO right val?
+		Domain:    v.DomainType,
+		ValueCheckF: func(data []byte) error {
+			return nil
+		},
+		ProposerF: func(state *qbft.State, round qbft.Round) types.OperatorID {
+			return
+		},
+		Storage: v.Storage,
+		Network: v.Network,
+		Timer:   v,
+	}
+	qbftQtrl := controller.NewController(v.Identifier, v.Share, v.DomainType, config)
+	v.DutyRunners = runner.DutyRunners{
+		types.BNRoleAttester: runner.NewAttesterRunnner("", v.Share, qbftQtrl, v.Beacon, v.Network, v.Signer, nil), // TODO add valcheck
+		//spectypes.BNRoleProposer:                       utils.ProposerRunner(keySet),
+		//spectypes.BNRoleAggregator:                     utils.AggregatorRunner(keySet),
+		//spectypes.BNRoleSyncCommittee:                  utils.SyncCommitteeRunner(keySet),
+		//spectypes.BNRoleSyncCommitteeContribution: utils.SyncCommitteeContributionRunner(keySet)},
+	}
 }
