@@ -37,7 +37,10 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if err := sm.Decode(msg.Data); err != nil {
 			return Index{}
 		}
-		return SignedPostConsensusMsgIndex(msg.MsgID.String(), sm.Messages[0].Slot)
+		if len(sm.Message.Messages) == 0 {
+			return Index{}
+		}
+		return SignedPostConsensusMsgIndex(msg.MsgID.String(), sm.Message.Messages[0].Slot)
 	}
 }
 

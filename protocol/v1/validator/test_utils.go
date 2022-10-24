@@ -3,7 +3,8 @@ package validator
 import (
 	"crypto/rsa"
 	"encoding/hex"
-	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	ssz "github.com/ferranbt/fastssz"
 	"sync"
 	"testing"
 
@@ -145,64 +146,65 @@ func (t *testIBFT) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 func (t *testIBFT) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
 	// get operator pk for sig
-	pk, err := t.share.OperatorSharePubKey()
-	if err != nil {
-		return errors.Wrap(err, "could not find operator pk for signing duty")
-	}
+	//pk, err := t.share.OperatorSharePubKey()
+	//if err != nil {
+	//	return errors.Wrap(err, "could not find operator pk for signing duty")
+	//}
+	//
+	//retValueStruct := &beaconprotocol.DutyData{}
+	//if role != spectypes.BNRoleAttester {
+	//	return errors.New("unsupported role, can't sign")
+	//}
+	//s := &spec.AttestationData{}
+	//if err := s.UnmarshalSSZ(decidedValue); err != nil {
+	//	return errors.Wrap(err, "failed to marshal attestation")
+	//}
+	//
+	//cd := &spectypes.ConsensusData{
+	//	Duty: &spectypes.Duty{
+	//		Type: spectypes.BNRoleAttester,
+	//	},
+	//	AttestationData:           s,
+	//	BlockData:                 nil,
+	//	AggregateAndProof:         nil,
+	//	SyncCommitteeBlockRoot:    spec.Root{},
+	//	SyncCommitteeContribution: nil,
+	//}
 
-	retValueStruct := &beaconprotocol.DutyData{}
-	if role != spectypes.BNRoleAttester {
-		return errors.New("unsupported role, can't sign")
-	}
-	s := &spec.AttestationData{}
-	if err := s.UnmarshalSSZ(decidedValue); err != nil {
-		return errors.Wrap(err, "failed to marshal attestation")
-	}
+	//signedAttestation, _, err := t.beaconSigner.SignAttestation(cd.AttestationData, cd.Duty, pk.Serialize())
+	//if err != nil {
+	//	return errors.Wrap(err, "failed to sign attestation")
+	//}
+	//
+	//sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
+	//retValueStruct.SignedData = sg
+	//retValueStruct.GetAttestation().Signature = signedAttestation.Signature
+	//retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
 
-	cd := &spectypes.ConsensusData{
-		Duty: &spectypes.Duty{
-			Type: spectypes.BNRoleAttester,
-		},
-		AttestationData:           s,
-		BlockData:                 nil,
-		AggregateAndProof:         nil,
-		SyncCommitteeBlockRoot:    spec.Root{},
-		SyncCommitteeContribution: nil,
-	}
+	//t.signatureMu.Lock()
+	//signatures := t.signatures
+	//t.signatureMu.Unlock()
 
-	signedAttestation, _, err := t.beaconSigner.SignAttestation(cd.AttestationData, cd.Duty, pk.Serialize())
-	if err != nil {
-		return errors.Wrap(err, "failed to sign attestation")
-	}
+	//seen := map[string]struct{}{}
+	//for _, sig := range signatures {
+	//	seen[hex.EncodeToString(sig)] = struct{}{}
+	//}
+	//
+	//if l := len(seen); l < signaturesCount {
+	//	return fmt.Errorf("not enough post consensus signatures, received %d", l)
+	//}
+	//
+	//signature, err := threshold.ReconstructSignatures(signatures)
+	//if err != nil {
+	//	return errors.Wrap(err, "failed to reconstruct signatures")
+	//}
 
-	sg := &beaconprotocol.InputValueAttestation{Attestation: signedAttestation}
-	retValueStruct.SignedData = sg
-	retValueStruct.GetAttestation().Signature = signedAttestation.Signature
-	retValueStruct.GetAttestation().AggregationBits = signedAttestation.AggregationBits
-
-	t.signatureMu.Lock()
-	signatures := t.signatures
-	t.signatureMu.Unlock()
-
-	seen := map[string]struct{}{}
-	for _, sig := range signatures {
-		seen[hex.EncodeToString(sig)] = struct{}{}
-	}
-
-	if l := len(seen); l < signaturesCount {
-		return fmt.Errorf("not enough post consensus signatures, received %d", l)
-	}
-
-	signature, err := threshold.ReconstructSignatures(signatures)
-	if err != nil {
-		return errors.Wrap(err, "failed to reconstruct signatures")
-	}
-
-	blsSig := spec.BLSSignature{}
-	copy(blsSig[:], signature.Serialize()[:])
-	retValueStruct.GetAttestation().Signature = blsSig
-
-	return t.beacon.SubmitAttestation(retValueStruct.GetAttestation())
+	//blsSig := spec.BLSSignature{}
+	//copy(blsSig[:], signature.Serialize()[:])
+	//retValueStruct.GetAttestation().Signature = blsSig
+	//
+	//return t.beacon.SubmitAttestation(retValueStruct.GetAttestation())
+	return nil
 }
 
 func (t *testIBFT) ProcessMsg(msg *spectypes.SSVMessage) error {
@@ -219,7 +221,7 @@ func (t *testIBFT) ProcessMsg(msg *spectypes.SSVMessage) error {
 
 func (t *testIBFT) ProcessPostConsensusMessage(msg *specssv.SignedPartialSignatureMessage) error {
 	t.signatureMu.Lock()
-	t.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
+	//t.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
 	t.signatureMu.Unlock()
 	return nil
 }
@@ -382,6 +384,14 @@ type testKeyManager struct {
 	keys map[string]*bls.SecretKey
 }
 
+func (km *testKeyManager) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
+func (km *testKeyManager) IsBeaconBlockSlashable(block *bellatrix.BeaconBlock) error {
+	panic("implement me")
+}
+
 // NewTestKeyManager creates a new ssvSigner for tests
 func NewTestKeyManager() spectypes.KeyManager {
 	return &testKeyManager{&sync.Mutex{}, make(map[string]*bls.SecretKey)}
@@ -395,9 +405,6 @@ func (km *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectyp
 	panic("implement me")
 }
 
-func (km *testKeyManager) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
-	panic("implement me")
-}
 
 func (km *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
 	panic("implement me")
