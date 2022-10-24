@@ -28,7 +28,7 @@ type IConfig interface {
 	// GetStorage returns a storage instance
 	GetStorage() qbft.Storage
 	// GetTimer returns round timer
-	GetTimer() Timer
+	GetTimer() qbft.Timer
 }
 
 type Config struct {
@@ -39,7 +39,7 @@ type Config struct {
 	ProposerF   instance.ProposerF
 	Storage     qbft.Storage
 	Network     ssv.Network
-	Timer       Timer
+	Timer       qbft.Timer
 }
 
 // GetSigner returns a Signer instance
