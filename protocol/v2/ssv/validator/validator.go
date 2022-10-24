@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -19,7 +20,7 @@ import (
 
 type Options struct {
 	Logger  *zap.Logger
-	Network ssv.Network
+	Network qbft.Network
 	Beacon  ssv.BeaconNode
 	Storage qbft.Storage
 	Share   *beacon.Share
@@ -32,6 +33,11 @@ func (o *Options) defaults() {
 	if o.Logger == nil {
 		o.Logger = zap.L()
 	}
+}
+
+type Network interface {
+	qbft.Network
+	protcolp2p.Subscriber
 }
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -68,18 +74,12 @@ var (
 
 func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
-	ctx, cancel := context.WithCancel(pctx) // TODO: pass context
-
-	// makes sure that we have a sufficient interface, otherwise wrap it
-	n, ok := options.Network.(Network)
-	if !ok {
-		n = newNilNetwork(options.Network)
-	}
+	ctx, cancel := context.WithCancel(pctx)
 
 	var q msgqueue.MsgQueue
-	//if mode == int32(ModeRW) {
-	q, _ = msgqueue.New(options.Logger) // TODO: handle error
-	//}
+	if options.Mode == ModeRW {
+		q, _ = msgqueue.New(options.Logger) // TODO: handle error
+	}
 
 	identifier := types.NewMsgID(options.Share.PublicKey.Serialize(), types.BNRoleAttester)
 	v := &Validator{
@@ -88,7 +88,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		logger:     options.Logger,
 		Identifier: identifier[:],
 		DomainType: types2.GetDefaultDomain(),
-		Network:    n,
+		Network:    options.Network.(Network),
 		Beacon:     options.Beacon,
 		Storage:    options.Storage,
 		Share:      options.Share,
