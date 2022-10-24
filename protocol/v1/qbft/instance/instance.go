@@ -400,7 +400,7 @@ func (i *Instance) GetCommittedAggSSVMessage() (spectypes.SSVMessage, error) {
 		return spectypes.SSVMessage{}, errors.Wrap(err, "failed to encode agg message")
 	}
 	ssvMsg := spectypes.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
+		MsgType: spectypes.SSVDecidedMsgType,
 		MsgID:   message.ToMessageID(i.GetState().GetIdentifier()),
 		Data:    encodedAgg,
 	}

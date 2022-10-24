@@ -3,7 +3,6 @@ package controller
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sync/atomic"
 	"time"
 
@@ -192,7 +191,7 @@ func (c *Controller) processLateCommit(handler MessageHandler, identifier string
 			}
 			return indices[0]
 		}).Add(func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(spectypes.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
 		if len(indices) == 0 {
 			return msgqueue.Index{}
 		}
