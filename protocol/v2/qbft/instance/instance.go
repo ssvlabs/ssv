@@ -5,19 +5,16 @@ import (
 	"fmt"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"sync"
 )
-
-type ProposedValueCheckF func(data []byte) error
-type ProposerF func(state *qbftspec.State, round qbftspec.Round) types.OperatorID
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
 	State  *qbftspec.State
-	config controller.IConfig
+	config types2.IConfig
 
 	processMsgF *types.ThreadSafeF
 	startOnce   sync.Once
@@ -25,7 +22,7 @@ type Instance struct {
 }
 
 func NewInstance(
-	config controller.IConfig,
+	config types2.IConfig,
 	share *types.Share,
 	identifier []byte,
 	height qbftspec.Height,
@@ -127,12 +124,12 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() controller.IConfig {
+func (i *Instance) GetConfig() types2.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config controller.IConfig) {
+func (i *Instance) SetConfig(config types2.IConfig) {
 	i.config = config
 }
 

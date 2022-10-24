@@ -5,6 +5,7 @@ import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
@@ -67,11 +68,7 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	return nil, nil
 }
 
-func validateDecided(
-	config qbftspec.IConfig,
-	signedDecided *qbftspec.SignedMessage,
-	share *types.Share,
-) error {
+func validateDecided(config types2.IConfig, signedDecided *qbftspec.SignedMessage, share *types.Share) error {
 	if !isDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
 	}

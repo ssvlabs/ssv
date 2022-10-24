@@ -7,12 +7,13 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	types2 "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/network"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
@@ -35,11 +36,6 @@ func (o *Options) defaults() {
 	}
 }
 
-type Network interface {
-	qbft.Network
-	protcolp2p.Subscriber
-}
-
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
@@ -58,7 +54,7 @@ type Validator struct {
 	Signer types.KeyManager
 
 	Storage qbft.Storage // TODO: change?
-	Network Network
+	Network network.Network
 
 	Q msgqueue.MsgQueue
 
@@ -88,7 +84,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		logger:     options.Logger,
 		Identifier: identifier[:],
 		DomainType: types2.GetDefaultDomain(),
-		Network:    options.Network.(Network),
+		Network:    options.Network.(network.Network),
 		Beacon:     options.Beacon,
 		Storage:    options.Storage,
 		Share:      options.Share,
@@ -194,7 +190,7 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 }
 
 func (v *Validator) setupRunners() {
-	config := &controller.Config{
+	config := &qbft2.Config{
 		Signer:    v.Signer,
 		SigningPK: v.Share.PublicKey.Serialize(), // TODO right val?
 		Domain:    v.DomainType,
@@ -206,7 +202,7 @@ func (v *Validator) setupRunners() {
 		},
 		Storage: v.Storage,
 		Network: v.Network,
-		Timer: roundtimer.New(v.ctx, v.logger),
+		Timer:   roundtimer.New(v.ctx, v.logger),
 	}
 	specShare := ToSpecShare(v.Share) // temp solution
 	qbftQtrl := controller.NewController(v.Identifier, specShare, v.DomainType, config)

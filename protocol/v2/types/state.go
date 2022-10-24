@@ -1,13 +1,11 @@
-package controller
+package types
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-
+	"github.com/bloxapp/ssv/protocol/v2/network"
 	"github.com/pkg/errors"
 )
 
@@ -21,11 +19,11 @@ type signing interface {
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() instance.ProposedValueCheckF
+	GetValueCheckF() ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() instance.ProposerF
+	GetProposerF() ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() validator.Network
+	GetNetwork() network.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbft.Storage
 	// GetTimer returns round timer
@@ -36,10 +34,10 @@ type Config struct {
 	Signer      types.SSVSigner
 	SigningPK   []byte
 	Domain      types.DomainType
-	ValueCheckF instance.ProposedValueCheckF
-	ProposerF   instance.ProposerF
+	ValueCheckF ProposedValueCheckF
+	ProposerF   ProposerF
 	Storage     qbft.Storage
-	Network     validator.Network
+	Network     network.Network
 	Timer       qbft.Timer
 }
 
@@ -59,17 +57,17 @@ func (c *Config) GetSignatureDomainType() types.DomainType {
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() instance.ProposedValueCheckF {
+func (c *Config) GetValueCheckF() ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() instance.ProposerF {
+func (c *Config) GetProposerF() ProposerF {
 	return c.ProposerF
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() validator.Network {
+func (c *Config) GetNetwork() network.Network {
 	return c.Network
 }
 
@@ -119,3 +117,6 @@ func (s *State) Encode() ([]byte, error) {
 func (s *State) Decode(data []byte) error {
 	return json.Unmarshal(data, &s)
 }
+
+type ProposedValueCheckF func(data []byte) error
+type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID

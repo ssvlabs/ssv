@@ -4,7 +4,7 @@ import (
 	"bytes"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
@@ -48,7 +48,7 @@ func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeM
 	return nil
 }
 
-func isValidProposal(state *qbftspec.State, config controller.IConfig, signedProposal *qbftspec.SignedMessage, valCheck ProposedValueCheckF, operators []*types.Operator) error {
+func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposal *qbftspec.SignedMessage, valCheck types2.ProposedValueCheckF, operators []*types.Operator) error {
 	if signedProposal.Message.MsgType != qbftspec.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
@@ -94,7 +94,7 @@ func isValidProposal(state *qbftspec.State, config controller.IConfig, signedPro
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
-func isProposalJustification(state *qbftspec.State, config controller.IConfig, roundChangeMsgs []*qbftspec.SignedMessage, prepareMsgs []*qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, value []byte, valCheck ProposedValueCheckF) error {
+func isProposalJustification(state *qbftspec.State, config types2.IConfig, roundChangeMsgs []*qbftspec.SignedMessage, prepareMsgs []*qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, value []byte, valCheck types2.ProposedValueCheckF) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}
@@ -178,7 +178,7 @@ func isProposalJustification(state *qbftspec.State, config controller.IConfig, r
 	}
 }
 
-func proposer(state *qbftspec.State, config controller.IConfig, round qbftspec.Round) types.OperatorID {
+func proposer(state *qbftspec.State, config types2.IConfig, round qbftspec.Round) types.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -196,7 +196,7 @@ func proposer(state *qbftspec.State, config controller.IConfig, round qbftspec.R
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *qbftspec.State, config controller.IConfig, value []byte, roundChanges, prepares []*qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func CreateProposal(state *qbftspec.State, config types2.IConfig, value []byte, roundChanges, prepares []*qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
 	proposalData := &qbftspec.ProposalData{
 		Data:                     value,
 		RoundChangeJustification: roundChanges,

@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	validator2 "github.com/bloxapp/ssv/operator_v2/validator"
 	"github.com/bloxapp/ssv/protocol/v1/types"
 	"log"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	"github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
+	operatorv2 "github.com/bloxapp/ssv/operator_v2"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage"
@@ -44,7 +46,7 @@ import (
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
-	SSVOptions                 operator.Options       `yaml:"ssv"`
+	SSVOptions                 operatorv2.Options     `yaml:"ssv"`
 	ETH1Options                eth1.Options           `yaml:"eth1"`
 	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
@@ -219,10 +221,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
-		validatorCtrl := validator.NewController(cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator2.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode = operator.New(cfg.SSVOptions)
+		operatorNode = operatorv2.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)

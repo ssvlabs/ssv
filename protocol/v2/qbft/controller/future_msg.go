@@ -3,6 +3,7 @@ package controller
 import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
@@ -19,11 +20,7 @@ func (c *Controller) UponFutureMsg(msg *qbftspec.SignedMessage) (*qbftspec.Signe
 	return nil, nil
 }
 
-func validateFutureMsg(
-	config qbftspec.IConfig,
-	msg *qbftspec.SignedMessage,
-	operators []*types.Operator,
-) error {
+func validateFutureMsg(config types2.IConfig, msg *qbftspec.SignedMessage, operators []*types.Operator) error {
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
 	}

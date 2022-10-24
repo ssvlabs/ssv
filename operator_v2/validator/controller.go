@@ -1,10 +1,9 @@
-package operator
+package validator
 
 import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	validator2 "github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	validator3 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
@@ -123,7 +122,7 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(options ControllerOptions) Controller {
-	collection := validator2.NewCollection(validator2.CollectionOptions{
+	collection := NewCollection(CollectionOptions{
 		DB:     options.DB,
 		Logger: options.Logger,
 	})
@@ -438,7 +437,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 
 // onShareCreate is called when a validator was added/updated during registry sync
 func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*beaconprotocol.Share, bool, error) {
-	share, shareSecret, err := validator2.ShareFromValidatorEvent(
+	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
 		c.shareEncryptionKeyProvider,
@@ -459,7 +458,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistratio
 		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
 
 		// get metadata
-		if updated, err := validator2.UpdateShareMetadata(share, c.beacon); err != nil {
+		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
 		} else if !updated {
 			logger.Warn("could not find validator metadata")
@@ -511,7 +510,7 @@ func (c *controller) onShareStart(share *beaconprotocol.Share) {
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validator3.Validator) (bool, error) {
-	validator2.ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
+	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
 	if !v.GetShare().HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
 	}

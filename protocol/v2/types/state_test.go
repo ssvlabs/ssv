@@ -1,6 +1,7 @@
-package controller
+package types
 
 import (
+	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -24,9 +25,9 @@ func TestState_Decoding(t *testing.T) {
 		Height:            2,
 		LastPreparedRound: 3,
 		LastPreparedValue: []byte{1, 2, 3, 4},
-		ProposalAcceptedForCurrentRound: &SignedMessage{
-			Message: &Message{
-				MsgType:    CommitMsgType,
+		ProposalAcceptedForCurrentRound: &qbft.SignedMessage{
+			Message: &qbft.Message{
+				MsgType:    qbft.CommitMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: []byte{1, 2, 3, 4},
@@ -57,7 +58,7 @@ func TestState_Decoding(t *testing.T) {
 
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.ProposalAcceptedForCurrentRound.Signature)
 	require.EqualValues(t, []types.OperatorID{1}, decodedState.ProposalAcceptedForCurrentRound.Signers)
-	require.EqualValues(t, CommitMsgType, decodedState.ProposalAcceptedForCurrentRound.Message.MsgType)
+	require.EqualValues(t, qbft.CommitMsgType, decodedState.ProposalAcceptedForCurrentRound.Message.MsgType)
 	require.EqualValues(t, 1, decodedState.ProposalAcceptedForCurrentRound.Message.Height)
 	require.EqualValues(t, 2, decodedState.ProposalAcceptedForCurrentRound.Message.Round)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.ProposalAcceptedForCurrentRound.Message.Identifier)

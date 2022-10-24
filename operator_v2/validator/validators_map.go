@@ -1,4 +1,4 @@
-package operator
+package validator
 
 // TODO(nkryuchkov): remove old validator interface(s)
 import (

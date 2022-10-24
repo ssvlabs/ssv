@@ -8,6 +8,7 @@ import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
@@ -46,7 +47,7 @@ type Controller struct {
 	FutureMsgsContainer map[types.OperatorID]qbftspec.Height // maps msg signer to height of higher height received msgs
 	Domain              types.DomainType
 	Share               *types.Share
-	config              IConfig
+	config              types2.IConfig
 
 	// TODO: state
 	// TODO: validation pipeline
@@ -56,7 +57,7 @@ func NewController(
 	identifier []byte,
 	share *types.Share,
 	domain types.DomainType,
-	config IConfig,
+	config types2.IConfig,
 ) *Controller {
 	return &Controller{
 		Identifier:          identifier,
@@ -274,6 +275,6 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 	return nil
 }
 
-func (c *Controller) GetConfig() IConfig {
+func (c *Controller) GetConfig() types2.IConfig {
 	return c.config
 }

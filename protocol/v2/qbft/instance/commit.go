@@ -4,6 +4,7 @@ import (
 	"bytes"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
@@ -107,7 +108,7 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *qbftspec.State, config qbftspec.IConfig, value []byte) (*qbftspec.SignedMessage, error) {
+func CreateCommit(state *qbftspec.State, config types2.IConfig, value []byte) (*qbftspec.SignedMessage, error) {
 	commitData := &qbftspec.CommitData{
 		Data: value,
 	}
@@ -135,12 +136,7 @@ func CreateCommit(state *qbftspec.State, config qbftspec.IConfig, value []byte) 
 	return signedMsg, nil
 }
 
-func BaseCommitValidation(
-	config qbftspec.IConfig,
-	signedCommit *qbftspec.SignedMessage,
-	height qbftspec.Height,
-	operators []*types.Operator,
-) error {
+func BaseCommitValidation(config types2.IConfig, signedCommit *qbftspec.SignedMessage, height qbftspec.Height, operators []*types.Operator) error {
 	if signedCommit.Message.MsgType != qbftspec.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
@@ -164,14 +160,7 @@ func BaseCommitValidation(
 	return nil
 }
 
-func validateCommit(
-	config qbftspec.IConfig,
-	signedCommit *qbftspec.SignedMessage,
-	height qbftspec.Height,
-	round qbftspec.Round,
-	proposedMsg *qbftspec.SignedMessage,
-	operators []*types.Operator,
-) error {
+func validateCommit(config types2.IConfig, signedCommit *qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, proposedMsg *qbftspec.SignedMessage, operators []*types.Operator) error {
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return errors.Wrap(err, "invalid commit msg")
 	}

@@ -1,4 +1,4 @@
-package operator
+package validator
 
 import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -10,11 +10,11 @@ import (
 
 var (
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_current_slot",
+		Name: "ssv:validator:v2:ibft_current_slot",
 		Help: "Current running slot",
 	}, []string{"pubKey"})
 	metricsValidatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:status",
+		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
 	}, []string{"pubKey"})
 )
