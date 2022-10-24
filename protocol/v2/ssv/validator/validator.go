@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
@@ -205,7 +206,7 @@ func (v *Validator) setupRunners() {
 		},
 		Storage: v.Storage,
 		Network: v.Network,
-		//Timer:   nil, // TODO add
+		Timer: roundtimer.New(v.ctx, v.logger),
 	}
 	specShare := ToSpecShare(v.Share) // temp solution
 	qbftQtrl := controller.NewController(v.Identifier, specShare, v.DomainType, config)
