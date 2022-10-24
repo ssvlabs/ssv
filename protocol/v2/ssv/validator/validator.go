@@ -32,7 +32,6 @@ type Validator struct {
 
 	Q 			msgqueue.MsgQueue
 
-	identifiers []types.MessageID
 	mode int32
 }
 
@@ -74,13 +73,16 @@ func NewValidator(
 		Share:       share,
 		Signer:      signer,
 		Q: 			 q,
-		identifiers: runners.Identifiers(),
 		mode: int32(ModeRW),
 	}
 }
 
 func (v *Validator) Start() error {
-	for _, identifier := range v.identifiers {
+	identifiers := v.DutyRunners.Identifiers()
+	for _, identifier := range identifiers {
+		if err := v.Network.Subscribe(identifier.GetPubKey()); err != nil {
+			return err
+		}
 		go v.StartQueueConsumer(identifier, v.ProcessMessage)
 	}
 	return nil
