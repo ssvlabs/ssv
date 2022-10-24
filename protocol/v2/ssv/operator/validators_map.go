@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"sync"
@@ -66,16 +66,16 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *types.Share) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *beacon.Share) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
-	pubKey := hex.EncodeToString(share.ValidatorPubKey)
+	pubKey := hex.EncodeToString(share.PublicKey.Serialize())
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
-		vm.validatorsMap[pubKey] = validator.NewValidator(opts)
+		vm.validatorsMap[pubKey] = validator.NewValidator(vm.ctx, opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil
 	} else {
@@ -105,13 +105,13 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
-func printShare(s *types.Share, logger *zap.Logger, msg string) {
+func printShare(s *beacon.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
-		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.OperatorID, c.PubKey))
+		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftID, c.Pk))
 	}
 	logger.Debug(msg,
-		zap.String("pubKey", hex.EncodeToString(s.ValidatorPubKey)),
-		zap.Uint64("nodeID", uint64(s.OperatorID)),
+		zap.String("pubKey", hex.EncodeToString(s.PublicKey.Serialize())),
+		zap.Uint64("nodeID", uint64(s.NodeID)),
 		zap.Strings("committee", committee))
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	validator2 "github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	validator3 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -59,7 +60,7 @@ type ControllerOptions struct {
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
-	Shares                     []validator2.ShareOptions `yaml:"Shares"`
+	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
@@ -81,7 +82,7 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (validator.IValidator, bool)
+	GetValidator(pubKey string) (*validator3.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
@@ -142,11 +143,13 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	validatorOptions := &validator3.Options{ //TODO add vars
+		Logger:  options.Logger,
 		Network: commons.NewSSVNetworkAdapter(options.Network),
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
 		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
-		Share:   nil,                                        // set per validator
-		Signer:  options.KeyManager,
+		//Share:   nil,  // set per validator
+		Signer: options.KeyManager,
+		//Mode: validator3.ModeRW // set per validator
 	}
 
 	ctrl := controller{
@@ -185,14 +188,14 @@ func NewController(options ControllerOptions) Controller {
 func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
-		handlers.LastDecidedHandler(c.logger, c.validatorOptions.IbftStorage, c.network),
+		handlers.LastDecidedHandler(c.logger, c.ibftStorage, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.LastChangeRoundProtocol,
-		handlers.LastChangeRoundHandler(c.logger, c.validatorOptions.IbftStorage, c.network),
+		handlers.LastChangeRoundHandler(c.logger, c.ibftStorage, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
-		handlers.HistoryHandler(c.logger, c.validatorOptions.IbftStorage, c.network, 25),
+		handlers.HistoryHandler(c.logger, c.ibftStorage, c.network, 25),
 	))
 	return nil
 }
@@ -234,11 +237,9 @@ func (c *controller) handleRouterMessages() {
 			hexPK := hex.EncodeToString(pk)
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				if err := v.ProcessMsg(&msg); err != nil {
-					c.logger.Warn("failed to process message", zap.Error(err))
-				}
+				v.HandleMessage(&msg)
 			} else {
-				if msg.MsgType != spectypes.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
+				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
@@ -273,9 +274,9 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 
 	opts := *c.validatorOptions
 	opts.Share = share
-	opts.ReadMode = true
-
-	return validator.NewValidator(&opts).ProcessMsg(msg)
+	opts.Mode = validator3.ModeRW
+	validator3.NewValidator(c.context, opts).HandleMessage(msg)
+	return nil
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
@@ -319,7 +320,7 @@ func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
-		pk := v.GetShare().PublicKey.SerializeToHexStr()
+		pk := hex.EncodeToString(v.Share.PublicKey.Serialize())
 		logger := c.logger.With(zap.String("pubkey", pk))
 		if !v.GetShare().HasMetadata() { // fetching index and status in case not exist
 			fetchMetadata = append(fetchMetadata, v.GetShare().PublicKey.Serialize())
@@ -384,7 +385,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (validator.IValidator, bool) {
+func (c *controller) GetValidator(pubKey string) (*validator3.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -394,7 +395,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v validator.IValidator) error {
+	err := c.validatorsMap.ForEach(func(v *validator3.Validator) error {
 		if !v.GetShare().HasMetadata() {
 			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
 		} else if v.GetShare().Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
@@ -486,7 +487,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 	// stop instance
 	if v != nil {
-		if err := v.Close(); err != nil {
+		if err := v.Stop(); err != nil {
 			return errors.Wrap(err, "could not close validator")
 		}
 	}
@@ -509,8 +510,8 @@ func (c *controller) onShareStart(share *beaconprotocol.Share) {
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v validator.IValidator) (bool, error) {
-	validator2.ReportValidatorStatus(v.GetShare().PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
+func (c *controller) startValidator(v *validator3.Validator) (bool, error) {
+	validator2.ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
 	if !v.GetShare().HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
 	}
@@ -518,7 +519,7 @@ func (c *controller) startValidator(v validator.IValidator) (bool, error) {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(); err != nil {
-		validator2.metricsValidatorStatus.WithLabelValues(v.GetShare().PublicKey.SerializeToHexStr()).Set(float64(validator2.validatorStatusError))
+		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.PublicKey.Serialize())).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	return true, nil
