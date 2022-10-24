@@ -9,7 +9,12 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+<<<<<<< Updated upstream
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
+=======
+	"github.com/bloxapp/ssv/protocol/v1/qbft"
+	//"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
+>>>>>>> Stashed changes
 
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
@@ -80,8 +85,15 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 		//	time.Sleep(interval)
 		//	continue
 		//}
+<<<<<<< Updated upstream
 		lastSlot := v.GetLastSlot(msgId)
 		lastHeight := v.GetLastHeight(msgId)
+=======
+		//
+		// TODO
+		lastSlot := spec.Slot(0)         // v.SignatureState.lastSlot // no slot - 0.
+		lastHeight := specqbft.Height(0) // v.GetHeight()
+>>>>>>> Stashed changes
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			v.logger.Debug("process higher height is done")

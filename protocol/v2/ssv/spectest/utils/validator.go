@@ -9,17 +9,19 @@ import (
 
 var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
 	return validator.NewValidator(
-		testingutils.NewTestingNetwork(),
-		testingutils.NewTestingBeaconNode(),
-		testingutils.NewTestingStorage(),
-		testingutils.TestingShare(keySet),
-		testingutils.NewTestingKeyManager(),
-		map[types.BeaconRole]runner.Runner{
-			types.BNRoleAttester:                  AttesterRunner(keySet),
-			types.BNRoleProposer:                  ProposerRunner(keySet),
-			types.BNRoleAggregator:                AggregatorRunner(keySet),
-			types.BNRoleSyncCommittee:             SyncCommitteeRunner(keySet),
-			types.BNRoleSyncCommitteeContribution: SyncCommitteeContributionRunner(keySet),
+		validator.Options{
+			Network: testingutils.NewTestingNetwork(),
+			Beacon:  testingutils.NewTestingBeaconNode(),
+			Storage: testingutils.NewTestingStorage(),
+			Share:   testingutils.TestingShare(keySet),
+			Signer:  testingutils.NewTestingKeyManager(),
+			Runners: map[types.BeaconRole]runner.Runner{
+				types.BNRoleAttester:                  AttesterRunner(keySet),
+				types.BNRoleProposer:                  ProposerRunner(keySet),
+				types.BNRoleAggregator:                AggregatorRunner(keySet),
+				types.BNRoleSyncCommittee:             SyncCommitteeRunner(keySet),
+				types.BNRoleSyncCommitteeContribution: SyncCommitteeContributionRunner(keySet),
+			},
 		},
 	)
 }

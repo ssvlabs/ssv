@@ -16,13 +16,18 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks)
 	keySet := keySetForShare(share)
-	v := ssv.NewValidator(nil, testingutils.NewTestingBeaconNode(), nil, share, nil,
-		runner.DutyRunners{
-			types.BNRoleAttester:                  utils.AttesterRunner(keySet),
-			types.BNRoleProposer:                  utils.ProposerRunner(keySet),
-			types.BNRoleAggregator:                utils.AggregatorRunner(keySet),
-			types.BNRoleSyncCommittee:             utils.SyncCommitteeRunner(keySet),
-			types.BNRoleSyncCommitteeContribution: utils.SyncCommitteeContributionRunner(keySet)})
+	v := ssv.NewValidator(
+		ssv.Options{
+			Beacon: testingutils.NewTestingBeaconNode(),
+			Share:  share,
+			Runners: runner.DutyRunners{
+				types.BNRoleAttester:                  utils.AttesterRunner(keySet),
+				types.BNRoleProposer:                  utils.ProposerRunner(keySet),
+				types.BNRoleAggregator:                utils.AggregatorRunner(keySet),
+				types.BNRoleSyncCommittee:             utils.SyncCommitteeRunner(keySet),
+				types.BNRoleSyncCommitteeContribution: utils.SyncCommitteeContributionRunner(keySet)},
+		},
+	)
 	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()

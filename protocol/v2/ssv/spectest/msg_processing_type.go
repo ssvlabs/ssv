@@ -33,13 +33,12 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	//v.Network = test.Runner.GetNetwork()
 
 	v := ssv2.NewValidator(
-		test.Runner.GetNetwork(),
-		nil,
-		nil,
-		testingutils.TestingShare(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share)),
-		nil,
-		runner.DutyRunners{
-			test.Runner.GetBaseRunner().BeaconRoleType: test.Runner,
+		ssv2.Options{
+			Network: test.Runner.GetNetwork(),
+			Share:   testingutils.TestingShare(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share)),
+			Runners: runner.DutyRunners{
+				test.Runner.GetBaseRunner().BeaconRoleType: test.Runner,
+			},
 		},
 	)
 

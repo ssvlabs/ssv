@@ -13,6 +13,16 @@ import (
 	"sync/atomic"
 )
 
+type Options struct {
+	logger  *zap.Logger
+	Network ssv.Network
+	Beacon  ssv.BeaconNode
+	Storage ssv.Storage
+	Share   *types.Share
+	Signer  types.KeyManager
+	Runners runner.DutyRunners
+}
+
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
@@ -42,40 +52,34 @@ var (
 	ModeR  ValidatorMode = 1
 )
 
-func NewValidator(
-	network ssv.Network,
-	beacon ssv.BeaconNode,
-	storage ssv.Storage,
-	share *types.Share,
-	signer types.KeyManager,
-	runners runner.DutyRunners,
-) *Validator {
+func NewValidator(ctx context.Context, options Options) *Validator {
 	ctx, cancel := context.WithCancel(context.Background()) // TODO: pass context
-	l := zap.L()                                            // TODO: real logger
-	var q msgqueue.MsgQueue
-	//if mode == int32(ModeRW) {
-	q, _ = msgqueue.New(l) // TODO: handle error
-	//}
 
 	// makes sure that we have a sufficient interface, otherwise wrap it
-	n, ok := network.(Network)
+	n, ok := options.Network.(Network)
 	if !ok {
-		n = newNilNetwork(network)
+		n = newNilNetwork(options.Network)
 	}
 	//s, ok := storage.(qbft.Storage)
 	//if !ok {
 	//	l.Warn("incompatible storage") // TODO: handle
 	//}
+
+	var q msgqueue.MsgQueue
+	//if mode == int32(ModeRW) {
+	q, _ = msgqueue.New(options.logger) // TODO: handle error
+	//}
+
 	return &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
-		logger:      l,
-		DutyRunners: runners,
+		logger:      options.logger,
+		DutyRunners: options.Runners,
 		Network:     n,
-		Beacon:      beacon,
-		Storage:     storage,
-		Share:       share,
-		Signer:      signer,
+		Beacon:      options.Beacon,
+		Storage:     options.Storage,
+		Share:       options.Share,
+		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(ModeRW),
 	}
