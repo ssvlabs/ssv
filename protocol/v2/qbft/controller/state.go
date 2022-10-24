@@ -58,45 +58,45 @@ func (c *Config) GetSignatureDomainType() types.DomainType {
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() ProposedValueCheckF {
+func (c *Config) GetValueCheckF() instance.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() ProposerF {
+func (c *Config) GetProposerF() instance.ProposerF {
 	return c.ProposerF
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() Network {
+func (c *Config) GetNetwork() ssv.Network {
 	return c.Network
 }
 
 // GetStorage returns a storage instance
-func (c *Config) GetStorage() Storage {
+func (c *Config) GetStorage() qbft.Storage {
 	return c.Storage
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() Timer {
+func (c *Config) GetTimer() qbft.Timer {
 	return c.Timer
 }
 
 type State struct {
 	Share                           *types.Share
 	ID                              []byte // instance Identifier
-	Round                           Round
-	Height                          Height
-	LastPreparedRound               Round
+	Round                           qbft.Round
+	Height                          qbft.Height
+	LastPreparedRound               qbft.Round
 	LastPreparedValue               []byte
-	ProposalAcceptedForCurrentRound *SignedMessage
+	ProposalAcceptedForCurrentRound *qbft.SignedMessage
 	Decided                         bool
 	DecidedValue                    []byte
 
-	ProposeContainer     *MsgContainer
-	PrepareContainer     *MsgContainer
-	CommitContainer      *MsgContainer
-	RoundChangeContainer *MsgContainer
+	ProposeContainer     *qbft.MsgContainer
+	PrepareContainer     *qbft.MsgContainer
+	CommitContainer      *qbft.MsgContainer
+	RoundChangeContainer *qbft.MsgContainer
 }
 
 // GetRoot returns the state's deterministic root
