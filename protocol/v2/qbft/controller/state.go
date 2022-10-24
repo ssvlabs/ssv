@@ -6,6 +6,8 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+
 	"github.com/pkg/errors"
 )
 
@@ -23,7 +25,7 @@ type IConfig interface {
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() instance.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() qbft.Network
+	GetNetwork() validator.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbft.Storage
 	// GetTimer returns round timer
@@ -37,7 +39,7 @@ type Config struct {
 	ValueCheckF instance.ProposedValueCheckF
 	ProposerF   instance.ProposerF
 	Storage     qbft.Storage
-	Network     qbft.Network
+	Network     validator.Network
 	Timer       qbft.Timer
 }
 
@@ -67,7 +69,7 @@ func (c *Config) GetProposerF() instance.ProposerF {
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() qbft.Network {
+func (c *Config) GetNetwork() validator.Network {
 	return c.Network
 }
 

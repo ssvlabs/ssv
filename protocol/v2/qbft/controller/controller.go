@@ -46,7 +46,7 @@ type Controller struct {
 	FutureMsgsContainer map[types.OperatorID]qbftspec.Height // maps msg signer to height of higher height received msgs
 	Domain              types.DomainType
 	Share               *types.Share
-	config              qbftspec.IConfig
+	config              IConfig
 
 	// TODO: state
 	// TODO: validation pipeline
@@ -56,7 +56,7 @@ func NewController(
 	identifier []byte,
 	share *types.Share,
 	domain types.DomainType,
-	config qbftspec.IConfig,
+	config IConfig,
 ) *Controller {
 	return &Controller{
 		Identifier:          identifier,
@@ -274,6 +274,6 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 	return nil
 }
 
-func (c *Controller) GetConfig() qbftspec.IConfig {
+func (c *Controller) GetConfig() IConfig {
 	return c.config
 }

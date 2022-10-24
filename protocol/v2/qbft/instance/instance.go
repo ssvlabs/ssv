@@ -5,6 +5,7 @@ import (
 	"fmt"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/pkg/errors"
 	"sync"
 )
@@ -16,7 +17,7 @@ type ProposerF func(state *qbftspec.State, round qbftspec.Round) types.OperatorI
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
 	State  *qbftspec.State
-	config qbftspec.IConfig
+	config controller.IConfig
 
 	processMsgF *types.ThreadSafeF
 	startOnce   sync.Once
@@ -24,7 +25,7 @@ type Instance struct {
 }
 
 func NewInstance(
-	config qbftspec.IConfig,
+	config controller.IConfig,
 	share *types.Share,
 	identifier []byte,
 	height qbftspec.Height,
@@ -55,7 +56,7 @@ func (i *Instance) Start(value []byte, height qbftspec.Height) {
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), qbftspec.FirstRound) == i.State.Share.OperatorID {
-			proposal, err := qbftspec.CreateProposal(i.State, i.config, i.StartValue, nil, nil)
+			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
 				fmt.Printf("%s\n", err.Error())
@@ -126,12 +127,12 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() qbftspec.IConfig {
+func (i *Instance) GetConfig() controller.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config qbftspec.IConfig) {
+func (i *Instance) SetConfig(config controller.IConfig) {
 	i.config = config
 }
 

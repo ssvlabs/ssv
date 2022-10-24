@@ -4,6 +4,7 @@ import (
 	"bytes"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/pkg/errors"
 )
 
@@ -103,13 +104,7 @@ func getRoundChangeJustification(state *specqbft.State, config specqbft.IConfig,
 
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndValue(
-	config specqbft.IConfig,
-	signedPrepare *specqbft.SignedMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	value []byte,
-	operators []*types.Operator) error {
+func validSignedPrepareForHeightRoundAndValue(config controller.IConfig, signedPrepare *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, operators []*types.Operator) error {
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -155,7 +150,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config specqbft.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
+func CreatePrepare(state *specqbft.State, config controller.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
 	prepareData := &specqbft.PrepareData{
 		Data: value,
 	}

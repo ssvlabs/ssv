@@ -3,15 +3,11 @@ package instance
 import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/pkg/errors"
 )
 
-func (i *Instance) uponRoundChange(
-	instanceStartValue []byte,
-	signedRoundChange *qbftspec.SignedMessage,
-	roundChangeMsgContainer *qbftspec.MsgContainer,
-	valCheck qbftspec.ProposedValueCheckF,
-) error {
+func (i *Instance) uponRoundChange(instanceStartValue []byte, signedRoundChange *qbftspec.SignedMessage, roundChangeMsgContainer *qbftspec.MsgContainer, valCheck ProposedValueCheckF) error {
 	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, signedRoundChange.Message.Round); err != nil {
 		return errors.Wrap(err, "round change msg invalid")
 	}
@@ -194,7 +190,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChange(state *qbftspec.State, config qbftspec.IConfig, signedMsg *qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round) error {
+func validRoundChange(state *qbftspec.State, config controller.IConfig, signedMsg *qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round) error {
 	if signedMsg.Message.MsgType != qbftspec.RoundChangeMsgType {
 		return errors.New("round change msg type is wrong")
 	}
