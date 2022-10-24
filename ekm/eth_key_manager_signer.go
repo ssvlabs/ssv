@@ -3,6 +3,8 @@ package ekm
 import (
 	"crypto/rsa"
 	"encoding/hex"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	ssz "github.com/ferranbt/fastssz"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -100,6 +102,10 @@ func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty 
 	}, root[:], nil
 }
 
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte) (spectypes.Signature, []byte, error) {
+	panic("implement me")
+}
+
 func (km *ethKeyManagerSigner) IsAttestationSlashable(data *spec.AttestationData) error {
 	panic("implement me")
 }
@@ -108,7 +114,7 @@ func (km *ethKeyManagerSigner) SignRandaoReveal(epoch spec.Epoch, pk []byte) (sp
 	panic("implement me")
 }
 
-func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(block *bellatrix.BeaconBlock) error {
 	panic("implement me")
 }
 

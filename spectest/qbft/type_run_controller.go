@@ -112,7 +112,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 			found := false
 			for _, msg := range broadcastMsgs {
-				if msg.MsgType == spectypes.SSVDecidedMsgType && bytes.Equal(identifier[:], msg.MsgID[:]) {
+				if msg.MsgType == message.SSVDecidedMsgType && bytes.Equal(identifier[:], msg.MsgID[:]) {
 					msg2 := &qbft.SignedMessage{}
 					require.NoError(t, msg2.Decode(msg.Data))
 					r1, err := msg2.GetRoot()

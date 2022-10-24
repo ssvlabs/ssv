@@ -19,7 +19,7 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 		return errors.Wrap(err, "could not verify PartialSignature by the provided operators")
 	}
 
-	for _, msg := range signedMsg.Messages {
+	for _, msg := range signedMsg.Message.Messages {
 		if slot != msg.Slot {
 			return errors.New("wrong slot")
 		}
@@ -33,11 +33,12 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 }
 
 func verifyBeaconPartialSignature(msg *specssv.PartialSignatureMessage, committee []*spectypes.Operator) error {
-	if len(msg.Signers) != 1 {
-		return errors.New("PartialSignatureMessage allows 1 signer")
-	}
-
-	signer := msg.Signers[0]
+	//if len(msg.Signers) != 1 {
+	//	return errors.New("PartialSignatureMessage allows 1 signer")
+	//}
+	//
+	//signer := msg.Signers[0]
+	signer := msg.Signer
 	signature := msg.PartialSignature
 	root := msg.SigningRoot
 
