@@ -74,7 +74,8 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	var q msgqueue.MsgQueue
 	if options.Mode == ModeRW {
-		q, _ = msgqueue.New(options.Logger) // TODO: handle error
+		indexers := msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
 	identifier := types.NewMsgID(options.Share.PublicKey.Serialize(), types.BNRoleAttester)
@@ -204,10 +205,12 @@ func (v *Validator) setupRunners() {
 		Network: v.Network,
 		Timer:   roundtimer.New(v.ctx, v.logger),
 	}
+
 	specShare := ToSpecShare(v.Share) // temp solution
 	qbftQtrl := controller.NewController(v.Identifier, specShare, v.DomainType, config)
 	v.DutyRunners = runner.DutyRunners{
-		types.BNRoleAttester: runner.NewAttesterRunnner("", specShare, qbftQtrl, v.Beacon, v.Network, v.Signer, nil), // TODO add valcheck
+		types.BNRoleAttester: runner.NewAttesterRunnner(types.PraterNetwork, specShare, qbftQtrl, v.Beacon, v.Network, v.Signer,
+			ssv.AttesterValueCheckF(v.Signer, types.PraterNetwork, specShare.ValidatorPubKey, v.Share.Metadata.Index)),
 		//spectypes.BNRoleProposer:                       utils.ProposerRunner(keySet),
 		//spectypes.BNRoleAggregator:                     utils.AggregatorRunner(keySet),
 		//spectypes.BNRoleSyncCommittee:                  utils.SyncCommitteeRunner(keySet),
