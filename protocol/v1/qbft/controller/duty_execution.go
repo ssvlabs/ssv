@@ -38,7 +38,7 @@ func (c *Controller) ProcessPostConsensusMessage(msg *specssv.SignedPartialSigna
 	logger := c.Logger.With(zap.Uint64("signer_id", uint64(msg.GetSigners()[0])))
 	logger.Info("received valid partial signature message",
 		zap.String("msg signature", hex.EncodeToString(msg.GetSignature())),
-		zap.String("msg beacon signature", hex.EncodeToString(msg.Messages[0].PartialSignature)),
+		zap.String("msg beacon signature", hex.EncodeToString(msg.Message.Messages[0].PartialSignature)),
 		zap.Any("msg", msg),
 	)
 
@@ -48,7 +48,7 @@ func (c *Controller) ProcessPostConsensusMessage(msg *specssv.SignedPartialSigna
 		return nil
 	}
 
-	c.SignatureState.signatures[msg.GetSigners()[0]] = msg.Messages[0].PartialSignature
+	c.SignatureState.signatures[msg.GetSigners()[0]] = msg.Message.Messages[0].PartialSignature
 	if len(c.SignatureState.signatures) >= c.SignatureState.sigCount {
 		c.Logger.Info("collected enough signature to reconstruct",
 			zap.Int("signatures", len(c.SignatureState.signatures)),
@@ -109,10 +109,12 @@ func (c *Controller) signAndBroadcast(logger *zap.Logger, psm specssv.PartialSig
 	}
 
 	signedMsg := &specssv.SignedPartialSignatureMessage{
-		Type:      specssv.PostConsensusPartialSig,
-		Messages:  psm,
+		Message: specssv.PartialSignatureMessages{
+			Type:      specssv.PostConsensusPartialSig,
+			Messages:  psm.Messages,
+		},
+		Signer: c.ValidatorShare.NodeID,
 		Signature: signature,
-		Signers:   []spectypes.OperatorID{c.ValidatorShare.NodeID},
 	}
 
 	encodedSignedMsg, err := signedMsg.Encode()
@@ -134,13 +136,16 @@ func (c *Controller) signAndBroadcast(logger *zap.Logger, psm specssv.PartialSig
 
 // generatePartialSignatureMessage returns a PartialSignatureMessage struct
 func (c *Controller) generatePartialSignatureMessage(sig []byte, root []byte, slot spec.Slot) (specssv.PartialSignatureMessages, error) {
-	signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
+	//signers := []spectypes.OperatorID{c.ValidatorShare.NodeID}
 	return specssv.PartialSignatureMessages{
-		&specssv.PartialSignatureMessage{
-			Slot:             slot,
-			PartialSignature: sig,
-			SigningRoot:      root,
-			Signers:          signers,
-		},
+		Type: specssv.PostConsensusPartialSig,
+		//Messages: []specssv.PartialSignatureMessage{
+		//	{
+		//		Slot:             slot,
+		//		PartialSignature: sig,
+		//		SigningRoot:      root,
+		//		Signers:          signers,
+		//	}
+		//},
 	}, nil
 }
