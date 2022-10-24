@@ -23,6 +23,12 @@ type Options struct {
 	Runners runner.DutyRunners
 }
 
+func (o *Options) defaults() {
+	if o.logger == nil {
+		o.logger = zap.L()
+	}
+}
+
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
@@ -52,18 +58,19 @@ var (
 	ModeR  ValidatorMode = 1
 )
 
-func NewValidator(ctx context.Context, options Options) *Validator {
-	ctx, cancel := context.WithCancel(context.Background()) // TODO: pass context
+func NewValidator(pctx context.Context, options Options) *Validator {
+	options.defaults()
+	ctx, cancel := context.WithCancel(pctx) // TODO: pass context
 
 	// makes sure that we have a sufficient interface, otherwise wrap it
 	n, ok := options.Network.(Network)
 	if !ok {
 		n = newNilNetwork(options.Network)
 	}
-	//s, ok := storage.(qbft.Storage)
-	//if !ok {
-	//	l.Warn("incompatible storage") // TODO: handle
-	//}
+	s, ok := options.Storage.(qbft.Storage)
+	if !ok {
+		options.logger.Warn("incompatible storage") // TODO: handle
+	}
 
 	var q msgqueue.MsgQueue
 	//if mode == int32(ModeRW) {
@@ -77,7 +84,7 @@ func NewValidator(ctx context.Context, options Options) *Validator {
 		DutyRunners: options.Runners,
 		Network:     n,
 		Beacon:      options.Beacon,
-		Storage:     options.Storage,
+		Storage:     s,
 		Share:       options.Share,
 		Signer:      options.Signer,
 		Q:           q,
