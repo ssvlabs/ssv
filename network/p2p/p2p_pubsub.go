@@ -55,7 +55,7 @@ func (n *p2pNetwork) Broadcast(msg spectypes.SSVMessage) error {
 	topics := n.fork.ValidatorTopicID(vpk)
 	// for decided message, send on decided channel first
 	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
-	if msg.MsgType == spectypes.SSVDecidedMsgType {
+	if msg.MsgType == message.SSVDecidedMsgType {
 		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
 			topics = append([]string{decidedTopic}, topics...)
 		}

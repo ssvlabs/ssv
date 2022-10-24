@@ -26,7 +26,7 @@ func NewQBFTNetworkAdapter(net protcolp2p.Network) qbft2.Network {
 
 type networkAdapter struct {
 	broadcaster protcolp2p.Broadcaster
-	syncer protcolp2p.Syncer
+	syncer      protcolp2p.Syncer
 
 	results *cache.Cache
 }
@@ -107,6 +107,7 @@ func NewQBFTStorageAdapter(store qbftstorage.QBFTStore) qbft2.Storage {
 type storageAdapter struct {
 	store qbftstorage.QBFTStore
 }
+
 // SaveHighestDecided saves (and potentially overrides) the highest Decided for a specific instance
 func (sa *storageAdapter) SaveHighestDecided(signedMsg *qbft2.SignedMessage) error {
 	return sa.store.SaveLastDecided(signedMsg)

@@ -23,12 +23,12 @@ func (dr DutyRunners) DutyRunnerForMsgID(msgID types.MessageID) Runner {
 
 func (dr DutyRunners) Identifiers() []types.MessageID {
 	var identifiers []types.MessageID
-	for _, r := range dr {
+	for role, r := range dr {
 		share := r.GetBaseRunner().Share
 		if share == nil { // TODO: handle missing share?
 			continue
 		}
-		i := types.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, r.GetBaseRunner().BeaconRoleType)
+		i := types.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
 		identifiers = append(identifiers, i)
 	}
 	return identifiers
@@ -153,7 +153,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedM
 	}
 
 	runner.GetBaseRunner().State.DecidedValue = decidedValue
-	runner.GetBaseRunner().State.LastHeight =	decidedMsg.Message.Height
+	runner.GetBaseRunner().State.LastHeight = decidedMsg.Message.Height
 
 	return true, decidedValue, nil
 }

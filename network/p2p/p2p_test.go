@@ -6,6 +6,7 @@ import (
 	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"sync/atomic"
@@ -264,7 +265,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
+		MsgType: message.SSVDecidedMsgType,
 		MsgID:   id,
 		Data:    data,
 	}, nil

@@ -129,6 +129,7 @@ func (i *Instance) IsDecided() (bool, []byte) {
 func (i *Instance) GetConfig() qbftspec.IConfig {
 	return i.config
 }
+
 // SetConfig returns the instance config
 func (i *Instance) SetConfig(config qbftspec.IConfig) {
 	i.config = config

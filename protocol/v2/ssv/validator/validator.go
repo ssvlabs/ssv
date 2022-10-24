@@ -17,20 +17,20 @@ import (
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
-	ctx context.Context
+	ctx    context.Context
 	cancel context.CancelFunc
 	logger *zap.Logger
 
 	DutyRunners runner.DutyRunners
 
-	Share       *types.Share
-	Beacon      ssv.BeaconNode
-	Signer      types.KeyManager
+	Share  *types.Share
+	Beacon ssv.BeaconNode
+	Signer types.KeyManager
 
-	Storage     ssv.Storage // TODO: change?
-	Network     Network
+	Storage ssv.Storage // TODO: change?
+	Network Network
 
-	Q 			msgqueue.MsgQueue
+	Q msgqueue.MsgQueue
 
 	mode int32
 }
@@ -39,7 +39,7 @@ type ValidatorMode int32
 
 var (
 	ModeRW ValidatorMode = 0
-	ModeR ValidatorMode = 1
+	ModeR  ValidatorMode = 1
 )
 
 func NewValidator(
@@ -51,8 +51,12 @@ func NewValidator(
 	runners runner.DutyRunners,
 ) *Validator {
 	ctx, cancel := context.WithCancel(context.Background()) // TODO: pass context
-	l := zap.L() // TODO: real logger
-	q, _ := msgqueue.New(l) // TODO: handle error
+	l := zap.L()                                            // TODO: real logger
+	var q msgqueue.MsgQueue
+	//if mode == int32(ModeRW) {
+	q, _ = msgqueue.New(l) // TODO: handle error
+	//}
+
 	// makes sure that we have a sufficient interface, otherwise wrap it
 	n, ok := network.(Network)
 	if !ok {
@@ -63,17 +67,17 @@ func NewValidator(
 	//	l.Warn("incompatible storage") // TODO: handle
 	//}
 	return &Validator{
-		ctx: ctx,
-		cancel: cancel,
-		logger: l,
+		ctx:         ctx,
+		cancel:      cancel,
+		logger:      l,
 		DutyRunners: runners,
 		Network:     n,
 		Beacon:      beacon,
 		Storage:     storage,
 		Share:       share,
 		Signer:      signer,
-		Q: 			 q,
-		mode: int32(ModeRW),
+		Q:           q,
+		mode:        int32(ModeRW),
 	}
 }
 

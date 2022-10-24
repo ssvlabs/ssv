@@ -145,7 +145,7 @@ func generatePostConsensusMsg(t *testing.T, slot spec.Slot, id spectypes.Message
 				},
 			},
 		},
-		Signer: spectypes.OperatorID(1),
+		Signer:    spectypes.OperatorID(1),
 		Signature: make([]byte, 96), // TODO should be msg sig and not decided sig
 	}
 

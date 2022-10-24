@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"sync"
 	"time"
 
@@ -279,7 +280,7 @@ func (c *controller) handleRouterMessages() {
 					c.logger.Warn("failed to process message", zap.Error(err))
 				}
 			} else {
-				if msg.MsgType != spectypes.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
+				if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork

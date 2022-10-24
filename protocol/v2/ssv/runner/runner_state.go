@@ -20,8 +20,8 @@ type State struct {
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *types.Duty
 	// flags
-	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
-	LastSlot phase0.Slot
+	Finished   bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	LastSlot   phase0.Slot
 	LastHeight qbft.Height // TODO: move somewhere else?
 }
 
