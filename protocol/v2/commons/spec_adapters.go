@@ -30,7 +30,7 @@ func NewQBFTNetworkAdapter(net protcolp2p.Network) qbft2.Network {
 }
 
 type networkAdapter struct {
-	subscriber 	protcolp2p.Subscriber
+	subscriber  protcolp2p.Subscriber
 	broadcaster protcolp2p.Broadcaster
 	syncer      protcolp2p.Syncer
 

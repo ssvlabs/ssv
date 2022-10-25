@@ -41,12 +41,12 @@ type RoundTimer struct {
 func New(pctx context.Context, logger *zap.Logger) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
-		ctx:       ctx,
-		cancelCtx: cancelCtx,
-		logger:    logger,
-		timer:     nil,
-		result:    make(chan bool, 1),
-		state:     statePreInit,
+		ctx:          ctx,
+		cancelCtx:    cancelCtx,
+		logger:       logger,
+		timer:        nil,
+		result:       make(chan bool, 1),
+		state:        statePreInit,
 		roundTimeout: DefaultRoundTimeout(3),
 	}
 }
@@ -117,7 +117,7 @@ func (t *RoundTimer) TimeoutForRound(round qbft.Round) {
 	t.Reset(t.roundTimeout(round))
 }
 
-type RoundTimeout func (round qbft.Round) time.Duration
+type RoundTimeout func(round qbft.Round) time.Duration
 
 func DefaultRoundTimeout(base float64) RoundTimeout {
 	return func(round qbft.Round) time.Duration {
