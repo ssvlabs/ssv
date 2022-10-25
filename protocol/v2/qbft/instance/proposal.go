@@ -48,7 +48,7 @@ func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeM
 	return nil
 }
 
-func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposal *qbftspec.SignedMessage, valCheck types2.ProposedValueCheckF, operators []*types.Operator) error {
+func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposal *qbftspec.SignedMessage, valCheck qbftspec.ProposedValueCheckF, operators []*types.Operator) error {
 	if signedProposal.Message.MsgType != qbftspec.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
@@ -94,7 +94,7 @@ func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposa
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
-func isProposalJustification(state *qbftspec.State, config types2.IConfig, roundChangeMsgs []*qbftspec.SignedMessage, prepareMsgs []*qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, value []byte, valCheck types2.ProposedValueCheckF) error {
+func isProposalJustification(state *qbftspec.State, config types2.IConfig, roundChangeMsgs []*qbftspec.SignedMessage, prepareMsgs []*qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, value []byte, valCheck qbftspec.ProposedValueCheckF) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}

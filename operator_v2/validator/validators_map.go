@@ -75,6 +75,8 @@ func (vm *validatorsMap) GetOrCreateValidator(share *beacon.Share) *validator.Va
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
+		opts.Mode = validator.ModeRW
+		opts.DutyRunners = setupRunners(vm.ctx, opts)
 		vm.validatorsMap[pubKey] = validator.NewValidator(vm.ctx, opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil

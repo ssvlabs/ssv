@@ -1,21 +1,28 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 )
 
 var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
+	ssvShare, err := validator.ToSSVShare(testingutils.TestingShare(keySet))
+	if err != nil {
+		panic(fmt.Errorf("failed to convert spec share to ssv share - %s", err))
+	}
 	return validator.NewValidator(
+		context.TODO(),
 		validator.Options{
 			Network: testingutils.NewTestingNetwork(),
 			Beacon:  testingutils.NewTestingBeaconNode(),
 			Storage: testingutils.NewTestingStorage(),
-			Share:   testingutils.TestingShare(keySet),
+			Share:   ssvShare,
 			Signer:  testingutils.NewTestingKeyManager(),
-			Runners: map[types.BeaconRole]runner.Runner{
+			DutyRunners: map[types.BeaconRole]runner.Runner{
 				types.BNRoleAttester:                  AttesterRunner(keySet),
 				types.BNRoleProposer:                  ProposerRunner(keySet),
 				types.BNRoleAggregator:                AggregatorRunner(keySet),

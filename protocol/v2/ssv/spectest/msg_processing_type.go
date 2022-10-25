@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -28,19 +28,9 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	//v := testingutils.BaseValidator(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
-	//v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
-	//v.Network = test.Runner.GetNetwork()
-
-	v := ssv2.NewValidator(
-		ssv2.Options{
-			Network: test.Runner.GetNetwork(),
-			Share:   testingutils.TestingShare(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share)),
-			Runners: runner.DutyRunners{
-				test.Runner.GetBaseRunner().BeaconRoleType: test.Runner,
-			},
-		},
-	)
+	v := utils.BaseValidator(testingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
+	//v.Network = test.Runner.GetNetwork() TODO need to align
 
 	var lastErr error
 	if !test.DontStartDuty {

@@ -9,25 +9,23 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/network"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
 )
 
 type Options struct {
-	Logger  *zap.Logger
-	Network qbft.Network
-	Beacon  ssv.BeaconNode
-	Storage qbft.Storage
-	Share   *beacon.Share
-	Signer  types.KeyManager
-
-	Mode ValidatorMode
+	Logger      *zap.Logger
+	Network     qbft.Network
+	Beacon      ssv.BeaconNode
+	Storage     qbft.Storage
+	Share       *beacon.Share
+	Signer      types.KeyManager
+	DutyRunners runner.DutyRunners
+	Mode        ValidatorMode
 }
 
 func (o *Options) defaults() {
@@ -44,7 +42,6 @@ type Validator struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	Identifier []byte
 	DomainType types.DomainType
 
 	DutyRunners runner.DutyRunners
@@ -78,23 +75,20 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
-	identifier := types.NewMsgID(options.Share.PublicKey.Serialize(), types.BNRoleAttester)
 	v := &Validator{
-		ctx:        ctx,
-		cancel:     cancel,
-		logger:     options.Logger,
-		Identifier: identifier[:],
-		DomainType: types2.GetDefaultDomain(),
-		Network:    options.Network.(network.Network),
-		Beacon:     options.Beacon,
-		Storage:    options.Storage,
-		Share:      options.Share,
-		Signer:     options.Signer,
-		Q:          q,
-		mode:       int32(options.Mode),
+		ctx:         ctx,
+		cancel:      cancel,
+		logger:      options.Logger,
+		DomainType:  types2.GetDefaultDomain(),
+		DutyRunners: options.DutyRunners,
+		Network:     options.Network.(network.Network),
+		Beacon:      options.Beacon,
+		Storage:     options.Storage,
+		Share:       options.Share,
+		Signer:      options.Signer,
+		Q:           q,
+		mode:        int32(options.Mode),
 	}
-
-	v.setupRunners()
 
 	return v
 }
@@ -190,38 +184,40 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	return nil
 }
 
-func (v *Validator) setupRunners() {
-	config := &qbft2.Config{
-		Signer:    v.Signer,
-		SigningPK: v.Share.PublicKey.Serialize(), // TODO right val?
-		Domain:    v.DomainType,
-		ValueCheckF: func(data []byte) error {
-			return nil // TODO need to add
-		},
-		ProposerF: func(state *qbft.State, round qbft.Round) types.OperatorID {
-			return qbft.RoundRobinProposer(state, round)
-		},
-		Storage: v.Storage,
-		Network: v.Network,
-		Timer:   roundtimer.New(v.ctx, v.logger),
-	}
-
-	specShare := ToSpecShare(v.Share) // temp solution
-	qbftQtrl := controller.NewController(v.Identifier, specShare, v.DomainType, config)
-	v.DutyRunners = runner.DutyRunners{
-		types.BNRoleAttester: runner.NewAttesterRunnner(types.PraterNetwork, specShare, qbftQtrl, v.Beacon, v.Network, v.Signer,
-			ssv.AttesterValueCheckF(v.Signer, types.PraterNetwork, specShare.ValidatorPubKey, v.Share.Metadata.Index)),
-		//spectypes.BNRoleProposer:                       utils.ProposerRunner(keySet),
-		//spectypes.BNRoleAggregator:                     utils.AggregatorRunner(keySet),
-		//spectypes.BNRoleSyncCommittee:                  utils.SyncCommitteeRunner(keySet),
-		//spectypes.BNRoleSyncCommitteeContribution: utils.SyncCommitteeContributionRunner(keySet)},
-	}
-}
-
 func (v *Validator) GetShare() *beacon.Share {
 	return v.Share // temp solution
 }
 
+// ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)
+func ToSSVShare(specShare *types.Share) (*beacon.Share, error) {
+	vpk := &bls.PublicKey{}
+	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
+		return nil, errors.Wrap(err, "failed to deserialize validator public key")
+	}
+
+	var operatorsId []uint64
+	ssvCommittee := map[types.OperatorID]*beacon.Node{}
+	for _, op := range specShare.Committee {
+		operatorsId = append(operatorsId, uint64(op.OperatorID))
+		ssvCommittee[op.OperatorID] = &beacon.Node{
+			IbftID: uint64(op.GetID()),
+			Pk:     op.GetPublicKey(),
+		}
+	}
+
+	return &beacon.Share{
+		NodeID:       specShare.OperatorID,
+		PublicKey:    vpk,
+		Committee:    ssvCommittee,
+		Metadata:     nil,
+		OwnerAddress: "",
+		Operators:    nil,
+		OperatorIds:  operatorsId,
+		Liquidated:   false,
+	}, nil
+}
+
+// ToSpecShare convert spec share to ssv share struct
 func ToSpecShare(share *beacon.Share) *types.Share {
 	var specCommittee []*types.Operator
 	var sharePK []byte

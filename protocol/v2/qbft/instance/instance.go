@@ -5,7 +5,7 @@ import (
 	"fmt"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"sync"
 )
@@ -14,7 +14,7 @@ import (
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
 	State  *qbftspec.State
-	config types2.IConfig
+	config ssvtypes.IConfig
 
 	processMsgF *types.ThreadSafeF
 	startOnce   sync.Once
@@ -22,7 +22,7 @@ type Instance struct {
 }
 
 func NewInstance(
-	config types2.IConfig,
+	config ssvtypes.IConfig,
 	share *types.Share,
 	identifier []byte,
 	height qbftspec.Height,
@@ -128,12 +128,12 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() types2.IConfig {
+func (i *Instance) GetConfig() ssvtypes.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config types2.IConfig) {
+func (i *Instance) SetConfig(config ssvtypes.IConfig) {
 	i.config = config
 }
 

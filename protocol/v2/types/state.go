@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/network"
 	"github.com/pkg/errors"
 )
 
@@ -19,11 +18,11 @@ type signing interface {
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() ProposedValueCheckF
+	GetValueCheckF() qbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() ProposerF
+	GetProposerF() qbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() network.Network
+	GetNetwork() qbft.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbft.Storage
 	// GetTimer returns round timer
@@ -34,10 +33,10 @@ type Config struct {
 	Signer      types.SSVSigner
 	SigningPK   []byte
 	Domain      types.DomainType
-	ValueCheckF ProposedValueCheckF
-	ProposerF   ProposerF
+	ValueCheckF qbft.ProposedValueCheckF
+	ProposerF   qbft.ProposerF
 	Storage     qbft.Storage
-	Network     network.Network
+	Network     qbft.Network
 	Timer       qbft.Timer
 }
 
@@ -57,17 +56,17 @@ func (c *Config) GetSignatureDomainType() types.DomainType {
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() ProposedValueCheckF {
+func (c *Config) GetValueCheckF() qbft.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() ProposerF {
+func (c *Config) GetProposerF() qbft.ProposerF {
 	return c.ProposerF
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() network.Network {
+func (c *Config) GetNetwork() qbft.Network {
 	return c.Network
 }
 
@@ -118,5 +117,5 @@ func (s *State) Decode(data []byte) error {
 	return json.Unmarshal(data, &s)
 }
 
-type ProposedValueCheckF func(data []byte) error
-type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID
+//type ProposedValueCheckF func(data []byte) error
+//type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID

@@ -22,15 +22,7 @@ type SyncCommitteeRunner struct {
 	valCheck qbft.ProposedValueCheckF
 }
 
-func NewSyncCommitteeRunner(
-	beaconNetwork types.BeaconNetwork,
-	share *types.Share,
-	qbftController *controller.Controller,
-	beacon ssv.BeaconNode,
-	network ssv.Network,
-	signer types.KeyManager,
-	valCheck qbft.ProposedValueCheckF,
-) Runner {
+func NewSyncCommitteeRunner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: types.BNRoleSyncCommittee,

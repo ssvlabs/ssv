@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v2/commons"
-	validator3 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v1/types"
+	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"sync"
 	"time"
 
@@ -17,6 +17,7 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -24,15 +25,21 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
-	"github.com/bloxapp/ssv/protocol/v1/validator"
+	validatorv1 "github.com/bloxapp/ssv/protocol/v1/validator"
+	"github.com/bloxapp/ssv/protocol/v2/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	validatorv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -81,7 +88,7 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (*validator3.Validator, bool)
+	GetValidator(pubKey string) (*validatorv2.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
@@ -97,7 +104,7 @@ type Controller interface {
 // controller implements Controller
 type controller struct {
 	context     context.Context
-	collection  validator.ICollection
+	collection  validatorv1.ICollection
 	storage     registrystorage.OperatorsCollection
 	ibftStorage qbftstorage.QBFTStore
 	logger      *zap.Logger
@@ -108,7 +115,7 @@ type controller struct {
 	operatorPubKey             string
 
 	validatorsMap    *validatorsMap
-	validatorOptions *validator3.Options
+	validatorOptions *validatorv2.Options
 
 	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
@@ -141,14 +148,15 @@ func NewController(options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := &validator3.Options{ //TODO add vars
+	validatorOptions := &validatorv2.Options{ //TODO add vars
 		Logger:  options.Logger,
 		Network: commons.NewQBFTNetworkAdapter(options.Network),
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
 		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
-		//Mode: validator3.ModeRW // set per validator
+		//Mode: validatorv2.ModeRW // set per validator
+		DutyRunners: nil, // set per validator
 	}
 
 	ctrl := controller{
@@ -273,8 +281,10 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 
 	opts := *c.validatorOptions
 	opts.Share = share
-	opts.Mode = validator3.ModeRW
-	validator3.NewValidator(c.context, opts).HandleMessage(msg)
+	opts.Mode = validatorv2.ModeR
+	opts.DutyRunners = setupRunners(c.context, opts)
+
+	validatorv2.NewValidator(c.context, opts).HandleMessage(msg)
 	return nil
 }
 
@@ -384,7 +394,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (*validator3.Validator, bool) {
+func (c *controller) GetValidator(pubKey string) (*validatorv2.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -394,7 +404,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v *validator3.Validator) error {
+	err := c.validatorsMap.ForEach(func(v *validatorv2.Validator) error {
 		if !v.GetShare().HasMetadata() {
 			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
 		} else if v.GetShare().Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
@@ -509,7 +519,7 @@ func (c *controller) onShareStart(share *beaconprotocol.Share) {
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v *validator3.Validator) (bool, error) {
+func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
 	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
 	if !v.GetShare().HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
@@ -544,4 +554,73 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		beaconprotocol.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
+}
+
+func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyRunners {
+	runnersType := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+	}
+
+	domainType := types.GetDefaultDomain()
+	generateConfig := func() *qbft2.Config {
+		return &qbft2.Config{
+			Signer:      options.Signer,
+			SigningPK:   options.Share.PublicKey.Serialize(), // TODO right val?
+			Domain:      domainType,
+			ValueCheckF: nil, // sets per role type
+			ProposerF: func(state *qbft.State, round qbft.Round) spectypes.OperatorID {
+				return qbft.RoundRobinProposer(state, round)
+			},
+			Storage: options.Storage,
+			Network: options.Network,
+			Timer:   roundtimer.New(ctx, options.Logger),
+		}
+	}
+
+	specShare := validatorv2.ToSpecShare(options.Share) // temp solution
+	runners := runner.DutyRunners{}
+	for _, role := range runnersType {
+		switch role {
+		case spectypes.BNRoleAttester:
+			config := generateConfig()
+			valCheck := ssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config.ValueCheckF = valCheck
+			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
+			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, valCheck)
+		case spectypes.BNRoleProposer:
+			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config := generateConfig()
+			config.ValueCheckF = proposedValueCheck
+			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleProposer)
+			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
+			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+		case spectypes.BNRoleAggregator:
+			proposedValueCheck := ssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config := generateConfig()
+			config.ValueCheckF = proposedValueCheck
+			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAggregator)
+			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
+			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+		case spectypes.BNRoleSyncCommittee:
+			proposedValueCheck := ssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config := generateConfig()
+			config.ValueCheckF = proposedValueCheck
+			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommittee)
+			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
+			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+		case spectypes.BNRoleSyncCommitteeContribution:
+			proposedValueCheck := ssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config := generateConfig()
+			config.ValueCheckF = proposedValueCheck
+			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommitteeContribution)
+			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
+			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+		}
+	}
+	return nil
 }
