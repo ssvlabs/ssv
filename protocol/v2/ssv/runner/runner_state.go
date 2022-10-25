@@ -20,9 +20,9 @@ type State struct {
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *types.Duty
 	// flags
-	Finished   bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
-	LastSlot   phase0.Slot
-	LastHeight qbft.Height // TODO: move somewhere else?
+	Finished   bool        // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	LastSlot   phase0.Slot `json:"-"` // ignore in root
+	LastHeight qbft.Height `json:"-"` // ignore in root // TODO: move somewhere else?
 }
 
 func NewRunnerState(quorum uint64, duty *types.Duty) *State {
