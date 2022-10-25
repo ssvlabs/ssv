@@ -8,9 +8,11 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/utils/logex"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
 )
 
 type AttesterRunner struct {
@@ -20,6 +22,8 @@ type AttesterRunner struct {
 	network  ssv.Network
 	signer   types.KeyManager
 	valCheck qbft.ProposedValueCheckF
+
+	logger *zap.Logger
 }
 
 func NewAttesterRunnner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
@@ -35,11 +39,19 @@ func NewAttesterRunnner(beaconNetwork types.BeaconNetwork, share *types.Share, q
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
+		logger:   logex.GetLogger(zap.String("who", "duty_runner")),
 	}
 }
 
 func (r *AttesterRunner) StartNewDuty(duty *types.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(r, duty)
+	if err := r.GetBaseRunner().canStartNewDuty(); err != nil {
+		return err
+	}
+	r.logger.Debug("can start duty", zap.Any("duty", duty))
+	r.BaseRunner.State = NewRunnerState(r.BaseRunner.Share.Quorum, duty)
+	r.logger.Debug("runner state", zap.Any("state", r.BaseRunner.State))
+	return r.executeDuty(duty)
+	//return r.GetBaseRunner().baseStartNewDuty(r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -144,6 +156,7 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(duty *types.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
+	r.logger.Debug("executing duty", zap.Any("duty", duty))
 
 	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
@@ -155,9 +168,16 @@ func (r *AttesterRunner) executeDuty(duty *types.Duty) error {
 		AttestationData: attData,
 	}
 
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	r.logger.Debug("calling base runner decide", zap.Any("input", input))
+
+	err = r.GetBaseRunner().decide(r, input)
+
+	r.logger.Debug("base runner decide result", zap.Error(err))
+
+	if err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
+
 	return nil
 }
 
