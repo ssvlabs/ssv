@@ -4,10 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/types"
-	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"sync"
 	"time"
 
@@ -17,6 +13,7 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -32,8 +29,11 @@ import (
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	validatorv1 "github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/protocol/v2/commons"
+	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	validatorv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
@@ -586,8 +586,8 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
-			config := generateConfig()
 			valCheck := ssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			config := generateConfig()
 			config.ValueCheckF = valCheck
 			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAttester)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
