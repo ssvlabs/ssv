@@ -248,14 +248,14 @@ func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height
 	iterator.
 		Add(func() msgqueue.Index {
 			return msgqueue.DecidedMsgIndex(identifier)
-		}).
+		}) /*.
 		Add(func() msgqueue.Index {
 			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, specqbft.RoundChangeMsgType)
 			if len(indices) == 0 {
 				return msgqueue.Index{}
 			}
 			return indices[0]
-		})
+		})*/
 
 	msgs := v.Q.PopIndices(1, iterator)
 	if len(msgs) == 0 {
