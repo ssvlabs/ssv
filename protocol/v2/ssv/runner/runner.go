@@ -84,9 +84,9 @@ func (b *BaseRunner) canStartNewDuty() error {
 	}
 
 	// check if instance running first as we can't start new duty if it does
-	if b.State.RunningInstance != nil {
+	if instance := b.State.RunningInstance; instance != nil {
 		// check consensus decided
-		if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
+		if decided, _ := instance.IsDecided(); !decided {
 			return errors.New("consensus on duty is running")
 		}
 	}
@@ -247,19 +247,24 @@ func (b *BaseRunner) decide(runner Runner, input *types.ConsensusData) error {
 		return errors.Wrap(err, "could not encode ConsensusData")
 	}
 
-	if err := runner.GetValCheckF()(byts); err != nil {
+	valc := runner.GetValCheckF()
+	if valc == nil {
+		return errors.New("val check nil")
+	}
+	if err := valc(byts); err != nil {
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {
+	ctrl := runner.GetBaseRunner().QBFTController
+	if err := ctrl.StartNewInstance(byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(runner.GetBaseRunner().QBFTController.Height)
+	newInstance := ctrl.InstanceForHeight(ctrl.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}
-
 	runner.GetBaseRunner().State.RunningInstance = newInstance
+
 	return nil
 }
 

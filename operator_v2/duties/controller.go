@@ -120,7 +120,9 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 				return
 			}
 			logger.Info("starting duty processing")
-			v.StartDuty(duty)
+			if err := v.StartDuty(duty); err != nil {
+				logger.Warn("could not start duty", zap.Error(err))
+			}
 		}()
 	} else {
 		logger.Warn("could not find validator")
