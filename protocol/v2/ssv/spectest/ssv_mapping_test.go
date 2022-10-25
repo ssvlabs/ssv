@@ -18,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"os"
@@ -25,6 +26,11 @@ import (
 	"strings"
 	"testing"
 )
+
+
+func init() {
+	logex.Build("ssv-mapping-test", zapcore.DebugLevel, nil)
+}
 
 func TestSSVMapping(t *testing.T) {
 	path, _ := os.Getwd()

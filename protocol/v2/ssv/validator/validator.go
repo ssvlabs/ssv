@@ -51,7 +51,7 @@ type Validator struct {
 	Signer types.KeyManager
 
 	Storage qbft.Storage // TODO: change?
-	Network network.Network
+	Network qbft.Network
 
 	Q msgqueue.MsgQueue
 
@@ -75,13 +75,17 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
+	//n, ok := options.Network.(network.Network)
+	//if !ok {
+	//	n = newNilNetwork(options.Network)
+	//}
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
 		DomainType:  types2.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
-		Network:     options.Network.(network.Network),
+		Network:     options.Network,
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
 		Share:       options.Share,
@@ -94,9 +98,13 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 }
 
 func (v *Validator) Start() error {
+	n, ok := v.Network.(network.Network)
+	if !ok {
+		return nil
+	}
 	identifiers := v.DutyRunners.Identifiers()
 	for _, identifier := range identifiers {
-		if err := v.Network.Subscribe(identifier.GetPubKey()); err != nil {
+		if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 			return err
 		}
 		go v.StartQueueConsumer(identifier, v.ProcessMessage)
