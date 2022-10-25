@@ -107,7 +107,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 }
 
 func (km *ethKeyManagerSigner) IsAttestationSlashable(data *spec.AttestationData) error {
-	panic("implement me")
+	return nil
 }
 
 func (km *ethKeyManagerSigner) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
