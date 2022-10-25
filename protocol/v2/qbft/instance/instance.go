@@ -120,7 +120,11 @@ func (i *Instance) ProcessMsg(msg *qbftspec.SignedMessage) (decided bool, decide
 
 // IsDecided interface implementation
 func (i *Instance) IsDecided() (bool, []byte) {
-	return i.State.Decided, i.State.DecidedValue
+	state := i.State
+	if state == nil {
+		return false, nil
+	}
+	return state.Decided, state.DecidedValue
 }
 
 // GetConfig returns the instance config
