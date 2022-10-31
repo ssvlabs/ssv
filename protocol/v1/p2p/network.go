@@ -79,7 +79,7 @@ func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
 	}
 }
 
-// Syncer holds the interface for syncing data from other peerz
+// Syncer holds the interface for syncing data from other peers
 type Syncer interface {
 	// RegisterHandlers registers handler for the given protocol
 	RegisterHandlers(handlers ...*SyncHandler)
@@ -90,6 +90,16 @@ type Syncer interface {
 	GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
 	// LastChangeRound fetches last change round message from a random set of peers
 	LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]SyncResult, error)
+}
+
+// SpecSyncer implements specqbft.Syncer
+// TODO: merge with Syncer once we're ready
+type SpecSyncer interface {
+	// SyncHighestDecided tries to fetch the highest decided from peers (not blocking)
+	SyncHighestDecided(mid spectypes.MessageID) error
+	// SyncHighestRoundChange tries to fetch for each committee member the highest round change broadcast-ed
+	// for the specific height from peers (not blocking)
+	SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
@@ -119,5 +129,6 @@ type Network interface {
 	Subscriber
 	Broadcaster
 	Syncer
+	SpecSyncer
 	ValidationReporting
 }

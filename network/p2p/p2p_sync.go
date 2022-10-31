@@ -16,6 +16,28 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
+func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
+	results, err := n.LastDecided(mid)
+	for _, res := range results {
+		if res.Msg == nil {
+			continue
+		}
+		n.msgRouter.Route(*res.Msg)
+	}
+	return err
+}
+
+func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
+	results, err := n.LastChangeRound(mid, height)
+	for _, res := range results {
+		if res.Msg == nil {
+			continue
+		}
+		n.msgRouter.Route(*res.Msg)
+	}
+	return err
+}
+
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
