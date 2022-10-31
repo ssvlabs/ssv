@@ -405,7 +405,6 @@ func (km *testKeyManager) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectyp
 	panic("implement me")
 }
 
-
 func (km *testKeyManager) SignBeaconBlock(block *altair.BeaconBlock, duty *spectypes.Duty, pk []byte) (*altair.SignedBeaconBlock, []byte, error) {
 	panic("implement me")
 }

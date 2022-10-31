@@ -110,10 +110,10 @@ func (c *Controller) signAndBroadcast(logger *zap.Logger, psm specssv.PartialSig
 
 	signedMsg := &specssv.SignedPartialSignatureMessage{
 		Message: specssv.PartialSignatureMessages{
-			Type:      specssv.PostConsensusPartialSig,
-			Messages:  psm.Messages,
+			Type:     specssv.PostConsensusPartialSig,
+			Messages: psm.Messages,
 		},
-		Signer: c.ValidatorShare.NodeID,
+		Signer:    c.ValidatorShare.NodeID,
 		Signature: signature,
 	}
 
