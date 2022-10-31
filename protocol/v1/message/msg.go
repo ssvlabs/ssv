@@ -2,10 +2,11 @@ package message
 
 import spectypes "github.com/bloxapp/ssv-spec/types"
 
-// SSVSyncMsgType extension for spec msg type
 const (
+	// SSVDecidedMsgType extends spec msg type
 	SSVDecidedMsgType spectypes.MsgType = 3
-	SSVSyncMsgType    spectypes.MsgType = 4
+	// SSVSyncMsgType extends spec msg type
+	SSVSyncMsgType spectypes.MsgType = 4
 )
 
 // MsgTypeToString extension for spec msg type. convert spec msg type to string

@@ -199,7 +199,11 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	return peers, nil
 }
 
-func (m *mockNetwork) Broadcast(msg spectypes.SSVMessage) error {
+func (m *mockNetwork) Broadcast(enc spectypes.Encoder) error {
+	msg, ok := enc.(*spectypes.SSVMessage)
+	if !ok {
+		return errors.New("bad type")
+	}
 	pk := msg.GetID().GetPubKey()
 	spk := hex.EncodeToString(pk)
 	topic := spk
@@ -207,7 +211,7 @@ func (m *mockNetwork) Broadcast(msg spectypes.SSVMessage) error {
 	e := MockMessageEvent{
 		From:  m.self,
 		Topic: topic,
-		Msg:   &msg,
+		Msg:   msg,
 	}
 
 	m.topicsLock.Lock()
@@ -225,7 +229,7 @@ func (m *mockNetwork) Broadcast(msg spectypes.SSVMessage) error {
 	}
 
 	m.broadcastMessagesLock.Lock()
-	m.broadcastMessages = append(m.broadcastMessages, msg)
+	m.broadcastMessages = append(m.broadcastMessages, *msg)
 	m.broadcastMessagesLock.Unlock()
 
 	return nil

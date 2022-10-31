@@ -25,7 +25,7 @@ type Subscriber interface {
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
 	// Broadcast broadcasts the given message to the corresponding subnet
-	Broadcast(msg spectypes.SSVMessage) error
+	Broadcast(msg spectypes.Encoder) error
 }
 
 // RequestHandler handles p2p requests
