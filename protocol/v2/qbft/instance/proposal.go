@@ -5,6 +5,7 @@ import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 )
 
@@ -13,7 +14,7 @@ func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeM
 	if err := isValidProposal(i.State, i.config, signedProposal, valCheck, i.State.Share.Committee); err != nil {
 		return errors.Wrap(err, "proposal invalid")
 	}
-
+	logex.GetLogger().Info("received valid proposal")
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(signedProposal)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -44,7 +45,7 @@ func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeM
 	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
-
+	logex.GetLogger().Info("broadcast prepare")
 	return nil
 }
 

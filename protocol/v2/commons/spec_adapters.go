@@ -213,6 +213,11 @@ func (b beaconAdapter) SubmitSignedContributionAndProof(contribution *altair.Sig
 }
 
 func (b beaconAdapter) DomainData(epoch spec.Epoch, domain spec.DomainType) (spec.Domain, error) {
-	//TODO implement me
-	panic("implement me")
+	// epoch is used to calculate fork version, here we hard code it
+	//return types.ComputeETHDomain(domain, types.GenesisForkVersion, types.GenesisValidatorsRoot)
+
+	d, err := b.beacon.GetDomain(&spec.AttestationData{Slot: spec.Slot(epoch * 32)}) // TODO by default using Attester type. need to adjust
+	var d32 spec.Domain
+	copy(d32[:], d[:])
+	return d32, err
 }

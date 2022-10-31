@@ -284,8 +284,9 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 	opts.Mode = validatorv2.ModeR
 	opts.DutyRunners = setupRunners(c.context, opts)
 
-	validatorv2.NewValidator(c.context, opts).HandleMessage(msg)
-	return nil
+	v := validatorv2.NewValidator(c.context, opts)
+	v.HandleMessage(msg)
+	return v.Stop()
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
@@ -557,6 +558,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 }
 
 func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyRunners {
+	if options.Share.Metadata == nil {
+		options.Logger.Error("validator missing metadata", zap.String("pk", options.Share.PublicKey.SerializeToHexStr()))
+		return runner.DutyRunners{} // TODO need to find better way to fix it
+	}
+
 	runnersType := []spectypes.BeaconRole{
 		spectypes.BNRoleAttester,
 		spectypes.BNRoleProposer,
@@ -573,7 +579,9 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 			Domain:      domainType,
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *qbft.State, round qbft.Round) spectypes.OperatorID {
-				return qbft.RoundRobinProposer(state, round)
+				leader := qbft.RoundRobinProposer(state, round)
+				options.Logger.Debug("leader", zap.Int("", int(leader)))
+				return leader
 			},
 			Storage: options.Storage,
 			Network: options.Network,
@@ -622,5 +630,5 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		}
 	}
-	return nil
+	return runners
 }

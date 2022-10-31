@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"os"
@@ -17,6 +18,10 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/types"
 )
+
+func init() {
+	logex.Build("qbft-mapping-test", zapcore.DebugLevel, nil)
+}
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()

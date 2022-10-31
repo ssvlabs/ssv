@@ -2,11 +2,13 @@ package validator
 
 import (
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/network"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
@@ -34,6 +36,12 @@ func (o *Options) defaults() {
 	}
 }
 
+// set of states for the controller
+const (
+	NotStarted uint32 = iota
+	Started
+)
+
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
@@ -56,6 +64,8 @@ type Validator struct {
 	Q msgqueue.MsgQueue
 
 	mode int32
+
+	State uint32
 }
 
 type ValidatorMode int32
@@ -92,22 +102,26 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),
+		State:       NotStarted,
 	}
 
 	return v
 }
 
 func (v *Validator) Start() error {
-	n, ok := v.Network.(network.Network)
-	if !ok {
-		return nil
-	}
-	identifiers := v.DutyRunners.Identifiers()
-	for _, identifier := range identifiers {
-		if err := n.Subscribe(identifier.GetPubKey()); err != nil {
-			return err
+	if atomic.CompareAndSwapUint32(&v.State, NotStarted, Started) {
+		n, ok := v.Network.(network.Network)
+		if !ok {
+			return nil
 		}
-		go v.StartQueueConsumer(identifier, v.ProcessMessage)
+		identifiers := v.DutyRunners.Identifiers()
+		for _, identifier := range identifiers {
+			//v.loadLastHeight(identifier)
+			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
+				return err
+			}
+			go v.StartQueueConsumer(identifier, v.ProcessMessage)
+		}
 	}
 	return nil
 }
@@ -171,6 +185,7 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 		}
 
 		if signedMsg.Message.Type == ssv.PostConsensusPartialSig {
+			v.logger.Info("process post consensus")
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
@@ -194,6 +209,24 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 
 func (v *Validator) GetShare() *beacon.Share {
 	return v.Share // temp solution
+}
+
+func (v *Validator) loadLastHeight(identifier types.MessageID) {
+	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
+	if err != nil {
+		v.logger.Warn("failed to get heights decided", zap.Error(err))
+	}
+	if knownDecided == nil {
+		return
+	}
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+
+	if r == nil || r.GetBaseRunner() == nil {
+		v.logger.Warn(fmt.Sprintf("%s runner is nil", identifier.GetRoleType().String()))
+		return
+	}
+	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
+	v.logger.Info(fmt.Sprintf("%s runner load height %d", identifier.GetRoleType().String(), knownDecided.Message.Height))
 }
 
 // ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)
@@ -227,23 +260,18 @@ func ToSSVShare(specShare *types.Share) (*beacon.Share, error) {
 
 // ToSpecShare convert spec share to ssv share struct
 func ToSpecShare(share *beacon.Share) *types.Share {
-	var specCommittee []*types.Operator
 	var sharePK []byte
 	for id, node := range share.Committee {
 		if id == share.NodeID {
 			sharePK = node.Pk
 		}
-		specCommittee = append(specCommittee, &types.Operator{
-			OperatorID: id,
-			PubKey:     node.Pk,
-		})
 	}
 
 	return &types.Share{
 		OperatorID:      share.NodeID,
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     sharePK,
-		Committee:       specCommittee,
+		Committee:       roundrobin.MapCommittee(share),
 		Quorum:          3,                         // temp
 		PartialQuorum:   2,                         // temp
 		DomainType:      types2.GetDefaultDomain(), // temp

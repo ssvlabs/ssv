@@ -5,6 +5,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 )
 
@@ -31,6 +32,7 @@ func (i *Instance) uponPrepare(
 		return errors.Wrap(err, "invalid prepare msg")
 	}
 
+	logex.GetLogger().Info("received valid prepare")
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
@@ -60,7 +62,7 @@ func (i *Instance) uponPrepare(
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
-
+	logex.GetLogger().Info("broadcast commit")
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +25,7 @@ func (i *Instance) UponCommit(signedCommit *qbftspec.SignedMessage, commitMsgCon
 	); err != nil {
 		return false, nil, nil, errors.Wrap(err, "commit msg invalid")
 	}
-
+	logex.GetLogger().Info("received valid commit")
 	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(signedCommit)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")

@@ -74,6 +74,8 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 		return nil
 	}
 
+	r.logger.Info("decided consensus")
+
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, types.DomainAttester)
 	if err != nil {
@@ -103,6 +105,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	r.logger.Info("partial signature broadcast")
 	return nil
 }
 
@@ -116,6 +119,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 		return nil
 	}
 
+	logex.GetLogger().Info("reached quorum")
 	duty := r.GetState().DecidedValue.Duty
 
 	for _, root := range roots {
@@ -134,10 +138,12 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 			AggregationBits: aggregationBitfield,
 		}
 
+		r.logger.Info("submitting attestation...")
 		// broadcast
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
+		r.logger.Info("submitted attestation!")
 	}
 	r.GetState().Finished = true
 	r.GetState().LastSlot = duty.Slot

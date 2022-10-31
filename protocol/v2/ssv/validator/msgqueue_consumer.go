@@ -19,11 +19,12 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	state := r.GetBaseRunner().State
-	if state == nil {
-		return specqbft.Height(0)
-	}
-	return state.LastHeight
+	//state := r.GetBaseRunner().State
+	//if state == nil {
+	//	return specqbft.Height(0)
+	//}
+	//return state.LastHeight
+	return r.GetBaseRunner().QBFTController.Height
 }
 
 // GetLastSlot returns the last slot for the given identifier
@@ -36,7 +37,7 @@ func (v *Validator) GetLastSlot(identifier spectypes.MessageID) spec.Slot {
 	if state == nil {
 		return spec.Slot(0)
 	}
-	return state.LastSlot
+	return state.StartingDuty.Slot
 }
 
 // MessageHandler process the msg. return error if exist
@@ -85,13 +86,11 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 			v.logger.Debug("process higher height is done")
 			continue
 		}
-		if !v.DutyRunners.DutyRunnerForMsgID(msgId).HasRunningDuty() {
-			if processed := v.processNoRunningInstance(handler, identifier, lastHeight, lastSlot); processed {
-				v.logger.Debug("process none running instance is done")
-				continue
-			}
+		if processed := v.processNoRunningInstance(handler, msgId, identifier, lastHeight, lastSlot); processed {
+			v.logger.Debug("process none running instance is done")
+			continue
 		}
-		if processed := v.processByState(handler, identifier, lastHeight); processed {
+		if processed := v.processByState(handler, msgId, identifier, lastHeight); processed {
 			v.logger.Debug("process by state is done")
 			continue
 		}
@@ -115,12 +114,12 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (v *Validator) processNoRunningInstance(
-	handler MessageHandler,
-	identifier string,
-	lastHeight specqbft.Height,
-	lastSlot spec.Slot,
-) bool {
+func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spectypes.MessageID, identifier string, lastHeight specqbft.Height, lastSlot spec.Slot) bool {
+	runner := v.DutyRunners.DutyRunnerForMsgID(msgId)
+	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
+		return false // only pop when already decided
+	}
+
 	//instance := v.GetCurrentInstance()
 	//if instance != nil {
 	//	return false // only pop when no instance running
@@ -156,7 +155,11 @@ func (v *Validator) processNoRunningInstance(
 }
 
 // processByState if an instance is running -> get the state and get the relevant messages
-func (v *Validator) processByState(handler MessageHandler, identifier string, height specqbft.Height) bool {
+func (v *Validator) processByState(handler MessageHandler, msgId spectypes.MessageID, identifier string, height specqbft.Height) bool {
+	runner := v.DutyRunners.DutyRunnerForMsgID(msgId)
+	if !runner.HasRunningDuty() || runner.GetBaseRunner().State.RunningInstance == nil {
+		return false
+	}
 	//currentInstance := v.GetCurrentInstance()
 	//if currentInstance == nil {
 	//	return false

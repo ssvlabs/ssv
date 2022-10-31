@@ -103,7 +103,33 @@ func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty 
 }
 
 func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte) (spectypes.Signature, []byte, error) {
-	panic("implement me")
+	km.walletLock.RLock()
+	defer km.walletLock.RUnlock()
+
+	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not get signing account")
+	}
+	if account == nil {
+		return nil, nil, errors.New("pk not found")
+	}
+
+	r, err := spectypes.ComputeETHSigningRoot(obj, domain)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not compute signing root")
+	}
+
+	//sig := k.SignByte(r[:])
+	sig, err := account.ValidationKeySign(r[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not sign message")
+	}
+	blsSig := spec.BLSSignature{}
+	//copy(blsSig[:], sig.Serialize())
+	copy(blsSig[:], sig)
+
+	//return sig.Serialize(), r[:], nil
+	return sig, r[:], nil
 }
 
 func (km *ethKeyManagerSigner) IsAttestationSlashable(data *spec.AttestationData) error {

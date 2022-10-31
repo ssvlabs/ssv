@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/utils/logex"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -126,6 +127,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedM
 		return false, nil, errors.Wrap(err, "invalid consensus message")
 	}
 
+	if b.State.RunningInstance == nil {
+		return false, nil, errors.Errorf("running instance is nil")
+	}
 	prevDecided, _ := b.State.RunningInstance.IsDecided()
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
@@ -163,11 +167,13 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *ssv.SignedPartial
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
+	logex.GetLogger().Info("received valid partial signature")
 	roots := make([][]byte, 0)
 	anyQuorum := false
 	for _, msg := range signedMsg.Message.Messages {
 		prevQuorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
 
+		logex.GetLogger().Info("signature added to container")
 		if err := b.State.PostConsensusContainer.AddSignature(msg); err != nil {
 			return false, nil, errors.Wrap(err, "could not add partial post consensus signature")
 		}
@@ -177,8 +183,8 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *ssv.SignedPartial
 		}
 
 		quorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
-
 		if quorum {
+			logex.GetLogger().Info("signature quorum achieved")
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
 		}

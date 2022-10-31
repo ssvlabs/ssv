@@ -26,7 +26,7 @@ func New(share *beaconprotocol.Share, state *qbftprotocol.State) *RoundRobin {
 func (rr *RoundRobin) Calculate(round uint64) uint64 {
 	mappedState := &specqbft.State{
 		Share: &spectypes.Share{
-			Committee: mapCommittee(rr.share),
+			Committee: MapCommittee(rr.share),
 		},
 		Height: rr.state.GetHeight(),
 	}
@@ -34,7 +34,7 @@ func (rr *RoundRobin) Calculate(round uint64) uint64 {
 	return uint64(specqbft.RoundRobinProposer(mappedState, specqbft.Round(round)))
 }
 
-func mapCommittee(share *beaconprotocol.Share) []*spectypes.Operator {
+func MapCommittee(share *beaconprotocol.Share) []*spectypes.Operator {
 	mappedCommittee := make([]*spectypes.Operator, 0)
 	for _, operatorID := range share.OperatorIds {
 		node := share.Committee[spectypes.OperatorID(operatorID)]
