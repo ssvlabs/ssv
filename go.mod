@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/attestantio/go-eth2-client v0.11.3
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
-	github.com/bloxapp/ssv-spec v0.2.3-0.20221102120541-7e6168947071 // v0.2.6
+	github.com/bloxapp/ssv-spec v0.2.7 // v0.2.6
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.10.18
