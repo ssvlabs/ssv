@@ -199,11 +199,7 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	return peers, nil
 }
 
-func (m *mockNetwork) Broadcast(enc spectypes.Encoder) error {
-	msg, ok := enc.(*spectypes.SSVMessage)
-	if !ok {
-		return errors.New("bad type")
-	}
+func (m *mockNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	pk := msg.GetID().GetPubKey()
 	spk := hex.EncodeToString(pk)
 	topic := spk
@@ -267,6 +263,16 @@ func (m *mockNetwork) registerHandler(protocol SyncProtocol, handlers ...Request
 	m.handlersLock.Lock()
 	defer m.handlersLock.Unlock()
 	m.handlers[pid] = requestHandlers
+}
+
+func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
+	_, err := m.LastDecided(mid)
+	return err
+}
+
+func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
+	_, err := m.LastChangeRound(mid, height)
+	return err
 }
 
 func (m *mockNetwork) LastDecided(mid spectypes.MessageID) ([]SyncResult, error) {

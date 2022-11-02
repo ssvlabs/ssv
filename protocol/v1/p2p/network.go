@@ -1,6 +1,7 @@
 package protcolp2p
 
 import (
+	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -24,8 +25,7 @@ type Subscriber interface {
 
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
-	// Broadcast broadcasts the given message to the corresponding subnet
-	Broadcast(msg spectypes.Encoder) error
+	p2p.Broadcaster
 }
 
 // RequestHandler handles p2p requests

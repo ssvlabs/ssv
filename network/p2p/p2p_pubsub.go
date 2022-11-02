@@ -43,11 +43,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(enc spectypes.Encoder) error {
-	msg, ok := enc.(*spectypes.SSVMessage)
-	if !ok {
-		return errors.New("bad type")
-	}
+func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}

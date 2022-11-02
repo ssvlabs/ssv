@@ -39,50 +39,37 @@ type networkAdapter struct {
 
 type SyncResults []protcolp2p.SyncResult
 
-func (na *networkAdapter) SyncHighestDecided(identifier []byte) error {
-	mid := types.MessageID{}
-	copy(mid[:], identifier)
+func (na *networkAdapter) SyncHighestDecided(mid types.MessageID) error {
 	res, err := na.syncer.LastDecided(mid)
 	if err != nil {
 		return err
 	}
 
-	k := fmt.Sprintf("sync-%x", identifier)
+	k := fmt.Sprintf("sync-%s", mid.String())
 	if _, ok := na.results.Get(k); !ok {
 		na.results.SetDefault(k, res)
 	}
 	return nil
 }
 
-func (na *networkAdapter) SyncHighestRoundChange(identifier []byte, height qbft2.Height) error {
-	mid := types.MessageID{}
-	copy(mid[:], identifier)
-
+func (na *networkAdapter) SyncHighestRoundChange(mid types.MessageID, height qbft2.Height) error {
 	res, err := na.syncer.LastChangeRound(mid, height)
 	if err != nil {
 		return err
 	}
 
-	k := fmt.Sprintf("sync-cr-%x", identifier)
+	k := fmt.Sprintf("sync-cr-%s", mid.String())
 	if _, ok := na.results.Get(k); !ok {
 		na.results.SetDefault(k, res)
 	}
 	return nil
 }
 
-func (na *networkAdapter) Broadcast(msg types.Encoder) error {
-	m, ok := msg.(*types.SSVMessage)
-	if !ok {
-		return errors.New("invalid message structure")
-	}
-	if m == nil {
+func (na *networkAdapter) Broadcast(msg *types.SSVMessage) error {
+	if msg == nil {
 		return errors.New("empty message")
 	}
-	return na.broadcaster.Broadcast(*m)
-}
-
-func (na *networkAdapter) BroadcastDecided(msg types.Encoder) error {
-	return na.Broadcast(msg)
+	return na.broadcaster.Broadcast(msg)
 }
 
 func (na *networkAdapter) Subscribe(pk types.ValidatorPK) error {
