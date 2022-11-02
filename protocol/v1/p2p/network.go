@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 )
@@ -92,16 +93,6 @@ type Syncer interface {
 	LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]SyncResult, error)
 }
 
-// SpecSyncer implements specqbft.Syncer
-// TODO: merge with Syncer once we're ready
-type SpecSyncer interface {
-	// SyncHighestDecided tries to fetch the highest decided from peers (not blocking)
-	SyncHighestDecided(mid spectypes.MessageID) error
-	// SyncHighestRoundChange tries to fetch for each committee member the highest round change broadcast-ed
-	// for the specific height from peers (not blocking)
-	SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error
-}
-
 // MsgValidationResult helps other components to report message validation with a generic results scheme
 type MsgValidationResult int32
 
@@ -129,6 +120,6 @@ type Network interface {
 	Subscriber
 	Broadcaster
 	Syncer
-	SpecSyncer
+	protocolp2p.Syncer
 	ValidationReporting
 }
