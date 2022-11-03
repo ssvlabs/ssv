@@ -3,14 +3,14 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv-spec/p2p"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
-	types2 "github.com/bloxapp/ssv/protocol/v1/types"
-	"github.com/bloxapp/ssv/protocol/v2/network"
+	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -93,7 +93,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  types2.GetDefaultDomain(),
+		DomainType:  typesv1.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -110,7 +110,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 func (v *Validator) Start() error {
 	if atomic.CompareAndSwapUint32(&v.State, NotStarted, Started) {
-		n, ok := v.Network.(network.Network)
+		n, ok := v.Network.(p2p.Subscriber)
 		if !ok {
 			return nil
 		}
@@ -272,9 +272,9 @@ func ToSpecShare(share *beacon.Share) *types.Share {
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     sharePK,
 		Committee:       roundrobin.MapCommittee(share),
-		Quorum:          3,                         // temp
-		PartialQuorum:   2,                         // temp
-		DomainType:      types2.GetDefaultDomain(), // temp
+		Quorum:          3,                          // temp
+		PartialQuorum:   2,                          // temp
+		DomainType:      typesv1.GetDefaultDomain(), // temp
 		Graffiti:        nil,
 	}
 }

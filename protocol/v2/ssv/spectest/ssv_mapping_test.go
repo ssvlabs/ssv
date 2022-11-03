@@ -27,7 +27,6 @@ import (
 	"testing"
 )
 
-
 func init() {
 	logex.Build("ssv-mapping-test", zapcore.DebugLevel, nil)
 }

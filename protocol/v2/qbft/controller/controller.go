@@ -268,7 +268,7 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 		MsgID:   qbftspec.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
-	if err := c.GetConfig().GetNetwork().BroadcastDecided(msgToBroadcast); err != nil {
+	if err := c.GetConfig().GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

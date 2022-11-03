@@ -65,7 +65,7 @@ func (i *Instance) Start(value []byte, height qbftspec.Height) {
 			}
 		}
 
-		if err := i.config.GetNetwork().SyncHighestRoundChange(i.State.ID, i.State.Height); err != nil {
+		if err := i.config.GetNetwork().SyncHighestRoundChange(types.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
 			fmt.Printf("%s\n", err.Error())
 		}
 	})

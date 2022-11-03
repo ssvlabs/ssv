@@ -150,7 +150,7 @@ func NewController(options ControllerOptions) Controller {
 
 	validatorOptions := &validatorv2.Options{ //TODO add vars
 		Logger:  options.Logger,
-		Network: commons.NewQBFTNetworkAdapter(options.Network),
+		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
 		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
 		//Share:   nil,  // set per validator

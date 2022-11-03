@@ -364,7 +364,7 @@ func (i *Instance) SignAndBroadcast(msg *specqbft.Message) error {
 		Data:    encodedMsg,
 	}
 	if i.network != nil {
-		return i.network.Broadcast(ssvMsg)
+		return i.network.Broadcast(&ssvMsg)
 	}
 	return errors.New("no networking, could not broadcast msg")
 }

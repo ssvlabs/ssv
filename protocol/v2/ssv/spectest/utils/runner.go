@@ -204,7 +204,7 @@ var SSVDecidingMsgs = func(consensusData []byte, ks *testingutils.TestKeySet, ro
 
 var DecidingMsgsForHeight = func(consensusData, msgIdentifier []byte, height qbft.Height, keySet *testingutils.TestKeySet) []*qbft.SignedMessage {
 	msgs := make([]*qbft.SignedMessage, 0)
-	for h := qbft.Height(qbft.FirstHeight); h <= height; h++ {
+	for h := qbft.FirstHeight; h <= height; h++ {
 		msgs = append(msgs, testingutils.SignQBFTMsg(keySet.Shares[1], 1, &qbft.Message{
 			MsgType:    qbft.ProposalMsgType,
 			Height:     h,

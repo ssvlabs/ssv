@@ -1,8 +1,10 @@
 package protcolp2p
 
 import (
+	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 )
@@ -24,8 +26,7 @@ type Subscriber interface {
 
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
-	// Broadcast broadcasts the given message to the corresponding subnet
-	Broadcast(msg spectypes.SSVMessage) error
+	p2p.Broadcaster
 }
 
 // RequestHandler handles p2p requests
@@ -79,7 +80,7 @@ func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
 	}
 }
 
-// Syncer holds the interface for syncing data from other peerz
+// Syncer holds the interface for syncing data from other peers
 type Syncer interface {
 	// RegisterHandlers registers handler for the given protocol
 	RegisterHandlers(handlers ...*SyncHandler)
@@ -119,5 +120,6 @@ type Network interface {
 	Subscriber
 	Broadcaster
 	Syncer
+	protocolp2p.Syncer
 	ValidationReporting
 }

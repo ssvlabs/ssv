@@ -102,81 +102,78 @@ func isProposalJustification(state *qbftspec.State, config types2.IConfig, round
 
 	if round == qbftspec.FirstRound {
 		return nil
-	} else {
-		// check all round changes are valid for height and round
-		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
-		// prepared
-		for _, rc := range roundChangeMsgs {
-			if err := validRoundChange(state, config, rc, height, round); err != nil {
-				return errors.Wrap(err, "change round msg not valid")
-			}
-		}
-
-		// check there is a quorum
-		if !qbftspec.HasQuorum(state.Share, roundChangeMsgs) {
-			return errors.New("change round has no quorum")
-		}
-
-		// previouslyPreparedF returns true if any on the round change messages have a prepared round and value
-		previouslyPrepared, err := func(rcMsgs []*qbftspec.SignedMessage) (bool, error) {
-			for _, rc := range rcMsgs {
-				rcData, err := rc.Message.GetRoundChangeData()
-				if err != nil {
-					return false, errors.Wrap(err, "could not get round change data")
-				}
-				if rcData.Prepared() {
-					return true, nil
-				}
-			}
-			return false, nil
-		}(roundChangeMsgs)
-		if err != nil {
-			return errors.Wrap(err, "could not calculate if previously prepared")
-		}
-
-		if !previouslyPrepared {
-			return nil
-		} else {
-
-			// check prepare quorum
-			if !qbftspec.HasQuorum(state.Share, prepareMsgs) {
-				return errors.New("prepares has no quorum")
-			}
-
-			// get a round change data for which there is a justification for the highest previously prepared round
-			rcm, err := highestPrepared(roundChangeMsgs)
-			if err != nil {
-				return errors.Wrap(err, "could not get highest prepared")
-			}
-			if rcm == nil {
-				return errors.New("no highest prepared")
-			}
-			rcmData, err := rcm.Message.GetRoundChangeData()
-			if err != nil {
-				return errors.Wrap(err, "could not get round change data")
-			}
-
-			// proposed value must equal highest prepared value
-			if !bytes.Equal(value, rcmData.PreparedValue) {
-				return errors.New("proposed data doesn't match highest prepared")
-			}
-
-			// validate each prepare message against the highest previously prepared value and round
-			for _, pm := range prepareMsgs {
-				if err := validSignedPrepareForHeightRoundAndValue(
-					config,
-					pm,
-					height,
-					rcmData.PreparedRound,
-					rcmData.PreparedValue,
-					state.Share.Committee,
-				); err != nil {
-					return errors.New("signed prepare not valid")
-				}
-			}
-			return nil
+	}
+	// check all round changes are valid for height and round
+	// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
+	// prepared
+	for _, rc := range roundChangeMsgs {
+		if err := validRoundChange(state, config, rc, height, round); err != nil {
+			return errors.Wrap(err, "change round msg not valid")
 		}
 	}
+
+	// check there is a quorum
+	if !qbftspec.HasQuorum(state.Share, roundChangeMsgs) {
+		return errors.New("change round has no quorum")
+	}
+
+	// previouslyPreparedF returns true if any on the round change messages have a prepared round and value
+	previouslyPrepared, err := func(rcMsgs []*qbftspec.SignedMessage) (bool, error) {
+		for _, rc := range rcMsgs {
+			rcData, err := rc.Message.GetRoundChangeData()
+			if err != nil {
+				return false, errors.Wrap(err, "could not get round change data")
+			}
+			if rcData.Prepared() {
+				return true, nil
+			}
+		}
+		return false, nil
+	}(roundChangeMsgs)
+	if err != nil {
+		return errors.Wrap(err, "could not calculate if previously prepared")
+	}
+
+	if !previouslyPrepared {
+		return nil
+	}
+	// check prepare quorum
+	if !qbftspec.HasQuorum(state.Share, prepareMsgs) {
+		return errors.New("prepares has no quorum")
+	}
+
+	// get a round change data for which there is a justification for the highest previously prepared round
+	rcm, err := highestPrepared(roundChangeMsgs)
+	if err != nil {
+		return errors.Wrap(err, "could not get highest prepared")
+	}
+	if rcm == nil {
+		return errors.New("no highest prepared")
+	}
+	rcmData, err := rcm.Message.GetRoundChangeData()
+	if err != nil {
+		return errors.Wrap(err, "could not get round change data")
+	}
+
+	// proposed value must equal highest prepared value
+	if !bytes.Equal(value, rcmData.PreparedValue) {
+		return errors.New("proposed data doesn't match highest prepared")
+	}
+
+	// validate each prepare message against the highest previously prepared value and round
+	for _, pm := range prepareMsgs {
+		if err := validSignedPrepareForHeightRoundAndValue(
+			config,
+			pm,
+			height,
+			rcmData.PreparedRound,
+			rcmData.PreparedValue,
+			state.Share.Committee,
+		); err != nil {
+			return errors.New("signed prepare not valid")
+		}
+	}
+	return nil
 }
 
 func proposer(state *qbftspec.State, config types2.IConfig, round qbftspec.Round) types.OperatorID {

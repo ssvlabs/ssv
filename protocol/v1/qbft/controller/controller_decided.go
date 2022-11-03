@@ -62,7 +62,7 @@ func (c *Controller) onNewDecidedMessage(msg *specqbft.SignedMessage) error {
 		return nil
 	}
 
-	if err := c.Network.Broadcast(spectypes.SSVMessage{
+	if err := c.Network.Broadcast(&spectypes.SSVMessage{
 		MsgType: message.SSVDecidedMsgType,
 		MsgID:   message.ToMessageID(c.Identifier),
 		Data:    data,

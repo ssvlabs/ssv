@@ -127,7 +127,7 @@ func (c *Controller) signAndBroadcast(logger *zap.Logger, psm specssv.PartialSig
 		Data:    encodedSignedMsg,
 	}
 
-	if err := c.Network.Broadcast(ssvMsg); err != nil {
+	if err := c.Network.Broadcast(&ssvMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast signature")
 	}
 	logger.Info("broadcasting partial signature post consensus")
