@@ -15,7 +15,7 @@ func (c *Controller) UponFutureMsg(msg *qbftspec.SignedMessage) (*qbftspec.Signe
 		return nil, errors.New("discarded future msg")
 	}
 	if c.f1SyncTrigger() {
-		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(c.Identifier)
+		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(types.MessageIDFromBytes(c.Identifier))
 	}
 	return nil, nil
 }
