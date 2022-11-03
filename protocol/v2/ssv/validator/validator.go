@@ -121,6 +121,8 @@ func (v *Validator) Start() error {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
+			// TODO: uncomment once we support processing of sync messages
+			//go v.sync(identifier)
 		}
 	}
 	return nil
@@ -209,6 +211,13 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 
 func (v *Validator) GetShare() *beacon.Share {
 	return v.Share // temp solution
+}
+
+func (v *Validator) sync(identifier types.MessageID) {
+	err := v.Network.SyncHighestDecided(identifier)
+	if err != nil {
+		v.logger.Warn("sync failed", zap.String("identifier", identifier.String()), zap.Error(err))
+	}
 }
 
 func (v *Validator) loadLastHeight(identifier types.MessageID) {
