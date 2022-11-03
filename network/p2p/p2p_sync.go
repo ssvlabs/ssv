@@ -18,6 +18,7 @@ import (
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	results, err := n.LastDecided(mid)
+	n.logger.Debug("got highest decided", zap.Any("results", results), zap.Error(err))
 	for _, res := range results {
 		if res.Msg == nil {
 			continue
@@ -29,6 +30,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
 	results, err := n.LastChangeRound(mid, height)
+	n.logger.Debug("got highest change round", zap.Any("results", results), zap.Error(err))
 	for _, res := range results {
 		if res.Msg == nil {
 			continue

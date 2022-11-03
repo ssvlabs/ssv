@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"fmt"
 	"github.com/bloxapp/ssv-spec/p2p"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
@@ -122,7 +121,7 @@ func (v *Validator) Start() error {
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
 			// TODO: uncomment once we support processing of sync messages
-			//go v.sync(identifier)
+			go v.sync(identifier)
 		}
 	}
 	return nil
@@ -214,28 +213,35 @@ func (v *Validator) GetShare() *beacon.Share {
 }
 
 func (v *Validator) sync(identifier types.MessageID) {
-	err := v.Network.SyncHighestDecided(identifier)
+	logger := v.logger.With(zap.String("role", identifier.GetRoleType().String()))
+	logger.Debug("syncing")
+	h, err := v.loadLastHeight(identifier)
 	if err != nil {
-		v.logger.Warn("sync failed", zap.String("identifier", identifier.String()), zap.Error(err))
+		v.logger.Warn("could not load highest", zap.Error(err))
 	}
+	logger.Debug("loaded local highest", zap.Uint64("local_highest", uint64(h)))
+	err = v.Network.SyncHighestDecided(identifier)
+	if err != nil {
+		v.logger.Warn("sync failed", zap.Error(err))
+	}
+	logger.Debug("messages were synced")
 }
 
-func (v *Validator) loadLastHeight(identifier types.MessageID) {
+func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
 	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
 	if err != nil {
-		v.logger.Warn("failed to get heights decided", zap.Error(err))
+		return qbft.Height(0), errors.Wrap(err, "failed to get heights decided")
 	}
 	if knownDecided == nil {
-		return
+		return qbft.Height(0), nil
 	}
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
 
 	if r == nil || r.GetBaseRunner() == nil {
-		v.logger.Warn(fmt.Sprintf("%s runner is nil", identifier.GetRoleType().String()))
-		return
+		return qbft.Height(0), errors.New("runner is nil")
 	}
 	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
-	v.logger.Info(fmt.Sprintf("%s runner load height %d", identifier.GetRoleType().String(), knownDecided.Message.Height))
+	return knownDecided.Message.Height, nil
 }
 
 // ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)
