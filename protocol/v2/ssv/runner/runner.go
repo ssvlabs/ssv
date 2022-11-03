@@ -11,6 +11,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
@@ -127,6 +128,33 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedM
 		return false, nil, errors.Wrap(err, "invalid consensus message")
 	}
 
+	if !b.HashRunningDuty() {
+		if b.QBFTController.Height < msg.Message.Height {
+			logger := logex.GetLogger(
+				zap.String("who", "base_runner"),
+				zap.String("identifier", types.MessageIDFromBytes(msg.Message.Identifier).String()),
+				zap.Int("msg_type", int(msg.Message.MsgType)),
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)))
+			// higher message, checking if decided
+			switch msg.Message.MsgType {
+			case qbft.CommitMsgType:
+			// TODO: change round
+			default:
+				return false, nil, nil
+			}
+			logger.Debug("higher message sent to controller")
+			decidedMsg, err := b.QBFTController.ProcessMsg(msg)
+			if err != nil {
+				logger.Debug("could not process higher message", zap.Error(err))
+				return false, nil, errors.Wrap(err, "failed to process consensus msg")
+			}
+			logger.Debug("processed higher message", zap.Any("msg", decidedMsg))
+			return false, nil, nil
+		}
+		return false, nil, errors.New("no running duty")
+	}
+
 	if b.State.RunningInstance == nil {
 		return false, nil, errors.Errorf("running instance is nil")
 	}
@@ -229,8 +257,8 @@ func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *ssv.Signe
 }
 
 func (b *BaseRunner) validateConsensusMsg(msg *qbft.SignedMessage) error {
-	if !b.HashRunningDuty() {
-		return errors.New("no running duty")
+	if msg == nil || msg.Message == nil {
+		return errors.New("empty msg")
 	}
 	return nil
 }
