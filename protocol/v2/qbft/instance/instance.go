@@ -3,11 +3,13 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
-	"sync"
+
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
