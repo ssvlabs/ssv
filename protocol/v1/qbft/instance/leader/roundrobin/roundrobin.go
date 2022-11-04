@@ -6,6 +6,7 @@ import (
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	qbftprotocol "github.com/bloxapp/ssv/protocol/v1/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/share"
 )
 
 // RoundRobin robin leader selection will always return the same leader
@@ -37,6 +38,19 @@ func (rr *RoundRobin) Calculate(round uint64) uint64 {
 func MapCommittee(share *beaconprotocol.Share) []*spectypes.Operator {
 	mappedCommittee := make([]*spectypes.Operator, 0)
 	for _, operatorID := range share.OperatorIds {
+		node := share.Committee[spectypes.OperatorID(operatorID)]
+		mappedCommittee = append(mappedCommittee, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(node.IbftID),
+			PubKey:     node.Pk,
+		})
+	}
+
+	return mappedCommittee
+}
+
+func MapCommitteeV2(share *share.Share) []*spectypes.Operator {
+	mappedCommittee := make([]*spectypes.Operator, 0)
+	for _, operatorID := range share.OperatorIDs {
 		node := share.Committee[spectypes.OperatorID(operatorID)]
 		mappedCommittee = append(mappedCommittee, &spectypes.Operator{
 			OperatorID: spectypes.OperatorID(node.IbftID),

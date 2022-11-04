@@ -26,6 +26,7 @@ var (
 		migrationCleanValidatorRegistryData,
 		migrationCleanSyncOffset,
 		migrationCleanOperatorRemovalCorruptions,
+		migrationCleanShares,
 	}
 )
 
