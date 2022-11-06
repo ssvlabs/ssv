@@ -15,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/share"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -159,7 +158,7 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 }
 
 func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
-	return &validator.Validator{Share: &share.Share{
+	return &validator.Validator{Share: &spectypes.Share{
 		NodeID:    0,
 		PublicKey: nil,
 		Committee: nil,

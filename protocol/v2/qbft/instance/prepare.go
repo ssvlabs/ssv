@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/pkg/errors"
 )
 
 func (i *Instance) uponPrepare(

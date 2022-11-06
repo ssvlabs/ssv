@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/pkg/errors"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.

@@ -9,7 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
-	"github.com/bloxapp/ssv/protocol/v2/share"
+	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 )
 
 // ShareOptions - used to load validator share from config
@@ -34,7 +34,7 @@ func (options *ShareOptions) valid() bool {
 }
 
 // CreateShare creates a Share instance from ShareOptions
-func (options *ShareOptions) CreateShare() (*share.Share, error) {
+func (options *ShareOptions) CreateShare() (*spectypes.Share, error) {
 	var err error
 
 	if !options.valid() {
@@ -72,7 +72,7 @@ func (options *ShareOptions) CreateShare() (*share.Share, error) {
 		return nil, err
 	}
 
-	s := &share.Share{
+	s := &spectypes.Share{
 		OperatorID:      spectypes.OperatorID(options.NodeID),
 		ValidatorPubKey: validatorPk.Serialize(),
 		SharePubKey:     sharePK,
@@ -86,8 +86,8 @@ func (options *ShareOptions) CreateShare() (*share.Share, error) {
 
 }
 
-// CreateMetadata creates a Metadata instance from ShareOptions
-func (options *ShareOptions) CreateMetadata() (*share.Metadata, error) {
+// CreateMetadata creates a ShareMetadata instance from ShareOptions
+func (options *ShareOptions) CreateMetadata() (*sharemetadata.ShareMetadata, error) {
 	var err error
 
 	if !options.valid() {
@@ -127,7 +127,7 @@ func (options *ShareOptions) CreateMetadata() (*share.Metadata, error) {
 		return nil, err
 	}
 
-	metadata := &share.Metadata{
+	metadata := &sharemetadata.ShareMetadata{
 		PublicKey:    validatorPk,
 		OwnerAddress: options.OwnerAddress,
 		Operators:    operators,

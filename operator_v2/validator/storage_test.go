@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/share"
+	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -88,7 +88,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.False(t, found)
 }
 
-func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*share.Share, *bls.SecretKey) {
+func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*spectypes.Share, *bls.SecretKey) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -112,15 +112,15 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*share.S
 		},
 	}
 
-	return &share.Share{
+	return &spectypes.Share{
 		NodeID:    1,
 		PublicKey: sk.GetPublicKey(),
 		Committee: ibftCommittee,
 	}, &sk
 }
 
-func generateRandomValidatorMetadata() *share.Metadata {
-	return &share.Metadata{
+func generateRandomValidatorMetadata() *sharemetadata.ShareMetadata {
+	return &sharemetadata.ShareMetadata{
 		OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
 	}
 }

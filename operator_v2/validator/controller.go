@@ -33,7 +33,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/share"
+	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	validatorv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
@@ -52,7 +52,7 @@ const (
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *share.Share)
+type ShareEventHandlerFunc func(share *spectypes.Share)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
@@ -92,13 +92,13 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
-	GetAllValidatorShares() ([]*share.Share, error)
-	//OnFork(forkVersion forksprotocol.ForkVersion) error
+	GetAllValidatorShares() ([]*spectypes.Share, error)
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
+	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
@@ -207,7 +207,7 @@ func (c *controller) setupNetworkHandlers() error {
 	return nil
 }
 
-func (c *controller) GetAllValidatorShares() ([]*share.Share, error) {
+func (c *controller) GetAllValidatorShares() ([]*spectypes.Share, error) {
 	return c.collection.GetAllValidatorShares()
 }
 
@@ -259,7 +259,7 @@ func (c *controller) handleRouterMessages() {
 
 // getShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*share.Share, error) {
+func (c *controller) getShare(pk spectypes.ValidatorPK) (*spectypes.Share, error) {
 	share, found, err := c.collection.GetValidatorShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -270,7 +270,7 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*share.Share, error) {
 	return share, nil
 }
 
-func (c *controller) getMetadata(pk spectypes.ValidatorPK) (*share.Metadata, error) {
+func (c *controller) getMetadata(pk spectypes.ValidatorPK) (*sharemetadata.ShareMetadata, error) {
 	metadata, found, err := c.collection.GetValidatorMetadata(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -340,7 +340,7 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shareList []*share.Share, metadataList []*share.Metadata) {
+func (c *controller) setupValidators(shareList []*spectypes.Share, metadataList []*sharemetadata.ShareMetadata) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shareList)))
 	var started int
 	var errs []error
@@ -400,7 +400,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		if v.Metadata == nil {
-			v.Metadata = &share.Metadata{}
+			v.Metadata = &sharemetadata.ShareMetadata{}
 		}
 		v.Metadata.Stats = metadata
 		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
@@ -467,7 +467,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*share.Share, *share.Metadata, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*spectypes.Share, *sharemetadata.ShareMetadata, bool, error) {
 	share, metadata, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -535,7 +535,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(share *share.Share, metadata *share.Metadata) {
+func (c *controller) onShareStart(share *spectypes.Share, metadata *sharemetadata.ShareMetadata) {
 	v := c.validatorsMap.GetOrCreateValidator(share, metadata)
 	_, err := c.startValidator(v)
 	if err != nil {
