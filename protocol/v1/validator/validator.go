@@ -52,6 +52,7 @@ type Options struct {
 type Validator struct {
 	ctx          context.Context
 	cancelCtx    context.CancelFunc
+	startTime    time.Time
 	logger       *zap.Logger
 	network      beaconprotocol.Network
 	p2pNetwork   p2pprotocol.Network
@@ -107,6 +108,8 @@ func (v *Validator) Close() error {
 
 // Start starts the validator
 func (v *Validator) Start() error {
+	v.startTime = time.Now()
+
 	if err := v.p2pNetwork.Subscribe(v.GetShare().PublicKey.Serialize()); err != nil {
 		return errors.Wrap(err, "failed to subscribe topic")
 	}

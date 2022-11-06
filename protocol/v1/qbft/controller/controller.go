@@ -3,8 +3,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -24,9 +22,11 @@ import (
 	forksfactory "github.com/bloxapp/ssv/protocol/v1/qbft/controller/forks/factory"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 )
 
 // ErrAlreadyRunning is used to express that some process is already running, e.g. sync
@@ -121,6 +121,9 @@ type Controller struct {
 	newDecidedHandler NewDecidedHandler
 
 	highestRoundCtxCancel context.CancelFunc
+
+	instanceStartTime      time.Time
+	postConsensusStartTime time.Time
 }
 
 // New is the constructor of Controller
@@ -252,6 +255,8 @@ func (c *Controller) initialized() (bool, error) {
 
 // StartInstance - starts an ibft instance or returns error
 func (c *Controller) StartInstance(opts instance.ControllerStartInstanceOptions, getInstance func(instance instance.Instancer)) (res *instance.Result, err error) {
+	c.instanceStartTime = time.Now()
+
 	instanceOpts, err := c.instanceOptionsFromStartOptions(opts)
 	if err != nil {
 		return nil, errors.WithMessage(err, "can't generate instance options")

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -118,6 +119,11 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			i.GetState().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
 			i.GetState().PreparedRound.Store(i.GetState().GetRound())
 			i.ProcessStageChange(qbft.RoundStatePrepare)
+			messageID := message.ToMessageID(i.GetState().GetIdentifier())
+			metricsStageTimePrepare.
+				WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
+				Set(time.Since(i.stageStartTime).Seconds())
+			i.stageStartTime = time.Now()
 
 			// send commit msg
 			broadcastMsg, err := i.GenerateCommitMessage(i.GetState().GetPreparedValue())

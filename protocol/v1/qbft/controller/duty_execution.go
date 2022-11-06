@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -74,11 +75,17 @@ func (c *Controller) broadcastSignature() error {
 		return errors.Wrap(err, "failed to reconstruct and broadcast signature")
 	}
 	c.Logger.Info("Successfully submitted role!")
+
+	metricsTimeFullSubmissionFlow.WithLabelValues(c.ValidatorShare.PublicKey.SerializeToHexStr()).
+		Set(time.Since(c.instanceStartTime).Seconds())
+
 	return nil
 }
 
 // PostConsensusDutyExecution signs the eth2 duty after iBFT came to consensus and start signature state
 func (c *Controller) PostConsensusDutyExecution(logger *zap.Logger, decidedValue []byte, signaturesCount int, role spectypes.BeaconRole) error {
+	c.postConsensusStartTime = time.Now()
+
 	// sign input value and broadcast
 	sig, root, valueStruct, duty, err := c.signDuty(logger, decidedValue, role)
 	if err != nil {

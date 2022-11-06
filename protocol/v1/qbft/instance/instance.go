@@ -56,6 +56,7 @@ type Instance struct {
 	Logger         *zap.Logger
 	fork           forks.Fork
 	SsvSigner      spectypes.SSVSigner
+	stageStartTime time.Time
 
 	// messages
 	ContainersMap map[specqbft.MessageType]msgcont.MessageContainer
@@ -179,6 +180,7 @@ func (i *Instance) Start(inputValue []byte) error {
 	i.GetState().Stage.Store(int32(qbft.RoundStateReady)) // for the queue to process by state only from this point
 	metricsIBFTStage.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(qbft.RoundStateReady))
 	metricsIBFTRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(1)
+	i.stageStartTime = time.Now()
 
 	i.Logger.Debug("state", zap.Uint64("round", uint64(i.GetState().GetRound())))
 	if i.IsLeader() {

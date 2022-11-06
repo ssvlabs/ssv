@@ -21,6 +21,18 @@ var (
 		Name: "ssv:validator:running_ibfts_count",
 		Help: "Count running IBFTs by validator pub key",
 	}, []string{"pubKey"})
+	metricsTimePostConsensusSignatures = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:time_post_consensus_signatures",
+		Help: "Validator post consensus signatures collection time (seconds)",
+	}, []string{"pubKey"})
+	metricsTimeAttestationSubmission = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:time_attestation_submission",
+		Help: "Validator attestation submission time (seconds)",
+	}, []string{"pubKey"})
+	metricsTimeFullSubmissionFlow = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:time_full_submission_flow",
+		Help: "Validator full submission flow time (seconds)",
+	}, []string{"pubKey"})
 )
 
 func init() {

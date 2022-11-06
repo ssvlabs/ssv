@@ -16,6 +16,18 @@ var (
 		Name: "ssv:validator:ibft_round",
 		Help: "IBFTs round",
 	}, []string{"identifier", "pubKey"})
+	metricsStageTimeProposal = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:stage_time_proposal",
+		Help: "Proposal stage time (seconds)",
+	}, []string{"identifier", "pubKey"})
+	metricsStageTimePrepare = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:proposal_stage_time",
+		Help: "Prepare stage time (seconds)",
+	}, []string{"identifier", "pubKey"})
+	metricsStageTimeCommit = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:stage_time_commit",
+		Help: "Commit stage time (seconds)",
+	}, []string{"identifier", "pubKey"})
 )
 
 func init() {
@@ -23,6 +35,9 @@ func init() {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsIBFTRound); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsStageTimeProposal); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }

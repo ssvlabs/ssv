@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/msgcont"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
@@ -80,6 +82,11 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 			i.decidedMsg = agg
 			// mark instance commit
 			i.ProcessStageChange(qbft.RoundStateDecided)
+			messageID := message.ToMessageID(i.GetState().GetIdentifier())
+			metricsStageTimeCommit.
+				WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
+				Set(time.Since(i.stageStartTime).Seconds())
+			i.stageStartTime = time.Now()
 		})
 
 		return onceErr

@@ -11,6 +11,12 @@ import (
 )
 
 var (
+	allMetrics = []prometheus.Collector{
+		metricsCurrentSlot,
+		metricsValidatorStatus,
+		metricsTimeAttestationData,
+		metricsTimeConsensus,
+	}
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_slot1",
 		Help: "Current running slot",
@@ -19,14 +25,21 @@ var (
 		Name: "ssv:validator:status1",
 		Help: "Validator status",
 	}, []string{"pubKey"})
+	metricsTimeAttestationData = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:time_attestation_data",
+		Help: "Validator attestation data time (seconds)",
+	}, []string{"pubKey"})
+	metricsTimeConsensus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:time_consensus",
+		Help: "Validator consensus time (seconds)",
+	}, []string{"pubKey"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsCurrentSlot); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsValidatorStatus); err != nil {
-		log.Println("could not register prometheus collector")
+	for _, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			log.Println("could not register prometheus collector")
+		}
 	}
 }
 

@@ -1,12 +1,15 @@
 package instance
 
 import (
+	"encoding/hex"
 	"fmt"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/qbft"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/pipelines"
 )
@@ -73,6 +76,11 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 
 		// mark state
 		i.ProcessStageChange(qbft.RoundStateProposal)
+		messageID := message.ToMessageID(i.GetState().GetIdentifier())
+		metricsStageTimeProposal.
+			WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
+			Set(time.Since(i.stageStartTime).Seconds())
+		i.stageStartTime = time.Now()
 
 		// broadcast prepare msg
 		broadcastMsg, err := i.GeneratePrepareMessage(proposalData.Data)
