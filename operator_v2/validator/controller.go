@@ -347,10 +347,10 @@ func (c *controller) setupValidators(shareList []*share.Share, metadataList []*s
 	var fetchMetadata [][]byte
 	for i, validatorShare := range shareList {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare, metadataList[i])
-		pk := hex.EncodeToString(v.Share.PublicKey.Serialize())
+		pk := hex.EncodeToString(v.Share.ValidatorPubKey)
 		logger := c.logger.With(zap.String("pubkey", pk))
 		if !v.HasMetadata() { // fetching index and status in case not exist
-			fetchMetadata = append(fetchMetadata, v.GetShare().PublicKey.Serialize())
+			fetchMetadata = append(fetchMetadata, v.GetShare().ValidatorPubKey)
 			logger.Warn("could not start validator as metadata not found")
 			continue
 		}
@@ -427,7 +427,7 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 
 	err := c.validatorsMap.ForEach(func(v *validatorv2.Validator) error {
 		if !v.HasMetadata() {
-			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
+			toFetch = append(toFetch, v.GetShare().ValidatorPubKey)
 		} else if v.GetMetadata().Stats.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
 			indices = append(indices, v.GetMetadata().Stats.Index)
 		}
@@ -486,7 +486,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistratio
 			return nil, metadata, isOperatorMetadata, errors.New("could not decode shareSecret")
 		}
 
-		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+		logger := c.logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
 		// get metadata
 		if updated, err := UpdateMetadataStats(metadata, c.beacon); err != nil {
@@ -545,7 +545,7 @@ func (c *controller) onShareStart(share *share.Share, metadata *share.Metadata) 
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
-	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetMetadata().Stats, c.logger)
+	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.GetMetadata().Stats, c.logger)
 	if !v.HasMetadata() {
 		return false, errors.New("could not start validator: metadata not found")
 	}
@@ -553,7 +553,7 @@ func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(); err != nil {
-		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.PublicKey.Serialize())).Set(float64(validatorStatusError))
+		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	return true, nil
@@ -573,7 +573,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		}
 		var pks [][]byte
 		for _, share := range shareList {
-			pks = append(pks, share.PublicKey.Serialize())
+			pks = append(pks, share.ValidatorPubKey)
 		}
 		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shareList)))
 		beaconprotocol.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
@@ -583,7 +583,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyRunners {
 	if options.Metadata == nil {
-		options.Logger.Error("validator missing metadata", zap.String("pk", options.Share.PublicKey.SerializeToHexStr()))
+		options.Logger.Error("validator missing metadata", zap.String("pk", hex.EncodeToString(options.Share.ValidatorPubKey)))
 		return runner.DutyRunners{} // TODO need to find better way to fix it
 	}
 
@@ -599,7 +599,7 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 	generateConfig := func() *qbft2.Config {
 		return &qbft2.Config{
 			Signer:      options.Signer,
-			SigningPK:   options.Share.PublicKey.Serialize(), // TODO right val?
+			SigningPK:   options.Share.ValidatorPubKey, // TODO right val?
 			Domain:      domainType,
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *qbft.State, round qbft.Round) spectypes.OperatorID {
@@ -613,7 +613,8 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 		}
 	}
 
-	specShare := validatorv2.ToSpecShare(options.Share) // temp solution
+	//specShare := validatorv2.ToSpecShare(options.Share) // temp solution
+	specShare := options.Share
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
 		switch role {
@@ -621,35 +622,35 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 			valCheck := ssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Metadata.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = valCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAttester)
+			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleAttester)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
 			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Metadata.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleProposer)
+			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleProposer)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
 			proposedValueCheck := ssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Metadata.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAggregator)
+			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleAggregator)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
 			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommittee:
 			proposedValueCheck := ssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Metadata.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommittee)
+			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
 			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommitteeContribution:
 			proposedValueCheck := ssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Metadata.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommitteeContribution)
+			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
 			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		}

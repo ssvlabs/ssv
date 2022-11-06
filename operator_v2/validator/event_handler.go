@@ -119,11 +119,11 @@ func (c *controller) handleOperatorRemovalEvent(
 	}
 
 	for _, share := range shareList {
-		if err := c.collection.DeleteValidatorShare(share.PublicKey.Serialize()); err != nil {
+		if err := c.collection.DeleteValidatorShare(share.ValidatorPubKey); err != nil {
 			return nil, errors.Wrap(err, "could not remove validator share")
 		}
 		if ongoingSync {
-			if err := c.onShareRemove(share.PublicKey.SerializeToHexStr(), true); err != nil {
+			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
 				return nil, err
 			}
 		}

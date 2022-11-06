@@ -15,7 +15,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/share"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
@@ -202,8 +201,7 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 }
 
 func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage) error {
-	specShare := ToSpecShare(v.Share) // temp solution
-	if !specShare.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
+	if !v.Share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
@@ -258,29 +256,29 @@ func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, err
 }
 
 // ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)
-func ToSSVShare(specShare *types.Share) (*share.Share, error) {
-	vpk := &bls.PublicKey{}
-	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize validator public key")
-	}
-
-	var operatorsId []uint64
-	ssvCommittee := map[types.OperatorID]*beacon.Node{}
-	for _, op := range specShare.Committee {
-		operatorsId = append(operatorsId, uint64(op.OperatorID))
-		ssvCommittee[op.OperatorID] = &beacon.Node{
-			IbftID: uint64(op.GetID()),
-			Pk:     op.GetPublicKey(),
-		}
-	}
-
-	return &share.Share{
-		NodeID:      specShare.OperatorID,
-		PublicKey:   vpk,
-		Committee:   ssvCommittee,
-		OperatorIDs: operatorsId,
-	}, nil
-}
+//func ToSSVShare(specShare *types.Share) (*share.Share, error) {
+//	vpk := &bls.PublicKey{}
+//	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
+//		return nil, errors.Wrap(err, "failed to deserialize validator public key")
+//	}
+//
+//	var operatorsId []uint64
+//	ssvCommittee := map[types.OperatorID]*beacon.Node{}
+//	for _, op := range specShare.Committee {
+//		operatorsId = append(operatorsId, uint64(op.OperatorID))
+//		ssvCommittee[op.OperatorID] = &beacon.Node{
+//			IbftID: uint64(op.GetID()),
+//			Pk:     op.GetPublicKey(),
+//		}
+//	}
+//
+//	return &share.Share{
+//		NodeID:      specShare.OperatorID,
+//		PublicKey:   vpk,
+//		Committee:   ssvCommittee,
+//		OperatorIDs: operatorsId,
+//	}, nil
+//}
 
 // ToSSVMetadata convert spec share struct to ssv metadata struct (mainly for testing purposes)
 func ToSSVMetadata(specShare *types.Share) (*share.Metadata, error) {
@@ -305,23 +303,23 @@ func ToSSVMetadata(specShare *types.Share) (*share.Metadata, error) {
 	}, nil
 }
 
-// ToSpecShare convert spec share to ssv share struct
-func ToSpecShare(share *share.Share) *types.Share {
-	var sharePK []byte
-	for id, node := range share.Committee {
-		if id == share.NodeID {
-			sharePK = node.Pk
-		}
-	}
-
-	return &types.Share{
-		OperatorID:      share.NodeID,
-		ValidatorPubKey: share.PublicKey.Serialize(),
-		SharePubKey:     sharePK,
-		Committee:       roundrobin.MapCommitteeV2(share),
-		Quorum:          3,                          // temp
-		PartialQuorum:   2,                          // temp
-		DomainType:      typesv1.GetDefaultDomain(), // temp
-		Graffiti:        nil,
-	}
-}
+//// ToSpecShare convert spec share to ssv share struct
+//func ToSpecShare(share *share.Share) *types.Share {
+//	var sharePK []byte
+//	for id, node := range share.Committee {
+//		if id == share.NodeID {
+//			sharePK = node.Pk
+//		}
+//	}
+//
+//	return &types.Share{
+//		OperatorID:      share.NodeID,
+//		ValidatorPubKey: share.PublicKey.Serialize(),
+//		SharePubKey:     sharePK,
+//		Committee:       roundrobin.MapCommitteeV2(share),
+//		Quorum:          3,                          // temp
+//		PartialQuorum:   2,                          // temp
+//		DomainType:      typesv1.GetDefaultDomain(), // temp
+//		Graffiti:        nil,
+//	}
+//}

@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/share"
 )
 
@@ -52,30 +53,36 @@ func (options *ShareOptions) CreateShare() (*share.Share, error) {
 		}
 		return val
 	}
-	ibftCommittee := make(map[spectypes.OperatorID]*beacon.Node)
-	for pk, id := range options.Committee {
-		ibftCommittee[spectypes.OperatorID(id)] = &beacon.Node{
-			IbftID: uint64(id),
-			Pk:     _getBytesFromHex(pk),
-		}
-	}
 
-	var operatorIDs []uint64
-	for _, opID := range options.OperatorIds {
-		operatorIDs = append(operatorIDs, uint64(opID))
+	var sharePK []byte
+	committee := make([]*spectypes.Operator, 0)
+	for pkString, id := range options.Committee {
+		pkBytes := _getBytesFromHex(pkString)
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(id),
+			PubKey:     pkBytes,
+		})
+
+		if spectypes.OperatorID(id) == spectypes.OperatorID(options.NodeID) {
+			sharePK = pkBytes
+		}
 	}
 
 	if err != nil {
 		return nil, err
 	}
 
-	share := &share.Share{
-		NodeID:      spectypes.OperatorID(options.NodeID),
-		PublicKey:   validatorPk,
-		Committee:   ibftCommittee,
-		OperatorIDs: operatorIDs,
+	s := &share.Share{
+		OperatorID:      spectypes.OperatorID(options.NodeID),
+		ValidatorPubKey: validatorPk.Serialize(),
+		SharePubKey:     sharePK,
+		Committee:       committee,
+		Quorum:          3,                          // temp
+		PartialQuorum:   2,                          // temp
+		DomainType:      typesv1.GetDefaultDomain(), // temp
+		Graffiti:        nil,
 	}
-	return share, nil
+	return s, nil
 
 }
 
