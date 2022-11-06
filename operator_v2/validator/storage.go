@@ -87,12 +87,12 @@ func (s *Collection) SaveValidatorMetadata(metadata *share.Metadata) error {
 }
 
 func (s *Collection) saveShareUnsafe(share *share.Share) error {
-	value, err := share.Serialize()
+	value, err := share.Encode()
 	if err != nil {
 		s.logger.Error("failed to serialize share", zap.Error(err))
 		return err
 	}
-	return s.db.Set(sharePrefix(), share.PublicKey.Serialize(), value)
+	return s.db.Set(sharePrefix(), share.ValidatorPubKey, value)
 }
 
 func (s *Collection) saveMetadataUnsafe(metadata *share.Metadata) error {
@@ -128,8 +128,9 @@ func (s *Collection) getShareUnsafe(key []byte) (*share.Share, bool, error) {
 	if err != nil {
 		return nil, found, err
 	}
-	share, err := (&share.Share{}).Deserialize(obj.Key, obj.Value)
-	return share, found, err
+	value := &share.Share{}
+	err = value.Decode(obj.Value)
+	return value, found, err
 }
 
 // GetValidatorShare by key
@@ -162,9 +163,9 @@ func (s *Collection) GetAllValidatorShares() ([]*share.Share, error) {
 	var res []*share.Share
 
 	err := s.db.GetAll(sharePrefix(), func(i int, obj basedb.Obj) error {
-		val, err := (&share.Share{}).Deserialize(obj.Key, obj.Value)
-		if err != nil {
-			return errors.Wrap(err, "failed to deserialize validator")
+		val := &share.Share{}
+		if err := val.Decode(obj.Value); err != nil {
+			return errors.Wrap(err, "failed to deserialize share")
 		}
 		res = append(res, val)
 		return nil
@@ -183,7 +184,7 @@ func (s *Collection) GetAllValidatorMetadata() ([]*share.Metadata, error) {
 	err := s.db.GetAll(metadataPrefix(), func(i int, obj basedb.Obj) error {
 		val, err := (&share.Metadata{}).Deserialize(obj.Key, obj.Value)
 		if err != nil {
-			return errors.Wrap(err, "failed to deserialize validator")
+			return errors.Wrap(err, "failed to deserialize metadata")
 		}
 		res = append(res, val)
 		return nil
@@ -204,7 +205,7 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled b
 	err := s.db.GetAll(metadataPrefix(), func(i int, metadataObj basedb.Obj) error {
 		metadataVal, err := (&share.Metadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
 		if err != nil {
-			return errors.Wrap(err, "failed to deserialize validator")
+			return errors.Wrap(err, "failed to deserialize metadata")
 		}
 		if !metadataVal.Liquidated || !enabled {
 			if ok := metadataVal.BelongsToOperator(operatorPubKey); ok {
@@ -218,9 +219,10 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled b
 					shareList = append(shareList, nil)
 					return nil
 				}
-				shareVal, err := (&share.Share{}).Deserialize(shareObj.Key, shareObj.Value)
-				if err != nil {
-					return fmt.Errorf("failed to deserialize metadata: %w", err)
+
+				shareVal := &share.Share{}
+				if err := shareVal.Decode(shareObj.Value); err != nil {
+					return fmt.Errorf("failed to deserialize share: %w", err)
 				}
 				shareList = append(shareList, shareVal)
 			}
@@ -243,7 +245,7 @@ func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled boo
 	err := s.db.GetAll(sharePrefix(), func(i int, metadataObj basedb.Obj) error {
 		metadataVal, err := (&share.Metadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
 		if err != nil {
-			return errors.Wrap(err, "failed to deserialize validator")
+			return errors.Wrap(err, "failed to deserialize metadata")
 		}
 		if !metadataVal.Liquidated || !enabled {
 			if ok := metadataVal.BelongsToOperatorID(uint64(operatorID)); ok {
@@ -257,9 +259,10 @@ func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled boo
 					shareList = append(shareList, nil)
 					return nil
 				}
-				shareVal, err := (&share.Share{}).Deserialize(shareObj.Key, shareObj.Value)
-				if err != nil {
-					return fmt.Errorf("failed to deserialize metadata: %w", err)
+
+				shareVal := &share.Share{}
+				if err := shareVal.Decode(shareObj.Value); err != nil {
+					return fmt.Errorf("failed to deserialize share: %w", err)
 				}
 				shareList = append(shareList, shareVal)
 			}
@@ -294,9 +297,9 @@ func (s *Collection) GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]
 				shareList = append(shareList, nil)
 				return nil
 			}
-			shareVal, err := (&share.Share{}).Deserialize(shareObj.Key, shareObj.Value)
-			if err != nil {
-				return fmt.Errorf("failed to deserialize metadata: %w", err)
+			shareVal := &share.Share{}
+			if err := shareVal.Decode(shareObj.Value); err != nil {
+				return fmt.Errorf("failed to deserialize share: %w", err)
 			}
 			shareList = append(shareList, shareVal)
 		}

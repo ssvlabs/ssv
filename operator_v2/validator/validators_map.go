@@ -72,7 +72,7 @@ func (vm *validatorsMap) GetOrCreateValidator(share *share.Share, metadata *shar
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
-	pubKey := hex.EncodeToString(share.PublicKey.Serialize())
+	pubKey := hex.EncodeToString(share.ValidatorPubKey)
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
@@ -113,10 +113,10 @@ func (vm *validatorsMap) Size() int {
 func printShare(s *share.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
-		committee = append(committee, fmt.Sprintf(`[IbftId=%d, PK=%x]`, c.IbftID, c.Pk))
+		committee = append(committee, fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey))
 	}
 	logger.Debug(msg,
-		zap.String("pubKey", hex.EncodeToString(s.PublicKey.Serialize())),
-		zap.Uint64("nodeID", uint64(s.NodeID)),
+		zap.String("pubKey", hex.EncodeToString(s.ValidatorPubKey)),
+		zap.Uint64("nodeID", uint64(s.OperatorID)),
 		zap.Strings("committee", committee))
 }

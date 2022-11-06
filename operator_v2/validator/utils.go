@@ -52,21 +52,22 @@ func ShareFromValidatorEvent(
 			Err: errors.Wrap(err, "failed to deserialize share public key"),
 		}
 	}
-	validatorShare.PublicKey = publicKey
+	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	shareMetadata.PublicKey = publicKey
 
 	shareMetadata.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
-	ibftCommittee := map[spectypes.OperatorID]*beaconprotocol.Node{}
+	committee := make([]*spectypes.Operator, 0)
 	for i := range validatorRegistrationEvent.OperatorPublicKeys {
 		nodeID := spectypes.OperatorID(validatorRegistrationEvent.OperatorIds[i])
-		ibftCommittee[nodeID] = &beaconprotocol.Node{
-			IbftID: uint64(nodeID),
-			Pk:     validatorRegistrationEvent.SharesPublicKeys[i],
-		}
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: nodeID,
+			PubKey:     validatorRegistrationEvent.SharesPublicKeys[i],
+		})
+		shareMetadata.Operators = append(shareMetadata.Operators, validatorRegistrationEvent.OperatorPublicKeys[i])
 		if strings.EqualFold(string(validatorRegistrationEvent.OperatorPublicKeys[i]), operatorPubKey) {
-			validatorShare.NodeID = nodeID
+			validatorShare.OperatorID = nodeID
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
@@ -91,8 +92,10 @@ func ShareFromValidatorEvent(
 			}
 		}
 	}
-	validatorShare.Committee = ibftCommittee
-	validatorShare.SetOperators(validatorRegistrationEvent.OperatorIds)
+	validatorShare.Committee = committee
+	for _, oid := range validatorRegistrationEvent.OperatorIds {
+		shareMetadata.OperatorIDs = append(shareMetadata.OperatorIDs, uint64(oid))
+	}
 
 	return &validatorShare, &shareMetadata, shareSecret, nil
 }
