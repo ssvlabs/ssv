@@ -174,7 +174,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 				encodedMsg, err := signedMessage.Encode()
 				require.NoError(t, err)
-				ssvMsg := spectypes.SSVMessage{
+				ssvMsg := &spectypes.SSVMessage{
 					MsgType: spectypes.SSVConsensusMsgType,
 					MsgID:   message.ToMessageID(identifier),
 					Data:    encodedMsg,
@@ -182,7 +182,7 @@ func TestPostConsensusSignatureAndAggregation(t *testing.T) {
 
 				require.NoError(t, validator.p2pNetwork.Broadcast(ssvMsg))
 				for _, ibft := range validator.Ibfts() {
-					require.NoError(t, ibft.ProcessMsg(&ssvMsg))
+					require.NoError(t, ibft.ProcessMsg(ssvMsg))
 				}
 			}
 

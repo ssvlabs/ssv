@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"encoding/hex"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -8,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -27,19 +27,19 @@ func TestValidatorSerializer(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-	b, err := validatorShare.Serialize()
+	b, err := validatorShare.Encode()
 	require.NoError(t, err)
 
 	obj := basedb.Obj{
-		Key:   validatorShare.PublicKey.Serialize(),
+		Key:   validatorShare.ValidatorPubKey,
 		Value: b,
 	}
-	v, err := validatorShare.Deserialize(obj.Key, obj.Value)
-	require.NoError(t, err)
-	require.NotNil(t, v.PublicKey)
-	require.Equal(t, v.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())
+	v := &spectypes.Share{}
+	require.NoError(t, v.Decode(obj.Value))
+	require.NotNil(t, v.ValidatorPubKey)
+	require.Equal(t, hex.EncodeToString(v.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 	require.NotNil(t, v.Committee)
-	require.NotNil(t, v.NodeID)
+	require.NotNil(t, v.OperatorID)
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
@@ -73,17 +73,17 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
 	require.NoError(t, collection.SaveValidatorShare(validatorShare2))
 
-	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
+	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.ValidatorPubKey)
 	require.True(t, found)
 	require.NoError(t, err)
-	require.EqualValues(t, validatorShareByKey.PublicKey.SerializeToHexStr(), validatorShare.PublicKey.SerializeToHexStr())
+	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 
 	validators, err := collection.GetAllValidatorShares()
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 
-	require.NoError(t, collection.DeleteValidatorShare(validatorShare.PublicKey.Serialize()))
-	_, found, err = collection.GetValidatorShare(validatorShare.PublicKey.Serialize())
+	require.NoError(t, collection.DeleteValidatorShare(validatorShare.ValidatorPubKey))
+	_, found, err = collection.GetValidatorShare(validatorShare.ValidatorPubKey)
 	require.NoError(t, err)
 	require.False(t, found)
 }
@@ -93,29 +93,29 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*spectyp
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
 
-	ibftCommittee := map[spectypes.OperatorID]*beacon.Node{
-		1: {
-			IbftID: 1,
-			Pk:     splitKeys[1].Serialize(),
+	ibftCommittee := []*spectypes.Operator{
+		{
+			OperatorID: 1,
+			PubKey:     splitKeys[1].Serialize(),
 		},
-		2: {
-			IbftID: 2,
-			Pk:     splitKeys[2].Serialize(),
+		{
+			OperatorID: 2,
+			PubKey:     splitKeys[2].Serialize(),
 		},
-		3: {
-			IbftID: 3,
-			Pk:     splitKeys[3].Serialize(),
+		{
+			OperatorID: 3,
+			PubKey:     splitKeys[3].Serialize(),
 		},
-		4: {
-			IbftID: 4,
-			Pk:     splitKeys[4].Serialize(),
+		{
+			OperatorID: 4,
+			PubKey:     splitKeys[4].Serialize(),
 		},
 	}
 
 	return &spectypes.Share{
-		NodeID:    1,
-		PublicKey: sk.GetPublicKey(),
-		Committee: ibftCommittee,
+		OperatorID:      1,
+		ValidatorPubKey: sk.GetPublicKey().Serialize(),
+		Committee:       ibftCommittee,
 	}, &sk
 }
 
