@@ -99,6 +99,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
 		Share:       options.Share,
+		Metadata:    options.Metadata,
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),
