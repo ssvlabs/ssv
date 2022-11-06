@@ -12,10 +12,7 @@ import (
 )
 
 var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
-	ssvShare, err := validator.ToSSVShare(testingutils.TestingShare(keySet))
-	if err != nil {
-		panic(fmt.Errorf("failed to convert spec share to ssv share - %s", err))
-	}
+	share := testingutils.TestingShare(keySet)
 	ssvMetadata, err := validator.ToSSVMetadata(testingutils.TestingShare(keySet))
 	if err != nil {
 		panic(fmt.Errorf("failed to convert spec share to ssv share - %s", err))
@@ -26,7 +23,7 @@ var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
 			Network:  testingutils.NewTestingNetwork(),
 			Beacon:   testingutils.NewTestingBeaconNode(),
 			Storage:  testingutils.NewTestingStorage(),
-			Share:    ssvShare,
+			Share:    share,
 			Metadata: ssvMetadata,
 			Signer:   testingutils.NewTestingKeyManager(),
 			DutyRunners: map[types.BeaconRole]runner.Runner{

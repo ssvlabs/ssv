@@ -4,22 +4,23 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -57,21 +58,21 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg1))
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg3))
+		require.NoError(t, ln.Nodes[2].Broadcast(msg3))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg1))
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg2))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg2))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg1))
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg3))
+		require.NoError(t, ln.Nodes[2].Broadcast(msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg3))
 	}()
 
 	wg.Wait()

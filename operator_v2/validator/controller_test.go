@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -158,12 +159,16 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 }
 
 func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
-	return &validator.Validator{Share: &spectypes.Share{
-		NodeID:    0,
-		PublicKey: nil,
-		Committee: nil,
-		Metadata:  metaData,
-	}}
+	return &validator.Validator{
+		Share: &spectypes.Share{
+			OperatorID:      0,
+			ValidatorPubKey: nil,
+			Committee:       nil,
+		},
+		Metadata: &types.ShareMetadata{
+			Stats: metaData,
+		},
+	}
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
