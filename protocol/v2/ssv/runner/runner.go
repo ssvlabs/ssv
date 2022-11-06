@@ -128,30 +128,31 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedM
 		return false, nil, errors.Wrap(err, "invalid consensus message")
 	}
 
-	if !b.HashRunningDuty() {
-		if b.QBFTController.Height < msg.Message.Height {
-			logger := logex.GetLogger(
-				zap.String("who", "base_runner"),
-				zap.String("identifier", types.MessageIDFromBytes(msg.Message.Identifier).String()),
-				zap.Int("msg_type", int(msg.Message.MsgType)),
-				zap.Uint64("msg_height", uint64(msg.Message.Height)),
-				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)))
-			// higher message, checking if decided
-			switch msg.Message.MsgType {
-			case qbft.CommitMsgType:
-			// TODO: change round
-			default:
-				return false, nil, nil
-			}
-			logger.Debug("higher message sent to controller")
-			decidedMsg, err := b.QBFTController.ProcessMsg(msg)
-			if err != nil {
-				logger.Debug("could not process higher message", zap.Error(err))
-				return false, nil, errors.Wrap(err, "failed to process consensus msg")
-			}
-			logger.Debug("processed higher message", zap.Any("msg", decidedMsg))
+	if b.QBFTController.Height < msg.Message.Height {
+		logger := logex.GetLogger(
+			zap.String("who", "base_runner"),
+			zap.String("identifier", types.MessageIDFromBytes(msg.Message.Identifier).String()),
+			zap.Int("msg_type", int(msg.Message.MsgType)),
+			zap.Uint64("msg_height", uint64(msg.Message.Height)),
+			zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)))
+		// higher message, checking if decided
+		switch msg.Message.MsgType {
+		case qbft.CommitMsgType:
+		// TODO: change round
+		default:
 			return false, nil, nil
 		}
+		logger.Debug("higher message sent to controller")
+		decidedMsg, err := b.QBFTController.ProcessMsg(msg)
+		if err != nil {
+			logger.Debug("could not process higher message", zap.Error(err))
+			return false, nil, errors.Wrap(err, "failed to process consensus msg")
+		}
+		logger.Debug("processed higher message", zap.Any("msg", decidedMsg))
+		return false, nil, nil
+	}
+
+	if !b.HashRunningDuty() {
 		return false, nil, errors.New("no running duty")
 	}
 
