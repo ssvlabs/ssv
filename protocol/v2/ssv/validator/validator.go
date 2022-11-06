@@ -103,6 +103,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
 		Share:       options.Share,
+		Metadata:    options.Metadata,
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),
@@ -210,18 +211,6 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	}
 
 	return nil
-}
-
-func (v *Validator) GetShare() *types.Share {
-	return v.Share // temp solution
-}
-
-func (v *Validator) GetMetadata() *types2.ShareMetadata {
-	return v.Metadata // temp solution
-}
-
-func (v *Validator) HasMetadata() bool {
-	return v.Metadata != nil
 }
 
 func (v *Validator) sync(identifier types.MessageID) {

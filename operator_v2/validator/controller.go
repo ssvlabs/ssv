@@ -348,8 +348,8 @@ func (c *controller) setupValidators(shareList []*spectypes.Share, metadataList 
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare, metadataList[i])
 		pk := hex.EncodeToString(v.Share.ValidatorPubKey)
 		logger := c.logger.With(zap.String("pubkey", pk))
-		if !v.HasMetadata() { // fetching index and status in case not exist
-			fetchMetadata = append(fetchMetadata, v.GetShare().ValidatorPubKey)
+		if v.Metadata == nil { // fetching index and status in case not exist
+			fetchMetadata = append(fetchMetadata, v.Share.ValidatorPubKey)
 			logger.Warn("could not start validator as metadata not found")
 			continue
 		}
@@ -425,10 +425,10 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var indices []spec.ValidatorIndex
 
 	err := c.validatorsMap.ForEach(func(v *validatorv2.Validator) error {
-		if !v.HasMetadata() {
-			toFetch = append(toFetch, v.GetShare().ValidatorPubKey)
-		} else if v.GetMetadata().Stats.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
-			indices = append(indices, v.GetMetadata().Stats.Index)
+		if v.Metadata == nil {
+			toFetch = append(toFetch, v.Share.ValidatorPubKey)
+		} else if v.Metadata.Stats.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+			indices = append(indices, v.Metadata.Stats.Index)
 		}
 		return nil
 	})
@@ -449,10 +449,10 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.HasMetadata() {
+		if v.Metadata == nil {
 			v.Metadata.Stats = meta
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
-		} else if !v.GetMetadata().Stats.Equals(meta) {
+		} else if !v.Metadata.Stats.Equals(meta) {
 			v.Metadata.Stats.Status = meta.Status
 			v.Metadata.Stats.Balance = meta.Balance
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
@@ -544,11 +544,11 @@ func (c *controller) onShareStart(share *spectypes.Share, metadata *qbft2.ShareM
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
-	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.GetMetadata().Stats, c.logger)
-	if !v.HasMetadata() {
+	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Metadata.Stats, c.logger)
+	if v.Metadata == nil {
 		return false, errors.New("could not start validator: metadata not found")
 	}
-	if v.GetMetadata().Stats.Index == 0 {
+	if v.Metadata.Stats.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(); err != nil {
