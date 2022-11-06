@@ -1,4 +1,4 @@
-package share
+package sharemetadata
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
-type Metadata struct {
+type ShareMetadata struct {
 	PublicKey    *bls.PublicKey
 	Stats        *beaconprotocol.ValidatorMetadata
 	OwnerAddress string
@@ -19,7 +19,7 @@ type Metadata struct {
 	Liquidated   bool
 }
 
-type serializedMetadata struct {
+type serializedShareMetadata struct {
 	ShareKey     []byte
 	Stats        *beaconprotocol.ValidatorMetadata
 	OwnerAddress string
@@ -28,9 +28,9 @@ type serializedMetadata struct {
 	Liquidated   bool
 }
 
-// Serialize Metadata to []byte
-func (s *Metadata) Serialize() ([]byte, error) {
-	value := serializedMetadata{
+// Serialize ShareMetadata to []byte
+func (s *ShareMetadata) Serialize() ([]byte, error) {
+	value := serializedShareMetadata{
 		Stats:        s.Stats,
 		OwnerAddress: s.OwnerAddress,
 		Operators:    s.Operators,
@@ -47,25 +47,20 @@ func (s *Metadata) Serialize() ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-// Deserialize key/value to Metadata model
-func (s *Metadata) Deserialize(key []byte, val []byte) (*Metadata, error) {
-	value := serializedMetadata{}
+// Deserialize key/value to ShareMetadata model
+func (s *ShareMetadata) Deserialize(key []byte, val []byte) (*ShareMetadata, error) {
+	value := serializedShareMetadata{}
 	d := gob.NewDecoder(bytes.NewReader(val))
 	if err := d.Decode(&value); err != nil {
 		return nil, fmt.Errorf("failed to get val value: %w", err)
 	}
-	shareSecret := &bls.SecretKey{} // need to decode secret separately cause of encoding has private var limit in bls.SecretKey struct
-	// in exporter scenario, share key should be nil
-	if value.ShareKey != nil && len(value.ShareKey) > 0 {
-		if err := shareSecret.Deserialize(value.ShareKey); err != nil {
-			return nil, fmt.Errorf("failed to get key secret: %w", err)
-		}
-	}
+
 	pubKey := &bls.PublicKey{}
 	if err := pubKey.Deserialize(key); err != nil {
 		return nil, fmt.Errorf("failed to get pubkey: %w", err)
 	}
-	return &Metadata{
+
+	return &ShareMetadata{
 		PublicKey:    pubKey,
 		Stats:        value.Stats,
 		OwnerAddress: value.OwnerAddress,
@@ -76,7 +71,7 @@ func (s *Metadata) Deserialize(key []byte, val []byte) (*Metadata, error) {
 }
 
 // BelongsToOperator checks whether the metadata belongs to operator
-func (s *Metadata) BelongsToOperator(operatorPubKey string) bool {
+func (s *ShareMetadata) BelongsToOperator(operatorPubKey string) bool {
 	for _, pk := range s.Operators {
 		if string(pk) == operatorPubKey {
 			return true
@@ -86,7 +81,7 @@ func (s *Metadata) BelongsToOperator(operatorPubKey string) bool {
 }
 
 // BelongsToOperatorID checks whether the metadata belongs to operator ID
-func (s *Metadata) BelongsToOperatorID(operatorID uint64) bool {
+func (s *ShareMetadata) BelongsToOperatorID(operatorID uint64) bool {
 	for _, id := range s.OperatorIDs {
 		if id == operatorID {
 			return true
@@ -95,10 +90,10 @@ func (s *Metadata) BelongsToOperatorID(operatorID uint64) bool {
 	return false
 }
 
-func (s *Metadata) HasMetadata() bool {
+func (s *ShareMetadata) HasMetadata() bool {
 	return s != nil
 }
 
-func (s *Metadata) HasStats() bool {
+func (s *ShareMetadata) HasStats() bool {
 	return s.HasMetadata() && s.Stats != nil
 }

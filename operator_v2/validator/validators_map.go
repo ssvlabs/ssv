@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v2/share"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/storage/basedb"
-
-	"go.uber.org/zap"
 )
 
 // validatorIterator is the function used to iterate over existing validators
@@ -67,7 +68,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *share.Share, metadata *share.Metadata) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *spectypes.Share, metadata *sharemetadata.ShareMetadata) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -110,7 +111,7 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
-func printShare(s *share.Share, logger *zap.Logger, msg string) {
+func printShare(s *spectypes.Share, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
 		committee = append(committee, fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey))

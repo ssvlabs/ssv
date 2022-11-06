@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/bloxapp/ssv/protocol/v2/share"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -155,7 +154,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
-	var validatorShare *share.Share
+	var validatorShare *spectypes.Share
 	if !found {
 		validatorShare, validatorMetadata, _, err = c.onShareCreate(validatorRegistrationEvent)
 		if err != nil {
