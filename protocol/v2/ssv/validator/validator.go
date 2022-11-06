@@ -16,9 +16,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	types2 "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Options struct {
@@ -27,7 +27,7 @@ type Options struct {
 	Beacon      ssv.BeaconNode
 	Storage     qbft.Storage
 	Share       *types.Share
-	Metadata    *sharemetadata.ShareMetadata
+	Metadata    *types2.ShareMetadata
 	Signer      types.KeyManager
 	DutyRunners runner.DutyRunners
 	Mode        ValidatorMode
@@ -58,7 +58,7 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 
 	Share    *types.Share
-	Metadata *sharemetadata.ShareMetadata
+	Metadata *types2.ShareMetadata
 	Beacon   ssv.BeaconNode
 	Signer   types.KeyManager
 
@@ -241,7 +241,7 @@ func (v *Validator) GetShare() *types.Share {
 	return v.Share // temp solution
 }
 
-func (v *Validator) GetMetadata() *sharemetadata.ShareMetadata {
+func (v *Validator) GetMetadata() *types2.ShareMetadata {
 	return v.Metadata // temp solution
 }
 
@@ -292,7 +292,7 @@ func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, err
 //}
 
 // ToSSVMetadata convert spec share struct to ssv metadata struct (mainly for testing purposes)
-func ToSSVMetadata(specShare *types.Share) (*sharemetadata.ShareMetadata, error) {
+func ToSSVMetadata(specShare *types.Share) (*types2.ShareMetadata, error) {
 	vpk := &bls.PublicKey{}
 	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
 		return nil, errors.Wrap(err, "failed to deserialize validator public key")
@@ -308,7 +308,7 @@ func ToSSVMetadata(specShare *types.Share) (*sharemetadata.ShareMetadata, error)
 		}
 	}
 
-	return &sharemetadata.ShareMetadata{
+	return &types2.ShareMetadata{
 		PublicKey:   vpk,
 		OperatorIDs: operatorsId,
 	}, nil

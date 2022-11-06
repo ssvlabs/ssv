@@ -10,8 +10,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -68,7 +68,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *spectypes.Share, metadata *sharemetadata.ShareMetadata) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *spectypes.Share, metadata *types.ShareMetadata) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()

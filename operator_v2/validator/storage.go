@@ -12,7 +12,7 @@ import (
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -21,14 +21,14 @@ type ICollection interface {
 	eth1.RegistryStore
 
 	SaveValidatorShare(share *spectypes.Share) error
-	SaveValidatorMetadata(metadata *sharemetadata.ShareMetadata) error
+	SaveValidatorMetadata(metadata *types.ShareMetadata) error
 	GetValidatorShare(key []byte) (*spectypes.Share, bool, error)
-	GetValidatorMetadata(key []byte) (*sharemetadata.ShareMetadata, bool, error)
+	GetValidatorMetadata(key []byte) (*types.ShareMetadata, bool, error)
 	GetAllValidatorShares() ([]*spectypes.Share, error)
-	GetAllValidatorMetadata() ([]*sharemetadata.ShareMetadata, error)
-	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error)
-	GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error)
-	GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error)
+	GetAllValidatorMetadata() ([]*types.ShareMetadata, error)
+	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error)
+	GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error)
+	GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]*spectypes.Share, []*types.ShareMetadata, error)
 	DeleteValidatorShare(key []byte) error
 }
 
@@ -76,7 +76,7 @@ func (s *Collection) SaveValidatorShare(share *spectypes.Share) error {
 }
 
 // SaveValidatorMetadata save validator metadata to db
-func (s *Collection) SaveValidatorMetadata(metadata *sharemetadata.ShareMetadata) error {
+func (s *Collection) SaveValidatorMetadata(metadata *types.ShareMetadata) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -96,7 +96,7 @@ func (s *Collection) saveShareUnsafe(share *spectypes.Share) error {
 	return s.db.Set(sharePrefix(), share.ValidatorPubKey, value)
 }
 
-func (s *Collection) saveMetadataUnsafe(metadata *sharemetadata.ShareMetadata) error {
+func (s *Collection) saveMetadataUnsafe(metadata *types.ShareMetadata) error {
 	value, err := metadata.Serialize()
 	if err != nil {
 		s.logger.Error("failed to serialize metadata", zap.Error(err))
@@ -114,7 +114,7 @@ func (s *Collection) GetValidatorShare(key []byte) (*spectypes.Share, bool, erro
 }
 
 // GetValidatorMetadata by key
-func (s *Collection) GetValidatorMetadata(key []byte) (*sharemetadata.ShareMetadata, bool, error) {
+func (s *Collection) GetValidatorMetadata(key []byte) (*types.ShareMetadata, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -135,7 +135,7 @@ func (s *Collection) getShareUnsafe(key []byte) (*spectypes.Share, bool, error) 
 }
 
 // GetValidatorShare by key
-func (s *Collection) getMetadataUnsafe(key []byte) (*sharemetadata.ShareMetadata, bool, error) {
+func (s *Collection) getMetadataUnsafe(key []byte) (*types.ShareMetadata, bool, error) {
 	obj, found, err := s.db.Get(metadataPrefix(), key)
 	if !found {
 		return nil, false, nil
@@ -143,7 +143,7 @@ func (s *Collection) getMetadataUnsafe(key []byte) (*sharemetadata.ShareMetadata
 	if err != nil {
 		return nil, found, err
 	}
-	metadata, err := (&sharemetadata.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
+	metadata, err := (&types.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
 	return metadata, found, err
 }
 
@@ -176,14 +176,14 @@ func (s *Collection) GetAllValidatorShares() ([]*spectypes.Share, error) {
 }
 
 // GetAllValidatorMetadata returns all metadata
-func (s *Collection) GetAllValidatorMetadata() ([]*sharemetadata.ShareMetadata, error) {
+func (s *Collection) GetAllValidatorMetadata() ([]*types.ShareMetadata, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	var res []*sharemetadata.ShareMetadata
+	var res []*types.ShareMetadata
 
 	err := s.db.GetAll(metadataPrefix(), func(i int, obj basedb.Obj) error {
-		val, err := (&sharemetadata.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
+		val, err := (&types.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize metadata")
 		}
@@ -196,15 +196,15 @@ func (s *Collection) GetAllValidatorMetadata() ([]*sharemetadata.ShareMetadata, 
 
 // GetOperatorValidatorShares returns all not liquidated validator shares belongs to operator
 // TODO: check regards returning a slice of public keys instead of share objects
-func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error) {
+func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var shareList []*spectypes.Share
-	var metadataList []*sharemetadata.ShareMetadata
+	var metadataList []*types.ShareMetadata
 
 	err := s.db.GetAll(metadataPrefix(), func(i int, metadataObj basedb.Obj) error {
-		metadataVal, err := (&sharemetadata.ShareMetadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
+		metadataVal, err := (&types.ShareMetadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize metadata")
 		}
@@ -236,15 +236,15 @@ func (s *Collection) GetOperatorValidatorShares(operatorPubKey string, enabled b
 
 // GetOperatorIDValidatorShares returns all not liquidated validator shares belongs to operator ID.
 // TODO: check regards returning a slice of public keys instead of share objects
-func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error) {
+func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var shareList []*spectypes.Share
-	var metadataList []*sharemetadata.ShareMetadata
+	var metadataList []*types.ShareMetadata
 
 	err := s.db.GetAll(sharePrefix(), func(i int, metadataObj basedb.Obj) error {
-		metadataVal, err := (&sharemetadata.ShareMetadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
+		metadataVal, err := (&types.ShareMetadata{}).Deserialize(metadataObj.Key, metadataObj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize metadata")
 		}
@@ -275,15 +275,15 @@ func (s *Collection) GetOperatorIDValidatorShares(operatorID uint32, enabled boo
 }
 
 // GetValidatorMetadataByOwnerAddress returns all validator metadata that belongs to owner address
-func (s *Collection) GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]*spectypes.Share, []*sharemetadata.ShareMetadata, error) {
+func (s *Collection) GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]*spectypes.Share, []*types.ShareMetadata, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var shareList []*spectypes.Share
-	var metadataList []*sharemetadata.ShareMetadata
+	var metadataList []*types.ShareMetadata
 
 	err := s.db.GetAll(metadataPrefix(), func(i int, obj basedb.Obj) error {
-		metadataVal, err := (&sharemetadata.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
+		metadataVal, err := (&types.ShareMetadata{}).Deserialize(obj.Key, obj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to deserialize validator")
 		}
