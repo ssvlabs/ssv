@@ -9,7 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // ShareOptions - used to load validator share from config
@@ -63,6 +63,7 @@ func (options *ShareOptions) CreateShare() (*spectypes.Share, error) {
 			PubKey:     pkBytes,
 		})
 
+		// TODO: check if need to use options.ShareKey instead
 		if spectypes.OperatorID(id) == spectypes.OperatorID(options.NodeID) {
 			sharePK = pkBytes
 		}
@@ -87,7 +88,7 @@ func (options *ShareOptions) CreateShare() (*spectypes.Share, error) {
 }
 
 // CreateMetadata creates a ShareMetadata instance from ShareOptions
-func (options *ShareOptions) CreateMetadata() (*sharemetadata.ShareMetadata, error) {
+func (options *ShareOptions) CreateMetadata() (*types.ShareMetadata, error) {
 	var err error
 
 	if !options.valid() {
@@ -127,7 +128,7 @@ func (options *ShareOptions) CreateMetadata() (*sharemetadata.ShareMetadata, err
 		return nil, err
 	}
 
-	metadata := &sharemetadata.ShareMetadata{
+	metadata := &types.ShareMetadata{
 		PublicKey:    validatorPk,
 		OwnerAddress: options.OwnerAddress,
 		Operators:    operators,

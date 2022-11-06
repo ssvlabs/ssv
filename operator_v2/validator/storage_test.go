@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -119,8 +119,8 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*spectyp
 	}, &sk
 }
 
-func generateRandomValidatorMetadata() *sharemetadata.ShareMetadata {
-	return &sharemetadata.ShareMetadata{
+func generateRandomValidatorMetadata() *types.ShareMetadata {
+	return &types.ShareMetadata{
 		OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
 	}
 }

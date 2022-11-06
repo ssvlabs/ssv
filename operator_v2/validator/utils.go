@@ -9,14 +9,14 @@ import (
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // UpdateMetadataStats will update the given metadata object w/o involving storage,
 // it will be called only when a new metadata is created
-func UpdateMetadataStats(metadata *sharemetadata.ShareMetadata, bc beaconprotocol.Beacon) (bool, error) {
+func UpdateMetadataStats(metadata *types.ShareMetadata, bc beaconprotocol.Beacon) (bool, error) {
 	pk := metadata.PublicKey.SerializeToHexStr()
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{metadata.PublicKey.Serialize()})
 	if err != nil {
@@ -37,9 +37,9 @@ func ShareFromValidatorEvent(
 	registryStorage registrystorage.OperatorsCollection,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
-) (*spectypes.Share, *sharemetadata.ShareMetadata, *bls.SecretKey, error) {
+) (*spectypes.Share, *types.ShareMetadata, *bls.SecretKey, error) {
 	validatorShare := spectypes.Share{}
-	shareMetadata := sharemetadata.ShareMetadata{}
+	shareMetadata := types.ShareMetadata{}
 
 	// extract operator public keys from storage and fill the event
 	if err := SetOperatorPublicKeys(registryStorage, &validatorRegistrationEvent); err != nil {

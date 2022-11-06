@@ -1,4 +1,4 @@
-package sharemetadata
+package types
 
 import (
 	"bytes"

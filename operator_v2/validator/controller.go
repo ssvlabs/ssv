@@ -33,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/sharemetadata"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	validatorv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
@@ -270,7 +269,7 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*spectypes.Share, error
 	return share, nil
 }
 
-func (c *controller) getMetadata(pk spectypes.ValidatorPK) (*sharemetadata.ShareMetadata, error) {
+func (c *controller) getMetadata(pk spectypes.ValidatorPK) (*qbft2.ShareMetadata, error) {
 	metadata, found, err := c.collection.GetValidatorMetadata(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -340,7 +339,7 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shareList []*spectypes.Share, metadataList []*sharemetadata.ShareMetadata) {
+func (c *controller) setupValidators(shareList []*spectypes.Share, metadataList []*qbft2.ShareMetadata) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shareList)))
 	var started int
 	var errs []error
@@ -400,7 +399,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		if v.Metadata == nil {
-			v.Metadata = &sharemetadata.ShareMetadata{}
+			v.Metadata = &qbft2.ShareMetadata{}
 		}
 		v.Metadata.Stats = metadata
 		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
@@ -467,7 +466,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*spectypes.Share, *sharemetadata.ShareMetadata, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*spectypes.Share, *qbft2.ShareMetadata, bool, error) {
 	share, metadata, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -535,7 +534,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(share *spectypes.Share, metadata *sharemetadata.ShareMetadata) {
+func (c *controller) onShareStart(share *spectypes.Share, metadata *qbft2.ShareMetadata) {
 	v := c.validatorsMap.GetOrCreateValidator(share, metadata)
 	_, err := c.startValidator(v)
 	if err != nil {
