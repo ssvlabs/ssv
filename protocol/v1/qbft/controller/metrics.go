@@ -8,6 +8,14 @@ import (
 )
 
 var (
+	allMetrics = []prometheus.Collector{
+		metricsCurrentSequence,
+		metricsRunningIBFTsCount,
+		metricsRunningIBFTs,
+		metricsDurationPostConsensusSignatures,
+		metricsDurationAttestationSubmission,
+		metricsDurationFullSubmissionFlow,
+	}
 	// metricsCurrentSequence for current instance
 	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_sequence",
@@ -36,14 +44,10 @@ var (
 )
 
 func init() {
-	if err := prometheus.Register(metricsCurrentSequence); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
-		log.Println("could not register prometheus collector")
+	for _, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			log.Println("could not register prometheus collector")
+		}
 	}
 }
 
