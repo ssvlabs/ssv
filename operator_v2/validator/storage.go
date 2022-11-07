@@ -21,15 +21,16 @@ type ICollection interface {
 	eth1.RegistryStore
 
 	SaveValidatorShare(share *spectypes.Share) error
-	SaveValidatorMetadata(metadata *types.ShareMetadata) error
+	SaveShareMetadata(metadata *types.ShareMetadata) error
 	GetValidatorShare(key []byte) (*spectypes.Share, bool, error)
-	GetValidatorMetadata(key []byte) (*types.ShareMetadata, bool, error)
+	GetShareMetadata(key []byte) (*types.ShareMetadata, bool, error)
 	GetAllValidatorShares() ([]*spectypes.Share, error)
-	GetAllValidatorMetadata() ([]*types.ShareMetadata, error)
+	GetAllShareMetadata() ([]*types.ShareMetadata, error)
 	GetOperatorValidatorShares(operatorPubKey string, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error)
 	GetOperatorIDValidatorShares(operatorID uint32, enabled bool) ([]*spectypes.Share, []*types.ShareMetadata, error)
 	GetValidatorMetadataByOwnerAddress(ownerAddress string) ([]*spectypes.Share, []*types.ShareMetadata, error)
 	DeleteValidatorShare(key []byte) error
+	DeleteShareMetadata(key []byte) error
 }
 
 func sharePrefix() []byte {
@@ -76,7 +77,7 @@ func (s *Collection) SaveValidatorShare(share *spectypes.Share) error {
 }
 
 // SaveValidatorMetadata save validator metadata to db
-func (s *Collection) SaveValidatorMetadata(metadata *types.ShareMetadata) error {
+func (s *Collection) SaveShareMetadata(metadata *types.ShareMetadata) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -114,7 +115,7 @@ func (s *Collection) GetValidatorShare(key []byte) (*spectypes.Share, bool, erro
 }
 
 // GetValidatorMetadata by key
-func (s *Collection) GetValidatorMetadata(key []byte) (*types.ShareMetadata, bool, error) {
+func (s *Collection) GetShareMetadata(key []byte) (*types.ShareMetadata, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -176,7 +177,7 @@ func (s *Collection) GetAllValidatorShares() ([]*spectypes.Share, error) {
 }
 
 // GetAllValidatorMetadata returns all metadata
-func (s *Collection) GetAllValidatorMetadata() ([]*types.ShareMetadata, error) {
+func (s *Collection) GetAllShareMetadata() ([]*types.ShareMetadata, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -318,6 +319,15 @@ func (s *Collection) DeleteValidatorShare(key []byte) error {
 	if err := s.db.Delete(sharePrefix(), key); err != nil {
 		return fmt.Errorf("delete share: %w", err)
 	}
+
+	return nil
+}
+
+// DeleteShareMetadata removes share metadata by key
+func (s *Collection) DeleteShareMetadata(key []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	if err := s.db.Delete(metadataPrefix(), key); err != nil {
 		return fmt.Errorf("delete metadata: %w", err)
 	}

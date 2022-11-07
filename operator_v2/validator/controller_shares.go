@@ -76,7 +76,7 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return "", errors.Wrap(err, "could not save share from share options")
 	}
-	if err := c.collection.SaveValidatorMetadata(metadata); err != nil {
+	if err := c.collection.SaveShareMetadata(metadata); err != nil {
 		return "", errors.Wrap(err, "could not save metadata from share options")
 	}
 
