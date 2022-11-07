@@ -90,10 +90,6 @@ func (s *ShareMetadata) BelongsToOperatorID(operatorID uint64) bool {
 	return false
 }
 
-func (s *ShareMetadata) HasMetadata() bool {
-	return s != nil
-}
-
 func (s *ShareMetadata) HasStats() bool {
-	return s.HasMetadata() && s.Stats != nil
+	return s != nil && s.Stats != nil
 }

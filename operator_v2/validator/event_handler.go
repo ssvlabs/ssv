@@ -121,6 +121,9 @@ func (c *controller) handleOperatorRemovalEvent(
 		if err := c.collection.DeleteValidatorShare(share.ValidatorPubKey); err != nil {
 			return nil, errors.Wrap(err, "could not remove validator share")
 		}
+		if err := c.collection.DeleteShareMetadata(share.ValidatorPubKey); err != nil {
+			return nil, errors.Wrap(err, "could not remove share metadata")
+		}
 		if ongoingSync {
 			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
 				return nil, err
@@ -150,7 +153,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 	}
 
 	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
-	validatorMetadata, found, err := c.collection.GetValidatorMetadata(validatorRegistrationEvent.PublicKey)
+	validatorMetadata, found, err := c.collection.GetShareMetadata(validatorRegistrationEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
@@ -189,7 +192,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	// TODO: handle metrics
-	validatorMetadata, found, err := c.collection.GetValidatorMetadata(validatorRemovalEvent.PublicKey)
+	validatorMetadata, found, err := c.collection.GetShareMetadata(validatorRemovalEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
@@ -218,6 +221,10 @@ func (c *controller) handleValidatorRemovalEvent(
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(validatorMetadata.PublicKey.Serialize()); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
+	}
+
+	if err := c.collection.DeleteShareMetadata(validatorMetadata.PublicKey.Serialize()); err != nil {
+		return nil, errors.Wrap(err, "could not remove share metadata")
 	}
 
 	logFields := make([]zap.Field, 0)
@@ -261,7 +268,7 @@ func (c *controller) handleAccountLiquidationEvent(
 			metadata.Liquidated = true
 
 			// save validator data
-			if err := c.collection.SaveValidatorMetadata(metadata); err != nil {
+			if err := c.collection.SaveShareMetadata(metadata); err != nil {
 				return nil, errors.Wrap(err, "could not save validator share")
 			}
 
@@ -308,7 +315,7 @@ func (c *controller) handleAccountEnableEvent(
 			metadata.Liquidated = false
 
 			// save validator data
-			if err := c.collection.SaveValidatorMetadata(metadata); err != nil {
+			if err := c.collection.SaveShareMetadata(metadata); err != nil {
 				return nil, errors.Wrap(err, "could not save validator metadata")
 			}
 

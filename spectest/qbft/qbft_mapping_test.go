@@ -2,8 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller"
-	"github.com/bloxapp/ssv/utils/logex"
 	"io"
 	"net/http"
 	"os"
@@ -13,10 +11,12 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestQBFTMapping(t *testing.T) {

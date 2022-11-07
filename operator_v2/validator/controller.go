@@ -211,7 +211,7 @@ func (c *controller) GetAllValidatorShares() ([]*spectypes.Share, error) {
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
-	allMetadata, err := c.collection.GetAllValidatorMetadata()
+	allMetadata, err := c.collection.GetAllShareMetadata()
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -270,7 +270,7 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*spectypes.Share, error
 }
 
 func (c *controller) getMetadata(pk spectypes.ValidatorPK) (*qbft2.ShareMetadata, error) {
-	metadata, found, err := c.collection.GetValidatorMetadata(pk)
+	metadata, found, err := c.collection.GetShareMetadata(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
 	}
@@ -505,7 +505,7 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistratio
 		return nil, metadata, isOperatorMetadata, errors.Wrap(err, "could not save validator share")
 	}
 
-	if err := c.collection.SaveValidatorMetadata(metadata); err != nil {
+	if err := c.collection.SaveShareMetadata(metadata); err != nil {
 		return nil, metadata, isOperatorMetadata, errors.Wrap(err, "could not save validator metadata")
 	}
 
@@ -544,10 +544,10 @@ func (c *controller) onShareStart(share *spectypes.Share, metadata *qbft2.ShareM
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
-	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Metadata.Stats, c.logger)
-	if v.Metadata == nil {
-		return false, errors.New("could not start validator: metadata not found")
+	if v.Metadata == nil || v.Metadata.Stats == nil {
+		return false, errors.New("could not start validator: stats not found")
 	}
+	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Metadata.Stats, c.logger)
 	if v.Metadata.Stats.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
@@ -612,7 +612,6 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 		}
 	}
 
-	//specShare := validatorv2.ToSpecShare(options.Share) // temp solution
 	specShare := options.Share
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {

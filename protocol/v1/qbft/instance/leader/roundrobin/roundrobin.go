@@ -46,16 +46,3 @@ func MapCommittee(share *beaconprotocol.Share) []*spectypes.Operator {
 
 	return mappedCommittee
 }
-
-//func MapCommitteeV2(share *share.Share) []*spectypes.Operator {
-//	mappedCommittee := make([]*spectypes.Operator, 0)
-//	for _, operatorID := range share.OperatorIDs {
-//		node := share.Committee[spectypes.OperatorID(operatorID)]
-//		mappedCommittee = append(mappedCommittee, &spectypes.Operator{
-//			OperatorID: spectypes.OperatorID(node.IbftID),
-//			PubKey:     node.Pk,
-//		})
-//	}
-//
-//	return mappedCommittee
-//}
