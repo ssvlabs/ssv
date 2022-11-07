@@ -120,7 +120,6 @@ func (v *Validator) Start() error {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
-			// TODO: uncomment once we support processing of sync messages
 			go v.sync(identifier)
 		}
 	}

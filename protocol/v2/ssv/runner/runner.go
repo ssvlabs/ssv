@@ -11,7 +11,6 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
@@ -124,48 +123,20 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *ssv
 }
 
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *qbft.SignedMessage) (decided bool, decidedValue *types.ConsensusData, err error) {
-	if err := b.validateConsensusMsg(msg); err != nil {
-		return false, nil, errors.Wrap(err, "invalid consensus message")
+	prevDecided := false
+	if b.HasRunningDuty() {
+		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
-
-	if b.QBFTController.Height < msg.Message.Height {
-		logger := logex.GetLogger(
-			zap.String("who", "base_runner"),
-			zap.String("identifier", types.MessageIDFromBytes(msg.Message.Identifier).String()),
-			zap.Int("msg_type", int(msg.Message.MsgType)),
-			zap.Uint64("msg_height", uint64(msg.Message.Height)),
-			zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)))
-		// higher message, checking if decided
-		switch msg.Message.MsgType {
-		case qbft.CommitMsgType:
-		// TODO: change round
-		default:
-			return false, nil, nil
-		}
-		logger.Debug("higher message sent to controller")
-		decidedMsg, err := b.QBFTController.ProcessMsg(msg)
-		if err != nil {
-			logger.Debug("could not process higher message", zap.Error(err))
-			return false, nil, errors.Wrap(err, "failed to process consensus msg")
-		}
-		logger.Debug("processed higher message", zap.Any("msg", decidedMsg))
-		return false, nil, nil
-	}
-
-	if !b.HashRunningDuty() {
-		return false, nil, errors.New("no running duty")
-	}
-
-	if b.State.RunningInstance == nil {
-		return false, nil, errors.Errorf("running instance is nil")
-	}
-	prevDecided, _ := b.State.RunningInstance.IsDecided()
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
 		return false, nil, errors.Wrap(err, "failed to process consensus msg")
 	}
 
+	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
+	if !b.HasRunningDuty() {
+		return false, nil, err
+	}
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
 	}
@@ -241,7 +212,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *qbft.Signe
 }
 
 func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *ssv.SignedPartialSignatureMessage) error {
-	if !b.HashRunningDuty() {
+	if !b.HasRunningDuty() {
 		return errors.New("no running duty")
 	}
 
@@ -257,15 +228,8 @@ func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *ssv.Signe
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
 }
 
-func (b *BaseRunner) validateConsensusMsg(msg *qbft.SignedMessage) error {
-	if msg == nil || msg.Message == nil {
-		return errors.New("empty msg")
-	}
-	return nil
-}
-
 func (b *BaseRunner) validatePostConsensusMsg(msg *ssv.SignedPartialSignatureMessage) error {
-	if !b.HashRunningDuty() {
+	if !b.HasRunningDuty() {
 		return errors.New("no running duty")
 	}
 
@@ -303,7 +267,7 @@ func (b *BaseRunner) decide(runner Runner, input *types.ConsensusData) error {
 	return nil
 }
 
-func (b *BaseRunner) HashRunningDuty() bool {
+func (b *BaseRunner) HasRunningDuty() bool {
 	if b.State == nil {
 		return false
 	}
