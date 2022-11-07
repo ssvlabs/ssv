@@ -14,8 +14,8 @@ var (
 	allMetrics = []prometheus.Collector{
 		metricsCurrentSlot,
 		metricsValidatorStatus,
-		metricsTimeAttestationData,
-		metricsTimeConsensus,
+		metricsDurationGetAttestationData,
+		metricsDurationConsensus,
 	}
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_slot1",
@@ -25,13 +25,13 @@ var (
 		Name: "ssv:validator:status1",
 		Help: "Validator status",
 	}, []string{"pubKey"})
-	metricsTimeAttestationData = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:time_attestation_data",
-		Help: "Validator attestation data time (seconds)",
+	metricsDurationGetAttestationData = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:duration_get_attestation_data",
+		Help: "Getting attestation data duration (seconds)",
 	}, []string{"pubKey"})
-	metricsTimeConsensus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:time_consensus",
-		Help: "Validator consensus time (seconds)",
+	metricsDurationConsensus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:duration_consensus",
+		Help: "Consensus duration (seconds)",
 	}, []string{"pubKey"})
 )
 

@@ -83,7 +83,7 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 			// mark instance commit
 			i.ProcessStageChange(qbft.RoundStateDecided)
 			messageID := message.ToMessageID(i.GetState().GetIdentifier())
-			metricsStageTimeCommit.
+			metricsDurationStageTimeCommit.
 				WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
 				Set(time.Since(i.stageStartTime).Seconds())
 			i.stageStartTime = time.Now()

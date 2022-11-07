@@ -120,7 +120,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			i.GetState().PreparedRound.Store(i.GetState().GetRound())
 			i.ProcessStageChange(qbft.RoundStatePrepare)
 			messageID := message.ToMessageID(i.GetState().GetIdentifier())
-			metricsStageTimePrepare.
+			metricsDurationStagePrepare.
 				WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
 				Set(time.Since(i.stageStartTime).Seconds())
 			i.stageStartTime = time.Now()
