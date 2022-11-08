@@ -83,10 +83,7 @@ func DecidedMsgIndexer() Indexer {
 		if sm.Message.MsgType != specqbft.CommitMsgType || len(sm.GetSigners()) < 3 {
 			return Index{}
 		}
-		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return DecidedMsgIndex(msg.MsgID.String())
-		}
-		return Index{}
+		return DecidedMsgIndex(msg.MsgID.String())
 	}
 }
 
