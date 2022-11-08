@@ -12,9 +12,7 @@ var (
 		metricsCurrentSequence,
 		metricsRunningIBFTsCount,
 		metricsRunningIBFTs,
-		metricsDurationPostConsensusSignatures,
-		metricsDurationAttestationSubmission,
-		metricsDurationFullSubmissionFlow,
+		metricsDurationAttestation,
 	}
 	// metricsCurrentSequence for current instance
 	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -29,18 +27,11 @@ var (
 		Name: "ssv:validator:running_ibfts_count",
 		Help: "Count running IBFTs by validator pub key",
 	}, []string{"pubKey"})
-	metricsDurationPostConsensusSignatures = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_post_consensus_signatures",
-		Help: "Post consensus signatures collection duration (seconds)",
-	}, []string{"pubKey"})
-	metricsDurationAttestationSubmission = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_attestation_submission",
-		Help: "Attestation submission duration (seconds)",
-	}, []string{"pubKey"})
-	metricsDurationFullSubmissionFlow = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_full_attestation_submission_flow",
-		Help: "Full attestation submission flow duration (seconds)",
-	}, []string{"pubKey"})
+	metricsDurationAttestation = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:duration_attestation",
+		Help:    "Attestation duration (seconds)",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 60},
+	}, []string{"stage", "pubKey"})
 )
 
 func init() {

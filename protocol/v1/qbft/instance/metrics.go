@@ -11,9 +11,7 @@ var (
 	allMetrics = []prometheus.Collector{
 		metricsIBFTStage,
 		metricsIBFTRound,
-		metricsDurationStageProposal,
-		metricsDurationStagePrepare,
-		metricsDurationStageCommit,
+		metricsDurationStage,
 	}
 	metricsIBFTStage = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_stage",
@@ -23,18 +21,11 @@ var (
 		Name: "ssv:validator:ibft_round",
 		Help: "IBFTs round",
 	}, []string{"identifier", "pubKey"})
-	metricsDurationStageProposal = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_stage_proposal",
-		Help: "Proposal stage duration (seconds)",
-	}, []string{"identifier", "pubKey"})
-	metricsDurationStagePrepare = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_stage_prepare",
-		Help: "Prepare stage duration (seconds)",
-	}, []string{"identifier", "pubKey"})
-	metricsDurationStageCommit = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_stage_commit",
-		Help: "Commit stage duration (seconds)",
-	}, []string{"identifier", "pubKey"})
+	metricsDurationStage = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:duration_instance_stage",
+		Help:    "Instance stage duration (seconds)",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 60},
+	}, []string{"stage", "identifier", "pubKey"})
 )
 
 func init() {

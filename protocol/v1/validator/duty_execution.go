@@ -29,8 +29,8 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 			return nil, 0, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 		v.logger.Debug("attestation data", zap.Any("attData", attData))
-		metricsDurationGetAttestationData.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
-			Set(time.Since(attestationDataStartTime).Seconds())
+		metricsDurationConsensus.WithLabelValues("attestation_data_request", v.Share.PublicKey.SerializeToHexStr()).
+			Observe(time.Since(attestationDataStartTime).Seconds())
 
 		// TODO(olegshmuelov): use SSZ encoding
 		input := &spectypes.ConsensusData{
@@ -97,8 +97,8 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) {
 
 	// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
 	logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
-	metricsDurationConsensus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
-		Set(time.Since(consensusStartTime).Seconds())
+	metricsDurationConsensus.WithLabelValues("consensus", v.Share.PublicKey.SerializeToHexStr()).
+		Observe(time.Since(consensusStartTime).Seconds())
 
 	// Sign, aggregate and broadcast signature
 	if err := qbftCtrl.PostConsensusDutyExecution(logger, decidedValue, signaturesCount, duty.Type); err != nil {

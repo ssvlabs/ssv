@@ -168,8 +168,8 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.O
 		return errors.New("could not reconstruct a valid signature")
 	}
 
-	metricsDurationPostConsensusSignatures.WithLabelValues(c.ValidatorShare.PublicKey.SerializeToHexStr()).
-		Set(time.Since(c.postConsensusStartTime).Seconds())
+	metricsDurationAttestation.WithLabelValues("signature_collection", c.ValidatorShare.PublicKey.SerializeToHexStr()).
+		Observe(time.Since(c.postConsensusStartTime).Seconds())
 
 	c.Logger.Info("signatures successfully reconstructed", zap.String("signature", base64.StdEncoding.EncodeToString(signature.Serialize())), zap.Int("signature count", len(signatures)))
 
@@ -185,8 +185,8 @@ func (c *Controller) reconstructAndBroadcastSignature(signatures map[spectypes.O
 		if err := c.Beacon.SubmitAttestation(inputValue.GetAttestation()); err != nil {
 			return errors.Wrap(err, "failed to broadcast attestation")
 		}
-		metricsDurationAttestationSubmission.WithLabelValues(c.ValidatorShare.PublicKey.SerializeToHexStr()).
-			Set(time.Since(attestationSubmissionStartTime).Seconds())
+		metricsDurationAttestation.WithLabelValues("attestation_submission", c.ValidatorShare.PublicKey.SerializeToHexStr()).
+			Observe(time.Since(attestationSubmissionStartTime).Seconds())
 	default:
 		return errors.New("role is undefined, can't reconstruct signature")
 	}

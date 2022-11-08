@@ -76,8 +76,8 @@ func (c *Controller) broadcastSignature() error {
 	}
 	c.Logger.Info("Successfully submitted role!")
 
-	metricsDurationFullSubmissionFlow.WithLabelValues(c.ValidatorShare.PublicKey.SerializeToHexStr()).
-		Set(time.Since(c.instanceStartTime).Seconds())
+	metricsDurationAttestation.WithLabelValues("full_flow", c.ValidatorShare.PublicKey.SerializeToHexStr()).
+		Observe(time.Since(c.instanceStartTime).Seconds())
 
 	return nil
 }

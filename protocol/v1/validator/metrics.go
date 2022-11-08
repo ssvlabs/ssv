@@ -14,7 +14,6 @@ var (
 	allMetrics = []prometheus.Collector{
 		metricsCurrentSlot,
 		metricsValidatorStatus,
-		metricsDurationGetAttestationData,
 		metricsDurationConsensus,
 	}
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
@@ -25,14 +24,11 @@ var (
 		Name: "ssv:validator:status1",
 		Help: "Validator status",
 	}, []string{"pubKey"})
-	metricsDurationGetAttestationData = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_get_attestation_data",
-		Help: "Getting attestation data duration (seconds)",
-	}, []string{"pubKey"})
-	metricsDurationConsensus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:duration_consensus",
-		Help: "Consensus duration (seconds)",
-	}, []string{"pubKey"})
+	metricsDurationConsensus = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:duration_consensus",
+		Help:    "Consensus duration (seconds)",
+		Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 60},
+	}, []string{"stage", "pubKey"})
 )
 
 func init() {
