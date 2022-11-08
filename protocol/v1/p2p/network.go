@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
@@ -52,6 +53,24 @@ func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
 type SyncResult struct {
 	Msg    *spectypes.SSVMessage
 	Sender string
+}
+
+type SyncResults []SyncResult
+
+func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage)) {
+	for _, res := range results {
+		if res.Msg == nil {
+			continue
+		}
+		sm := &message.SyncMessage{}
+		err := sm.Decode(res.Msg.Data)
+		if err != nil {
+			continue
+		}
+		for _, m := range sm.Data {
+			iterator(m)
+		}
+	}
 }
 
 // SyncProtocol represent the type of sync protocols
