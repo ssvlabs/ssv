@@ -72,7 +72,15 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 // TODO: identify decided messages by: 1) type commit; 2) quorum of signers
 func DecidedMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
-		if msg.MsgType != message.SSVDecidedMsgType {
+		if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
+			return Index{}
+		}
+		sm := signedMsgIndexValidator(msg)
+		if sm == nil {
+			return Index{}
+		}
+		// TODO: use a function to check if decided
+		if sm.Message.MsgType != specqbft.CommitMsgType || len(sm.GetSigners()) < 3 {
 			return Index{}
 		}
 		if sm := signedMsgIndexValidator(msg); sm != nil {
