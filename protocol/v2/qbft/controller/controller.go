@@ -70,16 +70,6 @@ func NewController(
 	}
 }
 
-func (c *Controller) IsReady() bool {
-	// TODO: check state
-	return true
-}
-
-func (c *Controller) Sync() bool {
-	// TODO: check state
-	return true
-}
-
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(value []byte) error {
 	if err := c.canStartInstance(c.Height+1, value); err != nil {
