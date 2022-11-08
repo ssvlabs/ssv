@@ -39,29 +39,27 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	prevDecided := inst != nil && inst.State.Decided
 
 	// Mark current instance decided
-	if inst := c.InstanceForHeight(c.Height); inst != nil && !inst.State.Decided {
-		inst.State.Decided = true
+	currentInstance := c.InstanceForHeight(c.Height)
+	if currentInstance != nil && !currentInstance.State.Decided {
+		currentInstance.State.Decided = true
 		if c.Height == msg.Message.Height {
 			logger.Debug("decided for current instance")
-			if msg.Message.Round > inst.State.Round {
-				inst.State.Round = msg.Message.Round
+			if msg.Message.Round > currentInstance.State.Round {
+				currentInstance.State.Round = msg.Message.Round
 			}
-			inst.State.DecidedValue = data.Data
+			currentInstance.State.DecidedValue = data.Data
 		}
 	}
 
 	isFutureDecided := msg.Message.Height > c.Height
-	if inst == nil {
-		logger.Debug("adding instance")
+	if isFutureDecided {
+		logger.Debug("future instance, bump height")
 		// add an instance for the decided msg
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
 		c.StoredInstances.addNewInstance(i)
-	}
-	if isFutureDecided {
-		logger.Debug("future instance, bump height")
 		// bump height
 		c.Height = msg.Message.Height
 	}
