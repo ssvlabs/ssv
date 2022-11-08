@@ -21,7 +21,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("got highest decided", zap.Int("results count", len(lastDecided)), zap.Error(err))
+	n.logger.Debug("got highest decided", zap.Int("results count", len(lastDecided)))
 	results := p2pprotocol.SyncResults(lastDecided)
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
 		raw, err := m.Encode()
@@ -29,7 +29,6 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 			n.logger.Warn("could not encode signed message")
 			return
 		}
-		//n.logger.Debug("routing highest decided")
 		n.msgRouter.Route(spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   mid,
@@ -44,7 +43,7 @@ func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spec
 	if err != nil {
 		return err
 	}
-	n.logger.Debug("got highest change round", zap.Int("results", len(lastChangeRound)), zap.Error(err))
+	n.logger.Debug("got highest change round", zap.Int("results count", len(lastChangeRound)))
 	results := p2pprotocol.SyncResults(lastChangeRound)
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
 		raw, err := m.Encode()
@@ -52,7 +51,6 @@ func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spec
 			n.logger.Warn("could not encode signed message")
 			return
 		}
-		//n.logger.Debug("routing highest change round result")
 		n.msgRouter.Route(spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   mid,
