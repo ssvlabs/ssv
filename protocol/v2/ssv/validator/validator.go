@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
+	"time"
 )
 
 type Options struct {
@@ -219,6 +220,7 @@ func (v *Validator) sync(identifier types.MessageID) {
 		v.logger.Warn("could not load highest", zap.Error(err))
 	}
 	logger.Debug("loaded local highest, syncing", zap.Uint64("local_highest", uint64(h)))
+	<-time.After(time.Second * 5) // TODO: remove, it was added to let the network start before we try to sync
 	err = v.Network.SyncHighestDecided(identifier)
 	if err != nil {
 		v.logger.Warn("sync failed", zap.Error(err))
