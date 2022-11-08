@@ -5,16 +5,11 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	types2 "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
-	logger := logex.GetLogger(zap.String("who", "qbftCTRL"), zap.String("where", "UponDecided"),
-		zap.Int64("local_height", int64(c.Height)), zap.Int64("msg_height", int64(msg.Message.Height)))
-	logger.Debug("upon decided")
 	// decided msgs for past (already decided) instances will not decide again, just return
 	if msg.Message.Height < c.Height {
 		return nil, nil
@@ -43,7 +38,6 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	if currentInstance != nil && !currentInstance.State.Decided {
 		currentInstance.State.Decided = true
 		if c.Height == msg.Message.Height {
-			logger.Debug("decided for current instance")
 			if msg.Message.Round > currentInstance.State.Round {
 				currentInstance.State.Round = msg.Message.Round
 			}
@@ -53,7 +47,6 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 
 	isFutureDecided := msg.Message.Height > c.Height
 	if isFutureDecided {
-		logger.Debug("future instance, bump height")
 		// add an instance for the decided msg
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
@@ -65,7 +58,6 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	}
 
 	if !prevDecided {
-		logger.Debug("instance wasn't previously decided, saving decided message")
 		err = c.GetConfig().GetStorage().SaveHighestDecided(msg)
 		return msg, errors.Wrap(err, "could not save highest decided")
 	}
