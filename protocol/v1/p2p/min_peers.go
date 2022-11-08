@@ -2,9 +2,10 @@ package protcolp2p
 
 import (
 	"context"
+	"time"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
-	"time"
 )
 
 // WaitForMinPeers waits until there are minPeers conntected for the given validator
@@ -13,10 +14,10 @@ func WaitForMinPeers(pctx context.Context, logger *zap.Logger, subscriber Subscr
 	defer cancel()
 
 	for ctx.Err() == nil {
-		time.Sleep(interval)
 		peers, err := subscriber.Peers(vpk)
 		if err != nil {
 			logger.Warn("could not get peers of topic", zap.Error(err))
+			time.Sleep(interval)
 			continue
 		}
 		n := len(peers)
@@ -24,6 +25,7 @@ func WaitForMinPeers(pctx context.Context, logger *zap.Logger, subscriber Subscr
 			return nil
 		}
 		logger.Debug("looking for min peers", zap.Int("expected", minPeers), zap.Int("actual", n))
+		time.Sleep(interval)
 	}
 
 	return ctx.Err()
