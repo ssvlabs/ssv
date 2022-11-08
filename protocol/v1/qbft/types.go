@@ -24,13 +24,14 @@ const (
 
 // RoundStateName represents the map of the round state names
 var RoundStateName = map[int32]string{
-	0: "NotStarted",
-	1: "Proposal",
-	2: "Prepare",
-	3: "Commit",
-	4: "ChangeRound",
-	5: "Decided",
-	6: "Stopped",
+	int32(RoundStateNotStarted):  "NotStarted",
+	int32(RoundStateReady):       "Ready",
+	int32(RoundStateProposal):    "Proposal",
+	int32(RoundStatePrepare):     "Prepare",
+	int32(RoundStateCommit):      "Commit",
+	int32(RoundStateChangeRound): "ChangeRound",
+	int32(RoundStateDecided):     "Decided",
+	int32(RoundStateStopped):     "Stopped",
 }
 
 // State holds an iBFT state, thread safe
