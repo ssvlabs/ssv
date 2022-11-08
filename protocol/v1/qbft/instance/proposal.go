@@ -78,7 +78,7 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 		i.ProcessStageChange(qbft.RoundStateProposal)
 		messageID := message.ToMessageID(i.GetState().GetIdentifier())
 		metricsDurationStage.
-			WithLabelValues("proposal", messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
+			WithLabelValues("proposal", hex.EncodeToString(messageID.GetPubKey())).
 			Observe(time.Since(i.stageStartTime).Seconds())
 		i.stageStartTime = time.Now()
 

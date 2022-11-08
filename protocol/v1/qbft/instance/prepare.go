@@ -121,7 +121,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			i.ProcessStageChange(qbft.RoundStatePrepare)
 			messageID := message.ToMessageID(i.GetState().GetIdentifier())
 			metricsDurationStage.
-				WithLabelValues("prepare", messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).
+				WithLabelValues("prepare", hex.EncodeToString(messageID.GetPubKey())).
 				Observe(time.Since(i.stageStartTime).Seconds())
 			i.stageStartTime = time.Now()
 
