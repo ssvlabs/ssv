@@ -155,6 +155,7 @@ func (v *Validator) HandleMessage(msg *types.SSVMessage) {
 	fields := []zap.Field{
 		zap.Int("queue_len", v.Q.Len()),
 		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+		zap.String("msgID", msg.MsgID.String()),
 	}
 	v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
@@ -213,17 +214,15 @@ func (v *Validator) GetShare() *beacon.Share {
 
 func (v *Validator) sync(identifier types.MessageID) {
 	logger := v.logger.With(zap.String("role", identifier.GetRoleType().String()))
-	logger.Debug("syncing")
 	h, err := v.loadLastHeight(identifier)
 	if err != nil {
 		v.logger.Warn("could not load highest", zap.Error(err))
 	}
-	logger.Debug("loaded local highest", zap.Uint64("local_highest", uint64(h)))
+	logger.Debug("loaded local highest, syncing", zap.Uint64("local_highest", uint64(h)))
 	err = v.Network.SyncHighestDecided(identifier)
 	if err != nil {
 		v.logger.Warn("sync failed", zap.Error(err))
 	}
-	logger.Debug("messages were synced")
 }
 
 func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
