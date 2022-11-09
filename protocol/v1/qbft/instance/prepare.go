@@ -119,10 +119,7 @@ func (i *Instance) uponPrepareMsg() pipelines.SignedMessagePipeline {
 			i.GetState().PreparedValue.Store(prepareData.Data) // passing the data as is, and not get the specqbft.PrepareData cause of msgCount saves that way
 			i.GetState().PreparedRound.Store(i.GetState().GetRound())
 			i.ProcessStageChange(qbft.RoundStatePrepare)
-			messageID := message.ToMessageID(i.GetState().GetIdentifier())
-			metricsDurationStage.
-				WithLabelValues("prepare", hex.EncodeToString(messageID.GetPubKey())).
-				Observe(time.Since(i.stageStartTime).Seconds())
+			i.observeStageDurationMetric("prepare", time.Since(i.stageStartTime).Seconds())
 			i.stageStartTime = time.Now()
 
 			// send commit msg

@@ -28,9 +28,9 @@ var (
 		Help: "Count running IBFTs by validator pub key",
 	}, []string{"pubKey"})
 	metricsDurationAttestation = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv:validator:duration_attestation",
+		Name:    "ssv:validator:attestation_duration_seconds",
 		Help:    "Attestation duration (seconds)",
-		Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 60},
+		Buckets: []float64{0.05, 0.1, 0.2, 0.5, 1.5},
 	}, []string{"stage", "pubKey"})
 )
 

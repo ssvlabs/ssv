@@ -23,14 +23,11 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 
 	switch duty.Type {
 	case spectypes.BNRoleAttester:
-		attestationDataStartTime := time.Now()
 		attData, err := v.beacon.GetAttestationData(duty.Slot, duty.CommitteeIndex)
 		if err != nil {
 			return nil, 0, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 		v.logger.Debug("attestation data", zap.Any("attData", attData))
-		metricsDurationConsensus.WithLabelValues("attestation_data_request", v.Share.PublicKey.SerializeToHexStr()).
-			Observe(time.Since(attestationDataStartTime).Seconds())
 
 		// TODO(olegshmuelov): use SSZ encoding
 		input := &spectypes.ConsensusData{
@@ -45,6 +42,8 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 	default:
 		return nil, 0, nil, errors.Errorf("unknown role: %s", duty.Type.String())
 	}
+
+	consensusStartTime := time.Now()
 
 	// calculate next seq
 	height, err := qbftCtrl.NextHeightNumber()
@@ -74,6 +73,9 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 		return nil, 0, nil, errors.Wrap(err, "could not get commit data")
 	}
 
+	metricsDurationConsensus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
+		Observe(time.Since(consensusStartTime).Seconds())
+
 	return qbftCtrl, len(result.Msg.Signers), commitData.Data, nil
 }
 
@@ -88,7 +90,6 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) {
 	metricsCurrentSlot.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).Set(float64(duty.Slot))
 	logger.Debug("executing duty")
 
-	consensusStartTime := time.Now()
 	qbftCtrl, signaturesCount, decidedValue, err := v.comeToConsensusOnInputValue(logger, duty)
 	if err != nil {
 		logger.Warn("could not come to consensus", zap.Error(err))
@@ -97,8 +98,6 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) {
 
 	// Here we ensure at least 2/3 instances got a val so we can sign data and broadcast signatures
 	logger.Info("GOT CONSENSUS", zap.Any("inputValueHex", hex.EncodeToString(decidedValue)))
-	metricsDurationConsensus.WithLabelValues("consensus", v.Share.PublicKey.SerializeToHexStr()).
-		Observe(time.Since(consensusStartTime).Seconds())
 
 	// Sign, aggregate and broadcast signature
 	if err := qbftCtrl.PostConsensusDutyExecution(logger, decidedValue, signaturesCount, duty.Type); err != nil {

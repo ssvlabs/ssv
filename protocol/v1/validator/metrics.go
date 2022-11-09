@@ -25,10 +25,10 @@ var (
 		Help: "Validator status",
 	}, []string{"pubKey"})
 	metricsDurationConsensus = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv:validator:duration_consensus",
+		Name:    "ssv:validator:consensus_duration_seconds",
 		Help:    "Consensus duration (seconds)",
-		Buckets: []float64{0.01, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 60},
-	}, []string{"stage", "pubKey"})
+		Buckets: []float64{0.1, 0.2, 0.5, 1.5},
+	}, []string{"pubKey"})
 )
 
 func init() {
