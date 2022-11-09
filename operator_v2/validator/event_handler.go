@@ -4,18 +4,15 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/exporter"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
@@ -112,12 +109,12 @@ func (c *controller) handleOperatorRemovalEvent(
 		return logFields, nil
 	}
 
-	shareList, err := c.collection.GetValidatorSharesByOperatorID(event.OperatorId, false)
+	shares, err := c.collection.GetValidatorSharesByOperatorID(event.OperatorId, false)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
 
-	for _, share := range shareList {
+	for _, share := range shares {
 		if err := c.collection.DeleteValidatorShare(share.ValidatorPubKey); err != nil {
 			return nil, errors.Wrap(err, "could not remove validator share")
 		}
@@ -308,7 +305,7 @@ func (c *controller) handleAccountEnableEvent(
 
 			// save validator data
 			if err := c.collection.SaveValidatorShare(share); err != nil {
-				return nil, errors.Wrap(err, "could not save validator metadata")
+				return nil, errors.Wrap(err, "could not save validator share")
 			}
 
 			if ongoingSync {

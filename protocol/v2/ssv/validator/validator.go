@@ -9,11 +9,9 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	v1types "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
@@ -250,26 +248,4 @@ func (v *Validator) loadLastHeight(identifier spectypes.MessageID) (qbft.Height,
 	}
 	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
 	return knownDecided.Message.Height, nil
-}
-
-// ToSSVMetadata convert spec share struct to ssv metadata struct (mainly for testing purposes)
-func ToSSVMetadata(specShare *spectypes.Share) (*types.ShareMetadata, error) {
-	vpk := &bls.PublicKey{}
-	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize validator public key")
-	}
-
-	var operatorsId []uint64
-	ssvCommittee := map[spectypes.OperatorID]*beacon.Node{}
-	for _, op := range specShare.Committee {
-		operatorsId = append(operatorsId, uint64(op.OperatorID))
-		ssvCommittee[op.OperatorID] = &beacon.Node{
-			IbftID: uint64(op.GetID()),
-			Pk:     op.GetPublicKey(),
-		}
-	}
-
-	return &types.ShareMetadata{
-		OperatorIDs: operatorsId,
-	}, nil
 }

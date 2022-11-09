@@ -39,9 +39,7 @@ func ShareFromValidatorEvent(
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
 ) (*types.SSVShare, *bls.SecretKey, error) {
-	validatorShare := types.SSVShare{
-		ShareMetadata: types.ShareMetadata{},
-	}
+	validatorShare := types.SSVShare{}
 
 	// extract operator public keys from storage and fill the event
 	if err := SetOperatorPublicKeys(registryStorage, &validatorRegistrationEvent); err != nil {

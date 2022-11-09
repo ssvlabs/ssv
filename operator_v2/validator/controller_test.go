@@ -160,13 +160,15 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 
 func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 	return &validator.Validator{
-		Share: &spectypes.Share{
-			OperatorID:      0,
-			ValidatorPubKey: nil,
-			Committee:       nil,
-		},
-		Metadata: &types.ShareMetadata{
-			Stats: metaData,
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				OperatorID:      0,
+				ValidatorPubKey: nil,
+				Committee:       nil,
+			},
+			ShareMetadata: types.ShareMetadata{
+				Stats: metaData,
+			},
 		},
 	}
 }

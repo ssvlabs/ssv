@@ -125,7 +125,6 @@ func (s *Collection) GetAllValidatorShares() ([]*types.SSVShare, error) {
 }
 
 // GetValidatorSharesByOperatorPK returns all not liquidated validator shares belongs to operator
-// TODO: check regards returning a slice of public keys instead of share objects
 func (s *Collection) GetValidatorSharesByOperatorPK(operatorPubKey string, enabled bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -149,7 +148,7 @@ func (s *Collection) GetValidatorSharesByOperatorPK(operatorPubKey string, enabl
 }
 
 // GetValidatorSharesByOperatorID returns all not liquidated validator shares belongs to operator ID.
-// TODO: check regards returning a slice of public keys instead of share objects
+// TODO: check regarding returning a slice of public keys instead of share objects
 func (s *Collection) GetValidatorSharesByOperatorID(operatorID uint32, enabled bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
