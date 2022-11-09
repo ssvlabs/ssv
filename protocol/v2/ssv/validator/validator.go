@@ -8,17 +8,17 @@ import (
 	"github.com/bloxapp/ssv-spec/p2p"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
+	v1types "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Options struct {
@@ -26,9 +26,8 @@ type Options struct {
 	Network     qbft.Network
 	Beacon      ssv.BeaconNode
 	Storage     qbft.Storage
-	Share       *types.Share
-	Metadata    *types2.ShareMetadata
-	Signer      types.KeyManager
+	Share       *types.SSVShare
+	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
 	Mode        ValidatorMode
 }
@@ -53,14 +52,13 @@ type Validator struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	DomainType types.DomainType
+	DomainType spectypes.DomainType
 
 	DutyRunners runner.DutyRunners
 
-	Share    *types.Share
-	Metadata *types2.ShareMetadata
-	Beacon   ssv.BeaconNode
-	Signer   types.KeyManager
+	Share  *types.SSVShare
+	Beacon ssv.BeaconNode
+	Signer spectypes.KeyManager
 
 	Storage qbft.Storage // TODO: change?
 	Network qbft.Network
@@ -93,13 +91,12 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  typesv1.GetDefaultDomain(),
+		DomainType:  v1types.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
 		Share:       options.Share,
-		Metadata:    options.Metadata,
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),
@@ -166,7 +163,7 @@ func (v *Validator) Stop() error {
 	return nil
 }
 
-func (v *Validator) HandleMessage(msg *types.SSVMessage) {
+func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
 		err := v.ProcessMessage(msg)
 		if err != nil {
@@ -184,7 +181,7 @@ func (v *Validator) HandleMessage(msg *types.SSVMessage) {
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(duty *types.Duty) error {
+func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
@@ -193,7 +190,7 @@ func (v *Validator) StartDuty(duty *types.Duty) error {
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
+func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
@@ -204,13 +201,13 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 	}
 
 	switch msg.GetType() {
-	case types.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType:
 		signedMsg := &qbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
-	case types.SSVPartialSignatureMsgType:
+	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
@@ -226,7 +223,7 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 	}
 }
 
-func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage) error {
+func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMessage) error {
 	if !v.Share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
@@ -238,19 +235,7 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	return nil
 }
 
-func (v *Validator) GetShare() *types.Share {
-	return v.Share // temp solution
-}
-
-func (v *Validator) GetMetadata() *types2.ShareMetadata {
-	return v.Metadata // temp solution
-}
-
-func (v *Validator) HasMetadata() bool {
-	return v.Metadata != nil
-}
-
-func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
+func (v *Validator) loadLastHeight(identifier spectypes.MessageID) (qbft.Height, error) {
 	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
 	if err != nil {
 		return qbft.Height(0), errors.Wrap(err, "failed to get heights decided")
@@ -268,14 +253,14 @@ func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, err
 }
 
 // ToSSVMetadata convert spec share struct to ssv metadata struct (mainly for testing purposes)
-func ToSSVMetadata(specShare *types.Share) (*types2.ShareMetadata, error) {
+func ToSSVMetadata(specShare *spectypes.Share) (*types.ShareMetadata, error) {
 	vpk := &bls.PublicKey{}
 	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
 		return nil, errors.Wrap(err, "failed to deserialize validator public key")
 	}
 
 	var operatorsId []uint64
-	ssvCommittee := map[types.OperatorID]*beacon.Node{}
+	ssvCommittee := map[spectypes.OperatorID]*beacon.Node{}
 	for _, op := range specShare.Committee {
 		operatorsId = append(operatorsId, uint64(op.OperatorID))
 		ssvCommittee[op.OperatorID] = &beacon.Node{
@@ -284,8 +269,7 @@ func ToSSVMetadata(specShare *types.Share) (*types2.ShareMetadata, error) {
 		}
 	}
 
-	return &types2.ShareMetadata{
-		PublicKey:   vpk,
+	return &types.ShareMetadata{
 		OperatorIDs: operatorsId,
 	}, nil
 }

@@ -3,21 +3,26 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
 	"reflect"
 	"testing"
+
+	"github.com/bloxapp/ssv-spec/qbft"
+	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	identifier := types.NewMsgID(testingutils.TestingValidatorPubKey[:], types.BNRoleAttester)
+	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := testingutils.TestingConfig(testingutils.Testing4SharesSet())
 	contr := NewTestingQBFTController(
 		identifier[:],
-		testingutils.TestingShare(testingutils.Testing4SharesSet()),
+		&types.SSVShare{
+			Share: *testingutils.TestingShare(testingutils.Testing4SharesSet()),
+		},
 		config,
 	)
 

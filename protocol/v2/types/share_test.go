@@ -9,8 +9,10 @@ import (
 )
 
 func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
-	metadata := &ShareMetadata{
-		OperatorIDs: []uint64{1, 2, 3, 4},
+	metadata := &SSVShare{
+		ShareMetadata: ShareMetadata{
+			OperatorIDs: []uint64{1, 2, 3, 4},
+		},
 	}
 
 	require.True(t, metadata.BelongsToOperatorID(1))
@@ -18,10 +20,12 @@ func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 }
 
 func TestShare_IsOperatorShare(t *testing.T) {
-	metadata := &ShareMetadata{
-		Operators: [][]byte{
-			{1, 1, 1, 1},
-			{2, 2, 2, 2},
+	metadata := &SSVShare{
+		ShareMetadata: ShareMetadata{
+			Operators: [][]byte{
+				{1, 1, 1, 1},
+				{2, 2, 2, 2},
+			},
 		},
 	}
 
@@ -31,26 +35,30 @@ func TestShare_IsOperatorShare(t *testing.T) {
 
 func TestShare_HasStats(t *testing.T) {
 	tt := []struct {
-		Name     string
-		Metadata *ShareMetadata
-		Result   bool
+		Name          string
+		ShareMetadata *SSVShare
+		Result        bool
 	}{
 		{
-			Name:     "ShareMetadata == nil",
-			Metadata: nil,
-			Result:   false,
+			Name:          "ShareMetadata == nil",
+			ShareMetadata: nil,
+			Result:        false,
 		},
 		{
 			Name: "Stats == nil",
-			Metadata: &ShareMetadata{
-				Stats: nil,
+			ShareMetadata: &SSVShare{
+				ShareMetadata: ShareMetadata{
+					Stats: nil,
+				},
 			},
 			Result: false,
 		},
 		{
 			Name: "Stats != nil",
-			Metadata: &ShareMetadata{
-				Stats: &beaconprotocol.ValidatorMetadata{},
+			ShareMetadata: &SSVShare{
+				ShareMetadata: ShareMetadata{
+					Stats: &beaconprotocol.ValidatorMetadata{},
+				},
 			},
 			Result: true,
 		},
@@ -59,7 +67,7 @@ func TestShare_HasStats(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			require.Equal(t, tc.Result, tc.Metadata.HasStats())
+			require.Equal(t, tc.Result, tc.ShareMetadata.HasStats())
 		})
 	}
 }

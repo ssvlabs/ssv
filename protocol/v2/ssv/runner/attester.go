@@ -3,33 +3,36 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/utils/logex"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   ssv.BeaconNode
-	network  ssv.Network
-	signer   types.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck specqbft.ProposedValueCheckF
 
 	logger *zap.Logger
 }
 
-func NewAttesterRunnner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
+func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *types.SSVShare, qbftController *controller.Controller, beacon specssv.BeaconNode, network specssv.Network, signer spectypes.KeyManager, valCheck specqbft.ProposedValueCheckF) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: types.BNRoleAttester,
+			BeaconRoleType: spectypes.BNRoleAttester,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
@@ -43,7 +46,7 @@ func NewAttesterRunnner(beaconNetwork types.BeaconNetwork, share *types.Share, q
 	}
 }
 
-func (r *AttesterRunner) StartNewDuty(duty *types.Duty) error {
+func (r *AttesterRunner) StartNewDuty(duty *spectypes.Duty) error {
 	if err := r.GetBaseRunner().canStartNewDuty(); err != nil {
 		return err
 	}
@@ -59,11 +62,11 @@ func (r *AttesterRunner) HasRunningDuty() bool {
 	return r.BaseRunner.HasRunningDuty()
 }
 
-func (r *AttesterRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for attester role")
 }
 
-func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
+func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -77,13 +80,13 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	r.logger.Info("decided consensus")
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, types.DomainAttester)
+	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &ssv.PartialSignatureMessages{
-		Type:     ssv.PostConsensusPartialSig,
-		Messages: []*ssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &specssv.PartialSignatureMessages{
+		Type:     specssv.PostConsensusPartialSig,
+		Messages: []*specssv.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -96,9 +99,9 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVPartialSignatureMsgType,
-		MsgID:   types.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -109,7 +112,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	return nil
 }
 
-func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -152,7 +155,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 }
 
 func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, types.DomainError, errors.New("no expected pre consensus roots for attester")
+	return []ssz.HashRoot{}, spectypes.DomainError, errors.New("no expected pre consensus roots for attester")
 }
 
 // executeDuty steps:
@@ -160,7 +163,7 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // 2) start consensus on duty + attestation data
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
-func (r *AttesterRunner) executeDuty(duty *types.Duty) error {
+func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
 	r.logger.Debug("executing duty", zap.Any("duty", duty))
 
@@ -169,7 +172,7 @@ func (r *AttesterRunner) executeDuty(duty *types.Duty) error {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 
-	input := &types.ConsensusData{
+	input := &spectypes.ConsensusData{
 		Duty:            duty,
 		AttestationData: attData,
 	}
@@ -191,15 +194,15 @@ func (r *AttesterRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *AttesterRunner) GetNetwork() ssv.Network {
+func (r *AttesterRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *AttesterRunner) GetBeaconNode() ssv.BeaconNode {
+func (r *AttesterRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AttesterRunner) GetShare() *types.Share {
+func (r *AttesterRunner) GetShare() *types.SSVShare {
 	return r.BaseRunner.Share
 }
 
@@ -211,11 +214,11 @@ func (r *AttesterRunner) Init() error {
 	return r.BaseRunner.Init()
 }
 
-func (r *AttesterRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *AttesterRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AttesterRunner) GetSigner() types.KeyManager {
+func (r *AttesterRunner) GetSigner() spectypes.KeyManager {
 	return r.signer
 }
 

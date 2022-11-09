@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"encoding/hex"
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -14,19 +15,19 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-// UpdateMetadataStats will update the given metadata object w/o involving storage,
-// it will be called only when a new metadata is created
-func UpdateMetadataStats(metadata *types.ShareMetadata, bc beaconprotocol.Beacon) (bool, error) {
-	pk := metadata.PublicKey.SerializeToHexStr()
-	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{metadata.PublicKey.Serialize()})
+// UpdateShareMetadata will update the given share object w/o involving storage,
+// it will be called only when a new share is created
+func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool, error) {
+	pk := hex.EncodeToString(share.ValidatorPubKey)
+	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to fetch metadata for share")
 	}
-	stats, ok := results[pk]
+	meta, ok := results[pk]
 	if !ok {
 		return false, nil
 	}
-	metadata.Stats = stats
+	share.Stats = meta
 	return true, nil
 }
 
@@ -37,25 +38,24 @@ func ShareFromValidatorEvent(
 	registryStorage registrystorage.OperatorsCollection,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
-) (*spectypes.Share, *types.ShareMetadata, *bls.SecretKey, error) {
-	validatorShare := spectypes.Share{}
-	shareMetadata := types.ShareMetadata{}
+) (*types.SSVShare, *bls.SecretKey, error) {
+	validatorShare := types.SSVShare{
+		ShareMetadata: types.ShareMetadata{},
+	}
 
 	// extract operator public keys from storage and fill the event
 	if err := SetOperatorPublicKeys(registryStorage, &validatorRegistrationEvent); err != nil {
-		return nil, nil, nil, errors.Wrap(err, "could not set operator public keys")
+		return nil, nil, errors.Wrap(err, "could not set operator public keys")
 	}
 
 	publicKey := &bls.PublicKey{}
 	if err := publicKey.Deserialize(validatorRegistrationEvent.PublicKey); err != nil {
-		return nil, nil, nil, &abiparser.MalformedEventError{
+		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize share public key"),
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
-	shareMetadata.PublicKey = publicKey
-
-	shareMetadata.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
+	validatorShare.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
@@ -65,39 +65,38 @@ func ShareFromValidatorEvent(
 			OperatorID: nodeID,
 			PubKey:     validatorRegistrationEvent.SharesPublicKeys[i],
 		})
-		shareMetadata.Operators = append(shareMetadata.Operators, validatorRegistrationEvent.OperatorPublicKeys[i])
 		if strings.EqualFold(string(validatorRegistrationEvent.OperatorPublicKeys[i]), operatorPubKey) {
 			validatorShare.OperatorID = nodeID
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "could not get operator private key")
+				return nil, nil, errors.Wrap(err, "could not get operator private key")
 			}
 			if !found {
-				return nil, nil, nil, errors.New("could not find operator private key")
+				return nil, nil, errors.New("could not find operator private key")
 			}
 
 			shareSecret = &bls.SecretKey{}
 			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorRegistrationEvent.EncryptedKeys[i]))
 			if err != nil {
-				return nil, nil, nil, &abiparser.MalformedEventError{
+				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to decrypt share private key"),
 				}
 			}
 			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
 			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {
-				return nil, nil, nil, &abiparser.MalformedEventError{
+				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to set decrypted share private key"),
 				}
 			}
 		}
 	}
-	validatorShare.Committee = committee
-	for _, oid := range validatorRegistrationEvent.OperatorIds {
-		shareMetadata.OperatorIDs = append(shareMetadata.OperatorIDs, uint64(oid))
-	}
 
-	return &validatorShare, &shareMetadata, shareSecret, nil
+	validatorShare.Committee = committee
+	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
+	validatorShare.SetOperatorIds(validatorRegistrationEvent.OperatorIds)
+
+	return &validatorShare, shareSecret, nil
 }
 
 // SetOperatorPublicKeys extracts the operator public keys from the storage and fill the event

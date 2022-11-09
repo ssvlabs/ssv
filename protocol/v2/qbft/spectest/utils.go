@@ -1,20 +1,21 @@
 package qbft
 
 import (
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *types.Share,
-	config types2.IConfig,
+	share *types.SSVShare,
+	config types.IConfig,
 ) *controller.Controller {
 	return controller.NewController(
 		identifier,
 		share,
-		types.PrimusTestnet,
+		spectypes.PrimusTestnet,
 		config,
 	)
 }

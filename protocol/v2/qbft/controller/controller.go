@@ -5,11 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // HistoricalInstanceCapacity represents the upper bound of InstanceContainer a processmsg can process messages for as messages are not
@@ -18,7 +20,7 @@ const HistoricalInstanceCapacity int = 5
 
 type InstanceContainer [HistoricalInstanceCapacity]*instance.Instance
 
-func (i InstanceContainer) FindInstance(height qbftspec.Height) *instance.Instance {
+func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
 	for _, inst := range i {
 		if inst != nil {
 			if inst.GetHeight() == height {
@@ -40,21 +42,21 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
 	Identifier []byte
-	Height     qbftspec.Height // incremental Height for InstanceContainer
+	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances InstanceContainer
 	// FutureMsgsContainer holds all msgs from a higher height
-	FutureMsgsContainer map[types.OperatorID]qbftspec.Height // maps msg signer to height of higher height received msgs
-	Domain              types.DomainType
-	Share               *types.Share
-	config              types2.IConfig
+	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
+	Domain              spectypes.DomainType
+	Share               *types.SSVShare
+	config              types.IConfig
 }
 
 func NewController(
 	identifier []byte,
-	share *types.Share,
-	domain types.DomainType,
-	config types2.IConfig,
+	share *types.SSVShare,
+	domain spectypes.DomainType,
+	config types.IConfig,
 ) *Controller {
 	return &Controller{
 		Identifier:          identifier,
@@ -62,7 +64,7 @@ func NewController(
 		Domain:              domain,
 		Share:               share,
 		StoredInstances:     InstanceContainer{},
-		FutureMsgsContainer: make(map[types.OperatorID]qbftspec.Height),
+		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 	}
 }
@@ -81,7 +83,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(msg *qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := c.baseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -102,7 +104,7 @@ func (c *Controller) ProcessMsg(msg *qbftspec.SignedMessage) (*qbftspec.SignedMe
 	}
 }
 
-func (c *Controller) UponExistingInstanceMsg(msg *qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	inst := c.InstanceForHeight(msg.Message.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
@@ -132,7 +134,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *qbftspec.SignedMessage) (*qbft
 	return msg, nil
 }
 
-func (c *Controller) baseMsgValidation(msg *qbftspec.SignedMessage) error {
+func (c *Controller) baseMsgValidation(msg *specqbft.SignedMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.Message.Identifier) {
 		return errors.New("message doesn't belong to Identifier")
@@ -141,7 +143,7 @@ func (c *Controller) baseMsgValidation(msg *qbftspec.SignedMessage) error {
 	return nil
 }
 
-func (c *Controller) InstanceForHeight(height qbftspec.Height) *instance.Instance {
+func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instance {
 	return c.StoredInstances.FindInstance(height)
 }
 
@@ -161,8 +163,8 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	return i
 }
 
-func (c *Controller) canStartInstance(height qbftspec.Height, value []byte) error {
-	if height > qbftspec.FirstHeight {
+func (c *Controller) canStartInstance(height specqbft.Height, value []byte) error {
+	if height > specqbft.FirstHeight {
 		// check prev instance if prev instance is not the first instance
 		inst := c.StoredInstances.FindInstance(height - 1)
 		if inst == nil {
@@ -185,11 +187,11 @@ func (c *Controller) canStartInstance(height qbftspec.Height, value []byte) erro
 func (c *Controller) GetRoot() ([]byte, error) {
 	rootStruct := struct {
 		Identifier             []byte
-		Height                 qbftspec.Height
+		Height                 specqbft.Height
 		InstanceRoots          [][]byte
-		HigherReceivedMessages map[types.OperatorID]qbftspec.Height
-		Domain                 types.DomainType
-		Share                  *types.Share
+		HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
+		Domain                 spectypes.DomainType
+		Share                  *types.SSVShare
 	}{
 		Identifier:             c.Identifier,
 		Height:                 c.Height,
@@ -239,7 +241,7 @@ func (c *Controller) Decode(data []byte) error {
 	return nil
 }
 
-func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMessage) error {
+func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *specqbft.SignedMessage) error {
 	if err := c.GetConfig().GetStorage().SaveHighestDecided(aggregatedCommit); err != nil {
 		return errors.Wrap(err, "could not save decided")
 	}
@@ -250,9 +252,9 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 		return errors.Wrap(err, "could not encode decided message")
 	}
 
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVConsensusMsgType,
-		MsgID:   qbftspec.ControllerIdToMessageID(c.Identifier),
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   specqbft.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
 	if err := c.GetConfig().GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -262,6 +264,6 @@ func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *qbftspec.SignedMe
 	return nil
 }
 
-func (c *Controller) GetConfig() types2.IConfig {
+func (c *Controller) GetConfig() types.IConfig {
 	return c.config
 }

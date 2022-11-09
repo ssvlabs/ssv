@@ -41,14 +41,9 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 	if len(options.PublicKey) == 0 || len(options.ShareKey) == 0 || len(options.Committee) == 0 {
 		return "", errors.New("one or more fields are missing (PublicKey, ShareKey, Committee)")
 	}
-	share, err := options.CreateShare()
+	share, err := options.ToShare()
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to create share object")
-	}
-
-	metadata, err := options.CreateMetadata()
-	if err != nil {
-		return "", errors.WithMessage(err, "failed to create metadata object")
 	}
 
 	shareKey := &bls.SecretKey{}
@@ -60,11 +55,7 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 		return "", errors.New("returned nil share")
 	}
 
-	if metadata == nil {
-		return "", errors.New("returned nil metadata")
-	}
-
-	if updated, err := UpdateMetadataStats(metadata, c.beacon); err != nil {
+	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 		return "", errors.Wrap(err, "could not update share stats")
 	} else if !updated {
 		return "", errors.New("could not find validator metadata")
@@ -75,9 +66,6 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {
 		return "", errors.Wrap(err, "could not save share from share options")
-	}
-	if err := c.collection.SaveShareMetadata(metadata); err != nil {
-		return "", errors.Wrap(err, "could not save metadata from share options")
 	}
 
 	return options.PublicKey, err

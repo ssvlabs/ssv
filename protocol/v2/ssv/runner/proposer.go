@@ -3,29 +3,40 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   ssv.BeaconNode
-	network  ssv.Network
-	signer   types.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck specqbft.ProposedValueCheckF
 }
 
-func NewProposerRunner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
+func NewProposerRunner(
+	beaconNetwork spectypes.BeaconNetwork,
+	share *types.SSVShare,
+	qbftController *controller.Controller,
+	beacon specssv.BeaconNode,
+	network specssv.Network,
+	signer spectypes.KeyManager,
+	valCheck specqbft.ProposedValueCheckF,
+) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: types.BNRoleProposer,
+			BeaconRoleType: spectypes.BNRoleProposer,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
@@ -38,7 +49,7 @@ func NewProposerRunner(beaconNetwork types.BeaconNetwork, share *types.Share, qb
 	}
 }
 
-func (r *ProposerRunner) StartNewDuty(duty *types.Duty) error {
+func (r *ProposerRunner) StartNewDuty(duty *spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(r, duty)
 }
 
@@ -47,7 +58,7 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 	return r.BaseRunner.HasRunningDuty()
 }
 
-func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing randao message")
@@ -74,7 +85,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatu
 		return errors.Wrap(err, "failed to get Beacon block")
 	}
 
-	input := &types.ConsensusData{
+	input := &spectypes.ConsensusData{
 		Duty:      duty,
 		BlockData: blk,
 	}
@@ -86,7 +97,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatu
 	return nil
 }
 
-func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
+func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -98,13 +109,13 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.BlockData, decidedValue.Duty.Slot, types.DomainProposer)
+	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.BlockData, decidedValue.Duty.Slot, spectypes.DomainProposer)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &ssv.PartialSignatureMessages{
-		Type:     ssv.PostConsensusPartialSig,
-		Messages: []*ssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &specssv.PartialSignatureMessages{
+		Type:     specssv.PostConsensusPartialSig,
+		Messages: []*specssv.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -117,9 +128,9 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVPartialSignatureMsgType,
-		MsgID:   types.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -129,7 +140,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
 	return nil
 }
 
-func (r *ProposerRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -163,7 +174,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignat
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.Slot)
-	return []ssz.HashRoot{types.SSZUint64(epoch)}, types.DomainRandao, nil
+	return []ssz.HashRoot{spectypes.SSZUint64(epoch)}, spectypes.DomainRandao, nil
 }
 
 // executeDuty steps:
@@ -172,24 +183,24 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // 3) start consensus on duty + block data
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
-func (r *ProposerRunner) executeDuty(duty *types.Duty) error {
+func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-	msg, err := r.BaseRunner.signBeaconObject(r, types.SSZUint64(epoch), duty.Slot, types.DomainRandao)
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
-	msgs := ssv.PartialSignatureMessages{
-		Type:     ssv.RandaoPartialSig,
-		Messages: []*ssv.PartialSignatureMessage{msg},
+	msgs := specssv.PartialSignatureMessages{
+		Type:     specssv.RandaoPartialSig,
+		Messages: []*specssv.PartialSignatureMessage{msg},
 	}
 
 	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, types.PartialSignatureType, r.GetShare().SharePubKey)
+	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao msg")
 	}
-	signedPartialMsg := &ssv.SignedPartialSignatureMessage{
+	signedPartialMsg := &specssv.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
 		Signer:    r.GetShare().OperatorID,
@@ -200,9 +211,9 @@ func (r *ProposerRunner) executeDuty(duty *types.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
 	}
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVPartialSignatureMsgType,
-		MsgID:   types.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -215,15 +226,15 @@ func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() ssv.Network {
+func (r *ProposerRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() ssv.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *ProposerRunner) GetShare() *types.Share {
+func (r *ProposerRunner) GetShare() *types.SSVShare {
 	return r.BaseRunner.Share
 }
 
@@ -235,11 +246,11 @@ func (r *ProposerRunner) Init() error {
 	return r.BaseRunner.Init()
 }
 
-func (r *ProposerRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() types.KeyManager {
+func (r *ProposerRunner) GetSigner() spectypes.KeyManager {
 	return r.signer
 }
 

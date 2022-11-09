@@ -2,15 +2,16 @@ package controller
 
 import (
 	"fmt"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
-func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	// decided msgs for past (already decided) instances will not decide again, just return
 	if msg.Message.Height < c.Height {
 		return nil, nil
@@ -69,9 +70,9 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 }
 
 func validateDecided(
-	config types2.IConfig,
-	signedDecided *qbftspec.SignedMessage,
-	share *types.Share,
+	config types.IConfig,
+	signedDecided *specqbft.SignedMessage,
+	share *types.SSVShare
 ) error {
 	if !isDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
@@ -97,6 +98,6 @@ func validateDecided(
 }
 
 // isDecidedMsg returns true if signed commit has all quorum sigs
-func isDecidedMsg(share *types.Share, signedDecided *qbftspec.SignedMessage) bool {
-	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == qbftspec.CommitMsgType
+func isDecidedMsg(share *types.SSVShare, signedDecided *specqbft.SignedMessage) bool {
+	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == specqbft.CommitMsgType
 }

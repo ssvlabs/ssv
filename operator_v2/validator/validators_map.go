@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
@@ -68,7 +67,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *spectypes.Share, metadata *types.ShareMetadata) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(share *types.SSVShare) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -77,13 +76,11 @@ func (vm *validatorsMap) GetOrCreateValidator(share *spectypes.Share, metadata *
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.Share = share
-		opts.Metadata = metadata
 		opts.Mode = validator.ModeRW
 		opts.DutyRunners = setupRunners(vm.ctx, opts)
 		vm.validatorsMap[pubKey] = validator.NewValidator(vm.ctx, opts)
 		printShare(share, vm.logger, "setup validator done")
 		opts.Share = nil
-		opts.Metadata = nil
 	} else {
 		printShare(v.Share, vm.logger, "get validator")
 	}
@@ -111,7 +108,7 @@ func (vm *validatorsMap) Size() int {
 	return len(vm.validatorsMap)
 }
 
-func printShare(s *spectypes.Share, logger *zap.Logger, msg string) {
+func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 	var committee []string
 	for _, c := range s.Committee {
 		committee = append(committee, fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey))
