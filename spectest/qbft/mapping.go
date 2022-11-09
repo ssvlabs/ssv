@@ -5,9 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+
 	qbft2 "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -24,14 +34,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"sort"
-	"sync"
-	"testing"
-	"time"
 )
 
 // BroadcastMessagesGetter interface to support spec tests
@@ -188,7 +190,7 @@ func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.In
 func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *qbft2.MsgContainer {
 	c := qbft2.NewMsgContainer()
 	container.AllMessaged(func(round qbft2.Round, msg *qbft2.SignedMessage) {
-		ok, err := c.AddIfDoesntExist(&qbft2.SignedMessage{
+		ok, err := c.AddFirstMsgForSignerAndRound(&qbft2.SignedMessage{
 			Signature: msg.Signature,
 			Signers:   msg.Signers,
 			Message: &qbft2.Message{
