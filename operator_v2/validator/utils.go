@@ -92,7 +92,6 @@ func ShareFromValidatorEvent(
 
 	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
-	validatorShare.SetOperatorIds(validatorRegistrationEvent.OperatorIds)
 
 	return &validatorShare, shareSecret, nil
 }

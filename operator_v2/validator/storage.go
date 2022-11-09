@@ -3,7 +3,6 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"sync"
 
 	"go.uber.org/zap"
@@ -21,9 +20,7 @@ type ICollection interface {
 	SaveValidatorShare(share *types.SSVShare) error
 	GetValidatorShare(key []byte) (*types.SSVShare, bool, error)
 	GetAllValidatorShares() ([]*types.SSVShare, error)
-	GetValidatorSharesByOperatorPK(operatorPubKey string, enabled bool) ([]*types.SSVShare, error)
-	GetValidatorSharesByOperatorID(operatorID uint32, enabled bool) ([]*types.SSVShare, error)
-	GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*types.SSVShare, error)
+	GetFilteredValidatorShares(f func(share *types.SSVShare) bool) ([]*types.SSVShare, error)
 	DeleteValidatorShare(key []byte) error
 }
 
@@ -124,67 +121,19 @@ func (s *Collection) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	return res, err
 }
 
-// GetValidatorSharesByOperatorPK returns all not liquidated validator shares belongs to operator
-func (s *Collection) GetValidatorSharesByOperatorPK(operatorPubKey string, enabled bool) ([]*types.SSVShare, error) {
+func (s *Collection) GetFilteredValidatorShares(filter func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var res []*types.SSVShare
 
 	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
-		val := &types.SSVShare{}
-		if err := val.Decode(obj.Value); err != nil {
+		share := &types.SSVShare{}
+		if err := share.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize validator: %w", err)
 		}
-		if !val.Liquidated || !enabled {
-			if ok := val.BelongsToOperator(operatorPubKey); ok {
-				res = append(res, val)
-			}
-		}
-		return nil
-	})
-
-	return res, err
-}
-
-// GetValidatorSharesByOperatorID returns all not liquidated validator shares belongs to operator ID.
-// TODO: check regarding returning a slice of public keys instead of share objects
-func (s *Collection) GetValidatorSharesByOperatorID(operatorID uint32, enabled bool) ([]*types.SSVShare, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	var res []*types.SSVShare
-
-	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
-		val := &types.SSVShare{}
-		if err := val.Decode(obj.Value); err != nil {
-			return fmt.Errorf("failed to deserialize validator: %w", err)
-		}
-		if !val.Liquidated || !enabled {
-			if ok := val.BelongsToOperatorID(uint64(operatorID)); ok {
-				res = append(res, val)
-			}
-		}
-		return nil
-	})
-
-	return res, err
-}
-
-// GetValidatorSharesByOwnerAddress returns all validator metadata that belongs to owner address
-func (s *Collection) GetValidatorSharesByOwnerAddress(ownerAddress string) ([]*types.SSVShare, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	var res []*types.SSVShare
-
-	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
-		val := &types.SSVShare{}
-		if err := val.Decode(obj.Value); err != nil {
-			return fmt.Errorf("failed to deserialize validator: %w", err)
-		}
-		if strings.EqualFold(val.OwnerAddress, ownerAddress) {
-			res = append(res, val)
+		if filter(share) {
+			res = append(res, share)
 		}
 		return nil
 	})

@@ -65,11 +65,6 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		operators = append(operators, []byte(op))
 	}
 
-	var operatorIDs []uint64
-	for _, opID := range options.OperatorIds {
-		operatorIDs = append(operatorIDs, uint64(opID))
-	}
-
 	share := &types.SSVShare{
 		Share: spectypes.Share{
 			OperatorID:      spectypes.OperatorID(options.NodeID),
@@ -84,7 +79,6 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		ShareMetadata: types.ShareMetadata{
 			OwnerAddress: options.OwnerAddress,
 			Operators:    operators,
-			OperatorIDs:  operatorIDs,
 		},
 	}
 	return share, nil

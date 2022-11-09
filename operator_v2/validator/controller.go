@@ -309,7 +309,9 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetValidatorSharesByOperatorPK(c.operatorPubKey, true)
+	shares, err := c.collection.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
+		return !share.Liquidated && share.BelongsToOperator(c.operatorPubKey)
+	})
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -541,7 +543,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetValidatorSharesByOperatorPK(c.operatorPubKey, true)
+		shares, err := c.collection.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
+			return !share.Liquidated && share.BelongsToOperator(c.operatorPubKey)
+		})
 		if err != nil {
 			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue

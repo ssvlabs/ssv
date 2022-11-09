@@ -45,9 +45,9 @@ func (s *SSVShare) BelongsToOperator(operatorPubKey string) bool {
 }
 
 // BelongsToOperatorID checks whether the metadata belongs to operator ID
-func (s *SSVShare) BelongsToOperatorID(operatorID uint64) bool {
-	for _, id := range s.OperatorIDs {
-		if id == operatorID {
+func (s *SSVShare) BelongsToOperatorID(operatorID spectypes.OperatorID) bool {
+	for _, operator := range s.Committee {
+		if operator.OperatorID == operatorID {
 			return true
 		}
 	}
@@ -64,18 +64,9 @@ func (s *SSVShare) SetOperators(pks [][]byte) {
 	copy(s.Operators, pks)
 }
 
-// SetOperatorIds set Operator ids
-func (s *SSVShare) SetOperatorIds(ids []uint32) {
-	s.OperatorIDs = make([]uint64, len(ids))
-	for i, o := range ids {
-		s.OperatorIDs[i] = uint64(o)
-	}
-}
-
 type ShareMetadata struct {
 	Stats        *beaconprotocol.ValidatorMetadata
 	OwnerAddress string
 	Operators    [][]byte
-	OperatorIDs  []uint64
 	Liquidated   bool
 }
