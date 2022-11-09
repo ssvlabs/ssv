@@ -16,7 +16,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
-	"time"
 )
 
 type Options struct {
@@ -116,12 +115,14 @@ func (v *Validator) Start() error {
 		}
 		identifiers := v.DutyRunners.Identifiers()
 		for _, identifier := range identifiers {
-			//v.loadLastHeight(identifier)
+			_, err := v.loadLastHeight(identifier)
+			if err != nil {
+				v.logger.Warn("could not load highest", zap.String("identifier", identifier.String()), zap.Error(err))
+			}
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
-			go v.sync(identifier)
 		}
 	}
 	return nil
@@ -211,20 +212,6 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 
 func (v *Validator) GetShare() *beacon.Share {
 	return v.Share // temp solution
-}
-
-func (v *Validator) sync(identifier types.MessageID) {
-	logger := v.logger.With(zap.String("role", identifier.GetRoleType().String()))
-	h, err := v.loadLastHeight(identifier)
-	if err != nil {
-		v.logger.Warn("could not load highest", zap.Error(err))
-	}
-	logger.Debug("loaded local highest, syncing", zap.Uint64("local_highest", uint64(h)))
-	<-time.After(time.Second * 5) // TODO: remove, it was added to let the network start before we try to sync
-	err = v.Network.SyncHighestDecided(identifier)
-	if err != nil {
-		v.logger.Warn("sync failed", zap.Error(err))
-	}
 }
 
 func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
