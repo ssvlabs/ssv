@@ -48,9 +48,6 @@ type Controller struct {
 	Domain              types.DomainType
 	Share               *types.Share
 	config              types2.IConfig
-
-	// TODO: state
-	// TODO: validation pipeline
 }
 
 func NewController(
@@ -68,16 +65,6 @@ func NewController(
 		FutureMsgsContainer: make(map[types.OperatorID]qbftspec.Height),
 		config:              config,
 	}
-}
-
-func (c *Controller) IsReady() bool {
-	// TODO: check state
-	return true
-}
-
-func (c *Controller) Sync() bool {
-	// TODO: check state
-	return true
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
