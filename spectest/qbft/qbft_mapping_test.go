@@ -11,7 +11,6 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
@@ -90,14 +89,14 @@ func TestQBFTMapping(t *testing.T) {
 
 func excludeTest() map[string]bool {
 	return map[string]bool{
-		controller.FutureDecided().TestName():             true, // multi instance required
-		controller.MultiSignerNotDecidedMsg().TestName():  true,
-		controller.InvalidDecidedSig().TestName():         true,
-		controller.InvalidIdentifier().TestName():         true, // missing error
-		controller.ProcessMsgError().TestName():           true, // missing error
-		controller.StartInstanceInvalidValue().TestName(): true, // missing error
-		controller.InvalidSig().TestName():                true, // missing error
-		controller.QueueCleanup().TestName():              true, // sync count
-		controller.F1HighestDecidedSync().TestName():      true, // sync count
+		//consensus.FutureDecided().TestName():             true, // multi instance required
+		//consensus.MultiSignerNotDecidedMsg().TestName():  true,
+		//consensus.InvalidDecidedSig().TestName():         true,
+		//consensus.InvalidIdentifier().TestName():         true, // missing error
+		//consensus.ProcessMsgError().TestName():           true, // missing error
+		//consensus.StartInstanceInvalidValue().TestName(): true, // missing error
+		//consensus.InvalidSig().TestName():                true, // missing error
+		//consensus.QueueCleanup().TestName():              true, // sync count
+		//consensus.F1HighestDecidedSync().TestName():      true, // sync count
 	}
 }

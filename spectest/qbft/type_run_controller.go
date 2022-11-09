@@ -4,21 +4,23 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"reflect"
+	"testing"
+	"time"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
-	"reflect"
-	"testing"
-	"time"
 )
 
 // RunControllerSpecTest runs spec test type ControllerSpecTest
@@ -130,7 +132,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 
 		decidedSyncCalledCnt := p2pNet.(BroadcastMessagesGetter).CalledDecidedSyncCnt()
-		require.EqualValues(t, runData.DecidedSyncCallCnt, decidedSyncCalledCnt)
+		require.EqualValues(t, runData.DecidedCnt, decidedSyncCalledCnt)
 
 		if len(runData.ControllerPostRoot) > 0 {
 			r, err := GetControllerRoot(t, ctrl, storedInstances)
