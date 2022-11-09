@@ -3,6 +3,7 @@ package types
 import (
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -10,8 +11,25 @@ import (
 
 func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 	metadata := &SSVShare{
-		ShareMetadata: ShareMetadata{
-			OperatorIDs: []uint64{1, 2, 3, 4},
+		Share: spectypes.Share{
+			Committee: []*spectypes.Operator{
+				{
+					OperatorID: 1,
+					PubKey:     []byte{1, 1, 1, 1},
+				},
+				{
+					OperatorID: 2,
+					PubKey:     []byte{2, 2, 2, 2},
+				},
+				{
+					OperatorID: 3,
+					PubKey:     []byte{3, 3, 3, 3},
+				},
+				{
+					OperatorID: 4,
+					PubKey:     []byte{4, 4, 4, 4},
+				},
+			},
 		},
 	}
 
