@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	qbftspec "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -58,8 +59,11 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	}
 
 	if !prevDecided {
-		err = c.GetConfig().GetStorage().SaveHighestDecided(msg)
-		return msg, errors.Wrap(err, "could not save highest decided")
+		if err = c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
+			// no need to fail processing the decided msg if failed to save
+			fmt.Printf("%s\n", err.Error())
+		}
+		return msg, nil
 	}
 	return nil, nil
 }
