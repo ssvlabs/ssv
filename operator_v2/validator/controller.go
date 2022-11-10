@@ -596,40 +596,40 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
-			valCheck := specssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.ValidatorPubKey, options.Share.Stats.Index)
+			valCheck := specssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.Share.ValidatorPubKey, options.Share.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = valCheck
-			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleAttester)
-			qbftQtrl := qbftcontroller.NewController(identifier[:], options.Share, domainType, config)
-			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, options.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, valCheck)
+			identifier := spectypes.NewMsgID(options.Share.Share.ValidatorPubKey, spectypes.BNRoleAttester)
+			qbftQtrl := qbftcontroller.NewController(identifier[:], &options.Share.Share, domainType, config)
+			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.Share.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
-			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.ValidatorPubKey, options.Share.Stats.Index)
+			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.Share.ValidatorPubKey, options.Share.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleProposer)
-			qbftQtrl := qbftcontroller.NewController(identifier[:], options.Share, domainType, config)
-			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, options.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			identifier := spectypes.NewMsgID(options.Share.Share.ValidatorPubKey, spectypes.BNRoleProposer)
+			qbftQtrl := qbftcontroller.NewController(identifier[:], &options.Share.Share, domainType, config)
+			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.Share.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
-			proposedValueCheck := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.ValidatorPubKey, options.Share.Stats.Index)
+			proposedValueCheck := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.Share.ValidatorPubKey, options.Share.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleAggregator)
-			qbftQtrl := qbftcontroller.NewController(identifier[:], options.Share, domainType, config)
-			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, options.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftQtrl := qbftcontroller.NewController(identifier[:], &options.Share.Share, domainType, config)
+			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, &options.Share.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommittee:
 			proposedValueCheck := specssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.ValidatorPubKey, options.Share.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
-			qbftQtrl := qbftcontroller.NewController(identifier[:], options.Share, domainType, config)
-			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, options.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftQtrl := qbftcontroller.NewController(identifier[:], &options.Share.Share, domainType, config)
+			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.Share.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommitteeContribution:
-			proposedValueCheck := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.ValidatorPubKey, options.Share.Stats.Index)
+			proposedValueCheck := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.Share.Share.ValidatorPubKey, options.Share.Stats.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.Share.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
-			qbftQtrl := qbftcontroller.NewController(identifier[:], options.Share, domainType, config)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, options.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftQtrl := qbftcontroller.NewController(identifier[:], &options.Share.Share, domainType, config)
+			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.Share.Share, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		}
 	}
 	return runners
