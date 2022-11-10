@@ -9,6 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	v1types "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -43,7 +45,6 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, v1.Stats, validatorShare.Stats)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Operators, validatorShare.Operators)
-	require.Equal(t, v1.OperatorIDs, validatorShare.OperatorIDs)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
 }
 
@@ -95,8 +96,12 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 
 func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.SSVShare, *bls.SecretKey) {
 	threshold.Init()
-	sk := bls.SecretKey{}
-	sk.SetByCSPRNG()
+
+	sk1 := bls.SecretKey{}
+	sk1.SetByCSPRNG()
+
+	sk2 := bls.SecretKey{}
+	sk2.SetByCSPRNG()
 
 	ibftCommittee := []*spectypes.Operator{
 		{
@@ -120,8 +125,26 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.S
 	return &types.SSVShare{
 		Share: spectypes.Share{
 			OperatorID:      1,
-			ValidatorPubKey: sk.GetPublicKey().Serialize(),
+			ValidatorPubKey: sk1.GetPublicKey().Serialize(),
+			SharePubKey:     sk2.GetPublicKey().Serialize(),
 			Committee:       ibftCommittee,
+			Quorum:          3,
+			PartialQuorum:   2,
+			DomainType:      v1types.GetDefaultDomain(),
+			Graffiti:        nil,
 		},
-	}, &sk
+		ShareMetadata: types.ShareMetadata{
+			Stats: &beaconprotocol.ValidatorMetadata{
+				Balance: 1,
+				Status:  2,
+				Index:   3,
+			},
+			OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
+			Operators: [][]byte{
+				{1, 1, 1, 1},
+				{2, 2, 2, 2},
+			},
+			Liquidated: true,
+		},
+	}, &sk1
 }
