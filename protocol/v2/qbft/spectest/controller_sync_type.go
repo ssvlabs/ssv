@@ -8,8 +8,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
@@ -17,9 +15,7 @@ func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 	config := testingutils.TestingConfig(testingutils.Testing4SharesSet())
 	contr := NewTestingQBFTController(
 		identifier[:],
-		&types.SSVShare{
-			Share: *testingutils.TestingShare(testingutils.Testing4SharesSet()),
-		},
+		testingutils.TestingShare(testingutils.Testing4SharesSet()),
 		config,
 	)
 

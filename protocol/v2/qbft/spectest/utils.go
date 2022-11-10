@@ -9,7 +9,7 @@ import (
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *types.SSVShare,
+	share *spectypes.Share,
 	config types.IConfig,
 ) *controller.Controller {
 	return controller.NewController(

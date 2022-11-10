@@ -48,13 +48,13 @@ type Controller struct {
 	// FutureMsgsContainer holds all msgs from a higher height
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
-	Share               *types.SSVShare
+	Share               *spectypes.Share
 	config              types.IConfig
 }
 
 func NewController(
 	identifier []byte,
-	share *types.SSVShare,
+	share *spectypes.Share,
 	domain spectypes.DomainType,
 	config types.IConfig,
 ) *Controller {
@@ -191,7 +191,7 @@ func (c *Controller) GetRoot() ([]byte, error) {
 		InstanceRoots          [][]byte
 		HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
 		Domain                 spectypes.DomainType
-		Share                  *types.SSVShare
+		Share                  *spectypes.Share
 	}{
 		Identifier:             c.Identifier,
 		Height:                 c.Height,

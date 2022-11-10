@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type AggregatorRunner struct {
@@ -26,7 +25,7 @@ type AggregatorRunner struct {
 
 func NewAggregatorRunner(
 	beaconNetwork spectypes.BeaconNetwork,
-	share *types.SSVShare,
+	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
@@ -233,7 +232,7 @@ func (r *AggregatorRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AggregatorRunner) GetShare() *types.SSVShare {
+func (r *AggregatorRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 

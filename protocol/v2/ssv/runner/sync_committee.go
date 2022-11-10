@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeRunner struct {
@@ -27,7 +26,7 @@ type SyncCommitteeRunner struct {
 
 func NewSyncCommitteeRunner(
 	beaconNetwork spectypes.BeaconNetwork,
-	share *types.SSVShare,
+	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
@@ -179,7 +178,7 @@ func (r *SyncCommitteeRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *SyncCommitteeRunner) GetShare() *types.SSVShare {
+func (r *SyncCommitteeRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -69,10 +70,9 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	return nil, nil
 }
 
-func validateDecided(
-	config types.IConfig,
+func validateDecided(config types.IConfig,
 	signedDecided *specqbft.SignedMessage,
-	share *types.SSVShare
+	share *spectypes.Share,
 ) error {
 	if !isDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
@@ -98,6 +98,6 @@ func validateDecided(
 }
 
 // isDecidedMsg returns true if signed commit has all quorum sigs
-func isDecidedMsg(share *types.SSVShare, signedDecided *specqbft.SignedMessage) bool {
+func isDecidedMsg(share *spectypes.Share, signedDecided *specqbft.SignedMessage) bool {
 	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == specqbft.CommitMsgType
 }

@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -29,7 +28,7 @@ type AttesterRunner struct {
 	logger *zap.Logger
 }
 
-func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *types.SSVShare, qbftController *controller.Controller, beacon specssv.BeaconNode, network specssv.Network, signer spectypes.KeyManager, valCheck specqbft.ProposedValueCheckF) Runner {
+func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *spectypes.Share, qbftController *controller.Controller, beacon specssv.BeaconNode, network specssv.Network, signer spectypes.KeyManager, valCheck specqbft.ProposedValueCheckF) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleAttester,
@@ -202,7 +201,7 @@ func (r *AttesterRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *AttesterRunner) GetShare() *types.SSVShare {
+func (r *AttesterRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 

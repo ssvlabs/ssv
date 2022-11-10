@@ -25,13 +25,13 @@ type Instance struct {
 
 func NewInstance(
 	config types.IConfig,
-	share *types.SSVShare,
+	share *spectypes.Share,
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
 	return &Instance{
 		State: &specqbft.State{
-			Share:                &share.Share,
+			Share:                share,
 			ID:                   identifier,
 			Round:                specqbft.FirstRound,
 			Height:               height,

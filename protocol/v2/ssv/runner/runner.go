@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -64,7 +63,7 @@ type Runner interface {
 
 type BaseRunner struct {
 	State          *State
-	Share          *types.SSVShare
+	Share          *spectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
