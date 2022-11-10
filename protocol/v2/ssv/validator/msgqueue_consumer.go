@@ -63,7 +63,10 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 	defer cancel()
 
 	identifier := msgId.String()
+	logger := v.logger.With(zap.String("identifier", identifier))
 	higherCache := cache.New(time.Second*12, time.Second*24)
+
+	logger.Warn("queue consumer is running")
 
 	for ctx.Err() == nil {
 		time.Sleep(interval)
@@ -83,19 +86,19 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 		lastHeight := v.GetLastHeight(msgId)
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
-			v.logger.Debug("process higher height is done")
+			logger.Debug("process higher height is done")
 			continue
 		}
 		if processed := v.processNoRunningInstance(handler, msgId, identifier, lastHeight, lastSlot); processed {
-			v.logger.Debug("process none running instance is done")
+			logger.Debug("process none running instance is done")
 			continue
 		}
 		if processed := v.processByState(handler, msgId, identifier, lastHeight); processed {
-			v.logger.Debug("process by state is done")
+			logger.Debug("process by state is done")
 			continue
 		}
 		if processed := v.processLateCommit(handler, identifier, lastHeight); processed {
-			v.logger.Debug("process default is done")
+			logger.Debug("process default is done")
 			continue
 		}
 
@@ -106,10 +109,12 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 			return oldHeight || oldSlot
 		})
 		if cleaned > 0 {
-			v.logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
+			logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
 		}
 	}
-	v.logger.Warn("queue consumer is closed")
+
+	logger.Warn("queue consumer is closed")
+
 	return nil
 }
 
@@ -119,11 +124,6 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spect
 	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
 		return false // only pop when already decided
 	}
-
-	//instance := v.GetCurrentInstance()
-	//if instance != nil {
-	//	return false // only pop when no instance running
-	//}
 
 	logger := v.logger.With(
 		//zap.String("sig state", c.SignatureState.getState().toString()),
@@ -147,6 +147,8 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spect
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
+	logger.Debug("found message in queue when no running instance")
+
 	err := handler(msgs[0])
 	if err != nil {
 		logger.Warn("could not handle msg", zap.Error(err))
@@ -172,7 +174,7 @@ func (v *Validator) processByState(handler MessageHandler, msgId spectypes.Messa
 	if msg == nil {
 		return false // no msg found
 	}
-	v.logger.Debug("queue found message by state")
+	v.logger.Debug("found message by state in queue", zap.Int64("height", int64(height)))
 	//v.logger.Debug("queue found message for state",
 	//	zap.Int32("stage", currentState.Stage.Load()),
 	//	zap.Int32("seq", int32(currentState.GetHeight())),
@@ -200,6 +202,7 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	})
 
 	if len(msgs) > 0 {
+		v.logger.Debug("found higher height message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Warn("could not handle msg", zap.Error(err))
@@ -229,6 +232,7 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
+		v.logger.Debug("found late commit message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Warn("could not handle msg", zap.Error(err))
