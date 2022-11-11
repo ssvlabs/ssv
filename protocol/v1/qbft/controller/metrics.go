@@ -14,7 +14,6 @@ var (
 		metricsRunningIBFTs,
 		metricsDurationAttestation,
 	}
-	// metricsCurrentSequence for current instance
 	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_sequence",
 		Help: "The highest decided sequence number",
