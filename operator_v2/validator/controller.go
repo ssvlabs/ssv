@@ -585,7 +585,7 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 			},
 			Storage: options.Storage,
 			Network: options.Network,
-			Timer:   roundtimer.New(ctx, options.Logger),
+			Timer:   roundtimer.New(ctx, options.Logger, nil),
 		}
 	}
 
