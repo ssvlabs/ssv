@@ -3,6 +3,8 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -16,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
 	"github.com/libp2p/go-libp2p-core/host"
+	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/pkg/errors"
@@ -274,4 +277,15 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.TopicMaxPeers * 2
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+func (n *p2pNetwork) getConnectedPeersDHT(vpk spectypes.ValidatorPK) []peer.ID {
+	var res []peer.ID
+	pids := n.idx.GetSubnetPeers(n.fork.ValidatorSubnet(hex.EncodeToString(vpk)))
+	for _, pid := range pids {
+		if n.idx.Connectedness(pid) == libp2pnetwork.Connected {
+			res = append(res, pid)
+		}
+	}
+	return res
 }

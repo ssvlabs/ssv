@@ -206,6 +206,9 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		if err != nil {
 			continue
 		}
+		if len(ps) == 0 { // if pubsub router didn't find peers, trying the peer index (based on DHT)
+			ps = n.getConnectedPeersDHT(vpk)
+		}
 		for _, p := range ps {
 			if _, ok := seen[p]; !ok && filter(p) {
 				peers = append(peers, p)
