@@ -123,6 +123,12 @@ func (v *Validator) Start() error {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
+			go func(mid types.MessageID) {
+				err := v.Network.SyncHighestDecided(mid)
+				if err != nil {
+					v.logger.Warn("could not sync highest decided")
+				}
+			}(identifier)
 		}
 	}
 	return nil
