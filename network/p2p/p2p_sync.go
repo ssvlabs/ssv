@@ -21,6 +21,9 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	if err != nil {
 		return err
 	}
+	if len(lastDecided) == 0 {
+		return errors.New("no messages were synced")
+	}
 	n.logger.Debug("got highest decided", zap.Int("results count", len(lastDecided)))
 	results := p2pprotocol.SyncResults(lastDecided)
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
