@@ -151,6 +151,9 @@ func (v *Validator) sync(mid types.MessageID) {
 
 func (v *Validator) Stop() error {
 	v.cancel()
+	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
+		return nil
+	}
 	// clear the msg q
 	v.Q.Clean(func(index msgqueue.Index) bool {
 		return true
