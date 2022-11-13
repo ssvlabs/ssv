@@ -53,23 +53,29 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		i.State.Round = specqbft.FirstRound
 		i.State.Height = height
 
+		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
+
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
-			fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
-			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
-			// nolint
-			if err != nil {
-				fmt.Printf("%s\n", err.Error())
-			}
-			// nolint
-			if err := i.Broadcast(proposal); err != nil {
-				fmt.Printf("%s\n", err.Error())
-			}
+			go func() {
+				fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
+				proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
+				// nolint
+				if err != nil {
+					fmt.Printf("%s\n", err.Error())
+				}
+				// nolint
+				if err := i.Broadcast(proposal); err != nil {
+					fmt.Printf("%s\n", err.Error())
+				}
+			}()
 		}
 
-		if err := i.config.GetNetwork().SyncHighestRoundChange(spectypes.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
-			fmt.Printf("%s\n", err.Error())
-		}
+		go func() {
+			if err := i.config.GetNetwork().SyncHighestRoundChange(spectypes.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
+				fmt.Printf("%s\n", err.Error())
+			}
+		}()
 	})
 }
 
