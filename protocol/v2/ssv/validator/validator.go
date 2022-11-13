@@ -16,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
+	"time"
 )
 
 type Options struct {
@@ -84,10 +85,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
-	//n, ok := options.Network.(network.Network)
-	//if !ok {
-	//	n = newNilNetwork(options.Network)
-	//}
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
@@ -123,15 +120,33 @@ func (v *Validator) Start() error {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
-			go func(mid types.MessageID) {
-				err := v.Network.SyncHighestDecided(mid)
-				if err != nil {
-					v.logger.Warn("could not sync highest decided")
-				}
-			}(identifier)
+			go v.sync(identifier)
 		}
 	}
 	return nil
+}
+
+func (v *Validator) sync(mid types.MessageID) {
+	ctx, cancel := context.WithCancel(v.ctx)
+	defer cancel()
+
+	// TODO: config?
+	interval := time.Second
+	retries := 3
+
+	for ctx.Err() == nil {
+		err := v.Network.SyncHighestDecided(mid)
+		if err != nil {
+			v.logger.Debug("could not sync highest decided", zap.String("identifier", mid.String()))
+			retries--
+			if retries > 0 {
+				interval *= 2
+				time.Sleep(interval)
+				continue
+			}
+		}
+		return
+	}
 }
 
 func (v *Validator) Stop() error {
@@ -141,15 +156,6 @@ func (v *Validator) Stop() error {
 		return true
 	})
 	return nil
-}
-
-// StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(duty *types.Duty) error {
-	dutyRunner := v.DutyRunners[duty.Type]
-	if dutyRunner == nil {
-		return errors.Errorf("duty type %s not supported", duty.Type.String())
-	}
-	return dutyRunner.StartNewDuty(duty)
 }
 
 func (v *Validator) HandleMessage(msg *types.SSVMessage) {
@@ -167,6 +173,15 @@ func (v *Validator) HandleMessage(msg *types.SSVMessage) {
 	}
 	v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
+}
+
+// StartDuty starts a duty for the validator
+func (v *Validator) StartDuty(duty *types.Duty) error {
+	dutyRunner := v.DutyRunners[duty.Type]
+	if dutyRunner == nil {
+		return errors.Errorf("duty type %s not supported", duty.Type.String())
+	}
+	return dutyRunner.StartNewDuty(duty)
 }
 
 // ProcessMessage processes Network Message of all types
