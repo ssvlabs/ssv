@@ -35,13 +35,14 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	prevDecided := inst != nil && inst.State.Decided
 
 	// Mark current instance decided
-	if inst := c.InstanceForHeight(c.Height); inst != nil && !inst.State.Decided {
-		inst.State.Decided = true
-		if msg.Message.Round > inst.State.Round {
-			inst.State.Round = msg.Message.Round
-		}
+	currentInstance := c.InstanceForHeight(c.Height)
+	if currentInstance != nil && !currentInstance.State.Decided {
+		currentInstance.State.Decided = true
 		if c.Height == msg.Message.Height {
-			inst.State.DecidedValue = data.Data
+			if msg.Message.Round > currentInstance.State.Round {
+				currentInstance.State.Round = msg.Message.Round
+			}
+			currentInstance.State.DecidedValue = data.Data
 		}
 	}
 
@@ -53,13 +54,12 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
 		c.StoredInstances.addNewInstance(i)
-
 		// bump height
 		c.Height = msg.Message.Height
 	}
 
 	if !prevDecided {
-		if err := c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
+		if err = c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
 			// no need to fail processing the decided msg if failed to save
 			fmt.Printf("%s\n", err.Error())
 		}
@@ -92,7 +92,7 @@ func validateDecided(config types2.IConfig, signedDecided *qbftspec.SignedMessag
 	return nil
 }
 
-// returns true if signed commit has all quorum sigs
+// isDecidedMsg returns true if signed commit has all quorum sigs
 func isDecidedMsg(share *types.Share, signedDecided *qbftspec.SignedMessage) bool {
 	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == qbftspec.CommitMsgType
 }

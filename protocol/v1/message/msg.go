@@ -20,6 +20,8 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "partialSignature"
 	case spectypes.DKGMsgType:
 		return "dkg"
+	case SSVSyncMsgType:
+		return "sync"
 	default:
 		return ""
 	}

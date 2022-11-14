@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"fmt"
 	"github.com/bloxapp/ssv-spec/p2p"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
@@ -17,6 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync/atomic"
+	"time"
 )
 
 type Options struct {
@@ -85,10 +85,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
-	//n, ok := options.Network.(network.Network)
-	//if !ok {
-	//	n = newNilNetwork(options.Network)
-	//}
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
@@ -116,14 +112,41 @@ func (v *Validator) Start() error {
 		}
 		identifiers := v.DutyRunners.Identifiers()
 		for _, identifier := range identifiers {
-			//v.loadLastHeight(identifier)
+			_, err := v.loadLastHeight(identifier)
+			if err != nil {
+				v.logger.Warn("could not load highest", zap.String("identifier", identifier.String()), zap.Error(err))
+			}
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 				return err
 			}
 			go v.StartQueueConsumer(identifier, v.ProcessMessage)
+			go v.sync(identifier)
 		}
 	}
 	return nil
+}
+
+func (v *Validator) sync(mid types.MessageID) {
+	ctx, cancel := context.WithCancel(v.ctx)
+	defer cancel()
+
+	// TODO: config?
+	interval := time.Second
+	retries := 3
+
+	for ctx.Err() == nil {
+		err := v.Network.SyncHighestDecided(mid)
+		if err != nil {
+			v.logger.Debug("could not sync highest decided", zap.String("identifier", mid.String()))
+			retries--
+			if retries > 0 {
+				interval *= 2
+				time.Sleep(interval)
+				continue
+			}
+		}
+		return
+	}
 }
 
 func (v *Validator) Stop() error {
@@ -133,15 +156,6 @@ func (v *Validator) Stop() error {
 		return true
 	})
 	return nil
-}
-
-// StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(duty *types.Duty) error {
-	dutyRunner := v.DutyRunners[duty.Type]
-	if dutyRunner == nil {
-		return errors.Errorf("duty type %s not supported", duty.Type.String())
-	}
-	return dutyRunner.StartNewDuty(duty)
 }
 
 func (v *Validator) HandleMessage(msg *types.SSVMessage) {
@@ -155,9 +169,19 @@ func (v *Validator) HandleMessage(msg *types.SSVMessage) {
 	fields := []zap.Field{
 		zap.Int("queue_len", v.Q.Len()),
 		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+		zap.String("msgID", msg.MsgID.String()),
 	}
 	v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
+}
+
+// StartDuty starts a duty for the validator
+func (v *Validator) StartDuty(duty *types.Duty) error {
+	dutyRunner := v.DutyRunners[duty.Type]
+	if dutyRunner == nil {
+		return errors.Errorf("duty type %s not supported", duty.Type.String())
+	}
+	return dutyRunner.StartNewDuty(duty)
 }
 
 // ProcessMessage processes Network Message of all types
@@ -211,22 +235,21 @@ func (v *Validator) GetShare() *beacon.Share {
 	return v.Share // temp solution
 }
 
-func (v *Validator) loadLastHeight(identifier types.MessageID) {
+func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
 	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
 	if err != nil {
-		v.logger.Warn("failed to get heights decided", zap.Error(err))
+		return qbft.Height(0), errors.Wrap(err, "failed to get heights decided")
 	}
 	if knownDecided == nil {
-		return
+		return qbft.Height(0), nil
 	}
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
 
 	if r == nil || r.GetBaseRunner() == nil {
-		v.logger.Warn(fmt.Sprintf("%s runner is nil", identifier.GetRoleType().String()))
-		return
+		return qbft.Height(0), errors.New("runner is nil")
 	}
 	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
-	v.logger.Info(fmt.Sprintf("%s runner load height %d", identifier.GetRoleType().String(), knownDecided.Message.Height))
+	return knownDecided.Message.Height, nil
 }
 
 // ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)

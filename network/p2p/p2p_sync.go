@@ -17,25 +17,50 @@ import (
 )
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	results, err := n.LastDecided(mid)
-	for _, res := range results {
-		if res.Msg == nil {
-			continue
-		}
-		n.msgRouter.Route(*res.Msg)
+	lastDecided, err := n.LastDecided(mid)
+	if err != nil {
+		return err
 	}
-	return err
+	if len(lastDecided) == 0 {
+		return errors.New("no messages were synced")
+	}
+	n.logger.Debug("got highest decided", zap.Int("results count", len(lastDecided)))
+	results := p2pprotocol.SyncResults(lastDecided)
+	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
+		raw, err := m.Encode()
+		if err != nil {
+			n.logger.Warn("could not encode signed message")
+			return
+		}
+		n.msgRouter.Route(spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   mid,
+			Data:    raw,
+		})
+	})
+	return nil
 }
 
 func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	results, err := n.LastChangeRound(mid, height)
-	for _, res := range results {
-		if res.Msg == nil {
-			continue
-		}
-		n.msgRouter.Route(*res.Msg)
+	lastChangeRound, err := n.LastChangeRound(mid, height)
+	if err != nil {
+		return err
 	}
-	return err
+	n.logger.Debug("got highest change round", zap.Int("results count", len(lastChangeRound)))
+	results := p2pprotocol.SyncResults(lastChangeRound)
+	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
+		raw, err := m.Encode()
+		if err != nil {
+			n.logger.Warn("could not encode signed message")
+			return
+		}
+		n.msgRouter.Route(spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   mid,
+			Data:    raw,
+		})
+	})
+	return nil
 }
 
 // LastDecided fetches last decided from a random set of peers
@@ -240,7 +265,6 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 			logger.Debug("could not decode stream response", zap.Error(err))
 			continue
 		}
-		//logger.Debug("got stream response")
 		results = append(results, p2pprotocol.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),
