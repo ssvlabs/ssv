@@ -39,9 +39,6 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 		}
 		all = append(all, peers...)
 	}
-	if len(all) == 0 {
-		all = n.getConnectedPeersDHT(pk)
-	}
 	return all, nil
 }
 
