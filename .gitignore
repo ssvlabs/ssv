@@ -48,5 +48,7 @@ vendor/
 bin/
 /data/
 /db
+/scripts/spec_align_report/data
+/scripts/spec_align_report/ssv-spec/*
 spectest/**/tests.json
 
