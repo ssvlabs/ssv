@@ -126,7 +126,7 @@ func (v *Validator) Start() error {
 	return nil
 }
 
-func (v *Validator) sync(mid types.MessageID) {
+func (v *Validator) sync(mid spectypes.MessageID) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
