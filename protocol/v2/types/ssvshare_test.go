@@ -9,9 +9,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
-// TODO: enhance these tests
-
-func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
+func TestSSVShareMetadata_BelongsToOperatorID(t *testing.T) {
 	metadata := &SSVShare{
 		Share: spectypes.Share{
 			Committee: []*spectypes.Operator{
@@ -39,7 +37,7 @@ func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 	require.False(t, metadata.BelongsToOperatorID(10))
 }
 
-func TestShare_BelongsToOperator(t *testing.T) {
+func TestSSVShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
 		Metadata: Metadata{
 			Operators: [][]byte{
@@ -53,7 +51,7 @@ func TestShare_BelongsToOperator(t *testing.T) {
 	require.False(t, metadata.BelongsToOperator(string([]byte{1, 2, 3, 4})))
 }
 
-func TestShare_HasBeaconMetadata(t *testing.T) {
+func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 	tt := []struct {
 		Name          string
 		ShareMetadata *SSVShare
@@ -90,4 +88,16 @@ func TestShare_HasBeaconMetadata(t *testing.T) {
 			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
 		})
 	}
+}
+
+func TestSSVShare_SetOperators(t *testing.T) {
+	metadata := &SSVShare{}
+	require.Nil(t, metadata.Operators)
+
+	operators := [][]byte{
+		{1, 1, 1, 1},
+		{2, 2, 2, 2},
+	}
+	metadata.SetOperators(operators)
+	require.EqualValues(t, operators, metadata.Operators)
 }

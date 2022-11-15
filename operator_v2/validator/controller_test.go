@@ -1,4 +1,3 @@
-// TODO: add tests for nil SSVShare and BeaconMetadata
 package validator
 
 import (
