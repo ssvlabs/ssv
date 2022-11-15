@@ -39,7 +39,7 @@ func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 	require.False(t, metadata.BelongsToOperatorID(10))
 }
 
-func TestShare_IsOperatorShare(t *testing.T) {
+func TestShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
 		Metadata: Metadata{
 			Operators: [][]byte{
@@ -53,7 +53,7 @@ func TestShare_IsOperatorShare(t *testing.T) {
 	require.False(t, metadata.BelongsToOperator(string([]byte{1, 2, 3, 4})))
 }
 
-func TestShare_HasStats(t *testing.T) {
+func TestShare_HasBeaconMetadata(t *testing.T) {
 	tt := []struct {
 		Name          string
 		ShareMetadata *SSVShare
