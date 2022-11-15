@@ -68,7 +68,11 @@ func (c *Controller) UponDecided(msg *qbftspec.SignedMessage) (*qbftspec.SignedM
 	return nil, nil
 }
 
-func validateDecided(config types2.IConfig, signedDecided *qbftspec.SignedMessage, share *types.Share) error {
+func validateDecided(
+	config types2.IConfig,
+	signedDecided *qbftspec.SignedMessage,
+	share *types.Share,
+) error {
 	if !isDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
 	}

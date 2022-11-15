@@ -33,7 +33,7 @@ func CleanSpecPath() error{
 func GitDiff(ssv string, spec string, outputPath string) (error){
 	cmd := exec.Command("git", "diff", "--color", "-w", "--word-diff","--no-index", "--ignore-blank-lines",
 		ssv, spec)
-
+	fmt.Println(cmd.Args)
 	if output, err := cmd.Output(); err != nil {
 		ioutil.WriteFile(outputPath, output, 0644)
 		return err

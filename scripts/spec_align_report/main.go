@@ -16,20 +16,14 @@ func main() {
 		return
 	}
 
-	controllerCompareStruct:= InitControllerCompareStruct()
-	if err:= controllerCompareStruct.ReplaceMap(); err != nil {
-		panic(err)
-	}
-
-	if err  := utils.GitDiff(controllerCompareStruct.SSVPath,controllerCompareStruct.SpecPath, specDataPath+ "/controller.diff") ; err != nil {
-		fmt.Println("Controller is not aligned to spec: "+ specDataPath+ "/controller.diff")
-	}
-
-	utils.CleanSpecPath()
+	processController()
+	//utils.CleanSpecPath()
 
 
 	fmt.Println("done")
 }
+
+// Controller
 
 func InitControllerCompareStruct() *utils.Compare {
 	if err:= utils.Mkdir(specDataPath+"/controller"); err != nil {
@@ -49,4 +43,42 @@ func InitControllerCompareStruct() *utils.Compare {
 	}
 	return c
 }
+func processController()  {
+	//controllerCompareStruct:= InitControllerCompareStruct()
+	//if err:= controllerCompareStruct.ReplaceMap(); err != nil {
+	//	panic(err)
+	//}
+	//
+	//if err  := utils.GitDiff(controllerCompareStruct.SSVPath,controllerCompareStruct.SpecPath, specDataPath+ "/controller.diff") ; err != nil {
+	//	fmt.Println("Controller is not aligned to spec: "+ specDataPath+ "/controller.diff")
+	//}
 
+	decidedCompareStruct:= InitDecidedCompareStruct()
+	if err:= decidedCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+
+	if err  := utils.GitDiff(decidedCompareStruct.SSVPath,decidedCompareStruct.SpecPath, specDataPath+ "/decided.diff") ; err != nil {
+		fmt.Println("Decided is not aligned to spec: "+ specDataPath+ "/decided.diff")
+	}
+
+}
+
+func InitDecidedCompareStruct() *utils.Compare {
+	if err:= utils.Mkdir(specDataPath+"/controller"); err != nil {
+		panic(err)
+	}
+	c:= &utils.Compare{
+		Replace: mapping.DecidedReplace(),
+		SpecReplace: mapping.SpecDecidedReplace(),
+		SSVPath: specDataPath + "/controller/decided.go",
+		SpecPath: specDataPath + "/controller/decided-spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/controller/decided.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/decided.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
