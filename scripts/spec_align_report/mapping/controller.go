@@ -31,14 +31,8 @@ func ControllerReplace()  map[string]string {
 	}
 	return controllerGeneral
 }
-
-// specControllerGeneral describes the list of changes between spec and implementation
-// It includes package names & imports
-var specControllerGeneral = map[string]string{
-}
-
 func SpecControllerReplace()  map[string]string {
-	return specControllerGeneral
+	return map[string]string{}
 }
 
 
@@ -64,5 +58,30 @@ func DecidedReplace()  map[string]string {
 	return decidedGeneral
 }
 func SpecDecidedReplace()  map[string]string {
-	return specControllerGeneral
+	return map[string]string{}
+}
+
+
+// FutureMessage mapping
+var futureMessageGeneral = map[string]string{
+	"package controller": "package qbft",
+	"qbftspec \"github.com/bloxapp/ssv-spec/qbft\"" : "",
+	// TODO change types2 to types
+	"types2 \"github.com/bloxapp/ssv/protocol/v2/types\"" : "",
+	"qbftspec.": "",
+	// TODO change types2 to types
+	"types2.IConfig": "IConfig",
+	//"instance.NewInstance": "NewInstance",
+	//"instance.BaseCommitValidation": "baseCommitValidation",
+}
+var futureMessageChanges = map[string]string{}
+
+func FutureMessageReplace()  map[string]string {
+	for k, v := range futureMessageChanges {
+		futureMessageGeneral[k] = v
+	}
+	return futureMessageGeneral
+}
+func SpecFutureMessageReplace()  map[string]string {
+	return map[string]string{}
 }
