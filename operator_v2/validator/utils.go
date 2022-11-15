@@ -27,7 +27,7 @@ func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool,
 	if !ok {
 		return false, nil
 	}
-	share.Stats = meta
+	share.BeaconMetadata = meta
 	return true, nil
 }
 

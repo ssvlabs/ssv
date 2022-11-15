@@ -1,3 +1,4 @@
+// TODO: add tests for nil SSVShare and BeaconMetadata
 package validator
 
 import (
@@ -161,13 +162,8 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 	return &validator.Validator{
 		Share: &types.SSVShare{
-			Share: spectypes.Share{
-				OperatorID:      0,
-				ValidatorPubKey: nil,
-				Committee:       nil,
-			},
-			ShareMetadata: types.ShareMetadata{
-				Stats: metaData,
+			Metadata: types.Metadata{
+				BeaconMetadata: metaData,
 			},
 		},
 	}

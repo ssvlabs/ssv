@@ -3,8 +3,10 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
@@ -121,6 +123,24 @@ func (s *Collection) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	return res, err
 }
 
+func NotLiquidatedAndByOperatorPubKey(operatorPubKey string) func(share *types.SSVShare) bool {
+	return func(share *types.SSVShare) bool {
+		return !share.Liquidated && share.BelongsToOperator(operatorPubKey)
+	}
+}
+
+func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
+	return func(share *types.SSVShare) bool {
+		return share.BelongsToOperatorID(operatorID)
+	}
+}
+
+func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
+	return func(share *types.SSVShare) bool {
+		return strings.EqualFold(share.OwnerAddress, ownerAddress)
+	}
+}
+
 func (s *Collection) GetFilteredValidatorShares(filter func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -169,6 +189,6 @@ func (s *Collection) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if !found {
 		return nil
 	}
-	share.Stats = metadata
+	share.BeaconMetadata = metadata
 	return s.saveUnsafe(share)
 }

@@ -18,7 +18,7 @@ var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
 			Network: testingutils.NewTestingNetwork(),
 			Beacon:  testingutils.NewTestingBeaconNode(),
 			Storage: testingutils.NewTestingStorage(),
-			Share: &types.SSVShare{
+			SSVShare: &types.SSVShare{
 				Share: *testingutils.TestingShare(keySet),
 			},
 			Signer: testingutils.NewTestingKeyManager(),

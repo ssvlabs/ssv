@@ -12,7 +12,6 @@ import (
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -110,9 +109,7 @@ func (c *controller) handleOperatorRemovalEvent(
 		return logFields, nil
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
-		return share.BelongsToOperatorID(spectypes.OperatorID(event.OperatorId))
-	})
+	shares, err := c.collection.GetFilteredValidatorShares(ByOperatorID(spectypes.OperatorID(event.OperatorId)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
@@ -245,9 +242,7 @@ func (c *controller) handleAccountLiquidationEvent(
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	ownerAddress := event.OwnerAddress.String()
-	shares, err := c.collection.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
-		return strings.EqualFold(share.OwnerAddress, ownerAddress)
-	})
+	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(ownerAddress))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}
@@ -293,9 +288,7 @@ func (c *controller) handleAccountEnableEvent(
 	event abiparser.AccountEnableEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	shares, err := c.collection.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
-		return strings.EqualFold(share.OwnerAddress, event.OwnerAddress.String())
-	})
+	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(event.OwnerAddress.String()))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}

@@ -42,7 +42,7 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 	require.NotNil(t, v1.Committee)
 	require.NotNil(t, v1.OperatorID)
-	require.Equal(t, v1.Stats, validatorShare.Stats)
+	require.Equal(t, v1.BeaconMetadata, validatorShare.BeaconMetadata)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Operators, validatorShare.Operators)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
@@ -133,8 +133,8 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.S
 			DomainType:      v1types.GetDefaultDomain(),
 			Graffiti:        nil,
 		},
-		ShareMetadata: types.ShareMetadata{
-			Stats: &beaconprotocol.ValidatorMetadata{
+		Metadata: types.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Balance: 1,
 				Status:  2,
 				Index:   3,

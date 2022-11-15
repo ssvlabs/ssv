@@ -10,10 +10,10 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
-// SSVShare is a combination of spectypes.Share and its ShareMetadata.
+// SSVShare is a combination of spectypes.Share and its Metadata.
 type SSVShare struct {
 	spectypes.Share
-	ShareMetadata
+	Metadata
 }
 
 // Encode encodes SSVShare using gob.
@@ -57,9 +57,9 @@ func (s *SSVShare) BelongsToOperatorID(operatorID spectypes.OperatorID) bool {
 	return false
 }
 
-// HasStats checks whether the Stats field is not nil.
-func (s *SSVShare) HasStats() bool {
-	return s != nil && s.Stats != nil
+// HasBeaconMetadata checks whether the BeaconMetadata field is not nil.
+func (s *SSVShare) HasBeaconMetadata() bool {
+	return s != nil && s.BeaconMetadata != nil
 }
 
 // SetOperators sets operators public keys.
@@ -68,10 +68,10 @@ func (s *SSVShare) SetOperators(pks [][]byte) {
 	copy(s.Operators, pks)
 }
 
-// ShareMetadata represents Metadata of SSVShare.
-type ShareMetadata struct {
-	Stats        *beaconprotocol.ValidatorMetadata
-	OwnerAddress string
-	Operators    [][]byte
-	Liquidated   bool
+// Metadata represents metadata of SSVShare.
+type Metadata struct {
+	BeaconMetadata *beaconprotocol.ValidatorMetadata
+	OwnerAddress   string
+	Operators      [][]byte // TODO: remove
+	Liquidated     bool
 }

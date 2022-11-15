@@ -24,7 +24,7 @@ type Options struct {
 	Network     qbft.Network
 	Beacon      ssv.BeaconNode
 	Storage     qbft.Storage
-	Share       *types.SSVShare
+	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
 	Mode        ValidatorMode
@@ -94,7 +94,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Network:     options.Network,
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
-		Share:       options.Share,
+		Share:       options.SSVShare,
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),

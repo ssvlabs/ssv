@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"sort"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -15,11 +16,9 @@ import (
 type ShareOptions struct {
 	NodeID       uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
 	PublicKey    string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
-	ShareKey     string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
 	Committee    map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 	OwnerAddress string         `yaml:"OwnerAddress" env:"LOCAL_OWNER_ADDRESS" env-description:"Local validator owner address"`
 	Operators    []string       `yaml:"Operators" env:"LOCAL_OPERATORS" env-description:"Local validator selected operators"`
-	OperatorIds  []int          `yaml:"OperatorIds" env:"LOCAL_OPERATOR_IDS" env-description:"Local validator selected operator ids"`
 }
 
 func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
@@ -43,6 +42,7 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 
 	var sharePK []byte
 	committee := make([]*spectypes.Operator, 0)
+
 	for pkString, id := range options.Committee {
 		pkBytes := _getBytesFromHex(pkString)
 		committee = append(committee, &spectypes.Operator{
@@ -50,7 +50,6 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 			PubKey:     pkBytes,
 		})
 
-		// TODO: check if need to use options.ShareKey instead
 		if spectypes.OperatorID(id) == spectypes.OperatorID(options.NodeID) {
 			sharePK = pkBytes
 		}
@@ -65,32 +64,35 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		operators = append(operators, []byte(op))
 	}
 
+	sort.Slice(committee, func(i, j int) bool {
+		return committee[i].OperatorID < committee[j].OperatorID
+	})
+
+	f := uint64(len(committee)-1) / 3
 	share := &types.SSVShare{
 		Share: spectypes.Share{
 			OperatorID:      spectypes.OperatorID(options.NodeID),
 			ValidatorPubKey: validatorPk.Serialize(),
 			SharePubKey:     sharePK,
 			Committee:       committee,
-			Quorum:          3,                          // temp
-			PartialQuorum:   2,                          // temp
-			DomainType:      v1types.GetDefaultDomain(), // temp
+			Quorum:          3 * f,
+			PartialQuorum:   2 * f,
+			DomainType:      v1types.GetDefaultDomain(), // temp; TODO: decide about the value
 			Graffiti:        nil,
 		},
-		ShareMetadata: types.ShareMetadata{
+		Metadata: types.Metadata{
 			OwnerAddress: options.OwnerAddress,
 			Operators:    operators,
 		},
 	}
-	return share, nil
 
+	return share, nil
 }
 
 func (options *ShareOptions) valid() bool {
 	return options != nil &&
 		len(options.PublicKey) > 0 &&
-		len(options.ShareKey) > 0 &&
 		len(options.Committee) > 0 &&
 		len(options.OwnerAddress) > 0 &&
-		len(options.Operators) > 0 &&
-		len(options.OperatorIds) > 0
+		len(options.Operators) > 0
 }

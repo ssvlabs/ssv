@@ -9,6 +9,8 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 )
 
+// TODO: enhance these tests
+
 func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 	metadata := &SSVShare{
 		Share: spectypes.Share{
@@ -39,7 +41,7 @@ func TestShareMetadata_BelongsToOperatorID(t *testing.T) {
 
 func TestShare_IsOperatorShare(t *testing.T) {
 	metadata := &SSVShare{
-		ShareMetadata: ShareMetadata{
+		Metadata: Metadata{
 			Operators: [][]byte{
 				{1, 1, 1, 1},
 				{2, 2, 2, 2},
@@ -58,24 +60,24 @@ func TestShare_HasStats(t *testing.T) {
 		Result        bool
 	}{
 		{
-			Name:          "ShareMetadata == nil",
+			Name:          "Metadata == nil",
 			ShareMetadata: nil,
 			Result:        false,
 		},
 		{
-			Name: "Stats == nil",
+			Name: "BeaconMetadata == nil",
 			ShareMetadata: &SSVShare{
-				ShareMetadata: ShareMetadata{
-					Stats: nil,
+				Metadata: Metadata{
+					BeaconMetadata: nil,
 				},
 			},
 			Result: false,
 		},
 		{
-			Name: "Stats != nil",
+			Name: "BeaconMetadata != nil",
 			ShareMetadata: &SSVShare{
-				ShareMetadata: ShareMetadata{
-					Stats: &beaconprotocol.ValidatorMetadata{},
+				Metadata: Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{},
 				},
 			},
 			Result: true,
@@ -85,7 +87,7 @@ func TestShare_HasStats(t *testing.T) {
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			require.Equal(t, tc.Result, tc.ShareMetadata.HasStats())
+			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
 		})
 	}
 }
