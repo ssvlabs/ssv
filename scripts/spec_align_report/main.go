@@ -18,7 +18,7 @@ func main() {
 	}
 
 	processController()
-	//utils.CleanSpecPath()
+	utils.CleanSpecPath()
 
 
 	fmt.Println("done")
