@@ -30,12 +30,12 @@ func (c *controller) loadSharesFromConfig(items []ShareOptions) {
 	if len(items) > 0 {
 		c.logger.Info("loading validators share from config", zap.Int("count", len(items)))
 		for _, opts := range items {
-			pubkey, err := c.loadShare(opts)
+			share, err := c.loadShare(opts)
 			if err != nil {
 				c.logger.Error("failed to load validator share data from config", zap.Error(err))
 				continue
 			}
-			addedValidators = append(addedValidators, hex.EncodeToString(pubkey.ValidatorPubKey))
+			addedValidators = append(addedValidators, hex.EncodeToString(share.ValidatorPubKey))
 		}
 		c.logger.Info("successfully loaded validators from config", zap.Strings("pubkeys", addedValidators))
 	}
@@ -50,8 +50,8 @@ func (c *controller) loadShare(options ShareOptions) (*types.SSVShare, error) {
 		return nil, errors.WithMessage(err, "failed to create share object")
 	}
 
-	shareKey := &bls.SecretKey{}
-	if err = shareKey.SetLittleEndian(share.SharePubKey); err != nil {
+	sharePrivateKey := &bls.SecretKey{}
+	if err = sharePrivateKey.SetHexString(options.ShareKey); err != nil {
 		return nil, errors.Wrap(err, "failed to set hex private key")
 	}
 
@@ -65,7 +65,7 @@ func (c *controller) loadShare(options ShareOptions) (*types.SSVShare, error) {
 		return nil, errors.New("could not find validator metadata")
 	}
 
-	if err := c.keyManager.AddShare(shareKey); err != nil {
+	if err := c.keyManager.AddShare(sharePrivateKey); err != nil {
 		return nil, errors.Wrap(err, "could not save share key from share options")
 	}
 	if err := c.collection.SaveValidatorShare(share); err != nil {

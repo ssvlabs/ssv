@@ -16,6 +16,7 @@ import (
 type ShareOptions struct {
 	NodeID       uint64         `yaml:"NodeID" env:"NodeID" env-description:"Local share node ID"`
 	PublicKey    string         `yaml:"PublicKey" env:"LOCAL_NODE_ID" env-description:"Local validator public key"`
+	ShareKey     string         `yaml:"ShareKey" env:"LOCAL_SHARE_KEY" env-description:"Local share key"`
 	Committee    map[string]int `yaml:"Committee" env:"LOCAL_COMMITTEE" env-description:"Local validator committee array"`
 	OwnerAddress string         `yaml:"OwnerAddress" env:"LOCAL_OWNER_ADDRESS" env-description:"Local validator owner address"`
 	Operators    []string       `yaml:"Operators" env:"LOCAL_OPERATORS" env-description:"Local validator selected operators"`
@@ -40,7 +41,7 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		return val
 	}
 
-	var sharePK []byte
+	var sharePublicKey []byte
 	committee := make([]*spectypes.Operator, 0)
 
 	for pkString, id := range options.Committee {
@@ -51,7 +52,7 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		})
 
 		if spectypes.OperatorID(id) == spectypes.OperatorID(options.NodeID) {
-			sharePK = pkBytes
+			sharePublicKey = pkBytes
 		}
 	}
 
@@ -73,7 +74,7 @@ func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 		Share: spectypes.Share{
 			OperatorID:      spectypes.OperatorID(options.NodeID),
 			ValidatorPubKey: validatorPk.Serialize(),
-			SharePubKey:     sharePK,
+			SharePubKey:     sharePublicKey,
 			Committee:       committee,
 			Quorum:          3 * f,
 			PartialQuorum:   2 * f,

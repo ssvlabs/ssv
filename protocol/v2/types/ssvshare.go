@@ -21,7 +21,7 @@ func (s *SSVShare) Encode() ([]byte, error) {
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	if err := e.Encode(s); err != nil {
-		return nil, fmt.Errorf("failed to encode serializedValidator: %w", err)
+		return nil, fmt.Errorf("encode SSVShare: %w", err)
 	}
 
 	return b.Bytes(), nil
@@ -31,7 +31,7 @@ func (s *SSVShare) Encode() ([]byte, error) {
 func (s *SSVShare) Decode(data []byte) error {
 	d := gob.NewDecoder(bytes.NewReader(data))
 	if err := d.Decode(s); err != nil {
-		return fmt.Errorf("failed to get val value: %w", err)
+		return fmt.Errorf("decode SSVShare: %w", err)
 	}
 
 	return nil
@@ -72,6 +72,6 @@ func (s *SSVShare) SetOperators(pks [][]byte) {
 type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   string
-	Operators      [][]byte // TODO: remove
+	Operators      [][]byte // TODO: remove; get operator ID from the first event with operator public key
 	Liquidated     bool
 }

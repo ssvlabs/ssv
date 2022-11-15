@@ -20,6 +20,9 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
+// TODO: increase test coverage, add more tests, e.g.:
+// 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
+
 func init() {
 	logex.Build("test", zap.DebugLevel, nil)
 }

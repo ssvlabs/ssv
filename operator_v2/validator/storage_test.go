@@ -32,12 +32,12 @@ func TestValidatorSerializer(t *testing.T) {
 	b, err := validatorShare.Encode()
 	require.NoError(t, err)
 
-	obj1 := basedb.Obj{
+	obj := basedb.Obj{
 		Key:   validatorShare.ValidatorPubKey,
 		Value: b,
 	}
 	v1 := &types.SSVShare{}
-	require.NoError(t, v1.Decode(obj1.Value))
+	require.NoError(t, v1.Decode(obj.Value))
 	require.NotNil(t, v1.ValidatorPubKey)
 	require.Equal(t, hex.EncodeToString(v1.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 	require.NotNil(t, v1.Committee)
