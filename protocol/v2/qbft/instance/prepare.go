@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func (i *Instance) uponPrepare(
@@ -66,7 +68,7 @@ func (i *Instance) uponPrepare(
 	return nil
 }
 
-func getRoundChangeJustification(state *specqbft.State, config types2.IConfig, prepareMsgContainer *specqbft.MsgContainer) []*specqbft.SignedMessage {
+func getRoundChangeJustification(state *specqbft.State, config types.IConfig, prepareMsgContainer *specqbft.MsgContainer) []*specqbft.SignedMessage {
 	if state.LastPreparedValue == nil {
 		return nil
 	}
@@ -106,7 +108,7 @@ func getRoundChangeJustification(state *specqbft.State, config types2.IConfig, p
 
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndValue(config types2.IConfig, signedPrepare *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, operators []*types.Operator) error {
+func validSignedPrepareForHeightRoundAndValue(config types.IConfig, signedPrepare *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, operators []*spectypes.Operator) error {
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -133,7 +135,7 @@ func validSignedPrepareForHeightRoundAndValue(config types2.IConfig, signedPrepa
 		return errors.New("prepare msg allows 1 signer")
 	}
 
-	if err := signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), types.QBFTSignatureType, operators); err != nil {
+	if err := signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "prepare msg signature invalid")
 	}
 
@@ -152,7 +154,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config types2.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
+func CreatePrepare(state *specqbft.State, config types.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
 	prepareData := &specqbft.PrepareData{
 		Data: value,
 	}
@@ -167,14 +169,14 @@ func CreatePrepare(state *specqbft.State, config types2.IConfig, newRound specqb
 		Identifier: state.ID,
 		Data:       dataByts,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, types.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
 
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []types.OperatorID{state.Share.OperatorID},
+		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
 		Message:   msg,
 	}
 	return signedMsg, nil

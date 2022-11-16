@@ -1,13 +1,14 @@
 package controller
 
 import (
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (c *Controller) UponFutureMsg(msg *qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := validateFutureMsg(c.GetConfig(), msg, c.Share.Committee); err != nil {
 		return nil, errors.Wrap(err, "invalid future msg")
 	}
@@ -15,15 +16,14 @@ func (c *Controller) UponFutureMsg(msg *qbftspec.SignedMessage) (*qbftspec.Signe
 		return nil, errors.New("discarded future msg")
 	}
 	if c.f1SyncTrigger() {
-		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(types.MessageIDFromBytes(c.Identifier))
+		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
 	}
 	return nil, nil
 }
 
-func validateFutureMsg(
-	config types2.IConfig,
-	msg *qbftspec.SignedMessage,
-	operators []*types.Operator,
+func validateFutureMsg(config types.IConfig,
+	msg *specqbft.SignedMessage,
+	operators []*spectypes.Operator
 ) error {
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
@@ -34,7 +34,7 @@ func validateFutureMsg(
 	}
 
 	// verify signature
-	if err := msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), types.QBFTSignatureType, operators); err != nil {
+	if err := msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "commit msg signature invalid")
 	}
 
@@ -42,9 +42,9 @@ func validateFutureMsg(
 }
 
 // addHigherHeightMsg verifies msg, cleanup queue and adds the message if unique signer
-func (c *Controller) addHigherHeightMsg(msg *qbftspec.SignedMessage) bool {
+func (c *Controller) addHigherHeightMsg(msg *specqbft.SignedMessage) bool {
 	// cleanup lower height msgs
-	cleanedQueue := make(map[types.OperatorID]qbftspec.Height)
+	cleanedQueue := make(map[spectypes.OperatorID]specqbft.Height)
 	signerExists := false
 	for signer, height := range c.FutureMsgsContainer {
 		if height <= c.Height {

@@ -5,9 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	qbft2 "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	"sort"
+	"sync"
+	"testing"
+	"time"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/p2p"
@@ -20,29 +30,21 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/strategy/factory"
-	types2 "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v1/validator"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"sort"
-	"sync"
-	"testing"
-	"time"
 )
 
 // BroadcastMessagesGetter interface to support spec tests
 type BroadcastMessagesGetter interface {
-	GetBroadcastMessages() []types.SSVMessage
+	GetBroadcastMessages() []spectypes.SSVMessage
 	CalledDecidedSyncCnt() int
 	SetCalledDecidedSyncCnt(int) // temp solution to pass spec test
 }
 
 // NewController returns new qbft controller
-func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identifier types.MessageID, s qbftstorage.QBFTStore, share *beacon.Share, net protcolp2p.MockNetwork, beacon *validator.TestBeacon, version forksprotocol.ForkVersion) *controller.Controller {
+func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identifier spectypes.MessageID, s qbftstorage.QBFTStore, share *beacon.Share, net protcolp2p.MockNetwork, beacon *validator.TestBeacon, version forksprotocol.ForkVersion) *controller.Controller {
 	q, err := msgqueue.New(
 		logger.With(zap.String("who", "msg_q")),
 		msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer()),
@@ -61,7 +63,7 @@ func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identi
 		Fork:                   forksfactory.NewFork(version),
 		Beacon:                 beacon,
 		KeyManager:             beacon.KeyManager,
-		HigherReceivedMessages: make(map[types.OperatorID]qbft2.Height),
+		HigherReceivedMessages: make(map[spectypes.OperatorID]specqbft.Height),
 		CurrentInstanceLock:    &sync.RWMutex{},
 		ForkLock:               &sync.Mutex{},
 		SignatureState: controller.SignatureState{
@@ -83,21 +85,21 @@ func NewController(ctx context.Context, t *testing.T, logger *zap.Logger, identi
 func GetControllerRoot(t *testing.T, c *controller.Controller, storedInstances []instance.Instancer) ([]byte, error) {
 	rootStruct := struct {
 		Identifier             []byte
-		Height                 qbft2.Height
+		Height                 specqbft.Height
 		InstanceRoots          [][]byte
-		HigherReceivedMessages map[types.OperatorID]qbft2.Height
-		Domain                 types.DomainType
-		Share                  *types.Share
+		HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
+		Domain                 spectypes.DomainType
+		Share                  *spectypes.Share
 	}{
 		Identifier:             c.Identifier,
 		Height:                 c.GetHeight(),
 		InstanceRoots:          make([][]byte, len(storedInstances)),
 		HigherReceivedMessages: c.HigherReceivedMessages,
-		Domain:                 types2.GetDefaultDomain(), // might need to be dynamic
+		Domain:                 types.GetDefaultDomain(), // might need to be dynamic
 		Share:                  toSpecShare(c.ValidatorShare),
 	}
 
-	instances := make([][]byte, qbft2.HistoricalInstanceCapacity) // spec default history size
+	instances := make([][]byte, specqbft.HistoricalInstanceCapacity) // spec default history size
 	for i, inst := range storedInstances {
 		if inst != nil {
 			mappedInstance := MapToSpecInstance(t, c.Identifier, inst, c.ValidatorShare)
@@ -146,8 +148,8 @@ func NewQbftInstance(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, net 
 }
 
 // MapToSpecInstance mapping instance to spec instance struct
-func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.Instancer, instanceShare *beacon.Share) *qbft2.Instance {
-	mappedInstance := new(qbft2.Instance)
+func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.Instancer, instanceShare *beacon.Share) *specqbft.Instance {
+	mappedInstance := new(specqbft.Instance)
 	if qbftInstance != nil {
 		preparedValue := qbftInstance.GetState().GetPreparedValue()
 		if len(preparedValue) == 0 {
@@ -163,7 +165,7 @@ func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.In
 			decidedValue = cd.Data
 		}
 
-		mappedInstance.State = &qbft2.State{
+		mappedInstance.State = &specqbft.State{
 			Share:                           toSpecShare(instanceShare),
 			ID:                              identifier,
 			Round:                           round,
@@ -173,10 +175,10 @@ func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.In
 			ProposalAcceptedForCurrentRound: qbftInstance.GetState().GetProposalAcceptedForCurrentRound(),
 			Decided:                         len(decidedValue) != 0,
 			DecidedValue:                    decidedValue,
-			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[qbft2.ProposalMsgType]),
-			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[qbft2.PrepareMsgType]),
-			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[qbft2.CommitMsgType]),
-			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[qbft2.RoundChangeMsgType]),
+			ProposeContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.ProposalMsgType]),
+			PrepareContainer:                convertToSpecContainer(t, qbftInstance.Containers()[specqbft.PrepareMsgType]),
+			CommitContainer:                 convertToSpecContainer(t, qbftInstance.Containers()[specqbft.CommitMsgType]),
+			RoundChangeContainer:            convertToSpecContainer(t, qbftInstance.Containers()[specqbft.RoundChangeMsgType]),
 		}
 
 		mappedInstance.StartValue = qbftInstance.GetState().GetInputValue()
@@ -185,13 +187,13 @@ func MapToSpecInstance(t *testing.T, identifier []byte, qbftInstance instance.In
 }
 
 // convertToSpecContainer from ssv container struct to spec struct
-func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *qbft2.MsgContainer {
-	c := qbft2.NewMsgContainer()
-	container.AllMessaged(func(round qbft2.Round, msg *qbft2.SignedMessage) {
-		ok, err := c.AddIfDoesntExist(&qbft2.SignedMessage{
+func convertToSpecContainer(t *testing.T, container msgcont.MessageContainer) *specqbft.MsgContainer {
+	c := specqbft.NewMsgContainer()
+	container.AllMessaged(func(round specqbft.Round, msg *specqbft.SignedMessage) {
+		ok, err := c.AddFirstMsgForSignerAndRound(&specqbft.SignedMessage{
 			Signature: msg.Signature,
 			Signers:   msg.Signers,
-			Message: &qbft2.Message{
+			Message: &specqbft.Message{
 				MsgType:    msg.Message.MsgType,
 				Height:     msg.Message.Height,
 				Round:      msg.Message.Round,
@@ -217,10 +219,10 @@ func NewQBFTStorage(ctx context.Context, t *testing.T, logger *zap.Logger, role 
 }
 
 // toSpecShare convert ssv share to spec share
-func toSpecShare(share *beacon.Share) *types.Share {
-	specCommittee := make([]*types.Operator, 0)
+func toSpecShare(share *beacon.Share) *spectypes.Share {
+	specCommittee := make([]*spectypes.Operator, 0)
 	for operatorID, node := range share.Committee {
-		specCommittee = append(specCommittee, &types.Operator{
+		specCommittee = append(specCommittee, &spectypes.Operator{
 			OperatorID: operatorID,
 			PubKey:     node.Pk,
 		})
@@ -230,20 +232,20 @@ func toSpecShare(share *beacon.Share) *types.Share {
 		return specCommittee[i].OperatorID < specCommittee[j].OperatorID
 	})
 
-	return &types.Share{
+	return &spectypes.Share{
 		OperatorID:      share.NodeID,
 		ValidatorPubKey: share.PublicKey.Serialize(),
 		SharePubKey:     share.Committee[share.NodeID].Pk,
 		Committee:       specCommittee,
 		Quorum:          uint64(share.ThresholdSize()),
 		PartialQuorum:   uint64(share.PartialThresholdSize()),
-		DomainType:      types2.GetDefaultDomain(),
+		DomainType:      types.GetDefaultDomain(),
 		Graffiti:        nil,
 	}
 }
 
 // ToMappedShare convert spec share to ssv share
-func ToMappedShare(t *testing.T, share *types.Share) (*beacon.Share, *testingutils.TestKeySet) {
+func ToMappedShare(t *testing.T, share *spectypes.Share) (*beacon.Share, *testingutils.TestKeySet) {
 	vpk := &bls.PublicKey{}
 	require.NoError(t, vpk.Deserialize(share.ValidatorPubKey))
 
@@ -263,7 +265,7 @@ func ToMappedShare(t *testing.T, share *types.Share) (*beacon.Share, *testinguti
 }
 
 // applyCommittee to ssv share from spec share
-func applyCommittee(t *testing.T, share *beacon.Share, specCommittee []*types.Operator) *testingutils.TestKeySet {
+func applyCommittee(t *testing.T, share *beacon.Share, specCommittee []*spectypes.Operator) *testingutils.TestKeySet {
 	var keysSet *testingutils.TestKeySet
 	switch len(specCommittee) {
 	case 4:
@@ -279,14 +281,14 @@ func applyCommittee(t *testing.T, share *beacon.Share, specCommittee []*types.Op
 	}
 
 	if share.Committee == nil {
-		share.Committee = make(map[types.OperatorID]*beacon.Node)
+		share.Committee = make(map[spectypes.OperatorID]*beacon.Node)
 	}
 	sort.Slice(specCommittee, func(i, j int) bool { // make sure the same order
 		return specCommittee[i].OperatorID < specCommittee[j].OperatorID
 	})
 
 	for i := range specCommittee {
-		operatorID := types.OperatorID(i) + 1
+		operatorID := spectypes.OperatorID(i) + 1
 		pk := keysSet.Shares[operatorID].GetPublicKey().Serialize()
 		share.Committee[operatorID] = &beacon.Node{
 			IbftID: uint64(i) + 1,

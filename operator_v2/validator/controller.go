@@ -8,13 +8,13 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -24,19 +24,18 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	v1qbftcontroller "github.com/bloxapp/ssv/protocol/v1/qbft/controller"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v1/queue"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v1/sync/handlers"
-	"github.com/bloxapp/ssv/protocol/v1/types"
-	validatorv1 "github.com/bloxapp/ssv/protocol/v1/validator"
+	v1types "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/commons"
-	controller2 "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	validatorv2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	qbft2 "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -52,7 +51,7 @@ const (
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *beaconprotocol.Share)
+type ShareEventHandlerFunc func(share *types.SSVShare)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
@@ -74,7 +73,7 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
-	NewDecidedHandler          qbftcontroller.NewDecidedHandler
+	NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
@@ -88,23 +87,23 @@ type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
 	GetValidatorsIndices() []spec.ValidatorIndex
-	GetValidator(pubKey string) (*validatorv2.Validator, bool)
+	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler
-	GetAllValidatorShares() ([]*beaconprotocol.Share, error)
-	//OnFork(forkVersion forksprotocol.ForkVersion) error
+	GetAllValidatorShares() ([]*types.SSVShare, error)
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
+	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
 type controller struct {
 	context     context.Context
-	collection  validatorv1.ICollection
+	collection  ICollection
 	storage     registrystorage.OperatorsCollection
 	ibftStorage qbftstorage.QBFTStore
 	logger      *zap.Logger
@@ -115,7 +114,7 @@ type controller struct {
 	operatorPubKey             string
 
 	validatorsMap    *validatorsMap
-	validatorOptions *validatorv2.Options
+	validatorOptions *validator.Options
 
 	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
@@ -148,14 +147,14 @@ func NewController(options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := &validatorv2.Options{ //TODO add vars
+	validatorOptions := &validator.Options{ //TODO add vars
 		Logger:  options.Logger,
 		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
 		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
-		//Mode: validatorv2.ModeRW // set per validator
+		//Mode: validator.ModeRW // set per validator
 		DutyRunners: nil, // set per validator
 	}
 
@@ -207,7 +206,7 @@ func (c *controller) setupNetworkHandlers() error {
 	return nil
 }
 
-func (c *controller) GetAllValidatorShares() ([]*beaconprotocol.Share, error) {
+func (c *controller) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	return c.collection.GetAllValidatorShares()
 }
 
@@ -219,10 +218,10 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
-		if ok := s.IsOperatorShare(c.operatorPubKey); ok {
+		if ok := s.BelongsToOperator(c.operatorPubKey); ok {
 			operatorShares++
 		}
-		if s.HasMetadata() && s.Metadata.IsActive() {
+		if s.HasBeaconMetadata() && s.BeaconMetadata.IsActive() {
 			active++
 		}
 	}
@@ -259,7 +258,7 @@ func (c *controller) handleRouterMessages() {
 
 // getShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*beaconprotocol.Share, error) {
+func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
 	share, found, err := c.collection.GetValidatorShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -280,11 +279,11 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 	}
 
 	opts := *c.validatorOptions
-	opts.Share = share
-	opts.Mode = validatorv2.ModeR
+	opts.SSVShare = share
+	opts.Mode = validator.ModeR
 	opts.DutyRunners = setupRunners(c.context, opts)
 
-	v := validatorv2.NewValidator(c.context, opts)
+	v := validator.NewValidator(c.context, opts)
 	v.HandleMessage(msg)
 	return v.Stop()
 }
@@ -310,7 +309,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
+	shares, err := c.collection.GetFilteredValidatorShares(NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -323,17 +322,17 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*beaconprotocol.Share) {
+func (c *controller) setupValidators(shares []*types.SSVShare) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
-		pk := hex.EncodeToString(v.Share.PublicKey.Serialize())
+		pk := hex.EncodeToString(v.Share.ValidatorPubKey)
 		logger := c.logger.With(zap.String("pubkey", pk))
-		if !v.GetShare().HasMetadata() { // fetching index and status in case not exist
-			fetchMetadata = append(fetchMetadata, v.GetShare().PublicKey.Serialize())
+		if !v.Share.HasBeaconMetadata() { // fetching index and status in case not exist
+			fetchMetadata = append(fetchMetadata, v.Share.ValidatorPubKey)
 			logger.Warn("could not start validator as metadata not found")
 			continue
 		}
@@ -382,7 +381,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return errors.New("could not update empty metadata")
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
-		v.GetShare().Metadata = metadata
+		v.Share.BeaconMetadata = metadata
 		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(pk, metadata); err != nil {
 			return err
 		}
@@ -395,7 +394,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from validatorsMap
-func (c *controller) GetValidator(pubKey string) (*validatorv2.Validator, bool) {
+func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -405,11 +404,11 @@ func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
 	var toFetch [][]byte
 	var indices []spec.ValidatorIndex
 
-	err := c.validatorsMap.ForEach(func(v *validatorv2.Validator) error {
-		if !v.GetShare().HasMetadata() {
-			toFetch = append(toFetch, v.GetShare().PublicKey.Serialize())
-		} else if v.GetShare().Metadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
-			indices = append(indices, v.GetShare().Metadata.Index)
+	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
+		if !v.Share.HasBeaconMetadata() {
+			toFetch = append(toFetch, v.Share.ValidatorPubKey)
+		} else if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil
 	})
@@ -430,12 +429,12 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.GetShare().HasMetadata() {
-			v.GetShare().Metadata = meta
+		if !v.Share.HasBeaconMetadata() {
+			v.Share.BeaconMetadata = meta
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
-		} else if !v.GetShare().Metadata.Equals(meta) {
-			v.GetShare().Metadata.Status = meta.Status
-			v.GetShare().Metadata.Balance = meta.Balance
+		} else if !v.Share.BeaconMetadata.Equals(meta) {
+			v.Share.BeaconMetadata.Status = meta.Status
+			v.Share.BeaconMetadata.Balance = meta.Balance
 			c.logger.Debug("metadata was updated", zap.String("pk", pk))
 		}
 		_, err := c.startValidator(v)
@@ -447,7 +446,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*beaconprotocol.Share, bool, error) {
+func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistrationEvent) (*types.SSVShare, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
 		c.storage,
@@ -459,14 +458,14 @@ func (c *controller) onShareCreate(validatorEvent abiparser.ValidatorRegistratio
 	}
 
 	// determine if the share belongs to operator
-	isOperatorShare := share.IsOperatorShare(c.operatorPubKey)
+	isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
 
 	if isOperatorShare {
 		if shareSecret == nil {
 			return nil, isOperatorShare, errors.New("could not decode shareSecret")
 		}
 
-		logger := c.logger.With(zap.String("pubKey", share.PublicKey.SerializeToHexStr()))
+		logger := c.logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
@@ -511,7 +510,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(share *beaconprotocol.Share) {
+func (c *controller) onShareStart(share *types.SSVShare) {
 	v := c.validatorsMap.GetOrCreateValidator(share)
 	_, err := c.startValidator(v)
 	if err != nil {
@@ -520,16 +519,16 @@ func (c *controller) onShareStart(share *beaconprotocol.Share) {
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(v *validatorv2.Validator) (bool, error) {
-	ReportValidatorStatus(v.Share.PublicKey.SerializeToHexStr(), v.GetShare().Metadata, c.logger)
-	if !v.GetShare().HasMetadata() {
-		return false, errors.New("could not start validator: metadata not found")
+func (c *controller) startValidator(v *validator.Validator) (bool, error) {
+	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Share.BeaconMetadata, c.logger)
+	if !v.Share.HasBeaconMetadata() {
+		return false, errors.New("could not start validator: beacon metadata not found")
 	}
-	if v.GetShare().Metadata.Index == 0 {
+	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(); err != nil {
-		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.PublicKey.Serialize())).Set(float64(validatorStatusError))
+		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	return true, nil
@@ -542,14 +541,14 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetOperatorValidatorShares(c.operatorPubKey, true)
+		shares, err := c.collection.GetFilteredValidatorShares(NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
 		if err != nil {
 			c.logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue
 		}
 		var pks [][]byte
 		for _, share := range shares {
-			pks = append(pks, share.PublicKey.Serialize())
+			pks = append(pks, share.ValidatorPubKey)
 		}
 		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
 		beaconprotocol.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
@@ -557,9 +556,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyRunners {
-	if options.Share.Metadata == nil {
-		options.Logger.Error("validator missing metadata", zap.String("pk", options.Share.PublicKey.SerializeToHexStr()))
+func setupRunners(ctx context.Context, options validator.Options) runner.DutyRunners {
+	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
+		options.Logger.Error("validator missing metadata", zap.String("pk", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 		return runner.DutyRunners{} // TODO need to find better way to fix it
 	}
 
@@ -571,15 +570,15 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 		spectypes.BNRoleSyncCommitteeContribution,
 	}
 
-	domainType := types.GetDefaultDomain()
-	generateConfig := func() *qbft2.Config {
-		return &qbft2.Config{
+	domainType := v1types.GetDefaultDomain()
+	generateConfig := func() *types.Config {
+		return &types.Config{
 			Signer:      options.Signer,
-			SigningPK:   options.Share.PublicKey.Serialize(), // TODO right val?
+			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
 			Domain:      domainType,
 			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *qbft.State, round qbft.Round) spectypes.OperatorID {
-				leader := qbft.RoundRobinProposer(state, round)
+			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+				leader := specqbft.RoundRobinProposer(state, round)
 				options.Logger.Debug("leader", zap.Int("", int(leader)))
 				return leader
 			},
@@ -589,45 +588,44 @@ func setupRunners(ctx context.Context, options validatorv2.Options) runner.DutyR
 		}
 	}
 
-	specShare := validatorv2.ToSpecShare(options.Share) // temp solution
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
-			valCheck := ssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			valCheck := specssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = valCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAttester)
-			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
-			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, valCheck)
+			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleAttester)
+			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
-			proposedValueCheck := ssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleProposer)
-			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
-			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleProposer)
+			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
-			proposedValueCheck := ssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			proposedValueCheck := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleAggregator)
-			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
-			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleAggregator)
+			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommittee:
-			proposedValueCheck := ssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			proposedValueCheck := specssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommittee)
-			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
-			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
+			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommitteeContribution:
-			proposedValueCheck := ssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, specShare.ValidatorPubKey, options.Share.Metadata.Index)
+			proposedValueCheck := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.Share.PublicKey.Serialize(), spectypes.BNRoleSyncCommitteeContribution)
-			qbftQtrl := controller2.NewController(identifier[:], specShare, domainType, config)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, specShare, qbftQtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
+			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		}
 	}
 	return runners

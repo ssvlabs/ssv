@@ -3,29 +3,39 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 type SyncCommitteeRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   ssv.BeaconNode
-	network  ssv.Network
-	signer   types.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck specqbft.ProposedValueCheckF
 }
 
-func NewSyncCommitteeRunner(beaconNetwork types.BeaconNetwork, share *types.Share, qbftController *controller.Controller, beacon ssv.BeaconNode, network ssv.Network, signer types.KeyManager, valCheck qbft.ProposedValueCheckF) Runner {
+func NewSyncCommitteeRunner(
+	beaconNetwork spectypes.BeaconNetwork,
+	share *spectypes.Share,
+	qbftController *controller.Controller,
+	beacon specssv.BeaconNode,
+	network specssv.Network,
+	signer spectypes.KeyManager,
+	valCheck specqbft.ProposedValueCheckF,
+) Runner {
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: types.BNRoleSyncCommittee,
+			BeaconRoleType: spectypes.BNRoleSyncCommittee,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
@@ -38,7 +48,7 @@ func NewSyncCommitteeRunner(beaconNetwork types.BeaconNetwork, share *types.Shar
 	}
 }
 
-func (r *SyncCommitteeRunner) StartNewDuty(duty *types.Duty) error {
+func (r *SyncCommitteeRunner) StartNewDuty(duty *spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(r, duty)
 }
 
@@ -47,11 +57,11 @@ func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.HasRunningDuty()
 }
 
-func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for sync committee role")
 }
 
-func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) error {
+func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -63,13 +73,13 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) er
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, types.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, types.DomainSyncCommittee)
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &ssv.PartialSignatureMessages{
-		Type:     ssv.PostConsensusPartialSig,
-		Messages: []*ssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &specssv.PartialSignatureMessages{
+		Type:     specssv.PostConsensusPartialSig,
+		Messages: []*specssv.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -82,9 +92,9 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) er
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
 
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVPartialSignatureMsgType,
-		MsgID:   types.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -94,7 +104,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *qbft.SignedMessage) er
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -129,7 +139,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *ssv.SignedPartialS
 }
 
 func (r *SyncCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, types.DomainError, errors.New("no expected pre consensus roots for sync committee")
+	return []ssz.HashRoot{}, spectypes.DomainError, errors.New("no expected pre consensus roots for sync committee")
 }
 
 // executeDuty steps:
@@ -137,7 +147,7 @@ func (r *SyncCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 // 2) start consensus on duty + block root data
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
-func (r *SyncCommitteeRunner) executeDuty(duty *types.Duty) error {
+func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
 
 	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot()
@@ -145,7 +155,7 @@ func (r *SyncCommitteeRunner) executeDuty(duty *types.Duty) error {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
 
-	input := &types.ConsensusData{
+	input := &spectypes.ConsensusData{
 		Duty:                   duty,
 		SyncCommitteeBlockRoot: root,
 	}
@@ -160,15 +170,15 @@ func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *SyncCommitteeRunner) GetNetwork() ssv.Network {
+func (r *SyncCommitteeRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *SyncCommitteeRunner) GetBeaconNode() ssv.BeaconNode {
+func (r *SyncCommitteeRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 
-func (r *SyncCommitteeRunner) GetShare() *types.Share {
+func (r *SyncCommitteeRunner) GetShare() *spectypes.Share {
 	return r.BaseRunner.Share
 }
 
@@ -180,11 +190,11 @@ func (r *SyncCommitteeRunner) Init() error {
 	return r.BaseRunner.Init()
 }
 
-func (r *SyncCommitteeRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *SyncCommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *SyncCommitteeRunner) GetSigner() types.KeyManager {
+func (r *SyncCommitteeRunner) GetSigner() spectypes.KeyManager {
 	return r.signer
 }
 

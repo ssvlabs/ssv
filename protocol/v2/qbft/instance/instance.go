@@ -3,56 +3,58 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/pkg/errors"
 	"sync"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *qbftspec.State
-	config ssvtypes.IConfig
+	State  *specqbft.State
+	config types.IConfig
 
-	processMsgF *types.ThreadSafeF
+	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 	StartValue  []byte
 }
 
 func NewInstance(
-	config ssvtypes.IConfig,
-	share *types.Share,
+	config types.IConfig,
+	share *spectypes.Share,
 	identifier []byte,
-	height qbftspec.Height,
+	height specqbft.Height,
 ) *Instance {
 	return &Instance{
-		State: &qbftspec.State{
+		State: &specqbft.State{
 			Share:                share,
 			ID:                   identifier,
-			Round:                qbftspec.FirstRound,
+			Round:                specqbft.FirstRound,
 			Height:               height,
-			LastPreparedRound:    qbftspec.NoRound,
-			ProposeContainer:     qbftspec.NewMsgContainer(),
-			PrepareContainer:     qbftspec.NewMsgContainer(),
-			CommitContainer:      qbftspec.NewMsgContainer(),
-			RoundChangeContainer: qbftspec.NewMsgContainer(),
+			LastPreparedRound:    specqbft.NoRound,
+			ProposeContainer:     specqbft.NewMsgContainer(),
+			PrepareContainer:     specqbft.NewMsgContainer(),
+			CommitContainer:      specqbft.NewMsgContainer(),
+			RoundChangeContainer: specqbft.NewMsgContainer(),
 		},
 		config:      config,
-		processMsgF: types.NewThreadSafeF(),
+		processMsgF: spectypes.NewThreadSafeF(),
 	}
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(value []byte, height qbftspec.Height) {
+func (i *Instance) Start(value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.State.Round = qbftspec.FirstRound
+		i.State.Round = specqbft.FirstRound
 		i.State.Height = height
 
 		// propose if this node is the proposer
-		if proposer(i.State, i.GetConfig(), qbftspec.FirstRound) == i.State.Share.OperatorID {
+		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
@@ -65,23 +67,23 @@ func (i *Instance) Start(value []byte, height qbftspec.Height) {
 			}
 		}
 
-		if err := i.config.GetNetwork().SyncHighestRoundChange(types.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
+		if err := i.config.GetNetwork().SyncHighestRoundChange(spectypes.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
 			fmt.Printf("%s\n", err.Error())
 		}
 	})
 }
 
-func (i *Instance) Broadcast(msg *qbftspec.SignedMessage) error {
+func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	byts, err := msg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode message")
 	}
 
-	msgID := types.MessageID{}
+	msgID := spectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	msgToBroadcast := &types.SSVMessage{
-		MsgType: types.SSVConsensusMsgType,
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
 	}
@@ -89,25 +91,25 @@ func (i *Instance) Broadcast(msg *qbftspec.SignedMessage) error {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(msg *qbftspec.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *qbftspec.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := msg.Validate(); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
-		case qbftspec.ProposalMsgType:
+		case specqbft.ProposalMsgType:
 			return i.uponProposal(msg, i.State.ProposeContainer)
-		case qbftspec.PrepareMsgType:
+		case specqbft.PrepareMsgType:
 			return i.uponPrepare(msg, i.State.PrepareContainer, i.State.CommitContainer)
-		case qbftspec.CommitMsgType:
+		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
-		case qbftspec.RoundChangeMsgType:
+		case specqbft.RoundChangeMsgType:
 			return i.uponRoundChange(i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
@@ -129,17 +131,17 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() ssvtypes.IConfig {
+func (i *Instance) GetConfig() types.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config ssvtypes.IConfig) {
+func (i *Instance) SetConfig(config types.IConfig) {
 	i.config = config
 }
 
 // GetHeight interface implementation
-func (i *Instance) GetHeight() qbftspec.Height {
+func (i *Instance) GetHeight() specqbft.Height {
 	return i.State.Height
 }
 

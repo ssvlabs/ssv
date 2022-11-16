@@ -2,15 +2,17 @@ package instance
 
 import (
 	"bytes"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
-func (i *Instance) UponCommit(signedCommit *qbftspec.SignedMessage, commitMsgContainer *qbftspec.MsgContainer) (bool, []byte, *qbftspec.SignedMessage, error) {
+func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *specqbft.SignedMessage, error) {
 	if i.State.ProposalAcceptedForCurrentRound == nil {
 		return false, nil, nil, errors.New("did not receive proposal for this round")
 	}
@@ -55,17 +57,17 @@ func (i *Instance) UponCommit(signedCommit *qbftspec.SignedMessage, commitMsgCon
 }
 
 // returns true if there is a quorum for the current round for this provided value
-func commitQuorumForRoundValue(state *qbftspec.State, commitMsgContainer *qbftspec.MsgContainer, value []byte, round qbftspec.Round) (bool, []*qbftspec.SignedMessage, error) {
+func commitQuorumForRoundValue(state *specqbft.State, commitMsgContainer *specqbft.MsgContainer, value []byte, round specqbft.Round) (bool, []*specqbft.SignedMessage, error) {
 	signers, msgs := commitMsgContainer.LongestUniqueSignersForRoundAndValue(round, value)
 	return state.Share.HasQuorum(len(signers)), msgs, nil
 }
 
-func aggregateCommitMsgs(msgs []*qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
+func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("can't aggregate zero commit msgs")
 	}
 
-	var ret *qbftspec.SignedMessage
+	var ret *specqbft.SignedMessage
 	for _, m := range msgs {
 		if ret == nil {
 			ret = m.DeepCopy()
@@ -87,9 +89,9 @@ func aggregateCommitMsgs(msgs []*qbftspec.SignedMessage) (*qbftspec.SignedMessag
                             && uPayload.round == current.round
                             && recoverSignedCommitAuthor(m.commitPayload) == current.id
 */
-func didSendCommitForHeightAndRound(state *qbftspec.State, commitMsgContainer *qbftspec.MsgContainer) bool {
+func didSendCommitForHeightAndRound(state *specqbft.State, commitMsgContainer *specqbft.MsgContainer) bool {
 	for _, msg := range commitMsgContainer.MessagesForRound(state.Round) {
-		if msg.MatchedSigners([]types.OperatorID{state.Share.OperatorID}) {
+		if msg.MatchedSigners([]spectypes.OperatorID{state.Share.OperatorID}) {
 			return true
 		}
 	}
@@ -109,36 +111,36 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *qbftspec.State, config types2.IConfig, value []byte) (*qbftspec.SignedMessage, error) {
-	commitData := &qbftspec.CommitData{
+func CreateCommit(state *specqbft.State, config types.IConfig, value []byte) (*specqbft.SignedMessage, error) {
+	commitData := &specqbft.CommitData{
 		Data: value,
 	}
 	dataByts, err := commitData.Encode()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed encoding prepare data")
 	}
-	msg := &qbftspec.Message{
-		MsgType:    qbftspec.CommitMsgType,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.CommitMsgType,
 		Height:     state.Height,
 		Round:      state.Round,
 		Identifier: state.ID,
 		Data:       dataByts,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, types.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
 
-	signedMsg := &qbftspec.SignedMessage{
+	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []types.OperatorID{state.Share.OperatorID},
+		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
 		Message:   msg,
 	}
 	return signedMsg, nil
 }
 
-func BaseCommitValidation(config types2.IConfig, signedCommit *qbftspec.SignedMessage, height qbftspec.Height, operators []*types.Operator) error {
-	if signedCommit.Message.MsgType != qbftspec.CommitMsgType {
+func BaseCommitValidation(config types.IConfig, signedCommit *specqbft.SignedMessage, height specqbft.Height, operators []*spectypes.Operator) error {
+	if signedCommit.Message.MsgType != specqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
 	if signedCommit.Message.Height != height {
@@ -154,14 +156,14 @@ func BaseCommitValidation(config types2.IConfig, signedCommit *qbftspec.SignedMe
 	}
 
 	// verify signature
-	if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), types.QBFTSignatureType, operators); err != nil {
+	if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "commit msg signature invalid")
 	}
 
 	return nil
 }
 
-func validateCommit(config types2.IConfig, signedCommit *qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, proposedMsg *qbftspec.SignedMessage, operators []*types.Operator) error {
+func validateCommit(config types.IConfig, signedCommit *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, proposedMsg *specqbft.SignedMessage, operators []*spectypes.Operator) error {
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return errors.Wrap(err, "invalid commit msg")
 	}

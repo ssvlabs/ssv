@@ -3,8 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	validator2 "github.com/bloxapp/ssv/operator_v2/validator"
-	"github.com/bloxapp/ssv/protocol/v1/types"
 	"log"
 	"net/http"
 	"time"
@@ -29,12 +27,14 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/operator"
+	v1operator "github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	operatorv2 "github.com/bloxapp/ssv/operator_v2"
+	v1validator "github.com/bloxapp/ssv/operator/validator"
+	v2operator "github.com/bloxapp/ssv/operator_v2"
+	validator2 "github.com/bloxapp/ssv/operator_v2/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	v1types "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -46,13 +46,13 @@ import (
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
-	SSVOptions                 operatorv2.Options     `yaml:"ssv"`
+	SSVOptions                 v2operator.Options     `yaml:"ssv"`
 	ETH1Options                eth1.Options           `yaml:"eth1"`
 	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
+	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate v1operator key if none is passed by config"`
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
@@ -65,7 +65,7 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var operatorNode operator.Node
+var operatorNode v1operator.Node
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -109,12 +109,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-			cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
+			cfg.P2pNetworkConfig.NetworkID = string(v1types.GetDefaultDomain())
 		} else {
 			// we have some custom network id, overriding default domain
-			types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
+			v1types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
 		}
-		Logger.Info("using ssv network", zap.String("domain", string(types.GetDefaultDomain())),
+		Logger.Info("using ssv network", zap.String("domain", string(v1types.GetDefaultDomain())),
 			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
 
 		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
@@ -133,7 +133,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, types.GetDefaultDomain())
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, v1types.GetDefaultDomain())
 		if err != nil {
 			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -224,7 +224,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator2.NewController(cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode = operatorv2.New(cfg.SSVOptions)
+		operatorNode = v2operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), Logger, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -269,7 +269,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enab
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(logger *zap.Logger, db basedb.IDb, ssvForkVersion forksprotocol.ForkVersion, operatorPubKey string) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
-	sharesStorage := validator.NewCollection(validator.CollectionOptions{
+	sharesStorage := v1validator.NewCollection(v1validator.CollectionOptions{
 		DB:     db,
 		Logger: logger,
 	})

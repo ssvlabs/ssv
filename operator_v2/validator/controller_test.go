@@ -16,8 +16,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
+
+// TODO: increase test coverage, add more tests, e.g.:
+// 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 func init() {
 	logex.Build("test", zap.DebugLevel, nil)
@@ -158,12 +162,13 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 }
 
 func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
-	return &validator.Validator{Share: &beacon.Share{
-		NodeID:    0,
-		PublicKey: nil,
-		Committee: nil,
-		Metadata:  metaData,
-	}}
+	return &validator.Validator{
+		Share: &types.SSVShare{
+			Metadata: types.Metadata{
+				BeaconMetadata: metaData,
+			},
+		},
+	}
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {

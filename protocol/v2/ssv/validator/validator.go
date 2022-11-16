@@ -2,21 +2,21 @@ package validator
 
 import (
 	"context"
+	"sync/atomic"
+	"time"
+
 	"github.com/bloxapp/ssv-spec/p2p"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
-	typesv1 "github.com/bloxapp/ssv/protocol/v1/types"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync/atomic"
-	"time"
+
+	"github.com/bloxapp/ssv/protocol/v1/message"
+	v1types "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Options struct {
@@ -24,8 +24,8 @@ type Options struct {
 	Network     qbft.Network
 	Beacon      ssv.BeaconNode
 	Storage     qbft.Storage
-	Share       *beacon.Share
-	Signer      types.KeyManager
+	SSVShare    *types.SSVShare
+	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
 	Mode        ValidatorMode
 }
@@ -50,13 +50,13 @@ type Validator struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	DomainType types.DomainType
+	DomainType spectypes.DomainType
 
 	DutyRunners runner.DutyRunners
 
-	Share  *beacon.Share
+	Share  *types.SSVShare
 	Beacon ssv.BeaconNode
-	Signer types.KeyManager
+	Signer spectypes.KeyManager
 
 	Storage qbft.Storage // TODO: change?
 	Network qbft.Network
@@ -89,12 +89,12 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  typesv1.GetDefaultDomain(),
+		DomainType:  v1types.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
 		Storage:     options.Storage,
-		Share:       options.Share,
+		Share:       options.SSVShare,
 		Signer:      options.Signer,
 		Q:           q,
 		mode:        int32(options.Mode),
@@ -126,7 +126,7 @@ func (v *Validator) Start() error {
 	return nil
 }
 
-func (v *Validator) sync(mid types.MessageID) {
+func (v *Validator) sync(mid spectypes.MessageID) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -161,7 +161,7 @@ func (v *Validator) Stop() error {
 	return nil
 }
 
-func (v *Validator) HandleMessage(msg *types.SSVMessage) {
+func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
 		err := v.ProcessMessage(msg)
 		if err != nil {
@@ -179,7 +179,7 @@ func (v *Validator) HandleMessage(msg *types.SSVMessage) {
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(duty *types.Duty) error {
+func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
@@ -188,7 +188,7 @@ func (v *Validator) StartDuty(duty *types.Duty) error {
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
+func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
@@ -199,13 +199,13 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 	}
 
 	switch msg.GetType() {
-	case types.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType:
 		signedMsg := &qbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
-	case types.SSVPartialSignatureMsgType:
+	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &ssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
@@ -221,9 +221,8 @@ func (v *Validator) ProcessMessage(msg *types.SSVMessage) error {
 	}
 }
 
-func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage) error {
-	specShare := ToSpecShare(v.Share) // temp solution
-	if !specShare.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
+func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMessage) error {
+	if !v.Share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
@@ -234,11 +233,7 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *types.SSVMessage)
 	return nil
 }
 
-func (v *Validator) GetShare() *beacon.Share {
-	return v.Share // temp solution
-}
-
-func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, error) {
+func (v *Validator) loadLastHeight(identifier spectypes.MessageID) (qbft.Height, error) {
 	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
 	if err != nil {
 		return qbft.Height(0), errors.Wrap(err, "failed to get heights decided")
@@ -253,54 +248,4 @@ func (v *Validator) loadLastHeight(identifier types.MessageID) (qbft.Height, err
 	}
 	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
 	return knownDecided.Message.Height, nil
-}
-
-// ToSSVShare convert spec share struct to ssv share struct (mainly for testing purposes)
-func ToSSVShare(specShare *types.Share) (*beacon.Share, error) {
-	vpk := &bls.PublicKey{}
-	if err := vpk.Deserialize(specShare.ValidatorPubKey); err != nil {
-		return nil, errors.Wrap(err, "failed to deserialize validator public key")
-	}
-
-	var operatorsId []uint64
-	ssvCommittee := map[types.OperatorID]*beacon.Node{}
-	for _, op := range specShare.Committee {
-		operatorsId = append(operatorsId, uint64(op.OperatorID))
-		ssvCommittee[op.OperatorID] = &beacon.Node{
-			IbftID: uint64(op.GetID()),
-			Pk:     op.GetPublicKey(),
-		}
-	}
-
-	return &beacon.Share{
-		NodeID:       specShare.OperatorID,
-		PublicKey:    vpk,
-		Committee:    ssvCommittee,
-		Metadata:     nil,
-		OwnerAddress: "",
-		Operators:    nil,
-		OperatorIds:  operatorsId,
-		Liquidated:   false,
-	}, nil
-}
-
-// ToSpecShare convert spec share to ssv share struct
-func ToSpecShare(share *beacon.Share) *types.Share {
-	var sharePK []byte
-	for id, node := range share.Committee {
-		if id == share.NodeID {
-			sharePK = node.Pk
-		}
-	}
-
-	return &types.Share{
-		OperatorID:      share.NodeID,
-		ValidatorPubKey: share.PublicKey.Serialize(),
-		SharePubKey:     sharePK,
-		Committee:       roundrobin.MapCommittee(share),
-		Quorum:          3,                          // temp
-		PartialQuorum:   2,                          // temp
-		DomainType:      typesv1.GetDefaultDomain(), // temp
-		Graffiti:        nil,
-	}
 }

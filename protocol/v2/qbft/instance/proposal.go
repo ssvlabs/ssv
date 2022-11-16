@@ -2,14 +2,16 @@ package instance
 
 import (
 	"bytes"
-	qbftspec "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
-func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeMsgContainer *qbftspec.MsgContainer) error {
+func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
 	valCheck := i.config.GetValueCheckF()
 	if err := isValidProposal(i.State, i.config, signedProposal, valCheck, i.State.Share.Committee); err != nil {
 		return errors.Wrap(err, "proposal invalid")
@@ -49,8 +51,8 @@ func (i *Instance) uponProposal(signedProposal *qbftspec.SignedMessage, proposeM
 	return nil
 }
 
-func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposal *qbftspec.SignedMessage, valCheck qbftspec.ProposedValueCheckF, operators []*types.Operator) error {
-	if signedProposal.Message.MsgType != qbftspec.ProposalMsgType {
+func isValidProposal(state *specqbft.State, config types.IConfig, signedProposal *specqbft.SignedMessage, valCheck specqbft.ProposedValueCheckF, operators []*spectypes.Operator) error {
+	if signedProposal.Message.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
 	if signedProposal.Message.Height != state.Height {
@@ -59,10 +61,10 @@ func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposa
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("proposal msg allows 1 signer")
 	}
-	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), types.QBFTSignatureType, operators); err != nil {
+	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "proposal msg signature invalid")
 	}
-	if !signedProposal.MatchedSigners([]types.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
+	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")
 	}
 
@@ -95,12 +97,12 @@ func isValidProposal(state *qbftspec.State, config types2.IConfig, signedProposa
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
-func isProposalJustification(state *qbftspec.State, config types2.IConfig, roundChangeMsgs []*qbftspec.SignedMessage, prepareMsgs []*qbftspec.SignedMessage, height qbftspec.Height, round qbftspec.Round, value []byte, valCheck qbftspec.ProposedValueCheckF) error {
+func isProposalJustification(state *specqbft.State, config types.IConfig, roundChangeMsgs []*specqbft.SignedMessage, prepareMsgs []*specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, valCheck specqbft.ProposedValueCheckF) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}
 
-	if round == qbftspec.FirstRound {
+	if round == specqbft.FirstRound {
 		return nil
 	}
 	// check all round changes are valid for height and round
@@ -113,12 +115,12 @@ func isProposalJustification(state *qbftspec.State, config types2.IConfig, round
 	}
 
 	// check there is a quorum
-	if !qbftspec.HasQuorum(state.Share, roundChangeMsgs) {
+	if !specqbft.HasQuorum(state.Share, roundChangeMsgs) {
 		return errors.New("change round has no quorum")
 	}
 
 	// previouslyPreparedF returns true if any on the round change messages have a prepared round and value
-	previouslyPrepared, err := func(rcMsgs []*qbftspec.SignedMessage) (bool, error) {
+	previouslyPrepared, err := func(rcMsgs []*specqbft.SignedMessage) (bool, error) {
 		for _, rc := range rcMsgs {
 			rcData, err := rc.Message.GetRoundChangeData()
 			if err != nil {
@@ -138,7 +140,7 @@ func isProposalJustification(state *qbftspec.State, config types2.IConfig, round
 		return nil
 	}
 	// check prepare quorum
-	if !qbftspec.HasQuorum(state.Share, prepareMsgs) {
+	if !specqbft.HasQuorum(state.Share, prepareMsgs) {
 		return errors.New("prepares has no quorum")
 	}
 
@@ -176,7 +178,7 @@ func isProposalJustification(state *qbftspec.State, config types2.IConfig, round
 	return nil
 }
 
-func proposer(state *qbftspec.State, config types2.IConfig, round qbftspec.Round) types.OperatorID {
+func proposer(state *specqbft.State, config types.IConfig, round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -194,8 +196,8 @@ func proposer(state *qbftspec.State, config types2.IConfig, round qbftspec.Round
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *qbftspec.State, config types2.IConfig, value []byte, roundChanges, prepares []*qbftspec.SignedMessage) (*qbftspec.SignedMessage, error) {
-	proposalData := &qbftspec.ProposalData{
+func CreateProposal(state *specqbft.State, config types.IConfig, value []byte, roundChanges, prepares []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	proposalData := &specqbft.ProposalData{
 		Data:                     value,
 		RoundChangeJustification: roundChanges,
 		PrepareJustification:     prepares,
@@ -204,21 +206,21 @@ func CreateProposal(state *qbftspec.State, config types2.IConfig, value []byte, 
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode proposal data")
 	}
-	msg := &qbftspec.Message{
-		MsgType:    qbftspec.ProposalMsgType,
+	msg := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
 		Height:     state.Height,
 		Round:      state.Round,
 		Identifier: state.ID,
 		Data:       dataByts,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, types.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
 
-	signedMsg := &qbftspec.SignedMessage{
+	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []types.OperatorID{state.Share.OperatorID},
+		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
 		Message:   msg,
 	}
 	return signedMsg, nil

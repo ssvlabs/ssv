@@ -2,15 +2,16 @@ package qbft
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
-	identifier := types.NewMsgID(testingutils.TestingValidatorPubKey[:], types.BNRoleAttester)
+	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := testingutils.TestingConfig(testingutils.Testing4SharesSet())
 	contr := NewTestingQBFTController(
 		identifier[:],
