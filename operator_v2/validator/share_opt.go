@@ -22,6 +22,7 @@ type ShareOptions struct {
 	Operators    []string       `yaml:"Operators" env:"LOCAL_OPERATORS" env-description:"Local validator selected operators"`
 }
 
+// ToShare builds a *types.SSVShare using given *ShareOptions.
 func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
 	if !options.valid() {
 		return nil, errors.New("empty or invalid share")

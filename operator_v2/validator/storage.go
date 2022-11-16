@@ -123,24 +123,28 @@ func (s *Collection) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	return res, err
 }
 
+// NotLiquidatedAndByOperatorPubKey filters not liquidated and by operator public key.
 func NotLiquidatedAndByOperatorPubKey(operatorPubKey string) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return !share.Liquidated && share.BelongsToOperator(operatorPubKey)
 	}
 }
 
+// ByOperatorID filters by operator ID.
 func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return share.BelongsToOperatorID(operatorID)
 	}
 }
 
+// ByOwnerAddress filters by owner address.
 func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return strings.EqualFold(share.OwnerAddress, ownerAddress)
 	}
 }
 
+// GetFilteredValidatorShares returns shares by a filter.
 func (s *Collection) GetFilteredValidatorShares(filter func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
