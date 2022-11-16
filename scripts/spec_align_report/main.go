@@ -12,20 +12,28 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	if err:= utils.Mkdir(specDataPath); err != nil {
+	if err:= utils.Mkdir(specDataPath, true); err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	processController()
-	utils.CleanSpecPath()
+
+	processInstance()
+	//utils.CleanSpecPath()
 
 
 	fmt.Println("done")
 }
 
+// ########### QBFT #####################################
+
 // Controller
 func processController()  {
+	if err:= utils.Mkdir(specDataPath+"/controller", true); err != nil {
+		panic(err)
+	}
+
 	controllerCompareStruct:= initControllerCompareStruct()
 	if err:= controllerCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
@@ -62,9 +70,6 @@ func processController()  {
 
 }
 func initControllerCompareStruct() *utils.Compare {
-	if err:= utils.Mkdir(specDataPath+"/controller"); err != nil {
-		panic(err)
-	}
 	c:= &utils.Compare{
 		Replace: mapping.ControllerReplace(),
 		SpecReplace: mapping.SpecControllerReplace(),
@@ -80,9 +85,6 @@ func initControllerCompareStruct() *utils.Compare {
 	return c
 }
 func initDecidedCompareStruct() *utils.Compare {
-	if err:= utils.Mkdir(specDataPath+"/controller"); err != nil {
-		panic(err)
-	}
 	c:= &utils.Compare{
 		Replace: mapping.DecidedReplace(),
 		SpecReplace: mapping.SpecDecidedReplace(),
@@ -98,9 +100,6 @@ func initDecidedCompareStruct() *utils.Compare {
 	return c
 }
 func initFutureMsgCompareStruct() *utils.Compare {
-	if err:= utils.Mkdir(specDataPath+"/controller"); err != nil {
-		panic(err)
-	}
 	c:= &utils.Compare{
 		Replace: mapping.FutureMessageReplace(),
 		SpecReplace: mapping.SpecFutureMessageReplace(),
@@ -115,3 +114,46 @@ func initFutureMsgCompareStruct() *utils.Compare {
 	}
 	return c
 }
+
+// Instance
+func processInstance(){
+
+	instanceCompareStruct:= initInstanceCompareStruct()
+	if err:= instanceCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+
+	if err  := utils.GitDiff(instanceCompareStruct.SSVPath,instanceCompareStruct.SpecPath, specDataPath+ "/instance.diff") ; err != nil {
+		fmt.Println(utils.Error("Instance is not aligned to spec: "+ specDataPath+ "/instance.diff"))
+	} else {
+		fmt.Println(utils.Success("Instance is aligned to spec"))
+	}
+
+}
+func initInstanceCompareStruct() *utils.Compare {
+	if err:= utils.Mkdir(specDataPath+"/instance", true); err != nil {
+		panic(err)
+	}
+	c:= &utils.Compare{
+		Replace: mapping.InstanceReplace(),
+		SpecReplace: mapping.SpecInstanceReplace(),
+		SSVPath: specDataPath + "/instance/instance.go",
+		SpecPath: specDataPath + "/instance/instance_spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/instance/instance.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/instance.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+
+
+
+
+
+
+
+
+// ########### SSV #####################################
