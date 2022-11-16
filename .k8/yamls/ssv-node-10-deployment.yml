@@ -89,7 +89,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: boot_node_v2
+              key: bootnodes
         - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
