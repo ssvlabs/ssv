@@ -12,10 +12,18 @@ var (
 		Name: "ssv:ibft:msgq:ratio",
 		Help: "The messages ratio between pop and add",
 	}, []string{"identifier", "index_name", "msg_type", "consensus_type"})
+	metricsMsgQProcessingDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:ibft:msgq:processing_duration_seconds",
+		Help:    "Message processing duration (between add and pop)",
+		Buckets: []float64{0.05, 0.1, 0.2, 0.5, 1.5},
+	}, []string{"identifier", "index_name", "msg_type", "consensus_type"})
 )
 
 func init() {
 	if err := prometheus.Register(metricsMsgQRatio); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsMsgQProcessingDuration); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 }
