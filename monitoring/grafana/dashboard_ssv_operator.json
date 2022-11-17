@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 25,
-  "iteration": 1668614196139,
+  "iteration": 1668706737564,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -3580,12 +3580,75 @@
       "type": "table"
     },
     {
+      "cards": {},
+      "color": {
+        "cardColor": "#b4ff00",
+        "colorScale": "sqrt",
+        "colorScheme": "interpolateSpectral",
+        "exponent": 0.5,
+        "mode": "spectrum"
+      },
+      "dataFormat": "tsbuckets",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "Message processing duration (seconds)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 167
+      },
+      "heatmap": {},
+      "hideZeroBuckets": true,
+      "highlightCards": true,
+      "id": 123,
+      "interval": "2m",
+      "legend": {
+        "show": true
+      },
+      "pluginVersion": "8.3.4",
+      "reverseYBuckets": false,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(ssv:ibft:msgq:processing_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "format": "heatmap",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "{{le}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Message Processing Duration",
+      "tooltip": {
+        "show": true,
+        "showHistogram": false
+      },
+      "type": "heatmap",
+      "xAxis": {
+        "show": true
+      },
+      "yAxis": {
+        "format": "s",
+        "logBase": 1,
+        "show": true
+      },
+      "yBucketBound": "auto"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 167
+        "y": 175
       },
       "id": 50,
       "panels": [],
@@ -3644,7 +3707,7 @@
         "h": 12,
         "w": 15,
         "x": 0,
-        "y": 168
+        "y": 176
       },
       "id": 94,
       "options": {
@@ -3909,7 +3972,7 @@
         "h": 13,
         "w": 23,
         "x": 0,
-        "y": 180
+        "y": 188
       },
       "id": 55,
       "options": {
@@ -4009,7 +4072,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 193
+        "y": 201
       },
       "id": 38,
       "panels": [],
@@ -4114,7 +4177,7 @@
         "h": 5,
         "w": 9,
         "x": 0,
-        "y": 194
+        "y": 202
       },
       "id": 42,
       "options": {
@@ -4226,7 +4289,7 @@
         "h": 5,
         "w": 4,
         "x": 9,
-        "y": 194
+        "y": 202
       },
       "id": 28,
       "options": {
@@ -4341,7 +4404,7 @@
         "h": 5,
         "w": 4,
         "x": 13,
-        "y": 194
+        "y": 202
       },
       "id": 26,
       "options": {
@@ -4454,7 +4517,7 @@
         "h": 5,
         "w": 4,
         "x": 17,
-        "y": 194
+        "y": 202
       },
       "id": 24,
       "options": {
@@ -4486,7 +4549,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 199
+        "y": 207
       },
       "id": 36,
       "panels": [],
@@ -4549,7 +4612,7 @@
         "h": 10,
         "w": 11,
         "x": 0,
-        "y": 200
+        "y": 208
       },
       "id": 57,
       "options": {
@@ -4628,7 +4691,7 @@
         "h": 10,
         "w": 11,
         "x": 11,
-        "y": 200
+        "y": 208
       },
       "height": "",
       "hiddenSeries": false,
@@ -4730,7 +4793,7 @@
         "h": 9,
         "w": 11,
         "x": 0,
-        "y": 210
+        "y": 218
       },
       "hiddenSeries": false,
       "id": 8,
@@ -4845,7 +4908,7 @@
         "h": 9,
         "w": 11,
         "x": 11,
-        "y": 210
+        "y": 218
       },
       "hiddenSeries": false,
       "id": 32,
@@ -4974,7 +5037,7 @@
         "h": 8,
         "w": 11,
         "x": 0,
-        "y": 219
+        "y": 227
       },
       "id": 30,
       "options": {
@@ -5076,7 +5139,7 @@
         "h": 8,
         "w": 11,
         "x": 11,
-        "y": 219
+        "y": 227
       },
       "id": 92,
       "links": [],
@@ -5291,6 +5354,6 @@
   "timezone": "",
   "title": "SSV Operator Node (Stage)",
   "uid": "WRg-OKDnk",
-  "version": 66,
+  "version": 69,
   "weekStart": ""
 }
