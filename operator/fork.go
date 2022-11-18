@@ -1,9 +1,10 @@
 package operator
 
 import (
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
+
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 // getForkVersion returns the fork version of the given slot

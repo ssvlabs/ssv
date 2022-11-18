@@ -12,10 +12,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v1/validator"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
@@ -25,7 +26,7 @@ func init() {
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logex.GetLogger()
-	ctr := setupController(logger, map[string]validator.IValidator{}) // none committee
+	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
 	go ctr.handleRouterMessages()
 
 	var wg sync.WaitGroup
@@ -39,7 +40,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	ctr.messageRouter.Route(spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
+		MsgType: message.SSVDecidedMsgType,
 		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
@@ -69,7 +70,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 }
 
 func TestGetIndices(t *testing.T) {
-	validators := map[string]validator.IValidator{
+	validators := map[string]*validator.Validator{
 		"0": newValidator(&beacon.ValidatorMetadata{
 			Balance: 0,
 			Status:  0, // ValidatorStateUnknown
@@ -131,7 +132,7 @@ func TestGetIndices(t *testing.T) {
 	require.Equal(t, 1, len(indices)) // should return only active indices
 }
 
-func setupController(logger *zap.Logger, validators map[string]validator.IValidator) controller {
+func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
 	return controller{
 		context:                    context.Background(),
 		collection:                 nil,
@@ -157,13 +158,19 @@ func setupController(logger *zap.Logger, validators map[string]validator.IValida
 	}
 }
 
-func newValidator(metaData *beacon.ValidatorMetadata) validator.IValidator {
-	return &validator.Validator{Share: &beacon.Share{
-		NodeID:    0,
-		PublicKey: nil,
-		Committee: nil,
-		Metadata:  metaData,
-	}}
+func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
+	return &validator.Validator{
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				OperatorID:      0,
+				ValidatorPubKey: nil,
+				Committee:       nil,
+			},
+			Metadata: types.Metadata{
+				BeaconMetadata: metaData,
+			},
+		},
+	}
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {

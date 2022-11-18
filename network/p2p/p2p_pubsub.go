@@ -13,8 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/network"
 	genesisFork "github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (

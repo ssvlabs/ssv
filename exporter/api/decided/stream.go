@@ -10,12 +10,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/operator/validator"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
+func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) validator.NewDecidedHandler {
 	logger = logger.With(zap.String("who", "NewDecidedHandler"))
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()

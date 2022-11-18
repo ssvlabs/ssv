@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (

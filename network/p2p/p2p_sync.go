@@ -2,18 +2,18 @@ package p2pv1
 
 import (
 	"encoding/hex"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"math/rand"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {

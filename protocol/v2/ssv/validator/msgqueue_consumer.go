@@ -3,14 +3,16 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
-	"time"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
 // GetLastHeight returns the last height for the given identifier
@@ -167,10 +169,8 @@ func (v *Validator) processByState(handler MessageHandler, msgId spectypes.Messa
 	//	return false
 	//}
 
-	var msg *spectypes.SSVMessage
-
 	//currentState := currentInstance.GetState()
-	msg = v.getNextMsgForState(identifier, height)
+	msg := v.getNextMsgForState(identifier, height)
 	if msg == nil {
 		return false // no msg found
 	}

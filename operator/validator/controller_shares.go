@@ -45,24 +45,28 @@ func (c *controller) loadShare(options ShareOptions) (string, error) {
 	if err != nil {
 		return "", errors.WithMessage(err, "failed to create share object")
 	}
+
 	shareKey := &bls.SecretKey{}
 	if err = shareKey.SetHexString(options.ShareKey); err != nil {
 		return "", errors.Wrap(err, "failed to set hex private key")
 	}
-	if share != nil {
-		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
-			return "", errors.Wrap(err, "could not update validator metadata")
-		} else if !updated {
-			return "", errors.New("could not find validator metadata")
-		}
-		if err := c.keyManager.AddShare(shareKey); err != nil {
-			return "", errors.Wrap(err, "could not save share key from share options")
-		}
-		if err := c.collection.SaveValidatorShare(share); err != nil {
-			return "", errors.Wrap(err, "could not save share from share options")
-		}
-		return options.PublicKey, err
+
+	if share == nil {
+		return "", errors.New("returned nil share")
 	}
 
-	return "", errors.New("returned nil share")
+	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
+		return "", errors.Wrap(err, "could not update share stats")
+	} else if !updated {
+		return "", errors.New("could not find validator metadata")
+	}
+
+	if err := c.keyManager.AddShare(shareKey); err != nil {
+		return "", errors.Wrap(err, "could not save share key from share options")
+	}
+	if err := c.collection.SaveValidatorShare(share); err != nil {
+		return "", errors.Wrap(err, "could not save share from share options")
+	}
+
+	return options.PublicKey, err
 }

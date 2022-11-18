@@ -17,9 +17,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -170,15 +169,15 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	return nil
 }
 
-func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *qbft.State) error {
-	value, err := state.MarshalJSON()
+func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *specqbft.State) error {
+	value, err := state.Encode()
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
 	return i.save(value, currentKey, identifier[:])
 }
 
-func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*qbft.State, bool, error) {
+func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*specqbft.State, bool, error) {
 	val, found, err := i.get(currentKey, identifier[:])
 	if !found {
 		return nil, found, nil
@@ -186,8 +185,8 @@ func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*qbft.State, bool, 
 	if err != nil {
 		return nil, false, err
 	}
-	ret := &qbft.State{}
-	if err := ret.UnmarshalJSON(val); err != nil {
+	ret := &specqbft.State{}
+	if err := ret.Decode(val); err != nil {
 		return nil, false, errors.Wrap(err, "un-marshaling error")
 	}
 	return ret, found, nil

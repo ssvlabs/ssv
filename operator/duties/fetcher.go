@@ -13,7 +13,7 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/fetcher.go -source=./fetcher.go

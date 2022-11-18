@@ -9,8 +9,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 const (

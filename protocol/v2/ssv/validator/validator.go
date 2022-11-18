@@ -14,8 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	v1types "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -91,7 +90,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  v1types.GetDefaultDomain(),
+		DomainType:  types.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,

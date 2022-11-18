@@ -2,9 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"os"
@@ -13,10 +10,13 @@ import (
 	"testing"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func init() {

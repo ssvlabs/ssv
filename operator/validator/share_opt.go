@@ -7,7 +7,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // ShareOptions - used to load validator share from config
@@ -21,56 +21,75 @@ type ShareOptions struct {
 	OperatorIds  []int          `yaml:"OperatorIds" env:"LOCAL_OPERATOR_IDS" env-description:"Local validator selected operator ids"`
 }
 
-// ToShare creates a Share instance from ShareOptions
-func (options *ShareOptions) ToShare() (*beacon.Share, error) {
+func (options *ShareOptions) ToShare() (*types.SSVShare, error) {
+	if !options.valid() {
+		return nil, errors.New("empty or invalid share")
+	}
+
 	var err error
+	validatorPk := &bls.PublicKey{}
+	if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
+		return nil, errors.Wrap(err, "failed to decode validator key")
+	}
 
-	if len(options.PublicKey) > 0 && len(options.ShareKey) > 0 && len(options.Committee) > 0 &&
-		len(options.OwnerAddress) > 0 && len(options.Operators) > 0 && len(options.OperatorIds) > 0 {
-		validatorPk := &bls.PublicKey{}
-		if err = validatorPk.DeserializeHexStr(options.PublicKey); err != nil {
-			return nil, errors.Wrap(err, "failed to decode validator key")
+	_getBytesFromHex := func(str string) []byte {
+		val, e := hex.DecodeString(str)
+		if e != nil {
+			err = errors.Wrap(err, "failed to decode committee")
 		}
+		return val
+	}
 
-		_getBytesFromHex := func(str string) []byte {
-			val, e := hex.DecodeString(str)
-			if e != nil {
-				err = errors.Wrap(err, "failed to decode committee")
-			}
-			return val
-		}
-		ibftCommittee := make(map[spectypes.OperatorID]*beacon.Node)
-		for pk, id := range options.Committee {
-			ibftCommittee[spectypes.OperatorID(id)] = &beacon.Node{
-				IbftID: uint64(id),
-				Pk:     _getBytesFromHex(pk),
-			}
-		}
+	var sharePK []byte
+	committee := make([]*spectypes.Operator, 0)
+	for pkString, id := range options.Committee {
+		pkBytes := _getBytesFromHex(pkString)
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(id),
+			PubKey:     pkBytes,
+		})
 
-		var operators [][]byte
-		for _, op := range options.Operators {
-			operators = append(operators, []byte(op))
+		// TODO: check if need to use options.ShareKey instead
+		if spectypes.OperatorID(id) == spectypes.OperatorID(options.NodeID) {
+			sharePK = pkBytes
 		}
+	}
 
-		var operatorIds []uint64
-		for _, opID := range options.OperatorIds {
-			operatorIds = append(operatorIds, uint64(opID))
-		}
+	if err != nil {
+		return nil, err
+	}
 
-		if err != nil {
-			return nil, err
-		}
+	var operators [][]byte
+	for _, op := range options.Operators {
+		operators = append(operators, []byte(op))
+	}
 
-		share := beacon.Share{
-			NodeID:       spectypes.OperatorID(options.NodeID),
-			Metadata:     nil,
-			PublicKey:    validatorPk,
-			Committee:    ibftCommittee,
+	share := &types.SSVShare{
+		Share: spectypes.Share{
+			OperatorID:      spectypes.OperatorID(options.NodeID),
+			ValidatorPubKey: validatorPk.Serialize(),
+			SharePubKey:     sharePK,
+			Committee:       committee,
+			Quorum:          3,                        // temp
+			PartialQuorum:   2,                        // temp
+			DomainType:      types.GetDefaultDomain(), // temp
+			Graffiti:        nil,
+		},
+		Metadata: types.Metadata{
 			OwnerAddress: options.OwnerAddress,
 			Operators:    operators,
-			OperatorIds:  operatorIds,
-		}
-		return &share, nil
+		},
 	}
-	return nil, errors.New("empty or invalid share")
+	return share, nil
+
+}
+
+func (options *ShareOptions) valid() bool {
+	return options != nil &&
+		len(options.PublicKey) > 0 &&
+		len(options.ShareKey) > 0 &&
+		len(options.Committee) > 0 &&
+		len(options.OwnerAddress) > 0 &&
+		len(options.Operators) > 0 &&
+		len(options.OperatorIds) > 0
 }
