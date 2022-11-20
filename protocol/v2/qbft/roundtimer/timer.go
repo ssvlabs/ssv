@@ -83,12 +83,8 @@ func (t *RoundTimer) waitForRound(round qbft.Round, timeout <-chan time.Time) {
 	done := t.done
 	select {
 	case <-ctx.Done():
-		if t.Round() == round {
-			t.logger.Debug("round timer was killed")
-		}
 	case <-timeout:
 		if t.Round() == round {
-			t.logger.Debug("round timer was timed-out", zap.Int("round", int(round)))
 			if done != nil {
 				done()
 			}

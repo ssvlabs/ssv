@@ -5,10 +5,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (i *Instance) timeoutCurrentRound() {
-	i.config.GetTimer().TimeoutForRound(i.State.Round)
-}
-
 func (i *Instance) UponRoundTimeout() error {
 	newRound := i.State.Round + 1
 	fmt.Println("UponRoundTimeout:", newRound)
