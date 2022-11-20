@@ -61,19 +61,20 @@ func (t *RoundTimer) TimeoutForRound(round qbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 	timeout := t.roundTimeout(round)
 	// preparing the underlying timer
-	if t.timer == nil {
-		t.timer = time.NewTimer(timeout)
+	timer := t.timer
+	if timer == nil {
+		timer = time.NewTimer(timeout)
 	} else {
-		t.timer.Stop()
+		timer.Stop()
 		// draining the channel of existing timer
 		select {
-		case <-t.timer.C:
+		case <-timer.C:
 		default:
 		}
 	}
-	t.timer.Reset(timeout)
+	timer.Reset(timeout)
 	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, t.timer.C)
+	go t.waitForRound(round, timer.C)
 }
 
 func (t *RoundTimer) waitForRound(round qbft.Round, timeout <-chan time.Time) {
