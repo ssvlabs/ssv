@@ -57,18 +57,19 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
-			go func() {
-				fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
-				proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
-				// nolint
-				if err != nil {
-					fmt.Printf("%s\n", err.Error())
-				}
-				// nolint
-				if err := i.Broadcast(proposal); err != nil {
-					fmt.Printf("%s\n", err.Error())
-				}
-			}()
+			fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
+			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
+			// nolint
+			if err != nil {
+				fmt.Printf("%s\n", err.Error())
+			} else {
+				go func() {
+					// nolint
+					if err := i.Broadcast(proposal); err != nil {
+						fmt.Printf("%s\n", err.Error())
+					}
+				}()
+			}
 		}
 
 		go func() {
