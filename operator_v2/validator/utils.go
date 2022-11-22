@@ -87,6 +87,7 @@ func ShareFromValidatorEvent(
 					Err: errors.Wrap(err, "failed to set decrypted share private key"),
 				}
 			}
+			validatorShare.SharePubKey = shareSecret.GetPublicKey().Serialize()
 		}
 	}
 
