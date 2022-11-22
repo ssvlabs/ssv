@@ -25,7 +25,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
@@ -573,8 +572,8 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 	}
 
 	domainType := types.GetDefaultDomain()
-	generateConfig := func() *types.Config {
-		return &types.Config{
+	generateConfig := func() *specqbft.Config {
+		return &specqbft.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
 			Domain:      domainType,
@@ -598,36 +597,36 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 			config := generateConfig()
 			config.ValueCheckF = valCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleAttester)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
-			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
+			qbftCtrl := specqbft.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = specssv.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleProposer)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
-			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftCtrl := specqbft.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = specssv.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
 			proposedValueCheck := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleAggregator)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
-			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftCtrl := specqbft.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = specssv.NewAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommittee:
 			proposedValueCheck := specssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
-			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftCtrl := specqbft.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = specssv.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommitteeContribution:
 			proposedValueCheck := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			config := generateConfig()
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			qbftCtrl := specqbft.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+			runners[role] = specssv.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		}
 	}
 	return runners

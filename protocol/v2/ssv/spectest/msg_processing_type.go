@@ -13,9 +13,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
-type MsgProcessingSpecTest = specssvtests.MsgProcessingSpecTest
-
-func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
+// RunMsgProcessing is copied from spec but uses ssv Validator instead of spec Validator.
+func RunMsgProcessing(t *testing.T, test *specssvtests.MsgProcessingSpecTest) {
 	v := utils.BaseValidator(spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	// v.Network = test.Runner.GetNetwork() // TODO need to align

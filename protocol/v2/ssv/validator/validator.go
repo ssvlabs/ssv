@@ -73,6 +73,7 @@ type Validator struct {
 // Mode defines a mode Validator operates in.
 type Mode int32
 
+// Possible modes of Validator.
 const (
 	ModeRW Mode = iota
 	ModeR

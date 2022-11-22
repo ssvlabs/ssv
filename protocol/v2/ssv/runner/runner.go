@@ -25,6 +25,7 @@ func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	return dr[role]
 }
 
+// Identifiers gathers identifiers of all shares.
 func (dr DutyRunners) Identifiers() []spectypes.MessageID {
 	var identifiers []spectypes.MessageID
 	for role, r := range dr {

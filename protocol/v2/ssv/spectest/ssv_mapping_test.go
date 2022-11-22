@@ -10,7 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	specssvtests "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
@@ -18,14 +20,10 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -77,7 +75,7 @@ func TestSSVMapping(t *testing.T) {
 		case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &MsgProcessingSpecTest{}
+			typedTest := &specssvtests.MsgProcessingSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
@@ -85,7 +83,7 @@ func TestSSVMapping(t *testing.T) {
 			})
 		case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
 			subtests := test.(map[string]interface{})["Tests"].([]interface{})
-			typedTests := make([]*MsgProcessingSpecTest, 0)
+			typedTests := make([]*specssvtests.MsgProcessingSpecTest, 0)
 			for _, subtest := range subtests {
 				typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
 			}
@@ -155,7 +153,7 @@ func TestSSVMapping(t *testing.T) {
 	}
 }
 
-func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
+func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *specssvtests.MsgProcessingSpecTest {
 	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
 
 	duty := &spectypes.Duty{}
@@ -170,20 +168,20 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		msgs = append(msgs, typedMsg)
 	}
 
-	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	outputMsgs := make([]*specssv.SignedPartialSignatureMessage, 0)
 	for _, msg := range m["OutputMessages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		typedMsg := &specssv.SignedPartialSignatureMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
 
-	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
+	ks := spectestingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
 
 	// runner
 	runner := fixRunnerForRun(t, runnerMap, ks)
 
-	return &MsgProcessingSpecTest{
+	return &specssvtests.MsgProcessingSpecTest{
 		Name:                    m["Name"].(string),
 		Duty:                    duty,
 		Runner:                  runner,
@@ -195,8 +193,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	}
 }
 
-func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
-	base := &runner.BaseRunner{}
+func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *spectestingutils.TestKeySet) specssv.Runner {
+	base := &specssv.BaseRunner{}
 	byts, _ := json.Marshal(baseRunner)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
@@ -210,43 +208,43 @@ func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testin
 	return ret
 }
 
-func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
+func baseRunnerForRole(role spectypes.BeaconRole, base *specssv.BaseRunner, ks *spectestingutils.TestKeySet) specssv.Runner {
 	switch role {
 	case spectypes.BNRoleAttester:
-		ret := utils.AttesterRunner(ks)
-		ret.(*runner.AttesterRunner).BaseRunner = base
+		ret := spectestingutils.AttesterRunner(ks)
+		ret.(*specssv.AttesterRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleAggregator:
-		ret := utils.AggregatorRunner(ks)
-		ret.(*runner.AggregatorRunner).BaseRunner = base
+		ret := spectestingutils.AggregatorRunner(ks)
+		ret.(*specssv.AggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleProposer:
-		ret := utils.ProposerRunner(ks)
-		ret.(*runner.ProposerRunner).BaseRunner = base
+		ret := spectestingutils.ProposerRunner(ks)
+		ret.(*specssv.ProposerRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommittee:
-		ret := utils.SyncCommitteeRunner(ks)
-		ret.(*runner.SyncCommitteeRunner).BaseRunner = base
+		ret := spectestingutils.SyncCommitteeRunner(ks)
+		ret.(*specssv.SyncCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommitteeContribution:
-		ret := utils.SyncCommitteeContributionRunner(ks)
-		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
+		ret := spectestingutils.SyncCommitteeContributionRunner(ks)
+		ret.(*specssv.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
-	case testingutils.UnknownDutyType:
-		ret := utils.UnknownDutyTypeRunner(ks)
-		ret.(*runner.AttesterRunner).BaseRunner = base
+	case spectestingutils.UnknownDutyType:
+		ret := spectestingutils.UnknownDutyTypeRunner(ks)
+		ret.(*specssv.AttesterRunner).BaseRunner = base
 		return ret
 	default:
 		panic("unknown beacon role")
 	}
 }
 
-func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	config := testingutils.TestingConfig(ks)
-	newContr := controller.NewController(
+func fixControllerForRun(t *testing.T, runner specssv.Runner, contr *specqbft.Controller, ks *spectestingutils.TestKeySet) *specqbft.Controller {
+	config := spectestingutils.TestingConfig(ks)
+	newContr := specqbft.NewController(
 		contr.Identifier,
 		contr.Share,
-		testingutils.TestingConfig(ks).Domain,
+		spectestingutils.TestingConfig(ks).Domain,
 		config,
 	)
 	newContr.Height = contr.Height
@@ -262,8 +260,8 @@ func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.C
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.Share) *instance.Instance {
-	newInst := instance.NewInstance(
+func fixInstanceForRun(t *testing.T, inst *specqbft.Instance, contr *specqbft.Controller, share *spectypes.Share) *specqbft.Instance {
+	newInst := specqbft.NewInstance(
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
@@ -296,7 +294,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *specn
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
 
-	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
+	ks := spectestingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
 
 	runner := fixRunnerForRun(t, runnerMap, ks)
 

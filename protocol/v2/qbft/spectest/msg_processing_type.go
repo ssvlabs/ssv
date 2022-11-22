@@ -17,6 +17,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+// RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
 func RunMsgProcessing(t *testing.T, test *specqbfttests.MsgProcessingSpecTest) {
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
