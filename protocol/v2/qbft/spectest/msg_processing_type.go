@@ -7,7 +7,7 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	specqbfttests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
+func RunMsgProcessing(t *testing.T, test *specqbfttests.MsgProcessingSpecTest) {
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
 	msgId := message.ToMessageID(test.Pre.State.ID)
@@ -32,7 +32,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preInstance := pre
 
 	// a simple hack to change the proposer func
-	if preInstance.State.Height == spectests.ChangeProposerFuncInstanceHeight {
+	if preInstance.State.Height == specqbfttests.ChangeProposerFuncInstanceHeight {
 		preInstance.GetConfig().(*ssvtypes.Config).ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 2
 		}

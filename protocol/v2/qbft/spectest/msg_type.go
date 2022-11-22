@@ -4,11 +4,11 @@ import (
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	specqbfttests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 )
 
-func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
+func RunMsg(t *testing.T, test *specqbfttests.MsgSpecTest) { // using only spec struct so this test can be imported
 	var lastErr error
 
 	for i, msg := range test.Messages {
