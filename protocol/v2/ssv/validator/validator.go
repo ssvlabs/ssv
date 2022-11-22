@@ -20,6 +20,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+// Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Logger      *zap.Logger
 	Network     specqbft.Network
@@ -69,6 +70,7 @@ type Validator struct {
 	State uint32
 }
 
+// Mode defines a mode Validator operates in.
 type Mode int32
 
 const (
@@ -76,6 +78,7 @@ const (
 	ModeR
 )
 
+// NewValidator creates a new instance of Validator.
 func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
@@ -105,6 +108,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	return v
 }
 
+// Start starts a Validator.
 func (v *Validator) Start() error {
 	if atomic.CompareAndSwapUint32(&v.State, NotStarted, Started) {
 		n, ok := v.Network.(specp2p.Subscriber)
@@ -149,6 +153,7 @@ func (v *Validator) sync(mid spectypes.MessageID) {
 	}
 }
 
+// Stop stops a Validator.
 func (v *Validator) Stop() error {
 	v.cancel()
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
@@ -161,6 +166,7 @@ func (v *Validator) Stop() error {
 	return nil
 }
 
+// HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
 		err := v.ProcessMessage(msg)

@@ -45,12 +45,12 @@ func (v *Validator) GetLastSlot(identifier spectypes.MessageID) spec.Slot {
 type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(msgId spectypes.MessageID, handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(msgId, handler, time.Millisecond*50)
+		err := v.ConsumeQueue(msgID, handler, time.Millisecond*50)
 		if err != nil {
 			v.logger.Warn("could not consume queue", zap.Error(err))
 		}
@@ -59,11 +59,11 @@ func (v *Validator) StartQueueConsumer(msgId spectypes.MessageID, handler Messag
 
 // ConsumeQueue consumes messages from the msgqueue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandler, interval time.Duration) error {
+func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler, interval time.Duration) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	identifier := msgId.String()
+	identifier := msgID.String()
 	logger := v.logger.With(zap.String("identifier", identifier))
 	higherCache := cache.New(time.Second*12, time.Second*24)
 
@@ -83,18 +83,18 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 		//	time.Sleep(interval)
 		//	continue
 		//}
-		lastSlot := v.GetLastSlot(msgId)
-		lastHeight := v.GetLastHeight(msgId)
+		lastSlot := v.GetLastSlot(msgID)
+		lastHeight := v.GetLastHeight(msgID)
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			logger.Debug("process higher height is done")
 			continue
 		}
-		if processed := v.processNoRunningInstance(handler, msgId, identifier, lastHeight, lastSlot); processed {
+		if processed := v.processNoRunningInstance(handler, msgID, identifier, lastHeight, lastSlot); processed {
 			logger.Debug("process none running instance is done")
 			continue
 		}
-		if processed := v.processByState(handler, msgId, identifier, lastHeight); processed {
+		if processed := v.processByState(handler, msgID, identifier, lastHeight); processed {
 			logger.Debug("process by state is done")
 			continue
 		}
@@ -120,8 +120,8 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spectypes.MessageID, identifier string, lastHeight specqbft.Height, lastSlot spec.Slot) bool {
-	runner := v.DutyRunners.DutyRunnerForMsgID(msgId)
+func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spectypes.MessageID, identifier string, lastHeight specqbft.Height, lastSlot spec.Slot) bool {
+	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
 		return false // only pop when already decided
 	}
@@ -158,8 +158,8 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spect
 }
 
 // processByState if an instance is running -> get the state and get the relevant messages
-func (v *Validator) processByState(handler MessageHandler, msgId spectypes.MessageID, identifier string, height specqbft.Height) bool {
-	runner := v.DutyRunners.DutyRunnerForMsgID(msgId)
+func (v *Validator) processByState(handler MessageHandler, msgID spectypes.MessageID, identifier string, height specqbft.Height) bool {
+	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 	if !runner.HasRunningDuty() || runner.GetBaseRunner().State.RunningInstance == nil {
 		return false
 	}
