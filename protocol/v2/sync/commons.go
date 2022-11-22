@@ -69,8 +69,6 @@ func GetHighestSignedMessage(signedMsgs ...*specqbft.SignedMessage) *specqbft.Si
 			highest = msg
 		} else if msg.Message.Height == highest.Message.Height && len(msg.GetSigners()) > len(highest.GetSigners()) {
 			highest = msg
-		} else {
-			// older
 		}
 	}
 	return highest
