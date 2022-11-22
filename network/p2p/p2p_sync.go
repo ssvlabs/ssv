@@ -259,7 +259,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		}
 		mid := msgID(raw)
 		if distinct[mid] {
-			//logger.Debug("duplicated sync msg", zap.String("mid", mid))
+			// logger.Debug("duplicated sync msg", zap.String("mid", mid))
 			continue
 		}
 		distinct[mid] = true

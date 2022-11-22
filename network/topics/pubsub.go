@@ -118,10 +118,10 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
-		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
+		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
-		//}),
+		// }),
 	}
 
 	if cfg.Discovery != nil {

@@ -86,7 +86,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	}
 
 	// this check is deprecated, since the validation is happening on the contract side
-	//if od.OwnerAddress != event.OwnerAddress {
+	// if od.OwnerAddress != event.OwnerAddress {
 	//	return nil, &abiparser.MalformedEventError{
 	//		Err: errors.New("could not match operator owner address with provided event owner address"),
 	//	}
@@ -196,7 +196,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	}
 
 	// this check is deprecated, since the validation is happening on the contract side
-	//if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+	// if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
 	//	return nil, &abiparser.MalformedEventError{
 	//		Err: errors.New("could not match validator owner address with provided event owner address"),
 	//	}

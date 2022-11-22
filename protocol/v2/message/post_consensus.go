@@ -34,11 +34,11 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 }
 
 func verifyBeaconPartialSignature(msg *specssv.PartialSignatureMessage, committee []*spectypes.Operator) error {
-	//if len(msg.Signers) != 1 {
+	// if len(msg.Signers) != 1 {
 	//	return errors.New("PartialSignatureMessage allows 1 signer")
 	//}
 	//
-	//signer := msg.Signers[0]
+	// signer := msg.Signers[0]
 	signer := msg.Signer
 	signature := msg.PartialSignature
 	root := msg.SigningRoot
@@ -75,6 +75,6 @@ func ensureRoot(root []byte) []byte {
 		n = 1
 	}
 	tmp := make([]byte, n)
-	copy(tmp[:], root[:])
-	return tmp[:]
+	copy(tmp, root)
+	return tmp
 }

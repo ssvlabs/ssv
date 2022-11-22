@@ -104,6 +104,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			entries := map[spec.Slot]cacheEntry{}
 			entries[test.slot] = cacheEntry{[]spectypes.Duty{}}

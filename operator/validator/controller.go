@@ -99,7 +99,7 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
-	//OnFork(forkVersion forksprotocol.ForkVersion) error
+	// OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
@@ -149,7 +149,7 @@ func NewController(options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := &validator.Options{ //TODO add vars
+	validatorOptions := &validator.Options{ // TODO add vars
 		Logger:  options.Logger,
 		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),

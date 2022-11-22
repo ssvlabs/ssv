@@ -198,7 +198,7 @@ var postConsensusBeaconBlockMsg = func(
 	}
 
 	if wrongBeaconSig {
-		//signed, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
+		// signed, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
 		panic("implement")
 	}
 
@@ -410,7 +410,7 @@ var postConsensusAggregatorMsg = func(
 	signed, root, _ := signer.SignBeaconObject(testingutils.TestingAggregateAndProof, d, sk.GetPublicKey().Serialize())
 
 	if wrongBeaconSig {
-		//signed, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
+		// signed, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
 		panic("implement")
 	}
 
@@ -453,7 +453,7 @@ var postConsensusSyncCommitteeMsg = func(
 	signed, root, _ := signer.SignBeaconObject(types.SSZBytes(testingutils.TestingSyncCommitteeBlockRoot[:]), d, sk.GetPublicKey().Serialize())
 
 	if wrongBeaconSig {
-		//signedAtt, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
+		// signedAtt, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
 		panic("implement")
 	}
 
@@ -609,7 +609,7 @@ var postConsensusSyncCommitteeContributionMsg = func(
 		}
 
 		if wrongBeaconSig {
-			//signedAtt, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
+			// signedAtt, _, _ = signer.SignAttestation(testingutils.TestingAttestationData, testingutils.TestingAttesterDuty, testingutils.TestingWrongSK.GetPublicKey().Serialize())
 			panic("implement")
 		}
 
@@ -638,6 +638,6 @@ func ensureRoot(root []byte) []byte {
 		n = 1
 	}
 	tmp := make([]byte, n)
-	copy(tmp[:], root[:])
-	return tmp[:]
+	copy(tmp, root)
+	return tmp
 }

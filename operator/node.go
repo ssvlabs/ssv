@@ -64,7 +64,7 @@ type operatorNode struct {
 	qbftStorage    qbftstorageprotocol.QBFTStore
 	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
-	//fork           *forks.Forker
+	// fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
 

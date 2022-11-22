@@ -118,5 +118,5 @@ func (s *State) Decode(data []byte) error {
 	return json.Unmarshal(data, &s)
 }
 
-//type ProposedValueCheckF func(data []byte) error
-//type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID
+// type ProposedValueCheckF func(data []byte) error
+// type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID

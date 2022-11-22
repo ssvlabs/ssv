@@ -199,7 +199,7 @@ func getAllTest(t *testing.T, n int, db basedb.IDb) {
 	require.NoError(t, err)
 	visited := map[string][]byte{}
 	for _, item := range all {
-		visited[string(item.Key[:])] = item.Value[:]
+		visited[string(item.Key)] = item.Value
 	}
 	require.Equal(t, n, len(visited))
 	count, err := db.DeleteByPrefix(prefix)

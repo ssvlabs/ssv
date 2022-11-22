@@ -103,7 +103,7 @@ func SignMsg(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers 
 func AggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, consensusMessage *specqbft.Message) *specqbft.SignedMessage {
 	signedMsg := SignMsg(t, sks, signers, consensusMessage)
 	// TODO: use SignMsg instead of AggregateSign
-	//require.NoError(t, sigSignMsgnedMsg.Aggregate(signedMsg))
+	// require.NoError(t, sigSignMsgnedMsg.Aggregate(signedMsg))
 	return signedMsg
 }
 

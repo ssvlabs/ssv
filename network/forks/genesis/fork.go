@@ -20,6 +20,6 @@ func (g *ForkGenesis) AddOptions(opts []libp2p.Option) []libp2p.Option {
 	opts = append(opts, libp2p.Ping(true))
 	opts = append(opts, libp2p.EnableNATService())
 	opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
-	//opts = append(opts, libp2p.DisableRelay())
+	// opts = append(opts, libp2p.DisableRelay())
 	return opts
 }

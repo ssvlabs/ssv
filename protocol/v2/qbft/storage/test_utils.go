@@ -41,9 +41,9 @@ func NewQBFTStore(db basedb.IDb, logger *zap.Logger, instanceType string) QBFTSt
 	return ibft
 }
 
-// GetLastDecided gets a signed message for an ibft instance which is the highest
+// GetHighestDecided gets a signed message for an ibft instance which is the highest
 func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
-	val, found, err := i.get(highestKey, identifier[:])
+	val, found, err := i.get(highestKey, identifier)
 	if !found {
 		return nil, nil
 	}
@@ -74,7 +74,7 @@ func (i *ibftStorage) SaveHighestDecided(signedMsg *specqbft.SignedMessage) erro
 func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
 	prefix := make([]byte, len(i.prefix))
 	copy(prefix, i.prefix)
-	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, identifier...)
 
 	var sequences [][]byte
 	for seq := from; seq <= to; seq++ {
@@ -109,7 +109,7 @@ func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
 }
 
 func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
@@ -118,11 +118,11 @@ func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *specqbft.Sta
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, currentKey, identifier[:])
+	return i.save(value, currentKey, identifier)
 }
 
 func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*specqbft.State, bool, error) {
-	val, found, err := i.get(currentKey, identifier[:])
+	val, found, err := i.get(currentKey, identifier)
 	if !found {
 		return nil, found, nil
 	}
@@ -155,7 +155,7 @@ func (i *ibftStorage) SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error 
 // GetLastChangeRoundMsg returns last known change round message
 // TODO
 func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error) {
-	res, err := i.getAll(lastChangeRoundKey, identifier[:])
+	res, err := i.getAll(lastChangeRoundKey, identifier)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 
 func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	prefix := i.prefix
-	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, identifier...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
 	if err := i.db.RemoveAllByCollection(prefix); err != nil {
 		return errors.Wrap(err, "failed to remove decided")

@@ -20,11 +20,11 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	//state := r.GetBaseRunner().State
-	//if state == nil {
+	// state := r.GetBaseRunner().State
+	// if state == nil {
 	//	return specqbft.Height(0)
 	//}
-	//return state.LastHeight
+	// return state.LastHeight
 	return r.GetBaseRunner().QBFTController.Height
 }
 
@@ -79,7 +79,7 @@ func (v *Validator) ConsumeQueue(msgId spectypes.MessageID, handler MessageHandl
 			continue
 		}
 		//// avoid process messages on fork
-		//if atomic.LoadUint32(&v.State) == Forking {
+		// if atomic.LoadUint32(&v.State) == Forking {
 		//	time.Sleep(interval)
 		//	continue
 		//}
@@ -127,7 +127,7 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgId spect
 	}
 
 	logger := v.logger.With(
-		//zap.String("sig state", c.SignatureState.getState().toString()),
+		// zap.String("sig state", c.SignatureState.getState().toString()),
 		zap.Int32("height", int32(lastHeight)),
 		zap.Int32("slot", int32(lastSlot)))
 
@@ -163,18 +163,18 @@ func (v *Validator) processByState(handler MessageHandler, msgId spectypes.Messa
 	if !runner.HasRunningDuty() || runner.GetBaseRunner().State.RunningInstance == nil {
 		return false
 	}
-	//currentInstance := v.GetCurrentInstance()
-	//if currentInstance == nil {
+	// currentInstance := v.GetCurrentInstance()
+	// if currentInstance == nil {
 	//	return false
 	//}
 
-	//currentState := currentInstance.GetState()
+	// currentState := currentInstance.GetState()
 	msg := v.getNextMsgForState(identifier, height)
 	if msg == nil {
 		return false // no msg found
 	}
 	v.logger.Debug("found message by state in queue", zap.Int64("height", int64(height)))
-	//v.logger.Debug("queue found message for state",
+	// v.logger.Debug("queue found message for state",
 	//	zap.Int32("stage", currentState.Stage.Load()),
 	//	zap.Int32("seq", int32(currentState.GetHeight())),
 	//	zap.Int32("round", int32(currentState.GetRound())),

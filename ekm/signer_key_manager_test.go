@@ -159,9 +159,9 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 
 	t.Run("pk 2", func(t *testing.T) {
@@ -191,8 +191,8 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 }

@@ -80,7 +80,7 @@ func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMess
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	val, found, err := i.get(highestKey, identifier[:])
+	val, found, err := i.get(highestKey, identifier)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to spe
 
 	for seq := from; seq <= to; seq++ {
 		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
-		val, found, err := i.get(decidedKey, identifier[:], uInt64ToByteSlice(uint64(seq)))
+		val, found, err := i.get(decidedKey, identifier, uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
 			return msgs, err
 		}
@@ -153,7 +153,7 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	defer i.forkLock.RUnlock()
 
 	prefix := i.prefix
-	prefix = append(prefix, msgID[:]...)
+	prefix = append(prefix, msgID...)
 	prefix = append(prefix, []byte(decidedKey)...)
 	n, err := i.db.DeleteByPrefix(prefix)
 	if err != nil {
@@ -161,7 +161,7 @@ func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
 	}
 	i.logger.Debug("removed decided", zap.Int("count", n),
 		zap.String("identifier", hex.EncodeToString(msgID)))
-	if err := i.delete(highestKey, msgID[:]); err != nil {
+	if err := i.delete(highestKey, msgID); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
 	return nil
@@ -172,11 +172,11 @@ func (i *ibftStorage) SaveCurrentInstance(identifier []byte, state *specqbft.Sta
 	if err != nil {
 		return errors.Wrap(err, "marshaling error")
 	}
-	return i.save(value, currentKey, identifier[:])
+	return i.save(value, currentKey, identifier)
 }
 
 func (i *ibftStorage) GetCurrentInstance(identifier []byte) (*specqbft.State, bool, error) {
-	val, found, err := i.get(currentKey, identifier[:])
+	val, found, err := i.get(currentKey, identifier)
 	if !found {
 		return nil, found, nil
 	}
@@ -212,7 +212,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 	defer i.forkLock.RUnlock()
 
 	if len(signers) == 0 {
-		res, err := i.getAll(lastChangeRoundKey, identifier[:])
+		res, err := i.getAll(lastChangeRoundKey, identifier)
 
 		if err != nil {
 			return nil, err
@@ -222,7 +222,7 @@ func (i *ibftStorage) GetLastChangeRoundMsg(identifier []byte, signers ...specty
 
 	var res []*specqbft.SignedMessage
 	for _, s := range signers {
-		msg, found, err := i.get(lastChangeRoundKey, identifier[:], uInt64ToByteSlice(uint64(s)))
+		msg, found, err := i.get(lastChangeRoundKey, identifier, uInt64ToByteSlice(uint64(s)))
 		if err != nil {
 			return res, err
 		}
@@ -244,7 +244,7 @@ func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	defer i.forkLock.RUnlock()
 
 	prefix := i.prefix
-	prefix = append(prefix, identifier[:]...)
+	prefix = append(prefix, identifier...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
 	n, err := i.db.DeleteByPrefix(prefix)
 	if err != nil {

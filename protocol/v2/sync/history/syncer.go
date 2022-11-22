@@ -70,7 +70,7 @@ func (s syncer) SyncRange(ctx context.Context, identifier spectypes.MessageID, h
 	// if we didn't visit all messages in range > log warning
 	if len(visited) < int(to-from) {
 		logger.Warn("not all messages in range were saved", zap.Any("visited", visited))
-		//return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
+		// return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	logger.Debug("done with range history sync")
 

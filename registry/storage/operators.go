@@ -167,7 +167,7 @@ func (s *operatorsStorage) DeleteOperatorData(index uint64) error {
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(index uint64) []byte {
-	return bytes.Join([][]byte{operatorsPrefix[:], []byte(strconv.FormatUint(index, 10))}, []byte("/"))
+	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(index, 10))}, []byte("/"))
 }
 
 func (s *operatorsStorage) nextIndex() (int64, error) {

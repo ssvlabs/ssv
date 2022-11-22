@@ -16,7 +16,7 @@ func (gc *goClient) getSigningRoot(data *phase0spec.AttestationData) ([32]byte, 
 	if err != nil {
 		return [32]byte{}, err
 	}
-	root, err := gc.ComputeSigningRoot(data, domain[:])
+	root, err := gc.ComputeSigningRoot(data, domain)
 	if err != nil {
 		return [32]byte{}, err
 	}

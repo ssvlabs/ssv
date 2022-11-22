@@ -77,7 +77,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	for i, pk := range pks {
 		blsPubKey := spec.BLSPubKey{}
 		decoded, _ := hex.DecodeString(pk)
-		copy(blsPubKey[:], decoded[:])
+		copy(blsPubKey[:], decoded)
 		decodeds[i] = decoded
 		blsPubKeys[i] = blsPubKey
 	}
@@ -155,7 +155,7 @@ func TestBatch(t *testing.T) {
 	for i, pk := range pks {
 		blsPubKey := spec.BLSPubKey{}
 		decoded, _ := hex.DecodeString(pk)
-		copy(blsPubKey[:], decoded[:])
+		copy(blsPubKey[:], decoded)
 		decodeds = append(decodeds, decoded)
 		blsPubKeys[i] = blsPubKey
 	}

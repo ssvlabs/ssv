@@ -13,6 +13,7 @@ func (tests *MultiMsgProcessingSpecTest) TestName() string {
 
 func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
 	for _, test := range tests.Tests {
+		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
 			RunMsgProcessing(t, test)
 		})

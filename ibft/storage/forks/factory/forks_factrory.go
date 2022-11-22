@@ -11,6 +11,8 @@ func NewFork(forkVersion forksprotocol.ForkVersion) forks.Fork {
 	switch forkVersion {
 	case forksprotocol.GenesisForkVersion:
 		return &genesis.ForkGenesis{}
+	case forksprotocol.ForkVersionEmpty:
+		fallthrough
 	default:
 		return nil
 	}
