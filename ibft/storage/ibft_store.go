@@ -74,9 +74,9 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-// GetLastDecided gets a signed message for an ibft instance which is the highest
+// GetHighestDecided gets a signed message for an ibft instance which is the highest
 // it tries to read current fork items, and if not found it tries to read v0 items
-func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -90,21 +90,19 @@ func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage
 	return i.fork.DecodeSignedMsg(val)
 }
 
-// SaveLastDecided saves a signed message for an ibft instance which is currently highest
-func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) error {
+// SaveHighestDecided saves a signed message for an ibft instance which is currently highest
+func (i *ibftStorage) SaveHighestDecided(signedMsg *specqbft.SignedMessage) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	for _, signedMsg := range signedMsgs {
-		value, err := i.fork.EncodeSignedMsg(signedMsg)
-		if err != nil {
-			return errors.Wrap(err, "could not encode signed message")
-		}
-		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
-			return err
-		}
-		reportHighestDecided(signedMsg)
+	value, err := i.fork.EncodeSignedMsg(signedMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not encode signed message")
 	}
+	if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
+		return err
+	}
+	reportHighestDecided(signedMsg)
 
 	return nil
 }

@@ -153,7 +153,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger:  options.Logger,
 		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
-		Storage: commons.NewQBFTStorageAdapter(qbftStorage), // should support more than one duty type
+		Storage: qbftStorage, // should support more than one duty type
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator

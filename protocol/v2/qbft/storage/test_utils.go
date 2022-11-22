@@ -42,7 +42,7 @@ func NewQBFTStore(db basedb.IDb, logger *zap.Logger, instanceType string) QBFTSt
 }
 
 // GetLastDecided gets a signed message for an ibft instance which is the highest
-func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error) {
+func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	val, found, err := i.get(highestKey, identifier[:])
 	if !found {
 		return nil, nil
@@ -58,16 +58,14 @@ func (i *ibftStorage) GetLastDecided(identifier []byte) (*specqbft.SignedMessage
 	return ret, nil
 }
 
-// SaveLastDecided saves a signed message for an ibft instance which is currently highest
-func (i *ibftStorage) SaveLastDecided(signedMsgs ...*specqbft.SignedMessage) error {
-	for _, signedMsg := range signedMsgs {
-		value, err := json.Marshal(signedMsg)
-		if err != nil {
-			return errors.Wrap(err, "marshaling error")
-		}
-		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
-			return err
-		}
+// SaveHighestDecided saves a signed message for an ibft instance which is currently highest
+func (i *ibftStorage) SaveHighestDecided(signedMsg *specqbft.SignedMessage) error {
+	value, err := json.Marshal(signedMsg)
+	if err != nil {
+		return errors.Wrap(err, "marshaling error")
+	}
+	if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
+		return err
 	}
 
 	return nil
@@ -250,7 +248,7 @@ func PopulatedStorage(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey,
 		})
 		require.NoError(t, s.SaveDecided(signedMsg))
 		if i == int(highestHeight) {
-			require.NoError(t, s.SaveLastDecided(signedMsg))
+			require.NoError(t, s.SaveHighestDecided(signedMsg))
 		}
 	}
 	return s
