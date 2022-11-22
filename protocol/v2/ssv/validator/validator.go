@@ -28,7 +28,7 @@ type Options struct {
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
-	Mode        ValidatorMode
+	Mode        Mode
 }
 
 func (o *Options) defaults() {
@@ -69,11 +69,11 @@ type Validator struct {
 	State uint32
 }
 
-type ValidatorMode int32
+type Mode int32
 
-var (
-	ModeRW ValidatorMode = 0
-	ModeR  ValidatorMode = 1
+const (
+	ModeRW Mode = iota
+	ModeR
 )
 
 func NewValidator(pctx context.Context, options Options) *Validator {

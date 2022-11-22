@@ -1,9 +1,6 @@
 package message
 
+import spectypes "github.com/bloxapp/ssv-spec/types"
+
 // Encoder encodes or decodes the message
-type Encoder interface {
-	// Encode encodes the message
-	Encode() ([]byte, error)
-	// Decode decodes the message
-	Decode(data []byte) error
-}
+type Encoder = spectypes.Encoder
