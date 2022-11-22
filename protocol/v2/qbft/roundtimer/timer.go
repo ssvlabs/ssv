@@ -2,17 +2,18 @@ package roundtimer
 
 import (
 	"context"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"go.uber.org/zap"
 	"math"
 	"sync/atomic"
 	"time"
+
+	"github.com/bloxapp/ssv-spec/qbft"
+	"go.uber.org/zap"
 )
 
-// RoundTimeout is a function that determines the next round timeout
+// RoundTimeout is a function that determines the next round timeout.
 type RoundTimeout func(round qbft.Round) time.Duration
 
-// DefaultRoundTimeout returns the default timeout function (base^round seconds)
+// DefaultRoundTimeout returns the default timeout function (base^round seconds).
 func DefaultRoundTimeout(base float64) RoundTimeout {
 	return func(round qbft.Round) time.Duration {
 		roundTimeout := math.Pow(base, float64(round))
@@ -36,7 +37,7 @@ type RoundTimer struct {
 	roundTimeout RoundTimeout
 }
 
-// New creates a new instance of RoundTimer
+// New creates a new instance of RoundTimer.
 func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
@@ -49,14 +50,17 @@ func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 	}
 }
 
+// OnTimeout sets a function called on timeout.
 func (t *RoundTimer) OnTimeout(done func()) {
 	t.done = done
 }
 
+// Round returns a round.
 func (t *RoundTimer) Round() qbft.Round {
 	return qbft.Round(atomic.LoadInt64(&t.round))
 }
 
+// TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(round qbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 	timeout := t.roundTimeout(round)
