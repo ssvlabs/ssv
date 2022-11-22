@@ -126,20 +126,17 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 }
 
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
-	prevDecided := false
-	if b.HasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
-		prevDecided, _ = b.State.RunningInstance.IsDecided()
+	if err := b.validateConsensusMsg(msg); err != nil {
+		return false, nil, errors.Wrap(err, "invalid consensus message")
 	}
+
+	prevDecided, _ := b.State.RunningInstance.IsDecided()
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
 		return false, nil, errors.Wrap(err, "failed to process consensus msg")
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	if !b.HasRunningDuty() {
-		return false, nil, err
-	}
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
 	} else {
@@ -166,7 +163,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 
 	runner.GetBaseRunner().State.DecidedValue = decidedValue
-	runner.GetBaseRunner().State.LastHeight = decidedMsg.Message.Height
 
 	return true, decidedValue, nil
 }
@@ -235,6 +231,13 @@ func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.S
 	}
 
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+}
+
+func (b *BaseRunner) validateConsensusMsg(msg *specqbft.SignedMessage) error {
+	if !b.HasRunningDuty() {
+		return errors.New("no running duty")
+	}
+	return nil
 }
 
 func (b *BaseRunner) validatePostConsensusMsg(msg *specssv.SignedPartialSignatureMessage) error {
