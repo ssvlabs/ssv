@@ -21,27 +21,20 @@ func (i *Instance) uponRoundChange(instanceStartValue []byte, signedRoundChange 
 		return nil // UponCommit was already called
 	}
 
-	justifiedRoundChangeMsg, err := hasReceivedProposalJustificationForLeadingRound(
+	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		i.State,
 		i.config,
+		instanceStartValue,
 		signedRoundChange,
 		roundChangeMsgContainer,
 		valCheck)
 	if err != nil {
-		return errors.Wrap(err, "could not get proposal justification for leading ronud")
+		return errors.Wrap(err, "could not get proposal justification for leading round")
 	}
 	if justifiedRoundChangeMsg != nil {
 		highestRCData, err := justifiedRoundChangeMsg.Message.GetRoundChangeData()
 		if err != nil {
 			return errors.Wrap(err, "could not round change data from highestJustifiedRoundChangeMsg")
-		}
-
-		// Chose proposal value.
-		// If justifiedRoundChangeMsg has no prepare justification chose state value
-		// If justifiedRoundChangeMsg has prepare justification chose prepared value
-		valueToPropose := instanceStartValue
-		if highestRCData.Prepared() {
-			valueToPropose = highestRCData.PreparedValue
 		}
 
 		proposal, err := CreateProposal(
@@ -65,7 +58,7 @@ func (i *Instance) uponRoundChange(instanceStartValue []byte, signedRoundChange 
 		}
 		err := i.uponChangeRoundPartialQuorum(newRound, instanceStartValue)
 		if err != nil {
-			return errors.Wrap(err, "failed upon change round partial quorum")
+			return err
 		}
 	}
 	return nil
@@ -104,46 +97,53 @@ func hasReceivedPartialQuorum(state *specqbft.State, roundChangeMsgContainer *sp
 // if first round or not received round change msgs with prepare justification - returns first rc msg in container
 // if received round change msgs with prepare justification - returns the highest prepare justification round change msg
 // (all the above considering the operator is a leader for the round
-func hasReceivedProposalJustificationForLeadingRound(state *specqbft.State, config types.IConfig, signedRoundChange *specqbft.SignedMessage, roundChangeMsgContainer *specqbft.MsgContainer, valCheck specqbft.ProposedValueCheckF) (*specqbft.SignedMessage, error) {
+func hasReceivedProposalJustificationForLeadingRound(state *specqbft.State, config types.IConfig, instanceStartValue []byte, signedRoundChange *specqbft.SignedMessage, roundChangeMsgContainer *specqbft.MsgContainer, valCheck specqbft.ProposedValueCheckF) (*specqbft.SignedMessage, []byte, error) {
 	roundChanges := roundChangeMsgContainer.MessagesForRound(state.Round)
-
 	// optimization, if no round change quorum can return false
 	if !specqbft.HasQuorum(state.Share, roundChanges) {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// Important!
 	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
 	for _, msg := range roundChanges {
-		if isReceivedProposalJustificationForLeadingRound(
+		rcData, err := msg.Message.GetRoundChangeData()
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "could not get round change data")
+		}
+		// Chose proposal value.
+		// If justifiedRoundChangeMsg has no prepare justification chose state value
+		// If justifiedRoundChangeMsg has prepare justification chose prepared value
+		valueToPropose := instanceStartValue
+		if rcData.Prepared() {
+			valueToPropose = rcData.PreparedValue
+		}
+		if err := isReceivedProposalJustificationForLeadingRound(
 			state,
 			config,
 			msg,
 			roundChanges,
+			rcData.RoundChangeJustification,
+			valueToPropose,
 			valCheck,
 			signedRoundChange.Message.Round,
-		) == nil {
+		); err == nil {
 			// not returning error, no need to
-			return msg, nil
+			return msg, valueToPropose, nil
 		}
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 // isReceivedProposalJustificationForLeadingRound - returns nil if we have a quorum of round change msgs and highest justified value for leading round
-func isReceivedProposalJustificationForLeadingRound(state *specqbft.State, config types.IConfig, roundChangeMsg *specqbft.SignedMessage, roundChanges []*specqbft.SignedMessage, valCheck specqbft.ProposedValueCheckF, newRound specqbft.Round) error {
-	rcData, err := roundChangeMsg.Message.GetRoundChangeData()
-	if err != nil {
-		return errors.Wrap(err, "could not get round change data")
-	}
-
+func isReceivedProposalJustificationForLeadingRound(state *specqbft.State, config types.IConfig, roundChangeMsg *specqbft.SignedMessage, roundChanges, roundChangeJustifications []*specqbft.SignedMessage, value []byte, valCheck specqbft.ProposedValueCheckF, newRound specqbft.Round) error {
 	if err := isReceivedProposalJustification(
 		state,
 		config,
 		roundChanges,
-		rcData.RoundChangeJustification,
+		roundChangeJustifications,
 		roundChangeMsg.Message.Round,
-		rcData.PreparedValue,
+		value,
 		valCheck); err != nil {
 		return err
 	}
