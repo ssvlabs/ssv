@@ -66,7 +66,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
-			fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
+			fmt.Printf("operator %d is the leader!\n", i.State.Share.OperatorID)
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
