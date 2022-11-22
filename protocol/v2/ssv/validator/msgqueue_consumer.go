@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"encoding/hex"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -270,17 +269,4 @@ func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height
 	}
 
 	return msgs[0]
-}
-
-// processOnFork this phase is to allow process remaining decided messages that arrived late to the msg queue
-func (v *Validator) processAllDecided(handler MessageHandler, identifier []byte) {
-	idx := msgqueue.DecidedMsgIndex(hex.EncodeToString(identifier))
-	msgs := v.Q.Pop(1, idx)
-	for len(msgs) > 0 {
-		err := handler(msgs[0])
-		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
-		}
-		msgs = v.Q.Pop(1, idx)
-	}
 }
