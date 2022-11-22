@@ -38,7 +38,9 @@ func GitDiff(ssv string, spec string, outputPath string) error {
 	fmt.Println(Info(cmd.Args))
 
 	if output, err := cmd.Output(); err != nil {
-		ioutil.WriteFile(outputPath, output, 0644)
+		if err := ioutil.WriteFile(outputPath, output, 0644); err != nil {
+			return err
+		}
 		return err
 	}
 	return nil

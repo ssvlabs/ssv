@@ -20,7 +20,10 @@ func main() {
 	}
 
 	processController()
-	utils.CleanSpecPath()
+	if err := utils.CleanSpecPath(); err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	fmt.Println("done")
 }

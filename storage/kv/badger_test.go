@@ -5,12 +5,14 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"testing"
+	"time"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
-	"testing"
-	"time"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
@@ -184,7 +186,7 @@ func getAllTest(t *testing.T, n int, db basedb.IDb) {
 	prefix := []byte("test")
 	for i := 0; i < n; i++ {
 		id := fmt.Sprintf("test-%d", i)
-		db.Set(prefix, []byte(id), []byte(id+"-data"))
+		require.NoError(t, db.Set(prefix, []byte(id), []byte(id+"-data")))
 	}
 	time.Sleep(1 * time.Millisecond)
 

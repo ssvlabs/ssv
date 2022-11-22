@@ -3,11 +3,12 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
