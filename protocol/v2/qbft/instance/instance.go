@@ -70,7 +70,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			}
 		}
 
-		go syncHighestRoundChange(i.config.GetNetwork(), types.MessageIDFromBytes(i.State.ID), i.State.Height)
+		go syncHighestRoundChange(i.config.GetNetwork(), spectypes.MessageIDFromBytes(i.State.ID), i.State.Height)
 	})
 }
 
@@ -162,7 +162,7 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-func syncHighestRoundChange(syncer specqbft.Syncer, mid types.MessageID, h qbftspec.Height) {
+func syncHighestRoundChange(syncer specqbft.Syncer, mid spectypes.MessageID, h specqbft.Height) {
 	if err := syncer.SyncHighestRoundChange(mid, h); err != nil {
 		fmt.Printf("%s\n", err.Error())
 	}
