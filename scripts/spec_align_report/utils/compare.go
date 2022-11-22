@@ -3,25 +3,26 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
+
+	"github.com/pkg/errors"
 )
 
 type Compare struct {
-	Replace map[string]string
+	Replace     map[string]string
 	SpecReplace map[string]string
-	SSVPath string
-	SpecPath string
+	SSVPath     string
+	SpecPath    string
 }
 
-func (c *Compare) ReplaceMap() error{
+func (c *Compare) ReplaceMap() error {
 	output, err := ioutil.ReadFile(c.SSVPath)
 	if err != nil {
 		return err
 	}
 
 	for k, v := range c.Replace {
-		if cnt:=bytes.Count(output,[]byte(k)); cnt ==0 {
+		if cnt := bytes.Count(output, []byte(k)); cnt == 0 {
 			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in ssv", k))
 		}
 
@@ -31,14 +32,13 @@ func (c *Compare) ReplaceMap() error{
 		return err
 	}
 
-
 	output, err = ioutil.ReadFile(c.SpecPath)
 	if err != nil {
 		return err
 	}
 
 	for k, v := range c.SpecReplace {
-		if cnt:=bytes.Count(output,[]byte(k)); cnt ==0 {
+		if cnt := bytes.Count(output, []byte(k)); cnt == 0 {
 			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", k))
 		}
 
