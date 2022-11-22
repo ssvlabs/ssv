@@ -8,11 +8,9 @@ import (
 func (i *Instance) UponRoundTimeout() error {
 	newRound := i.State.Round + 1
 	fmt.Println("UponRoundTimeout:", newRound)
-	defer func() {
-		i.State.Round = newRound
-		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Round)
-	}()
+	i.State.Round = newRound
+	i.State.ProposalAcceptedForCurrentRound = nil
+	i.config.GetTimer().TimeoutForRound(i.State.Round)
 
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
 	if err != nil {
