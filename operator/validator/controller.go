@@ -323,7 +323,7 @@ func (c *controller) StartValidators() {
 }
 
 // setupValidators setup and starts validators from the given shares
-// shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
+// w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*types.SSVShare) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
