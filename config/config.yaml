@@ -6,7 +6,7 @@ db:
 
 eth2:
   ### replace with your beacon node address
-  BeaconNodeAddr: eth2-lh-prater-5052.stage.bloxinfra.com:80
+  BeaconNodeAddr: eth2-lh-prater-5052-ext.stage.bloxinfra.com:80
   Network: prater
 
 eth1:
