@@ -3,17 +3,18 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {

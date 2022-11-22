@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -92,13 +91,21 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	msgID := spectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	go broadcast(i.config.GetNetwork(), spectypes.SSVMessage{
+	// reverted from the async implementation below because it broke qbft spec tests:
+	// go broadcast(i.config.GetNetwork(), spectypes.SSVMessage{
+	//		MsgType: spectypes.SSVConsensusMsgType,
+	//		MsgID:   msgID,
+	//		Data:    byts,
+	//	})
+	//
+	//	return nil
+	// TODO: need to send asynchronously without breaking tests
+	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
-	})
-
-	return nil
+	}
+	return i.config.GetNetwork().Broadcast(msgToBroadcast)
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
@@ -173,13 +180,6 @@ func (i *Instance) Decode(data []byte) error {
 
 func syncHighestRoundChange(syncer specqbft.Syncer, mid spectypes.MessageID, h specqbft.Height) {
 	if err := syncer.SyncHighestRoundChange(mid, h); err != nil {
-		fmt.Printf("%s\n", err.Error())
-	}
-}
-
-func broadcast(b p2p.Broadcaster, msg spectypes.SSVMessage) {
-	err := b.Broadcast(&msg)
-	if err != nil {
 		fmt.Printf("%s\n", err.Error())
 	}
 }
