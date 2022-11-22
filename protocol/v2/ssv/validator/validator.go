@@ -3,13 +3,13 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/storage/v2"
-	instance2 "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	instance "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/p2p"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specp2p "github.com/bloxapp/ssv-spec/p2p"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,8 +22,8 @@ import (
 
 type Options struct {
 	Logger      *zap.Logger
-	Network     qbft.Network
-	Beacon      ssv.BeaconNode
+	Network     specqbft.Network
+	Beacon      specssv.BeaconNode
 	Storage     *storage.QBFTSyncMap
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
@@ -56,11 +56,11 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 
 	Share  *types.SSVShare
-	Beacon ssv.BeaconNode
+	Beacon specssv.BeaconNode
 	Signer spectypes.KeyManager
 
 	Storage *storage.QBFTSyncMap
-	Network qbft.Network
+	Network specqbft.Network
 
 	Q msgqueue.MsgQueue
 
@@ -107,7 +107,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 func (v *Validator) Start() error {
 	if atomic.CompareAndSwapUint32(&v.State, NotStarted, Started) {
-		n, ok := v.Network.(p2p.Subscriber)
+		n, ok := v.Network.(specp2p.Subscriber)
 		if !ok {
 			return nil
 		}
@@ -200,18 +200,18 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		signedMsg := &qbft.SignedMessage{}
+		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg := &ssv.SignedPartialSignatureMessage{}
+		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 
-		if signedMsg.Message.Type == ssv.PostConsensusPartialSig {
+		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			v.logger.Info("process post consensus")
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
@@ -249,7 +249,7 @@ func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
 	if r == nil {
 		return errors.New("runner is nil")
 	}
-	instance := instance2.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
+	instance := instance.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
 	r.GetBaseRunner().QBFTController.Height = instance.GetHeight()
 	r.GetBaseRunner().QBFTController.StoredInstances.AddNewInstance(instance)
 	v.logger.Info("highest instance loaded", zap.String("role", identifier.GetRoleType().String()), zap.Int64("h", int64(instance.GetHeight())))

@@ -6,16 +6,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"go.uber.org/zap"
 )
 
 // RoundTimeout is a function that determines the next round timeout.
-type RoundTimeout func(round qbft.Round) time.Duration
+type RoundTimeout func(round specqbft.Round) time.Duration
 
 // DefaultRoundTimeout returns the default timeout function (base^round seconds).
 func DefaultRoundTimeout(base float64) RoundTimeout {
-	return func(round qbft.Round) time.Duration {
+	return func(round specqbft.Round) time.Duration {
 		roundTimeout := math.Pow(base, float64(round))
 		return time.Duration(float64(time.Second) * roundTimeout)
 	}
@@ -56,12 +56,12 @@ func (t *RoundTimer) OnTimeout(done func()) {
 }
 
 // Round returns a round.
-func (t *RoundTimer) Round() qbft.Round {
-	return qbft.Round(atomic.LoadInt64(&t.round))
+func (t *RoundTimer) Round() specqbft.Round {
+	return specqbft.Round(atomic.LoadInt64(&t.round))
 }
 
 // TimeoutForRound times out for a given round.
-func (t *RoundTimer) TimeoutForRound(round qbft.Round) {
+func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 	timeout := t.roundTimeout(round)
 	// preparing the underlying timer
@@ -81,7 +81,7 @@ func (t *RoundTimer) TimeoutForRound(round qbft.Round) {
 	go t.waitForRound(round, timer.C)
 }
 
-func (t *RoundTimer) waitForRound(round qbft.Round, timeout <-chan time.Time) {
+func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
 	done := t.done

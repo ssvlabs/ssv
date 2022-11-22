@@ -7,19 +7,19 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := utils.TestingConfig(testingutils.Testing4SharesSet(), identifier.GetRoleType())
+	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
+	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := NewTestingQBFTController(
 		identifier[:],
-		testingutils.TestingShare(testingutils.Testing4SharesSet()),
+		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,
 	)
 
@@ -63,7 +63,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		}
 		if runData.BroadcastedDecided != nil {
 			// test broadcasted
-			broadcastedMsgs := config.GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
+			broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 			require.Greater(t, len(broadcastedMsgs), 0)
 			found := false
 			for _, msg := range broadcastedMsgs {
@@ -71,7 +71,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 					continue
 				}
 
-				msg1 := &qbft.SignedMessage{}
+				msg1 := &specqbft.SignedMessage{}
 				require.NoError(t, msg1.Decode(msg.Data))
 				r1, err := msg1.GetRoot()
 				require.NoError(t, err)

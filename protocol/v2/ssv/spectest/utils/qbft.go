@@ -2,11 +2,13 @@ package utils
 
 import (
 	"bytes"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
+
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole) *ssvtypes.Config {

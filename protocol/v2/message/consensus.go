@@ -1,14 +1,14 @@
 package message
 
 import (
-	"github.com/bloxapp/ssv-spec/qbft"
 	"sort"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Aggregate is a utility that helps to ensure sorted signers
-func Aggregate(signedMsg *qbft.SignedMessage, s spectypes.MessageSignature) error {
+func Aggregate(signedMsg *specqbft.SignedMessage, s spectypes.MessageSignature) error {
 	if err := signedMsg.Aggregate(s); err != nil {
 		return err
 	}
