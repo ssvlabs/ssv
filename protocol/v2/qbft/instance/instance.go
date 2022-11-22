@@ -91,15 +91,6 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	msgID := spectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	// reverted from the async implementation below because it broke qbft spec tests:
-	// go broadcast(i.config.GetNetwork(), spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   msgID,
-	//		Data:    byts,
-	//	})
-	//
-	//	return nil
-	// TODO: need to send asynchronously without breaking tests
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
