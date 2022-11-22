@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-
+	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -63,20 +63,14 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			if err != nil {
 				fmt.Printf("%s\n", err.Error())
 			} else {
-				go func() {
-					// nolint
-					if err := i.Broadcast(proposal); err != nil {
-						fmt.Printf("%s\n", err.Error())
-					}
-				}()
+				// nolint
+				if err := i.Broadcast(proposal); err != nil {
+					fmt.Printf("%s\n", err.Error())
+				}
 			}
 		}
 
-		go func() {
-			if err := i.config.GetNetwork().SyncHighestRoundChange(spectypes.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
-				fmt.Printf("%s\n", err.Error())
-			}
-		}()
+		go syncHighestRoundChange(i.config.GetNetwork(), types.MessageIDFromBytes(i.State.ID), i.State.Height)
 	})
 }
 
@@ -89,12 +83,13 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	msgID := spectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	msgToBroadcast := &spectypes.SSVMessage{
+	go broadcast(i.config.GetNetwork(), spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
-	}
-	return i.config.GetNetwork().Broadcast(msgToBroadcast)
+	})
+
+	return nil
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
@@ -165,4 +160,17 @@ func (i *Instance) Encode() ([]byte, error) {
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
+}
+
+func syncHighestRoundChange(syncer specqbft.Syncer, mid types.MessageID, h qbftspec.Height) {
+	if err := syncer.SyncHighestRoundChange(mid, h); err != nil {
+		fmt.Printf("%s\n", err.Error())
+	}
+}
+
+func broadcast(b p2p.Broadcaster, msg spectypes.SSVMessage) {
+	err := b.Broadcast(&msg)
+	if err != nil {
+		fmt.Printf("%s\n", err.Error())
+	}
 }
