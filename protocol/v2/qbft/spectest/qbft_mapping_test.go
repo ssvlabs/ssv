@@ -77,7 +77,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunMsg(t, typedTest)
+				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&specqbfttests.ControllerSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -86,7 +86,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunControllerSpecTest(t, typedTest)
+				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&specqbfttests.CreateMsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -95,7 +95,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunCreateMsg(t, typedTest)
+				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&specqbfttests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -117,7 +117,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunControllerSync(t, typedTest)
+				typedTest.Run(t)
 			})
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)

@@ -12,8 +12,9 @@ import (
 
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
+	specssvtests "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
+	specnewduty "github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -89,7 +90,7 @@ func TestSSVMapping(t *testing.T) {
 				typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
 			}
 
-			typedTest := &MultiMsgProcessingSpecTest{
+			typedTest := &specssvtests.MultiMsgProcessingSpecTest{
 				Name:  test.(map[string]interface{})["Name"].(string),
 				Tests: typedTests,
 			}
@@ -133,14 +134,14 @@ func TestSSVMapping(t *testing.T) {
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				typedTest.Run(t)
 			})
-		case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
+		case reflect.TypeOf(&specnewduty.MultiStartNewRunnerDutySpecTest{}).String():
 			subtests := test.(map[string]interface{})["Tests"].([]interface{})
-			typedTests := make([]*StartNewRunnerDutySpecTest, 0)
+			typedTests := make([]*specnewduty.StartNewRunnerDutySpecTest, 0)
 			for _, subtest := range subtests {
 				typedTests = append(typedTests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
 			}
 
-			typedTest := &MultiStartNewRunnerDutySpecTest{
+			typedTest := &specnewduty.MultiStartNewRunnerDutySpecTest{
 				Name:  test.(map[string]interface{})["Name"].(string),
 				Tests: typedTests,
 			}
@@ -280,7 +281,7 @@ func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.
 	return newInst
 }
 
-func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *StartNewRunnerDutySpecTest {
+func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *specnewduty.StartNewRunnerDutySpecTest {
 	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
 
 	duty := &spectypes.Duty{}
@@ -299,7 +300,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 
 	runner := fixRunnerForRun(t, runnerMap, ks)
 
-	return &StartNewRunnerDutySpecTest{
+	return &specnewduty.StartNewRunnerDutySpecTest{
 		Name:                    m["Name"].(string),
 		Duty:                    duty,
 		Runner:                  runner,
