@@ -2,11 +2,12 @@ package runner
 
 import (
 	"bytes"
-
+	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -257,6 +258,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	}
 
 	ctrl := runner.GetBaseRunner().QBFTController
+
 	if err := ctrl.StartNewInstance(byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
@@ -266,7 +268,35 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	}
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
+	// registers a timeout handler
+	timer, ok := newInstance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
+	if ok {
+		timer.OnTimeout(b.onTimeout(ctrl.Height))
+	}
+
 	return nil
+}
+
+// onTimeout is trigger upon timeout for the given height
+func (b *BaseRunner) onTimeout(h specqbft.Height) func() {
+	return func() {
+		if !b.HasRunningDuty() && b.QBFTController.Height == h {
+			return
+		}
+		instance := b.State.RunningInstance
+		if instance == nil {
+			return
+		}
+		decided, _ := instance.IsDecided()
+		if decided {
+			return
+		}
+		err := instance.UponRoundTimeout()
+		if err != nil {
+			// TODO: handle?
+			fmt.Println("failed to handle timeout:", err.Error())
+		}
+	}
 }
 
 func (b *BaseRunner) HasRunningDuty() bool {
