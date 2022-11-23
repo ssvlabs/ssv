@@ -86,7 +86,7 @@ func (v2 *AbiV2) ParseOperatorRegistrationEvent(
 			Err: errors.Wrap(err, "could not unpack event"),
 		}
 	}
-	outAbi, err := getOutAbi()
+	outAbi, err := GetOutAbi()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not define ABI")
 	}
@@ -138,7 +138,7 @@ func (v2 *AbiV2) ParseValidatorRegistrationEvent(
 		}
 	}
 
-	outAbi, err := getOutAbi()
+	outAbi, err := GetOutAbi()
 	if err != nil {
 		return nil, errors.Wrap(err, "could not define ABI")
 	}
@@ -233,7 +233,7 @@ func readOperatorPubKey(operatorPublicKey []byte, outAbi abi.ABI) (string, error
 	return operatorPublicKeyString, nil
 }
 
-func getOutAbi() (abi.ABI, error) {
+func GetOutAbi() (abi.ABI, error) {
 	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "string"}]}]`
 	return abi.JSON(strings.NewReader(def))
 }

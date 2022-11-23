@@ -2,6 +2,8 @@ package eth1
 
 import (
 	"encoding/hex"
+	"strings"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -12,7 +14,7 @@ import (
 //go:generate mockgen -package=eth1 -destination=./mock_client.go -source=./client.go
 
 type eventData interface {
-	toEventData() interface{}
+	toEventData() (interface{}, error)
 }
 
 type operatorRegistrationEventYAML struct {
@@ -48,71 +50,95 @@ type accountEnableEventYAML struct {
 	OwnerAddress string `yaml:"OwnerAddress"`
 }
 
-func (e *operatorRegistrationEventYAML) toEventData() interface{} {
+func (e *operatorRegistrationEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorRegistrationEvent{
 		Id:           e.Id,
 		Name:         e.Name,
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
 		PublicKey:    []byte(e.PublicKey),
-	}
+	}, nil
 }
 
-func (e *operatorRemovalEventYAML) toEventData() interface{} {
+func (e *operatorRemovalEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorRemovalEvent{
 		OperatorId:   e.OperatorId,
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-	}
+	}, nil
 }
 
-func (e *validatorRegistrationEventYAML) toEventData() interface{} {
-	var toByteArr = func(orig []string) [][]byte {
+func (e *validatorRegistrationEventYAML) toEventData() (interface{}, error) {
+	var toByteArr = func(orig []string) ([][]byte, error) {
 		res := make([][]byte, len(orig))
 		for i, v := range orig {
-			decodeString, err := hex.DecodeString(v)
+			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
 			if err != nil {
-				return nil
+				return nil, err
 			}
-			res[i] = decodeString
+			res[i] = d
 		}
-		return res
+		return res, nil
 	}
-	var toByteArr2 = func(orig []string) [][]byte {
+	var toByteArr2 = func(orig []string) ([][]byte, error) {
+		outAbi, err := abiparser.GetOutAbi()
+		if err != nil {
+			return nil, err
+		}
 		res := make([][]byte, len(orig))
 		for i, v := range orig {
-			res[i] = []byte(v)
+			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
+			if err != nil {
+				return nil, err
+			}
+			unpackedRaw, err := outAbi.Unpack("method", d)
+			if err != nil {
+				return nil, err
+			}
+			unpacked, ok := unpackedRaw[0].(string)
+			if !ok {
+				return nil, errors.New("could not cast to string")
+			}
+			res[i] = []byte(unpacked)
 		}
-		return res
+		return res, nil
 	}
-	decodeString, err := hex.DecodeString(e.PublicKey)
+	pubKey, err := hex.DecodeString(strings.TrimPrefix(e.PublicKey, "0x"))
 	if err != nil {
-		return nil
+		return nil, err
+	}
+	sharePubKeys, err := toByteArr(e.SharesPublicKeys)
+	if err != nil {
+		return nil, err
+	}
+	encryptedKeys, err := toByteArr2(e.EncryptedKeys)
+	if err != nil {
+		return nil, err
 	}
 	return abiparser.ValidatorRegistrationEvent{
-		PublicKey:        decodeString,
+		PublicKey:        pubKey,
 		OwnerAddress:     common.HexToAddress(e.OwnerAddress),
 		OperatorIds:      e.OperatorIds,
-		SharesPublicKeys: toByteArr(e.SharesPublicKeys),
-		EncryptedKeys:    toByteArr2(e.EncryptedKeys),
-	}
+		SharesPublicKeys: sharePubKeys,
+		EncryptedKeys:    encryptedKeys,
+	}, nil
 }
 
-func (e *validatorRemovalEventYAML) toEventData() interface{} {
+func (e *validatorRemovalEventYAML) toEventData() (interface{}, error) {
 	return abiparser.ValidatorRemovalEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-		PublicKey:    []byte(e.PublicKey),
-	}
+		PublicKey:    []byte(strings.TrimPrefix(e.PublicKey, "0x")),
+	}, nil
 }
 
-func (e *accountLiquidationEventYAML) toEventData() interface{} {
+func (e *accountLiquidationEventYAML) toEventData() (interface{}, error) {
 	return abiparser.AccountLiquidationEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-	}
+	}, nil
 }
 
-func (e *accountEnableEventYAML) toEventData() interface{} {
+func (e *accountEnableEventYAML) toEventData() (interface{}, error) {
 	return abiparser.AccountEnableEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-	}
+	}, nil
 }
 
 type eventDataUnmarshaler struct {
@@ -171,7 +197,11 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	e.Name = ev.Data.name
-	e.Data = ev.Data.data.toEventData()
+	data, err := ev.Data.data.toEventData()
+	if err != nil {
+		return err
+	}
+	e.Data = data
 
 	return nil
 }

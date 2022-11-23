@@ -1,0 +1,41 @@
+- Log: <log>
+  Name: OperatorRegistration
+  Data:
+    Id: <operator-id>
+    Name: <operator-name>
+    OwnerAddress: <owner-address>
+    PublicKey: <operator-public-key [rsa public key b64 encoded]>
+- Log:
+  Name: OperatorRemoval
+  Data:
+    OperatorId: <operator-id>
+    OwnerAddress: <owner-address>
+- Log:
+  Name: ValidatorRegistration
+  Data:
+    PublicKey: <validator-public-key>
+    OwnerAddress: <owner-address>
+    OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
+    SharesPublicKeys:
+      - <share-public-key [hex encoded] e.g. [0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f]>
+      - <share-public-key>
+      - <share-public-key>
+      - <share-public-key>
+    EncryptedKeys:
+      - <encrypted-key [abi encoded] e.g. [0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000001584b68767872614779794a34754831514572546f4e4755423374467a4f515359323848516b33646f4d397453446f6456323366456a344730356e7634703951466d525a545533726d6542616c796a494b427232794b58494376484b2f7a2f47694746656247415477472b43515775427962323562422f6d704e4a7544444b64666b77596265686d58354b744c515378437234546c7150674632396d4a745a4738624950527a5a41646d337a4a6c77567a704c757735766b716c5855714b6776426766676930307870464659706857362b5a58726b4a5a6c45312b457463314e456c61302f42484265735a42613857454134646930476378576c393943486d42445830336e32637464614c4e322b634a5061396e796e426651624b62303141613736627235364748362f4a4e6b34334c6a4856536f5543564e6b70375661725949364b55667a334f48397569795678586f535436397972673d3d0000000000000000]>
+      - <encrypted-key [abi encoded]>
+      - <encrypted-key [abi encoded]>
+      - <encrypted-key [abi encoded]>
+- Log:
+  Name: ValidatorRemoval
+  Data:
+    OwnerAddress: <owner-address>
+    PublicKey: <validator-public-key>
+- Log:
+  Name: AccountLiquidation
+  Data:
+    OwnerAddress: <owner-address>
+- Log:
+  Name: AccountEnable
+  Data:
+    OwnerAddress: <owner-address>
