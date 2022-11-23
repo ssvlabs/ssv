@@ -1,9 +1,242 @@
 package runner
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssz "github.com/ferranbt/fastssz"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
-type AttesterRunner = specssv.AttesterRunner
+type AttesterRunner struct {
+	BaseRunner *BaseRunner
 
-var NewAttesterRunnner = specssv.NewAttesterRunnner
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck specqbft.ProposedValueCheckF
+
+	logger *zap.Logger
+}
+
+func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *spectypes.Share, qbftController *controller.Controller, beacon specssv.BeaconNode, network specssv.Network, signer spectypes.KeyManager, valCheck specqbft.ProposedValueCheckF) Runner {
+	return &AttesterRunner{
+		BaseRunner: &BaseRunner{
+			BeaconRoleType: spectypes.BNRoleAttester,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
+			QBFTController: qbftController,
+		},
+
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		logger:   logex.GetLogger(zap.String("who", "duty_runner")),
+	}
+}
+
+func (r *AttesterRunner) StartNewDuty(duty *spectypes.Duty) error {
+	if err := r.GetBaseRunner().canStartNewDuty(); err != nil {
+		return err
+	}
+	r.logger.Debug("can start duty", zap.Any("duty", duty))
+	r.BaseRunner.State = NewRunnerState(r.BaseRunner.Share.Quorum, duty)
+	r.logger.Debug("runner state", zap.Any("state", r.BaseRunner.State))
+	return r.executeDuty(duty)
+	// return r.GetBaseRunner().baseStartNewDuty(r, duty)
+}
+
+// HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
+func (r *AttesterRunner) HasRunningDuty() bool {
+	return r.BaseRunner.HasRunningDuty()
+}
+
+func (r *AttesterRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+	return errors.New("no pre consensus sigs required for attester role")
+}
+
+func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
+	if err != nil {
+		return errors.Wrap(err, "failed processing consensus message")
+	}
+
+	// Decided returns true only once so if it is true it must be for the current running instance
+	if !decided {
+		return nil
+	}
+
+	r.logger.Info("decided consensus")
+
+	// specific duty sig
+	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
+	if err != nil {
+		return errors.Wrap(err, "failed signing attestation data")
+	}
+	postConsensusMsg := &specssv.PartialSignatureMessages{
+		Type:     specssv.PostConsensusPartialSig,
+		Messages: []*specssv.PartialSignatureMessage{msg},
+	}
+
+	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
+	if err != nil {
+		return errors.Wrap(err, "could not sign post consensus msg")
+	}
+
+	data, err := postSignedMsg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode post consensus signature msg")
+	}
+
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
+	}
+
+	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+	}
+	r.logger.Info("partial signature broadcast")
+	return nil
+}
+
+func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
+	if err != nil {
+		return errors.Wrap(err, "failed processing post consensus message")
+	}
+
+	if !quorum {
+		return nil
+	}
+
+	logex.GetLogger().Info("reached quorum")
+	duty := r.GetState().DecidedValue.Duty
+
+	for _, root := range roots {
+		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
+		if err != nil {
+			return errors.Wrap(err, "could not reconstruct post consensus signature")
+		}
+		specSig := phase0.BLSSignature{}
+		copy(specSig[:], sig)
+
+		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
+		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
+		signedAtt := &phase0.Attestation{
+			Data:            r.GetState().DecidedValue.AttestationData,
+			Signature:       specSig,
+			AggregationBits: aggregationBitfield,
+		}
+
+		r.logger.Info("submitting attestation...")
+		// broadcast
+		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+		}
+		r.logger.Info("submitted attestation!")
+	}
+	r.GetState().Finished = true
+	r.GetState().LastSlot = duty.Slot
+
+	return nil
+}
+
+func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return []ssz.HashRoot{}, spectypes.DomainError, errors.New("no expected pre consensus roots for attester")
+}
+
+// executeDuty steps:
+// 1) get attestation data from BN
+// 2) start consensus on duty + attestation data
+// 3) Once consensus decides, sign partial attestation and broadcast
+// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
+func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
+	// TODO - waitOneThirdOrValidBlock
+	r.logger.Debug("executing duty", zap.Any("duty", duty))
+
+	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
+	if err != nil {
+		return errors.Wrap(err, "failed to get attestation data")
+	}
+
+	input := &spectypes.ConsensusData{
+		Duty:            duty,
+		AttestationData: attData,
+	}
+
+	r.logger.Debug("calling base runner decide", zap.Any("input", input))
+
+	err = r.GetBaseRunner().decide(r, input)
+
+	r.logger.Debug("base runner decide result", zap.Error(err))
+
+	if err != nil {
+		return errors.Wrap(err, "can't start new duty runner instance for duty")
+	}
+
+	return nil
+}
+
+func (r *AttesterRunner) GetBaseRunner() *BaseRunner {
+	return r.BaseRunner
+}
+
+func (r *AttesterRunner) GetNetwork() specssv.Network {
+	return r.network
+}
+
+func (r *AttesterRunner) GetBeaconNode() specssv.BeaconNode {
+	return r.beacon
+}
+
+func (r *AttesterRunner) GetShare() *spectypes.Share {
+	return r.BaseRunner.Share
+}
+
+func (r *AttesterRunner) GetState() *State {
+	return r.BaseRunner.State
+}
+
+func (r *AttesterRunner) Init() error {
+	return r.BaseRunner.Init()
+}
+
+func (r *AttesterRunner) GetValCheckF() specqbft.ProposedValueCheckF {
+	return r.valCheck
+}
+
+func (r *AttesterRunner) GetSigner() spectypes.KeyManager {
+	return r.signer
+}
+
+// Encode returns the encoded struct in bytes or error
+func (r *AttesterRunner) Encode() ([]byte, error) {
+	return json.Marshal(r)
+}
+
+// Decode returns error if decoding failed
+func (r *AttesterRunner) Decode(data []byte) error {
+	return json.Unmarshal(data, &r)
+}
+
+// GetRoot returns the root used for signing and verification
+func (r *AttesterRunner) GetRoot() ([]byte, error) {
+	marshaledRoot, err := r.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+	}
+	ret := sha256.Sum256(marshaledRoot)
+	return ret[:], nil
+}
