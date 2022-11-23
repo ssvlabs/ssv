@@ -55,10 +55,8 @@ type SyncResult struct {
 	Sender string
 }
 
-// SyncResults represent a slice of SyncResult's and has a ForEachSignedMessage method for iterating them.
 type SyncResults []SyncResult
 
-// ForEachSignedMessage applies a function to all elements in SyncResults.
 func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage)) {
 	for _, res := range results {
 		if res.Msg == nil {

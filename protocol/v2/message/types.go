@@ -2,6 +2,25 @@ package message
 
 import spectypes "github.com/bloxapp/ssv-spec/types"
 
+// RoleType type of the validator role for a specific duty
+type RoleType int
+
+// String returns name of the role
+func (r RoleType) String() string {
+	switch r {
+	case RoleTypeUnknown:
+		return "UNKNOWN"
+	case RoleTypeAttester:
+		return "ATTESTER"
+	case RoleTypeAggregator:
+		return "AGGREGATOR"
+	case RoleTypeProposer:
+		return "PROPOSER"
+	default:
+		return "UNDEFINED"
+	}
+}
+
 // RoleTypeFromString returns RoleType from string
 func RoleTypeFromString(rt string) spectypes.BeaconRole {
 	switch rt {
@@ -11,11 +30,16 @@ func RoleTypeFromString(rt string) spectypes.BeaconRole {
 		return spectypes.BNRoleAggregator
 	case "PROPOSER":
 		return spectypes.BNRoleProposer
-	case "SYNC_COMMITTEE":
-		return spectypes.BNRoleSyncCommittee
-	case "SYNC_COMMITTEE_CONTRIBUTION":
-		return spectypes.BNRoleSyncCommitteeContribution
 	default:
+		// TODO(nkryuchkov): don't panic
 		panic("unknown role")
 	}
 }
+
+// List of roles
+const (
+	RoleTypeUnknown RoleType = iota
+	RoleTypeAttester
+	RoleTypeAggregator
+	RoleTypeProposer
+)
