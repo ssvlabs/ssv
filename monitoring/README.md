@@ -47,7 +47,9 @@ METRICS_API_PORT=15000
 * `ssv:validator:running_ibfts_count_all` Count all running IBFTs
 * `ssv:validator:consensus_duration_seconds{pubKey}` Consensus duration (seconds)
 * `ssv:validator:instance_stage_duration_seconds{stage, pubKey}` Instance stage duration (seconds)
-* `ssv:validator:attestation_duration_seconds{stage, pubKey}` Attestation duration (seconds)
+* `ssv:validator:signature_collection_duration_seconds{pubKey}` Signature collection duration (seconds)
+* `ssv:validator:attestation_submission_duration_seconds{pubKey}` Attestation duration (seconds)
+* `ssv:validator:attestation_full_flow_duration_seconds{pubKey}` Attestation full flow duration (seconds)
 
 
 ### Grafana

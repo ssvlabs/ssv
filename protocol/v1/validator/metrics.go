@@ -27,7 +27,7 @@ var (
 	metricsDurationConsensus = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv:validator:consensus_duration_seconds",
 		Help:    "Consensus duration (seconds)",
-		Buckets: []float64{0.1, 0.2, 0.5, 1.5},
+		Buckets: []float64{0.5, 1, 2, 3, 4, 10},
 	}, []string{"pubKey"})
 )
 

@@ -44,7 +44,7 @@ var (
 	metricsAttestationDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv:beacon:attestation_data_request_duration_seconds",
 		Help:    "Attestation data request duration (seconds)",
-		Buckets: []float64{0.1, 0.2, 0.5, 1.5},
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{})
 	statusUnknown beaconNodeStatus = 0
 	statusSyncing beaconNodeStatus = 1
