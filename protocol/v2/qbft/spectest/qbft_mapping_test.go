@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	specqbfttests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -61,46 +61,46 @@ func TestQBFTMapping(t *testing.T) {
 		testType := strings.Split(name, "_")[0]
 
 		switch testType {
-		case reflect.TypeOf(&specqbfttests.MsgProcessingSpecTest{}).String():
+		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &specqbfttests.MsgProcessingSpecTest{}
+			typedTest := &spectests.MsgProcessingSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsgProcessing(t, typedTest)
 			})
-		case reflect.TypeOf(&specqbfttests.MsgSpecTest{}).String():
+		case reflect.TypeOf(&spectests.MsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &specqbfttests.MsgSpecTest{}
+			typedTest := &spectests.MsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsg(t, typedTest)
 			})
-		case reflect.TypeOf(&specqbfttests.ControllerSpecTest{}).String():
+		case reflect.TypeOf(&spectests.ControllerSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &specqbfttests.ControllerSpecTest{}
+			typedTest := &spectests.ControllerSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunControllerSpecTest(t, typedTest)
 			})
-		case reflect.TypeOf(&specqbfttests.CreateMsgSpecTest{}).String():
+		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &specqbfttests.CreateMsgSpecTest{}
+			typedTest := &spectests.CreateMsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunCreateMsg(t, typedTest)
 			})
-		case reflect.TypeOf(&specqbfttests.RoundRobinSpecTest{}).String():
+		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &specqbfttests.RoundRobinSpecTest{}
+			typedTest := &spectests.RoundRobinSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)

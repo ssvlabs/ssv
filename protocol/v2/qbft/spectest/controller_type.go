@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specqbfttests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
-func RunControllerSpecTest(t *testing.T, test *specqbfttests.ControllerSpecTest) {
+func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := NewTestingQBFTController(

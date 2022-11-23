@@ -1,7 +1,21 @@
 package spectest
 
-import (
-	specssvtests "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-)
+import "testing"
 
-type MultiMsgProcessingSpecTest = specssvtests.MultiMsgProcessingSpecTest
+type MultiMsgProcessingSpecTest struct {
+	Name  string
+	Tests []*MsgProcessingSpecTest
+}
+
+func (tests *MultiMsgProcessingSpecTest) TestName() string {
+	return tests.Name
+}
+
+func (tests *MultiMsgProcessingSpecTest) Run(t *testing.T) {
+	for _, test := range tests.Tests {
+		test := test
+		t.Run(test.TestName(), func(t *testing.T) {
+			RunMsgProcessing(t, test)
+		})
+	}
+}

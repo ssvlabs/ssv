@@ -131,7 +131,7 @@ func TestSSVMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
+				RunSyncCommitteeAggProof(t, typedTest)
 			})
 		case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
 			subtests := test.(map[string]interface{})["Tests"].([]interface{})

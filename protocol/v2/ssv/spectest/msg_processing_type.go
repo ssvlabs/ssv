@@ -5,15 +5,29 @@ import (
 	"testing"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
-	specssvtests "github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
-type MsgProcessingSpecTest = specssvtests.MsgProcessingSpecTest
+type MsgProcessingSpecTest struct {
+	Name                    string
+	Runner                  runner.Runner
+	Duty                    *spectypes.Duty
+	Messages                []*spectypes.SSVMessage
+	PostDutyRunnerStateRoot string
+	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
+	OutputMessages []*specssv.SignedPartialSignatureMessage
+	DontStartDuty  bool // if set to true will not start a duty for the runner
+	ExpectedError  string
+}
+
+func (test *MsgProcessingSpecTest) TestName() string {
+	return test.Name
+}
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	v := utils.BaseValidator(spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
