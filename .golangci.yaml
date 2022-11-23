@@ -459,7 +459,7 @@ linters-settings:
 
 linters:
   enable:
-    - golint
+#    - golint # TODO: enable when all exported var/func in spec have comments
 #    - gocyclo
     - goconst
     - unconvert
