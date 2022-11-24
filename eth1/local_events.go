@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -72,11 +71,11 @@ func (e *validatorRegistrationEventYAML) toEventData() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	sharePubKeys, err := toByteArr(e.SharesPublicKeys, false)
+	sharePubKeys, err := toByteArr(e.SharesPublicKeys, true)
 	if err != nil {
 		return nil, err
 	}
-	encryptedKeys, err := toByteArr(e.EncryptedKeys, true)
+	encryptedKeys, err := toByteArr(e.EncryptedKeys, false)
 	if err != nil {
 		return nil, err
 	}
@@ -173,33 +172,17 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func toByteArr(orig []string, useAbi bool) ([][]byte, error) {
-	var outAbi abi.ABI
-	var err error
-	if useAbi {
-		outAbi, err = abiparser.GetOutAbi()
-		if err != nil {
-			return nil, err
-		}
-	}
+func toByteArr(orig []string, decodeHex bool) ([][]byte, error) {
 	res := make([][]byte, len(orig))
 	for i, v := range orig {
-		d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
-		if err != nil {
-			return nil, err
-		}
-		if useAbi {
-			unpackedRaw, err := outAbi.Unpack("method", d)
+		if decodeHex {
+			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
 			if err != nil {
 				return nil, err
 			}
-			unpacked, ok := unpackedRaw[0].(string)
-			if !ok {
-				return nil, errors.New("could not cast to string")
-			}
-			res[i] = []byte(unpacked)
-		} else {
 			res[i] = d
+		} else {
+			res[i] = []byte(v)
 		}
 	}
 	return res, nil
