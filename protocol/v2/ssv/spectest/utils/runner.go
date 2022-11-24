@@ -43,7 +43,7 @@ var baseRunner = func(role types.BeaconRole, valCheck qbft.ProposedValueCheckF, 
 	net := testingutils.NewTestingNetwork()
 	km := testingutils.NewTestingKeyManager()
 
-	config := testingutils.TestingConfig(keySet)
+	config := TestingConfig(keySet, identifier.GetRoleType())
 	config.ValueCheckF = valCheck
 	config.ProposerF = func(state *qbft.State, round qbft.Round) types.OperatorID {
 		return 1

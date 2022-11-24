@@ -3,6 +3,7 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"reflect"
 	"testing"
 
@@ -15,7 +16,7 @@ import (
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := testingutils.TestingConfig(testingutils.Testing4SharesSet())
+	config := utils.TestingConfig(testingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := NewTestingQBFTController(
 		identifier[:],
 		testingutils.TestingShare(testingutils.Testing4SharesSet()),
@@ -47,7 +48,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 		if runData.SavedDecided != nil {
 			// test saved to storage
-			decided, err := config.GetStorage().GetHighestDecided(identifier[:])
+			decided, err := config.GetStorage().GetLastDecided(identifier[:])
 			require.NoError(t, err)
 			require.NotNil(t, decided)
 			r1, err := decided.GetRoot()
