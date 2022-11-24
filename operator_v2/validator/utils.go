@@ -63,6 +63,7 @@ func ShareFromValidatorEvent(
 			OperatorID: nodeID,
 			PubKey:     validatorRegistrationEvent.SharesPublicKeys[i],
 		})
+		validatorShare.SharePubKey = validatorRegistrationEvent.SharesPublicKeys[i]
 		if strings.EqualFold(string(validatorRegistrationEvent.OperatorPublicKeys[i]), operatorPubKey) {
 			validatorShare.OperatorID = nodeID
 
@@ -87,7 +88,6 @@ func ShareFromValidatorEvent(
 					Err: errors.Wrap(err, "failed to set decrypted share private key"),
 				}
 			}
-			validatorShare.SharePubKey = shareSecret.GetPublicKey().Serialize()
 		}
 	}
 
