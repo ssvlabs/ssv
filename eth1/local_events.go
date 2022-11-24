@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -67,49 +68,15 @@ func (e *operatorRemovalEventYAML) toEventData() (interface{}, error) {
 }
 
 func (e *validatorRegistrationEventYAML) toEventData() (interface{}, error) {
-	var toByteArr = func(orig []string) ([][]byte, error) {
-		res := make([][]byte, len(orig))
-		for i, v := range orig {
-			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
-			if err != nil {
-				return nil, err
-			}
-			res[i] = d
-		}
-		return res, nil
-	}
-	var toByteArr2 = func(orig []string) ([][]byte, error) {
-		outAbi, err := abiparser.GetOutAbi()
-		if err != nil {
-			return nil, err
-		}
-		res := make([][]byte, len(orig))
-		for i, v := range orig {
-			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
-			if err != nil {
-				return nil, err
-			}
-			unpackedRaw, err := outAbi.Unpack("method", d)
-			if err != nil {
-				return nil, err
-			}
-			unpacked, ok := unpackedRaw[0].(string)
-			if !ok {
-				return nil, errors.New("could not cast to string")
-			}
-			res[i] = []byte(unpacked)
-		}
-		return res, nil
-	}
 	pubKey, err := hex.DecodeString(strings.TrimPrefix(e.PublicKey, "0x"))
 	if err != nil {
 		return nil, err
 	}
-	sharePubKeys, err := toByteArr(e.SharesPublicKeys)
+	sharePubKeys, err := toByteArr(e.SharesPublicKeys, false)
 	if err != nil {
 		return nil, err
 	}
-	encryptedKeys, err := toByteArr2(e.EncryptedKeys)
+	encryptedKeys, err := toByteArr(e.EncryptedKeys, true)
 	if err != nil {
 		return nil, err
 	}
@@ -204,4 +171,36 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 	e.Data = data
 
 	return nil
+}
+
+func toByteArr(orig []string, useAbi bool) ([][]byte, error) {
+	var outAbi abi.ABI
+	var err error
+	if useAbi {
+		outAbi, err = abiparser.GetOutAbi()
+		if err != nil {
+			return nil, err
+		}
+	}
+	res := make([][]byte, len(orig))
+	for i, v := range orig {
+		d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
+		if err != nil {
+			return nil, err
+		}
+		if useAbi {
+			unpackedRaw, err := outAbi.Unpack("method", d)
+			if err != nil {
+				return nil, err
+			}
+			unpacked, ok := unpackedRaw[0].(string)
+			if !ok {
+				return nil, errors.New("could not cast to string")
+			}
+			res[i] = []byte(unpacked)
+		} else {
+			res[i] = d
+		}
+	}
+	return res, nil
 }

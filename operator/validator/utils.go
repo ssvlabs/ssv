@@ -1,19 +1,15 @@
 package validator
 
 import (
-	"io/ioutil"
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
-
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 )
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
@@ -115,26 +111,5 @@ func SetOperatorPublicKeys(
 		}
 		validatorRegistrationEvent.OperatorPublicKeys[i] = []byte(od.PublicKey)
 	}
-	return nil
-}
-
-func LoadLocalEvents(handler eth1.SyncEventHandler, path string) error {
-	yamlFile, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
-	}
-
-	var parsedData []eth1.Event
-	err = yaml.Unmarshal(yamlFile, &parsedData)
-	if err != nil {
-		return err
-	}
-	for _, ev := range parsedData {
-		_, err = handler(ev)
-		if err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

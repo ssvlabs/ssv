@@ -241,7 +241,11 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml[json] if exists
 		if len(cfg.LocalEventsPath) > 0 {
-			if err := v1validator.LoadLocalEvents(validatorCtrl.Eth1EventHandler(false), cfg.LocalEventsPath); err != nil {
+			if err := validator2.LoadLocalEvents(
+				Logger,
+				validatorCtrl.Eth1EventHandler(false),
+				cfg.LocalEventsPath,
+			); err != nil {
 				Logger.Fatal("failed to load local events", zap.Error(err))
 			}
 		}
