@@ -10,6 +10,8 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
+// TODO: add missing tests
+
 // GetHighest returns the highest message from the given collection
 func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *specqbft.SignedMessage, sender string) {
 	var height specqbft.Height

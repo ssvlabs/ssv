@@ -15,6 +15,8 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 )
 
+// TODO: add missing tests
+
 // GenerateBLSKeys generates randomly nodes
 func GenerateBLSKeys(oids ...spectypes.OperatorID) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator) {
 	_ = bls.Init(bls.BLS12_381)

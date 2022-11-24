@@ -1,5 +1,7 @@
 package queue
 
+// TODO: add missing tests
+
 // Fn represents a function to execute
 type Fn func() error
 
