@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -90,6 +91,10 @@ func ShareFromValidatorEvent(
 		}
 	}
 
+	f := uint64(len(committee)-1) / 3
+	validatorShare.Quorum = 3 * f
+	validatorShare.PartialQuorum = 2 * f
+	validatorShare.DomainType = types2.GetDefaultDomain()
 	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
 
