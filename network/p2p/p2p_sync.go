@@ -22,7 +22,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 		return err
 	}
 	if len(lastDecided) == 0 {
-		return errors.New("no messages were synced")
+		return errors.New("highest decided: no messages were synced")
 	}
 	n.logger.Debug("got highest decided", zap.Int("results count", len(lastDecided)))
 	results := p2pprotocol.SyncResults(lastDecided)
@@ -45,6 +45,9 @@ func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spec
 	lastChangeRound, err := n.LastChangeRound(mid, height)
 	if err != nil {
 		return err
+	}
+	if len(lastChangeRound) == 0 {
+		return errors.New("highest change round: no messages were synced")
 	}
 	n.logger.Debug("got highest change round", zap.Int("results count", len(lastChangeRound)))
 	results := p2pprotocol.SyncResults(lastChangeRound)

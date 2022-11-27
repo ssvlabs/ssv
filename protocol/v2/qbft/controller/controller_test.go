@@ -35,7 +35,7 @@ func TestInstances_addNewInstance(t *testing.T) {
 			&instance.Instance{State: &qbftspec.State{Height: 4}},
 			&instance.Instance{State: &qbftspec.State{Height: 5}},
 		}
-		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 6}})
+		i.AddNewInstance(&instance.Instance{State: &qbftspec.State{Height: 6}})
 
 		require.EqualValues(t, 6, i[0].State.Height)
 		require.EqualValues(t, 1, i[1].State.Height)
@@ -46,7 +46,7 @@ func TestInstances_addNewInstance(t *testing.T) {
 
 	t.Run("add to empty", func(t *testing.T) {
 		i := InstanceContainer{}
-		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 1}})
+		i.AddNewInstance(&instance.Instance{State: &qbftspec.State{Height: 1}})
 
 		require.EqualValues(t, 1, i[0].State.Height)
 		require.Nil(t, i[1])
@@ -61,7 +61,7 @@ func TestInstances_addNewInstance(t *testing.T) {
 			&instance.Instance{State: &qbftspec.State{Height: 2}},
 			&instance.Instance{State: &qbftspec.State{Height: 3}},
 		}
-		i.addNewInstance(&instance.Instance{State: &qbftspec.State{Height: 4}})
+		i.AddNewInstance(&instance.Instance{State: &qbftspec.State{Height: 4}})
 
 		require.EqualValues(t, 4, i[0].State.Height)
 		require.EqualValues(t, 1, i[1].State.Height)

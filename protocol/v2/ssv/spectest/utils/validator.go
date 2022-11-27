@@ -2,22 +2,21 @@ package utils
 
 import (
 	"context"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
+
 	return validator.NewValidator(
 		context.TODO(),
 		validator.Options{
 			Network: testingutils.NewTestingNetwork(),
 			Beacon:  testingutils.NewTestingBeaconNode(),
-			Storage: testingutils.NewTestingStorage(),
+			Storage: TestingStorage(),
 			SSVShare: &types.SSVShare{
 				Share: *testingutils.TestingShare(keySet),
 			},

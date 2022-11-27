@@ -55,15 +55,21 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
-		c.StoredInstances.addNewInstance(i)
+		c.StoredInstances.AddNewInstance(i)
 		// bump height
 		c.Height = msg.Message.Height
 	}
 
 	if !prevDecided {
+		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
+			if err = c.GetConfig().GetStorage().SaveHighestInstance(futureInstance.State); err != nil {
+				fmt.Printf("failed to save instance: %s\n", err.Error())
+			}
+		}
+
 		if err = c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
 			// no need to fail processing the decided msg if failed to save
-			fmt.Printf("%s\n", err.Error())
+			fmt.Printf("failed to save decided: %s\n", err.Error())
 		}
 		return msg, nil
 	}

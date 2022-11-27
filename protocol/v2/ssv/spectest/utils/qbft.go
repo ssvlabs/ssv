@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var TestingConfig = func(keySet *testingutils.TestKeySet) *ssvtypes.Config {
+var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole) *ssvtypes.Config {
 	return &ssvtypes.Config{
 		Signer:    testingutils.NewTestingKeyManager(),
 		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
@@ -23,7 +23,7 @@ var TestingConfig = func(keySet *testingutils.TestKeySet) *ssvtypes.Config {
 		ProposerF: func(state *qbft.State, round qbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage: testingutils.NewTestingStorage(),
+		Storage: TestingStorage()[role],
 		Network: testingutils.NewTestingNetwork(),
 		Timer:   testingutils.NewTestingTimer(),
 	}
