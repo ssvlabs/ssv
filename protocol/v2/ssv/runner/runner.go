@@ -131,7 +131,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, errors.Wrap(err, "invalid consensus message")
 	}
 
-	prevDecided, _ := b.State.RunningInstance.IsDecided()
+	var prevDecided bool
+	if b.State != nil && b.State.RunningInstance != nil {
+		prevDecided, _ = b.State.RunningInstance.IsDecided()
+	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
