@@ -63,9 +63,9 @@ func ShareFromValidatorEvent(
 			OperatorID: nodeID,
 			PubKey:     validatorRegistrationEvent.SharesPublicKeys[i],
 		})
-		validatorShare.SharePubKey = validatorRegistrationEvent.SharesPublicKeys[i]
 		if strings.EqualFold(string(validatorRegistrationEvent.OperatorPublicKeys[i]), operatorPubKey) {
 			validatorShare.OperatorID = nodeID
+			validatorShare.SharePubKey = validatorRegistrationEvent.SharesPublicKeys[i]
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
