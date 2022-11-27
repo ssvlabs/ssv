@@ -45,3 +45,23 @@ func SpecRunnerStateSet() []utils.KeyValue {
 	return mapSet.Range()
 }
 
+func AggregatorSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+	mapSet.Set("package runner", "package ssv")
+	mapSet.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"", "\"github.com/bloxapp/ssv-spec/qbft\"")
+	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
+	mapSet.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	mapSet.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/controller\"\n", "")
+	mapSet.Set("specssv.", "")
+	mapSet.Set("specqbft.", "qbft.")
+	mapSet.Set("spectypes.", "types.")
+	mapSet.Set("controller.Controller", "qbft.Controller")
+	// ignored typo in spec
+	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
+	return mapSet.Range()
+}
+func SpecAggregatorSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+	return mapSet.Range()
+}
+

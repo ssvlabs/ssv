@@ -167,7 +167,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		}
 	}
 	r.GetState().Finished = true
-	r.GetState().LastSlot = r.GetState().DecidedValue.Duty.Slot
 
 	return nil
 }

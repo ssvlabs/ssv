@@ -133,7 +133,6 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		}
 	}
 	r.GetState().Finished = true
-	r.GetState().LastSlot = r.GetState().DecidedValue.Duty.Slot
 
 	return nil
 }

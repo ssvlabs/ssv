@@ -148,7 +148,6 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		r.logger.Info("submitted attestation!")
 	}
 	r.GetState().Finished = true
-	r.GetState().LastSlot = duty.Slot
 
 	return nil
 }

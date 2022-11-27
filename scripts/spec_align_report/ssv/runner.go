@@ -19,6 +19,13 @@ func ProcessRunner() {
 	}
 	runnerStateCompareStruct.Run()
 
+	aggregatorCompareStruct := initAggregatorCompareStruct()
+	if err := aggregatorCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+	aggregatorCompareStruct.Run()
+
+
 }
 
 func initRunnerCompareStruct() *utils.Compare {
@@ -50,6 +57,23 @@ func initRunnerStateCompareStruct() *utils.Compare {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_state.go", c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func initAggregatorCompareStruct() *utils.Compare {
+	c := &utils.Compare{
+		Name:        "aggregator",
+		Replace:     AggregatorSet(),
+		SpecReplace: SpecAggregatorSet(),
+		SSVPath:     utils.DataPath + "/runner/aggregator.go",
+		SpecPath:    utils.DataPath + "/runner/aggregator_spec.go",
+	}
+	if err := utils.Copy("./protocol/v2/ssv/runner/aggregator.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/aggregator.go", c.SpecPath); err != nil {
 		panic(err)
 	}
 	return c
