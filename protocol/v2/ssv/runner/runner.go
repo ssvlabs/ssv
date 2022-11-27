@@ -69,7 +69,6 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 }
 
-
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
 		return err

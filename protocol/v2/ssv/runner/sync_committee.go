@@ -185,7 +185,6 @@ func (r *SyncCommitteeRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-
 func (r *SyncCommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }

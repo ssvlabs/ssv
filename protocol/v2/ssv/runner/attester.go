@@ -21,7 +21,6 @@ type AttesterRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-
 }
 
 func NewAttesterRunnner(
@@ -71,7 +70,6 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if !decided {
 		return nil
 	}
-
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
@@ -191,7 +189,6 @@ func (r *AttesterRunner) GetShare() *spectypes.Share {
 func (r *AttesterRunner) GetState() *State {
 	return r.BaseRunner.State
 }
-
 
 func (r *AttesterRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck

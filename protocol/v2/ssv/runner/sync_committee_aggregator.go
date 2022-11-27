@@ -344,7 +344,6 @@ func (r *SyncCommitteeAggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-
 func (r *SyncCommitteeAggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }

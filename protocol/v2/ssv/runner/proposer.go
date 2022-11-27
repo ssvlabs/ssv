@@ -240,7 +240,6 @@ func (r *ProposerRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-
 func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }

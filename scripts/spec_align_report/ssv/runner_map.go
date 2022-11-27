@@ -107,7 +107,6 @@ func SpecProposerSet() []utils.KeyValue {
 	return mapSet.Range()
 }
 
-
 func SyncCommitteeSet() []utils.KeyValue {
 	var mapSet = utils.NewMap()
 
@@ -150,4 +149,3 @@ func SpecSyncCommitteeAggregatorSet() []utils.KeyValue {
 	var mapSet = utils.NewMap()
 	return mapSet.Range()
 }
-
