@@ -144,7 +144,6 @@ func SyncCommitteeAggregatorSet() []utils.KeyValue {
 	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
 	return mapSet.Range()
 }
-
 func SpecSyncCommitteeAggregatorSet() []utils.KeyValue {
 	var mapSet = utils.NewMap()
 	return mapSet.Range()
