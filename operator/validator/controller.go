@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"sync"
 	"time"
 
@@ -17,19 +18,17 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/ibft/storage"
+	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/commons"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
+	"github.com/bloxapp/ssv/protocol/v2/commons"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -51,10 +50,6 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *types.SSVShare)
 
-// NewDecidedHandler handles newly saved decided messages.
-// it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *specqbft.SignedMessage)
-
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
 	Context                    context.Context
@@ -75,7 +70,7 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
-	NewDecidedHandler          NewDecidedHandler
+	//NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
@@ -99,18 +94,18 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
-	// OnFork(forkVersion forksprotocol.ForkVersion) error
+	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
 type controller struct {
-	context     context.Context
-	collection  ICollection
-	storage     registrystorage.OperatorsCollection
-	ibftStorage qbftstorage.QBFTStore
-	logger      *zap.Logger
-	beacon      beaconprotocol.Beacon
-	keyManager  spectypes.KeyManager
+	context        context.Context
+	collection     ICollection
+	storage        registrystorage.OperatorsCollection
+	ibftStorageMap *storagev2.QBFTSyncMap
+	logger         *zap.Logger
+	beacon         beaconprotocol.Beacon
+	keyManager     spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -135,7 +130,12 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	qbftStorage := storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion) // TODO need to support multi duties
+	storageMap := &storagev2.QBFTSyncMap{}
+	storageMap.Add(spectypes.BNRoleAttester, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleProposer, storagev2.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleAggregator, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommittee, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -149,11 +149,11 @@ func NewController(options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := &validator.Options{ // TODO add vars
+	validatorOptions := &validator.Options{ //TODO add vars
 		Logger:  options.Logger,
 		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
-		Storage: qbftStorage, // should support more than one duty type
+		Storage: storageMap,
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
@@ -163,7 +163,7 @@ func NewController(options ControllerOptions) Controller {
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
-		ibftStorage:                qbftStorage,
+		ibftStorageMap:             storageMap,
 		context:                    options.Context,
 		logger:                     options.Logger.With(zap.String("component", "validatorsController")),
 		beacon:                     options.Beacon,
@@ -196,14 +196,14 @@ func NewController(options ControllerOptions) Controller {
 func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
-		handlers.LastDecidedHandler(c.logger, c.ibftStorage, c.network),
+		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.LastChangeRoundProtocol,
-		handlers.LastChangeRoundHandler(c.logger, c.ibftStorage, c.network),
+		handlers.LastChangeRoundHandler(c.logger, c.ibftStorageMap, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
-		handlers.HistoryHandler(c.logger, c.ibftStorage, c.network, 25),
+		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
 	))
 	return nil
 }
@@ -323,7 +323,7 @@ func (c *controller) StartValidators() {
 }
 
 // setupValidators setup and starts validators from the given shares
-// w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
+// shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*types.SSVShare) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
@@ -573,7 +573,7 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 	}
 
 	domainType := types.GetDefaultDomain()
-	generateConfig := func() *types.Config {
+	generateConfig := func(role spectypes.BeaconRole) *types.Config {
 		return &types.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
@@ -584,7 +584,7 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 				options.Logger.Debug("leader", zap.Int("", int(leader)))
 				return leader
 			},
-			Storage: options.Storage,
+			Storage: options.Storage.Get(role),
 			Network: options.Network,
 			Timer:   roundtimer.New(ctx, options.Logger, nil),
 		}
@@ -595,35 +595,35 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 		switch role {
 		case spectypes.BNRoleAttester:
 			valCheck := specssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig()
+			config := generateConfig(spectypes.BNRoleAttester)
 			config.ValueCheckF = valCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleAttester)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
 			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig()
+			config := generateConfig(spectypes.BNRoleProposer)
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleProposer)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
 			proposedValueCheck := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig()
+			config := generateConfig(spectypes.BNRoleAggregator)
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleAggregator)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
 			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommittee:
 			proposedValueCheck := specssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig()
+			config := generateConfig(spectypes.BNRoleSyncCommittee)
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
 			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleSyncCommitteeContribution:
 			proposedValueCheck := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig()
+			config := generateConfig(spectypes.BNRoleSyncCommitteeContribution)
 			config.ValueCheckF = proposedValueCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)

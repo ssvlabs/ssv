@@ -91,6 +91,10 @@ func ShareFromValidatorEvent(
 		}
 	}
 
+	f := uint64(len(committee)-1) / 3
+	validatorShare.Quorum = 3 * f
+	validatorShare.PartialQuorum = 2 * f
+	validatorShare.DomainType = types.GetDefaultDomain()
 	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
 

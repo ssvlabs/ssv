@@ -85,7 +85,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	}
 
 	// this check is deprecated, since the validation is happening on the contract side
-	// if od.OwnerAddress != event.OwnerAddress {
+	//if od.OwnerAddress != event.OwnerAddress {
 	//	return nil, &abiparser.MalformedEventError{
 	//		Err: errors.New("could not match operator owner address with provided event owner address"),
 	//	}
@@ -195,7 +195,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	}
 
 	// this check is deprecated, since the validation is happening on the contract side
-	// if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
+	//if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
 	//	return nil, &abiparser.MalformedEventError{
 	//		Err: errors.New("could not match validator owner address with provided event owner address"),
 	//	}
@@ -203,13 +203,17 @@ func (c *controller) handleValidatorRemovalEvent(
 
 	// remove decided messages
 	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
-	if err := c.ibftStorage.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean all decided messages")
+	store := c.ibftStorageMap.Get(messageID.GetRoleType())
+	if store != nil {
+		if err := store.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+			return nil, errors.Wrap(err, "could not clean all decided messages")
+		}
+		// remove change round messages
+		if err := store.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+			return nil, errors.Wrap(err, "could not clean last change round")
+		}
 	}
-	// remove change round messages
-	if err := c.ibftStorage.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean last change round")
-	}
+
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(share.ValidatorPubKey); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
