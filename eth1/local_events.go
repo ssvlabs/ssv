@@ -154,6 +154,9 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 	if err != nil {
 		return err
 	}
+	if evName.Name == "" {
+		return errors.New("event name is empty")
+	}
 	var ev struct {
 		Data eventDataUnmarshaler `yaml:"Data"`
 	}
@@ -161,6 +164,9 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 
 	if err := value.Decode(&ev); err != nil {
 		return err
+	}
+	if ev.Data.data == nil {
+		return errors.New("event data is nil")
 	}
 	e.Name = ev.Data.name
 	data, err := ev.Data.data.toEventData()
