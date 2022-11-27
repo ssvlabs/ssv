@@ -3,11 +3,11 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -29,18 +29,26 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
+	return NewInstanceFromState(config, &specqbft.State{
+		Share:                share,
+		ID:                   identifier,
+		Round:                specqbft.FirstRound,
+		Height:               height,
+		LastPreparedRound:    specqbft.NoRound,
+		ProposeContainer:     specqbft.NewMsgContainer(),
+		PrepareContainer:     specqbft.NewMsgContainer(),
+		CommitContainer:      specqbft.NewMsgContainer(),
+		RoundChangeContainer: specqbft.NewMsgContainer(),
+	})
+}
+
+// NewInstanceFromState return instance by state that provided
+func NewInstanceFromState(
+	config types.IConfig,
+	state *specqbft.State,
+) *Instance {
 	return &Instance{
-		State: &specqbft.State{
-			Share:                share,
-			ID:                   identifier,
-			Round:                specqbft.FirstRound,
-			Height:               height,
-			LastPreparedRound:    specqbft.NoRound,
-			ProposeContainer:     specqbft.NewMsgContainer(),
-			PrepareContainer:     specqbft.NewMsgContainer(),
-			CommitContainer:      specqbft.NewMsgContainer(),
-			RoundChangeContainer: specqbft.NewMsgContainer(),
-		},
+		State:       state,
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 	}

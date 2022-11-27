@@ -142,6 +142,12 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
+	} else {
+		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
+			if err = b.QBFTController.GetConfig().GetStorage().SaveHighestInstance(inst.State); err != nil {
+				fmt.Printf("failed to save instance: %s\n", err.Error())
+			}
+		}
 	}
 
 	// get decided value

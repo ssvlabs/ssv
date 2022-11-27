@@ -31,8 +31,8 @@ func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instan
 	return nil
 }
 
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
-func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
+// AddNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
+func (i *InstanceContainer) AddNewInstance(instance *instance.Instance) {
 	for idx := HistoricalInstanceCapacity - 1; idx > 0; idx-- {
 		i[idx] = i[idx-1]
 	}
@@ -159,7 +159,7 @@ func (c *Controller) GetIdentifier() []byte {
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
-	c.StoredInstances.addNewInstance(i)
+	c.StoredInstances.AddNewInstance(i)
 	return i
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +25,7 @@ type IConfig interface {
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() qbft.Network
 	// GetStorage returns a storage instance
-	GetStorage() qbft.Storage
+	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() qbft.Timer
 }
@@ -35,7 +36,7 @@ type Config struct {
 	Domain      types.DomainType
 	ValueCheckF qbft.ProposedValueCheckF
 	ProposerF   qbft.ProposerF
-	Storage     qbft.Storage
+	Storage     qbftstorage.QBFTStore
 	Network     qbft.Network
 	Timer       qbft.Timer
 }
@@ -71,7 +72,7 @@ func (c *Config) GetNetwork() qbft.Network {
 }
 
 // GetStorage returns a storage instance
-func (c *Config) GetStorage() qbft.Storage {
+func (c *Config) GetStorage() qbftstorage.QBFTStore {
 	return c.Storage
 }
 
