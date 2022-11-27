@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	types2 "github.com/bloxapp/ssv/protocol/v1/types"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
