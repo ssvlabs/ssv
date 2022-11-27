@@ -9,20 +9,20 @@ import (
 )
 
 type Compare struct {
-	Replace []mapping.KeyValue
+	Replace     []mapping.KeyValue
 	SpecReplace []mapping.KeyValue
-	SSVPath string
-	SpecPath string
+	SSVPath     string
+	SpecPath    string
 }
 
-func (c *Compare) ReplaceMap() error{
+func (c *Compare) ReplaceMap() error {
 	output, err := ioutil.ReadFile(c.SSVPath)
 	if err != nil {
 		return err
 	}
 
 	for _, kv := range c.Replace {
-		if cnt:=bytes.Count(output,[]byte(kv.Key)); cnt ==0 {
+		if cnt := bytes.Count(output, []byte(kv.Key)); cnt == 0 {
 			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in ssv", kv.Key))
 		}
 
@@ -32,14 +32,13 @@ func (c *Compare) ReplaceMap() error{
 		return err
 	}
 
-
 	output, err = ioutil.ReadFile(c.SpecPath)
 	if err != nil {
 		return err
 	}
 
 	for _, kv := range c.SpecReplace {
-		if cnt:=bytes.Count(output,[]byte(kv.Key)); cnt ==0 {
+		if cnt := bytes.Count(output, []byte(kv.Key)); cnt == 0 {
 			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", kv.Value))
 		}
 

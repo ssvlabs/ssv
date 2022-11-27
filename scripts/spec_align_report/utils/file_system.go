@@ -37,7 +37,7 @@ func Copy(srcPath, dstPath string) (err error) {
 	return nil
 }
 
-func Mkdir(path string, clean bool)(err error) {
+func Mkdir(path string, clean bool) (err error) {
 	if clean == true {
 		os.RemoveAll(path)
 	}

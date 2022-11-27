@@ -1,7 +1,7 @@
 package mapping
 
 type KeyValue struct {
-	Key string
+	Key   string
 	Value string
 }
 
@@ -25,7 +25,7 @@ func (m *Map) Range() []KeyValue {
 	var res []KeyValue
 	for _, k := range m.keys {
 		res = append(res, KeyValue{
-			Key: k,
+			Key:   k,
 			Value: m.m[k],
 		})
 	}

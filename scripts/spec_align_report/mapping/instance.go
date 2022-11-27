@@ -2,7 +2,7 @@ package mapping
 
 // Instance mapping
 
-func InstanceSet()  []KeyValue {
+func InstanceSet() []KeyValue {
 	var instanceMap = NewMap()
 
 	// list of changes package names & imports between spec and implementation
@@ -20,11 +20,10 @@ func InstanceSet()  []KeyValue {
 
 	// list of approved changes in code between spec and implementation
 
-
 	return instanceMap.Range()
 }
 
-func SpecInstanceSet()  []KeyValue {
+func SpecInstanceSet() []KeyValue {
 	var specInstanceMap = NewMap()
 	// We import from spec - so for the diff we remove it from spec
 	specInstanceMap.Set("type ProposedValueCheckF func(data []byte) error", "")
@@ -34,7 +33,7 @@ func SpecInstanceSet()  []KeyValue {
 
 }
 
-func ProposalSet()  []KeyValue {
+func ProposalSet() []KeyValue {
 	var proposalMap = NewMap()
 
 	// list of changes package names & imports between spec and implementation
@@ -47,14 +46,11 @@ func ProposalSet()  []KeyValue {
 	proposalMap.Set("specqbft.", "")
 	proposalMap.Set("spectypes.", "types.")
 
-
-
 	// list of approved changes in code between spec and implementation
-
 
 	return proposalMap.Range()
 }
-func SpecProposalSet()[]KeyValue {
+func SpecProposalSet() []KeyValue {
 	var specProposalMap = NewMap()
 	// redundant else
 	specProposalMap.Set("if round == FirstRound {\n\t\treturn nil\n\t} else {", "if round == FirstRound {\n\t\treturn nil\n\t}")
@@ -65,7 +61,7 @@ func SpecProposalSet()[]KeyValue {
 	return specProposalMap.Range()
 }
 
-func PrepareSet()[]KeyValue {
+func PrepareSet() []KeyValue {
 	var prepareMap = NewMap()
 	// list of changes package names & imports between spec and implementation
 
@@ -79,12 +75,12 @@ func PrepareSet()[]KeyValue {
 	prepareMap.Set("spectypes.", "types.")
 	return prepareMap.Range()
 }
-func SpecPrepareSet()[]KeyValue {
+func SpecPrepareSet() []KeyValue {
 	var specPrepareMap = NewMap()
 	return specPrepareMap.Range()
 }
 
-func CommitSet()[]KeyValue {
+func CommitSet() []KeyValue {
 	var commitMap = NewMap()
 	// list of changes package names & imports between spec and implementation
 
@@ -99,12 +95,12 @@ func CommitSet()[]KeyValue {
 	commitMap.Set("BaseCommitValidation", "baseCommitValidation")
 	return commitMap.Range()
 }
-func SpecCommitSet()[]KeyValue {
+func SpecCommitSet() []KeyValue {
 	var specCommitMap = NewMap()
 	return specCommitMap.Range()
 }
 
-func RoundChangeSet()[]KeyValue {
+func RoundChangeSet() []KeyValue {
 	var roundChangeMap = NewMap()
 	// list of changes package names & imports between spec and implementation
 
@@ -118,11 +114,7 @@ func RoundChangeSet()[]KeyValue {
 	roundChangeMap.Set("spectypes.", "types.")
 	return roundChangeMap.Range()
 }
-func SpecRoundChangeSet()[]KeyValue {
+func SpecRoundChangeSet() []KeyValue {
 	var specRoundChangeMap = NewMap()
 	return specRoundChangeMap.Range()
 }
-
-
-
-
