@@ -7,19 +7,22 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v1/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"time"
 )
 
 func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
+	msgId := message.ToMessageID(test.Pre.State.ID)
 	pre := instance.NewInstance(
-		utils.TestingConfig(testingutils.KeySetForShare(test.Pre.State.Share)),
+		utils.TestingConfig(testingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
@@ -51,6 +54,9 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	postRoot, err := preInstance.State.GetRoot()
 	require.NoError(t, err)
+
+	// broadcasting is asynchronic, so need to wait a bit before checking
+	time.Sleep(time.Millisecond * 50)
 
 	// test output message
 	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs

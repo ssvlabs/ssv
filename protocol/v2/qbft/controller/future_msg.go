@@ -21,7 +21,8 @@ func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.Signe
 	return nil, nil
 }
 
-func validateFutureMsg(config types.IConfig,
+func validateFutureMsg(
+	config types.IConfig,
 	msg *specqbft.SignedMessage,
 	operators []*spectypes.Operator,
 ) error {

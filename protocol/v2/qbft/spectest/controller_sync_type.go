@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
@@ -12,7 +13,7 @@ import (
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := testingutils.TestingConfig(testingutils.Testing4SharesSet())
+	config := utils.TestingConfig(testingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := NewTestingQBFTController(
 		identifier[:],
 		testingutils.TestingShare(testingutils.Testing4SharesSet()),

@@ -2,6 +2,8 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/ibft/storage/v2"
+	instance2 "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
 
@@ -23,7 +25,7 @@ type Options struct {
 	Logger      *zap.Logger
 	Network     qbft.Network
 	Beacon      ssv.BeaconNode
-	Storage     qbft.Storage
+	Storage     *storage.QBFTSyncMap
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
@@ -58,7 +60,7 @@ type Validator struct {
 	Beacon ssv.BeaconNode
 	Signer spectypes.KeyManager
 
-	Storage qbft.Storage // TODO: change?
+	Storage *storage.QBFTSyncMap
 	Network qbft.Network
 
 	Q msgqueue.MsgQueue
@@ -112,8 +114,7 @@ func (v *Validator) Start() error {
 		}
 		identifiers := v.DutyRunners.Identifiers()
 		for _, identifier := range identifiers {
-			_, err := v.loadLastHeight(identifier)
-			if err != nil {
+			if err := v.loadLastHeight(identifier); err != nil {
 				v.logger.Warn("could not load highest", zap.String("identifier", identifier.String()), zap.Error(err))
 			}
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
@@ -233,19 +234,25 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMess
 	return nil
 }
 
-func (v *Validator) loadLastHeight(identifier spectypes.MessageID) (qbft.Height, error) {
-	knownDecided, err := v.Storage.GetHighestDecided(identifier[:])
-	if err != nil {
-		return qbft.Height(0), errors.Wrap(err, "failed to get heights decided")
+func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
+	storage := v.Storage.Get(identifier.GetRoleType())
+	if storage == nil {
+		return errors.New("storage not found")
 	}
-	if knownDecided == nil {
-		return qbft.Height(0), nil
+	highestState, err := storage.GetHighestInstance(identifier[:])
+	if err != nil {
+		return errors.Wrap(err, "failed to get heights instance state")
+	}
+	if highestState == nil {
+		return nil
 	}
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-
-	if r == nil || r.GetBaseRunner() == nil {
-		return qbft.Height(0), errors.New("runner is nil")
+	if r == nil {
+		return errors.New("runner is nil")
 	}
-	r.GetBaseRunner().QBFTController.Height = knownDecided.Message.Height
-	return knownDecided.Message.Height, nil
+	instance := instance2.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
+	r.GetBaseRunner().QBFTController.Height = instance.GetHeight()
+	r.GetBaseRunner().QBFTController.StoredInstances.AddNewInstance(instance)
+	v.logger.Info("highest instance loaded", zap.String("role", identifier.GetRoleType().String()), zap.Int64("h", int64(instance.GetHeight())))
+	return nil
 }

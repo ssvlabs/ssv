@@ -3,11 +3,11 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
-
+	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -29,18 +29,26 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
+	return NewInstanceFromState(config, &specqbft.State{
+		Share:                share,
+		ID:                   identifier,
+		Round:                specqbft.FirstRound,
+		Height:               height,
+		LastPreparedRound:    specqbft.NoRound,
+		ProposeContainer:     specqbft.NewMsgContainer(),
+		PrepareContainer:     specqbft.NewMsgContainer(),
+		CommitContainer:      specqbft.NewMsgContainer(),
+		RoundChangeContainer: specqbft.NewMsgContainer(),
+	})
+}
+
+// NewInstanceFromState return instance by state that provided
+func NewInstanceFromState(
+	config types.IConfig,
+	state *specqbft.State,
+) *Instance {
 	return &Instance{
-		State: &specqbft.State{
-			Share:                share,
-			ID:                   identifier,
-			Round:                specqbft.FirstRound,
-			Height:               height,
-			LastPreparedRound:    specqbft.NoRound,
-			ProposeContainer:     specqbft.NewMsgContainer(),
-			PrepareContainer:     specqbft.NewMsgContainer(),
-			CommitContainer:      specqbft.NewMsgContainer(),
-			RoundChangeContainer: specqbft.NewMsgContainer(),
-		},
+		State:       state,
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 	}
@@ -53,6 +61,8 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		i.State.Round = specqbft.FirstRound
 		i.State.Height = height
 
+		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
+
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			fmt.Println(fmt.Sprintf("operator %d is the leader!", i.State.Share.OperatorID))
@@ -60,16 +70,15 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			// nolint
 			if err != nil {
 				fmt.Printf("%s\n", err.Error())
-			}
-			// nolint
-			if err := i.Broadcast(proposal); err != nil {
-				fmt.Printf("%s\n", err.Error())
+			} else {
+				// nolint
+				if err := i.Broadcast(proposal); err != nil {
+					fmt.Printf("%s\n", err.Error())
+				}
 			}
 		}
 
-		if err := i.config.GetNetwork().SyncHighestRoundChange(spectypes.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {
-			fmt.Printf("%s\n", err.Error())
-		}
+		go syncHighestRoundChange(i.config.GetNetwork(), spectypes.MessageIDFromBytes(i.State.ID), i.State.Height)
 	})
 }
 
@@ -82,12 +91,13 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	msgID := spectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	msgToBroadcast := &spectypes.SSVMessage{
+	go broadcast(i.config.GetNetwork(), spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
-	}
-	return i.config.GetNetwork().Broadcast(msgToBroadcast)
+	})
+
+	return nil
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
@@ -158,4 +168,17 @@ func (i *Instance) Encode() ([]byte, error) {
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
+}
+
+func syncHighestRoundChange(syncer specqbft.Syncer, mid spectypes.MessageID, h specqbft.Height) {
+	if err := syncer.SyncHighestRoundChange(mid, h); err != nil {
+		fmt.Printf("%s\n", err.Error())
+	}
+}
+
+func broadcast(b p2p.Broadcaster, msg spectypes.SSVMessage) {
+	err := b.Broadcast(&msg)
+	if err != nil {
+		fmt.Printf("%s\n", err.Error())
+	}
 }
