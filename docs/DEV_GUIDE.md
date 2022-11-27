@@ -15,17 +15,12 @@
     - [Generating an Operator Key](#generating-an-operator-key)
   + [Config Files](#config-files)
     - [Node Config](#node-config)
-    - [Shares Config](#shares-config)
 * [Running a Local Network of Operators](#running-a-local-network-of-operators)
   + [Install](#install)
     - [Prerequisites](#prerequisites)
     - [Clone Repository](#clone-repository)
     - [Build Binary](#build-binary)
   + [Configuration](#configuration)
-    - [Split Validator Key](#split-validator-key)
-    - [Create Config Files](#create-config-files)
-      * [Node Config](#node-config-1)
-      * [Shares Config](#shares-config-1)
   + [Run](#run)
     - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
     - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
@@ -85,11 +80,6 @@ Config files are located in `./config` directory:
 Specifies general configuration regards the current node. \
 Example yaml - [config.yaml](../config/config.yaml)
 
-#### Shares Config
-
-For a 4 node SSV network, 4 share<nodeId>.yaml files need to be created, based on the [template file](../config/example_share.yaml). \
-E.g. `./config/share1.yaml`, `./config/share2.yaml`, etc.
-
 ## Running a Local Network of Operators
 
 This section details the steps to run a local network of operator nodes.
@@ -100,7 +90,7 @@ This section details the steps to run a local network of operator nodes.
 
 In order to run a local environment, install the following:
 * git
-* go (1.15)
+* go (1.17)
 * docker
 * make
 
@@ -118,23 +108,19 @@ $ make build
 
 ### Configuration
 
-#### Split Validator Key
-
-Split a validator key to distribute to the nodes in your network. \
-See [Splitting a Validator Key](#splitting-a-validator-key).
-
-#### Create Config Files
-
-##### Node Config
-
-Fill the required fields in [config.yaml](../config/config.yaml) file. \
-Note - there's no need to fill the OperatorPrivateKey field.
-
-##### Shares Config
-
-Create 4 .yaml files with the corresponding configuration, based on the [template file](../config/example_share.yaml). \
-The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
-
+1. Generate 4 operator keys - [Generating an Operator Key](#generating-an-operator-key)
+2. Create 4 .yaml files with the corresponding configuration, based on the [template file](../config/example_share.yaml). \
+   The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
+3. Populate the `OperatorPrivateKey` in the created share[1..4].yaml with operator private keys generated in section 1 
+4. Generate share keys using 4 operator public keys generated in section 1 using [ssv-keys](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route)
+5. Create `events.yaml` file with the corresponding configuration [use validator registration happy flow example], based on the [template file](../config/example_events.yaml)
+   1. fill the operator registration events with the data generated in section 4
+   2. fill the validator registration event with the data generated in section 4
+6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)
+7. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
+8. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
+   Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
+9. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 ### Run
 
