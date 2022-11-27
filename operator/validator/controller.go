@@ -130,7 +130,7 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	storageMap := &storage.QBFTStores{}
+	storageMap := storage.NewStores()
 	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
