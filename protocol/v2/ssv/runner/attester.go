@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -11,10 +10,8 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type AttesterRunner struct {
@@ -25,10 +22,17 @@ type AttesterRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
-	logger *zap.Logger
 }
 
-func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *spectypes.Share, qbftController *controller.Controller, beacon specssv.BeaconNode, network specssv.Network, signer spectypes.KeyManager, valCheck specqbft.ProposedValueCheckF) Runner {
+func NewAttesterRunnner(
+	beaconNetwork spectypes.BeaconNetwork,
+	share *spectypes.Share,
+	qbftController *controller.Controller,
+	beacon specssv.BeaconNode,
+	network specssv.Network,
+	signer spectypes.KeyManager,
+	valCheck specqbft.ProposedValueCheckF,
+) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleAttester,
@@ -41,19 +45,11 @@ func NewAttesterRunnner(beaconNetwork spectypes.BeaconNetwork, share *spectypes.
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logex.GetLogger(zap.String("who", "duty_runner")),
 	}
 }
 
 func (r *AttesterRunner) StartNewDuty(duty *spectypes.Duty) error {
-	if err := r.GetBaseRunner().canStartNewDuty(); err != nil {
-		return err
-	}
-	r.logger.Debug("can start duty", zap.Any("duty", duty))
-	r.BaseRunner.State = NewRunnerState(r.BaseRunner.Share.Quorum, duty)
-	r.logger.Debug("runner state", zap.Any("state", r.BaseRunner.State))
-	return r.executeDuty(duty)
-	// return r.GetBaseRunner().baseStartNewDuty(r, duty)
+	return r.BaseRunner.baseStartNewDuty(r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -76,7 +72,6 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 		return nil
 	}
 
-	r.logger.Info("decided consensus")
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
@@ -107,7 +102,6 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	r.logger.Info("partial signature broadcast")
 	return nil
 }
 
@@ -121,9 +115,6 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
-	logex.GetLogger().Info("reached quorum")
-	duty := r.GetState().DecidedValue.Duty
-
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -131,6 +122,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+
+		duty := r.GetState().DecidedValue.Duty
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -140,12 +133,10 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			AggregationBits: aggregationBitfield,
 		}
 
-		r.logger.Info("submitting attestation...")
 		// broadcast
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
-		r.logger.Info("submitted attestation!")
 	}
 	r.GetState().Finished = true
 
@@ -163,7 +154,6 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
-	r.logger.Debug("executing duty", zap.Any("duty", duty))
 
 	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
@@ -175,13 +165,7 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 		AttestationData: attData,
 	}
 
-	r.logger.Debug("calling base runner decide", zap.Any("input", input))
-
-	err = r.GetBaseRunner().decide(r, input)
-
-	r.logger.Debug("base runner decide result", zap.Error(err))
-
-	if err != nil {
+	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
