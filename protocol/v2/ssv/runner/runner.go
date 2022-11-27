@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
@@ -52,7 +51,6 @@ type Runner interface {
 	spectypes.Root
 	Getters
 
-	Init() error
 	StartNewDuty(duty *spectypes.Duty) error
 	HasRunningDuty() bool
 	ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
@@ -71,9 +69,6 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 }
 
-func (b *BaseRunner) Init() error {
-	return nil
-}
 
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
@@ -89,9 +84,9 @@ func (b *BaseRunner) canStartNewDuty() error {
 	}
 
 	// check if instance running first as we can't start new duty if it does
-	if instance := b.State.RunningInstance; instance != nil {
+	if b.State.RunningInstance != nil {
 		// check consensus decided
-		if decided, _ := instance.IsDecided(); !decided {
+		if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
 			return errors.New("consensus on duty is running")
 		}
 	}
@@ -176,13 +171,11 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPar
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
-	logex.GetLogger().Info("received valid partial signature")
 	roots := make([][]byte, 0)
 	anyQuorum := false
 	for _, msg := range signedMsg.Message.Messages {
 		prevQuorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
 
-		logex.GetLogger().Info("signature added to container")
 		if err := b.State.PostConsensusContainer.AddSignature(msg); err != nil {
 			return false, nil, errors.Wrap(err, "could not add partial post consensus signature")
 		}
@@ -193,7 +186,6 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPar
 
 		quorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
 		if quorum {
-			logex.GetLogger().Info("signature quorum achieved")
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
 		}

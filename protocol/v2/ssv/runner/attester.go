@@ -209,9 +209,6 @@ func (r *AttesterRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *AttesterRunner) Init() error {
-	return r.BaseRunner.Init()
-}
 
 func (r *AttesterRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
