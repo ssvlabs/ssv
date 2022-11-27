@@ -67,7 +67,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 			}
 		}
 
-		if err = c.GetConfig().GetStorage().SaveLastDecided(msg); err != nil {
+		if err = c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
 			// no need to fail processing the decided msg if failed to save
 			fmt.Printf("failed to save decided: %s\n", err.Error())
 		}

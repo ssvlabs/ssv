@@ -7,9 +7,9 @@ import (
 
 // DecidedMsgStore manages persistence of messages
 type DecidedMsgStore interface {
-	GetLastDecided(identifier []byte) (*specqbft.SignedMessage, error)
-	// SaveLastDecided saves the given decided message, after checking that it is indeed the highest
-	SaveLastDecided(signedMsg ...*specqbft.SignedMessage) error
+	GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error)
+	// SaveHighestDecided saves the given decided message, after checking that it is indeed the highest
+	SaveHighestDecided(signedMsg ...*specqbft.SignedMessage) error
 	// GetDecided returns historical decided messages in the given range
 	GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
 	// SaveDecided saves historical decided messages

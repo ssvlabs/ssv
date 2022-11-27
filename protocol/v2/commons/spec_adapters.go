@@ -4,31 +4,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
 )
-
-func NewQBFTStorageAdapter(store qbftstorage.QBFTStore) specqbft.Storage {
-	return &storageAdapter{store: store}
-}
-
-type storageAdapter struct {
-	store qbftstorage.QBFTStore
-}
-
-// SaveHighestDecided saves (and potentially overrides) the highest Decided for a specific instance
-func (sa *storageAdapter) SaveHighestDecided(signedMsg *specqbft.SignedMessage) error {
-	return sa.store.SaveLastDecided(signedMsg)
-}
-
-// GetHighestDecided returns highest decided if found, nil if didn't
-func (sa *storageAdapter) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
-	return sa.store.GetLastDecided(identifier)
-}
 
 type beaconAdapter struct {
 	beacon beacon.Beacon

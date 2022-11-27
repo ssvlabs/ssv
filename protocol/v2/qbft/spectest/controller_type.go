@@ -48,7 +48,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 		if runData.SavedDecided != nil {
 			// test saved to storage
-			decided, err := config.GetStorage().GetLastDecided(identifier[:])
+			decided, err := config.GetStorage().GetHighestDecided(identifier[:])
 			require.NoError(t, err)
 			require.NotNil(t, decided)
 			r1, err := decided.GetRoot()

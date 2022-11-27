@@ -242,7 +242,7 @@ func (c *Controller) Decode(data []byte) error {
 }
 
 func (c *Controller) saveAndBroadcastDecided(aggregatedCommit *specqbft.SignedMessage) error {
-	if err := c.GetConfig().GetStorage().SaveLastDecided(aggregatedCommit); err != nil {
+	if err := c.GetConfig().GetStorage().SaveHighestDecided(aggregatedCommit); err != nil {
 		return errors.Wrap(err, "could not save decided")
 	}
 

@@ -46,18 +46,18 @@ func TestCleanDecided(t *testing.T) {
 	for i := 0; i < msgsCount; i++ {
 		require.NoError(t, storage.SaveDecided(generateMsg(msgID, specqbft.Height(i))))
 	}
-	require.NoError(t, storage.SaveLastDecided(generateMsg(msgID, specqbft.Height(msgsCount))))
+	require.NoError(t, storage.SaveHighestDecided(generateMsg(msgID, specqbft.Height(msgsCount))))
 
 	// add different msgID
 	differMsgID := spectypes.NewMsgID([]byte("differ_pk"), spectypes.BNRoleAttester)
 	require.NoError(t, storage.SaveDecided(generateMsg(differMsgID, specqbft.Height(1))))
-	require.NoError(t, storage.SaveLastDecided(generateMsg(differMsgID, specqbft.Height(msgsCount))))
+	require.NoError(t, storage.SaveHighestDecided(generateMsg(differMsgID, specqbft.Height(msgsCount))))
 
 	res, err := storage.GetDecided(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, msgsCount, len(res))
 
-	last, err := storage.GetLastDecided(msgID[:])
+	last, err := storage.GetHighestDecided(msgID[:])
 	require.NoError(t, err)
 	require.NotNil(t, last)
 	require.Equal(t, specqbft.Height(msgsCount), last.Message.Height)
@@ -68,7 +68,7 @@ func TestCleanDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
 
-	last, err = storage.GetLastDecided(msgID[:])
+	last, err = storage.GetHighestDecided(msgID[:])
 	require.NoError(t, err)
 	require.Nil(t, last)
 
@@ -77,7 +77,7 @@ func TestCleanDecided(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res))
 
-	last, err = storage.GetLastDecided(differMsgID[:])
+	last, err = storage.GetHighestDecided(differMsgID[:])
 	require.NoError(t, err)
 	require.NotNil(t, last)
 }

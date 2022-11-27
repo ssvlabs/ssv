@@ -28,7 +28,7 @@ func LastDecidedHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbft
 			return nil, nil
 		} else {
 			msgID := msg.GetID()
-			res, err := store[msgID.GetRoleType()].GetLastDecided(msgID[:])
+			res, err := store[msgID.GetRoleType()].GetHighestDecided(msgID[:])
 			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}
