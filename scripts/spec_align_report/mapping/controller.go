@@ -2,87 +2,84 @@ package mapping
 
 // Controller mapping
 
-// controllerGeneral describes the list of changes between spec and implementation
-// It includes package names & imports
-var controllerGeneral = map[string]string{
-	"package controller": "package qbft",
-	"specqbft \"github.com/bloxapp/ssv-spec/qbft\"" : "",
-	"\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"" : "",
-	"\"github.com/bloxapp/ssv/protocol/v2/types\"" : "",
-	"spectypes \"github.com/bloxapp/ssv-spec/types\"" : "\"github.com/bloxapp/ssv-spec/types\"",
-	"*instance.Instance": "*Instance",
-	"specqbft.": "",
-	"spectypes.": "types.",
-	"types.IConfig": "IConfig",
-	"instance.NewInstance": "NewInstance",
-}
+func ControllerSet()[]KeyValue {
+	var controllerMap = NewMap()
+	
+	// list of changes package names & imports between spec and implementation
+	controllerMap.Set("package controller", "package qbft")
+	controllerMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"", "")
+	controllerMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"", "")
+	controllerMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"","")
+	controllerMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"",  "\"github.com/bloxapp/ssv-spec/types\"")
+	controllerMap.Set("*instance.Instance", "*Instance")
+	controllerMap.Set("specqbft.", "")
+	controllerMap.Set("spectypes.", "types.")
+	controllerMap.Set("types.IConfig", "IConfig")
+	controllerMap.Set("instance.NewInstance", "NewInstance")
+	
 
-// controllerChanges describes the list of approved changes in code between spec and implementation
-var controllerChanges = map[string]string{
+	// list of approved changes in code between spec and implementation
 	//TODO should be removed after instance container moved to storage in spec
-	"//  TODO-spec-align rethink if we need it":"",
-	"i.SetConfig(config)":"i.config = config",
+	controllerMap.Set("//  TODO-spec-align rethink if we need it", "")
+	controllerMap.Set("i.SetConfig(config)", "i.config = config")
 
+
+	return controllerMap.Range()
 }
 
-func ControllerReplace()  map[string]string {
-	for k, v := range controllerChanges {
-		controllerGeneral[k] = v
-	}
-	return controllerGeneral
+func SpecControllerSet()[]KeyValue {
+	var specControllerSet = NewMap()
+	return specControllerSet.Range()
 }
-func SpecControllerReplace()  map[string]string {
-	return map[string]string{}
-}
-
 
 // Decided mapping
-var decidedGeneral = map[string]string{
-	"package controller": "package qbft",
-	"specqbft \"github.com/bloxapp/ssv-spec/qbft\"" : "",
-	"\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"" : "",
-	"\"github.com/bloxapp/ssv/protocol/v2/types\"" : "",
-	"spectypes \"github.com/bloxapp/ssv-spec/types\"" : "\"github.com/bloxapp/ssv-spec/types\"",
-	"specqbft.": "",
-	"spectypes.": "types.",
-	"types.IConfig": "IConfig",
-	"instance.NewInstance": "NewInstance",
-	"instance.BaseCommitValidation": "baseCommitValidation",
+
+func DecidedSet()[]KeyValue {
+	var decidedMap = NewMap()
+
+	// list of changes package names & imports between spec and implementation
+	decidedMap.Set("package controller", "package qbft")
+	decidedMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"" , "")
+	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"" , "")
+	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"" , "")
+	decidedMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"" , "\"github.com/bloxapp/ssv-spec/types\"")
+	decidedMap.Set("specqbft.", "")
+	decidedMap.Set("spectypes.", "types.")
+	decidedMap.Set("types.IConfig", "IConfig")
+	decidedMap.Set("instance.NewInstance", "NewInstance")
+	decidedMap.Set("instance.BaseCommitValidation", "baseCommitValidation")
+	
 	//TODO remove after comment add to spec
-	"// isDecidedMsg": "//",
-}
-var decidedChanges = map[string]string{}
+	decidedMap.Set("// isDecidedMsg", "//")
 
-func DecidedReplace()  map[string]string {
-	for k, v := range decidedChanges {
-		decidedGeneral[k] = v
-	}
-	return decidedGeneral
+	// list of approved changes in code between spec and implementation
+	
+	return decidedMap.Range()
 }
-func SpecDecidedReplace()  map[string]string {
-	return map[string]string{}
+func SpecDecidedSet()[]KeyValue {
+	var specDecidedSet = NewMap()
+	return specDecidedSet.Range()
 }
-
 
 // FutureMessage mapping
-var futureMessageGeneral = map[string]string{
-	"package controller": "package qbft",
-	"specqbft \"github.com/bloxapp/ssv-spec/qbft\"" : "",
-	"\"github.com/bloxapp/ssv/protocol/v2/types\"" : "",
-	"spectypes \"github.com/bloxapp/ssv-spec/types\"" : "\"github.com/bloxapp/ssv-spec/types\"",
-	"specqbft.": "",
-	"spectypes.": "types.",
-	"types.IConfig": "IConfig",
 
-}
-var futureMessageChanges = map[string]string{}
+func FutureMessageSet()[]KeyValue {
+	var futureMessageMap = NewMap()
 
-func FutureMessageReplace()  map[string]string {
-	for k, v := range futureMessageChanges {
-		futureMessageGeneral[k] = v
-	}
-	return futureMessageGeneral
+	// list of changes package names & imports between spec and implementation
+	futureMessageMap.Set("package controller", "package qbft")
+	futureMessageMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"" , "")
+	futureMessageMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"" , "")
+	futureMessageMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"" , "\"github.com/bloxapp/ssv-spec/types\"")
+	futureMessageMap.Set("specqbft.", "")
+	futureMessageMap.Set("spectypes.", "types.")
+	futureMessageMap.Set("types.IConfig", "IConfig")
+
+	// list of approved changes in code between spec and implementation
+
+	return futureMessageMap.Range()
 }
-func SpecFutureMessageReplace()  map[string]string {
-	return map[string]string{}
+func SpecFutureMessageSet()[]KeyValue {
+	var specFutureMessageSet = NewMap()
+	return specFutureMessageSet.Range()
 }

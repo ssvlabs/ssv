@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
@@ -16,7 +15,6 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if err := isValidProposal(i.State, i.config, signedProposal, valCheck, i.State.Share.Committee); err != nil {
 		return errors.Wrap(err, "proposal invalid")
 	}
-	logex.GetLogger().Info("received valid proposal")
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(signedProposal)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -47,11 +45,16 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
-	logex.GetLogger().Info("broadcast prepare")
 	return nil
 }
 
-func isValidProposal(state *specqbft.State, config types.IConfig, signedProposal *specqbft.SignedMessage, valCheck specqbft.ProposedValueCheckF, operators []*spectypes.Operator) error {
+func isValidProposal(
+	state *specqbft.State,
+	config types.IConfig,
+	signedProposal *specqbft.SignedMessage,
+	valCheck specqbft.ProposedValueCheckF,
+	operators []*spectypes.Operator,
+) error {
 	if signedProposal.Message.MsgType != specqbft.ProposalMsgType {
 		return errors.New("msg type is not proposal")
 	}
@@ -97,7 +100,16 @@ func isValidProposal(state *specqbft.State, config types.IConfig, signedProposal
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
-func isProposalJustification(state *specqbft.State, config types.IConfig, roundChangeMsgs []*specqbft.SignedMessage, prepareMsgs []*specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, valCheck specqbft.ProposedValueCheckF) error {
+func isProposalJustification(
+	state *specqbft.State,
+	config types.IConfig,
+	roundChangeMsgs []*specqbft.SignedMessage,
+	prepareMsgs []*specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	value []byte,
+	valCheck specqbft.ProposedValueCheckF,
+) error {
 	if err := valCheck(value); err != nil {
 		return errors.Wrap(err, "proposal value invalid")
 	}

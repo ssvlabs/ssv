@@ -71,8 +71,8 @@ func processController()  {
 }
 func initControllerCompareStruct() *utils.Compare {
 	c:= &utils.Compare{
-		Replace: mapping.ControllerReplace(),
-		SpecReplace: mapping.SpecControllerReplace(),
+		Replace: mapping.ControllerSet(),
+		SpecReplace: mapping.SpecControllerSet(),
 		SSVPath: specDataPath + "/controller/controller.go",
 		SpecPath: specDataPath + "/controller/controller_spec.go",
 	}
@@ -86,8 +86,8 @@ func initControllerCompareStruct() *utils.Compare {
 }
 func initDecidedCompareStruct() *utils.Compare {
 	c:= &utils.Compare{
-		Replace: mapping.DecidedReplace(),
-		SpecReplace: mapping.SpecDecidedReplace(),
+		Replace: mapping.DecidedSet(),
+		SpecReplace: mapping.SpecDecidedSet(),
 		SSVPath: specDataPath + "/controller/decided.go",
 		SpecPath: specDataPath + "/controller/decided_spec.go",
 	}
@@ -101,8 +101,8 @@ func initDecidedCompareStruct() *utils.Compare {
 }
 func initFutureMsgCompareStruct() *utils.Compare {
 	c:= &utils.Compare{
-		Replace: mapping.FutureMessageReplace(),
-		SpecReplace: mapping.SpecFutureMessageReplace(),
+		Replace: mapping.FutureMessageSet(),
+		SpecReplace: mapping.SpecFutureMessageSet(),
 		SSVPath: specDataPath + "/controller/future_msg.go",
 		SpecPath: specDataPath + "/controller/future_msg_spec.go",
 	}
@@ -117,7 +117,9 @@ func initFutureMsgCompareStruct() *utils.Compare {
 
 // Instance
 func processInstance(){
-
+	if err:= utils.Mkdir(specDataPath+"/instance", true); err != nil {
+		panic(err)
+	}
 	instanceCompareStruct:= initInstanceCompareStruct()
 	if err:= instanceCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
@@ -129,14 +131,55 @@ func processInstance(){
 		fmt.Println(utils.Success("Instance is aligned to spec"))
 	}
 
-}
-func initInstanceCompareStruct() *utils.Compare {
-	if err:= utils.Mkdir(specDataPath+"/instance", true); err != nil {
+	proposalCompareStruct:= initProposalCompareStruct()
+	if err:= proposalCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
+
+	if err  := utils.GitDiff(proposalCompareStruct.SSVPath,proposalCompareStruct.SpecPath, specDataPath+ "/proposal.diff") ; err != nil {
+		fmt.Println(utils.Error("Proposal is not aligned to spec: "+ specDataPath+ "/proposal.diff"))
+	} else {
+		fmt.Println(utils.Success("Proposal is aligned to spec"))
+	}
+
+	prepareCompareStruct:= initPrepareCompareStruct()
+	if err:= prepareCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+
+	if err  := utils.GitDiff(prepareCompareStruct.SSVPath,prepareCompareStruct.SpecPath, specDataPath+ "/prepare.diff") ; err != nil {
+		fmt.Println(utils.Error("Prepare is not aligned to spec: "+ specDataPath+ "/prepare.diff"))
+	} else {
+		fmt.Println(utils.Success("Prepare is aligned to spec"))
+	}
+
+	commitCompareStruct:= initCommitCompareStruct()
+	if err:= commitCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+
+	if err  := utils.GitDiff(commitCompareStruct.SSVPath,commitCompareStruct.SpecPath, specDataPath+ "/commit.diff") ; err != nil {
+		fmt.Println(utils.Error("Commit is not aligned to spec: "+ specDataPath+ "/commit.diff"))
+	} else {
+		fmt.Println(utils.Success("Commit is aligned to spec"))
+	}
+
+	roundChangeCompareStruct:= initRoundChangeCompareStruct()
+	if err:= roundChangeCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+
+	if err  := utils.GitDiff(roundChangeCompareStruct.SSVPath,roundChangeCompareStruct.SpecPath, specDataPath+ "/round_change.diff") ; err != nil {
+		fmt.Println(utils.Error("RoundChange is not aligned to spec: "+ specDataPath+ "/round_change.diff"))
+	} else {
+		fmt.Println(utils.Success("RoundChange is aligned to spec"))
+	}
+
+}
+func initInstanceCompareStruct() *utils.Compare {
 	c:= &utils.Compare{
-		Replace: mapping.InstanceReplace(),
-		SpecReplace: mapping.SpecInstanceReplace(),
+		Replace: mapping.InstanceSet(),
+		SpecReplace: mapping.SpecInstanceSet(),
 		SSVPath: specDataPath + "/instance/instance.go",
 		SpecPath: specDataPath + "/instance/instance_spec.go",
 	}
@@ -148,10 +191,66 @@ func initInstanceCompareStruct() *utils.Compare {
 	}
 	return c
 }
-
-
-
-
+func initProposalCompareStruct() *utils.Compare {
+	c:= &utils.Compare{
+		Replace: mapping.ProposalSet(),
+		SpecReplace: mapping.SpecProposalSet(),
+		SSVPath: specDataPath + "/instance/proposal.go",
+		SpecPath: specDataPath + "/instance/proposal_spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/instance/proposal.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/proposal.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+func initPrepareCompareStruct() *utils.Compare {
+	c:= &utils.Compare{
+		Replace: mapping.PrepareSet(),
+		SpecReplace: mapping.SpecPrepareSet(),
+		SSVPath: specDataPath + "/instance/prepare.go",
+		SpecPath: specDataPath + "/instance/prepare_spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/instance/prepare.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/prepare.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+func initCommitCompareStruct() *utils.Compare {
+	c:= &utils.Compare{
+		Replace: mapping.CommitSet(),
+		SpecReplace: mapping.SpecCommitSet(),
+		SSVPath: specDataPath + "/instance/commit.go",
+		SpecPath: specDataPath + "/instance/commit_spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/instance/commit.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/commit.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+func initRoundChangeCompareStruct() *utils.Compare {
+	c:= &utils.Compare{
+		Replace: mapping.RoundChangeSet(),
+		SpecReplace: mapping.SpecRoundChangeSet(),
+		SSVPath: specDataPath + "/instance/round_change.go",
+		SpecPath: specDataPath + "/instance/round_change_spec.go",
+	}
+	if err:=utils.Copy("./protocol/v2/qbft/instance/round_change.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err:=utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/round_change.go",c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
 
 
 
