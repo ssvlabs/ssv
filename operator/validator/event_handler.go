@@ -11,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -58,7 +57,7 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 	}
 
 	logFields := make([]zap.Field, 0)
-	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.Mode == validator.ModeRW {
+	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -95,7 +94,7 @@ func (c *controller) handleOperatorRemovalEvent(
 	// TODO: check by operator ID, not operator public key
 	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
 	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.Mode == validator.ModeRW {
+	if isOperatorEvent || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
@@ -168,7 +167,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 		}
 	}
 
-	if isOperatorShare || c.validatorOptions.Mode == validator.ModeRW {
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
@@ -226,7 +225,7 @@ func (c *controller) handleValidatorRemovalEvent(
 		}
 	}
 
-	if isOperatorShare || c.validatorOptions.Mode == validator.ModeRW {
+	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", hex.EncodeToString(share.ValidatorPubKey)),
 			zap.String("ownerAddress", share.OwnerAddress),
@@ -250,7 +249,7 @@ func (c *controller) handleAccountLiquidationEvent(
 
 	for _, share := range shares {
 		isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.Mode == validator.ModeRW {
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, hex.EncodeToString(share.ValidatorPubKey))
 		}
 		if isOperatorShare {
@@ -296,7 +295,7 @@ func (c *controller) handleAccountEnableEvent(
 
 	for _, share := range shares {
 		isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.Mode == validator.ModeRW {
+		if isOperatorShare || c.validatorOptions.FullNode {
 			operatorSharePubKeys = append(operatorSharePubKeys, hex.EncodeToString(share.ValidatorPubKey))
 		}
 		if share.BelongsToOperator(c.operatorPubKey) {

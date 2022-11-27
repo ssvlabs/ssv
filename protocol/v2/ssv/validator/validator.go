@@ -30,6 +30,7 @@ type Options struct {
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
 	Mode        Mode
+	FullNode    bool
 }
 
 func (o *Options) defaults() {
