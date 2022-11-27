@@ -7,7 +7,7 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 // SSVShare is a combination of spectypes.Share and its Metadata.

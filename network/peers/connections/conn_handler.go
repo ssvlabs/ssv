@@ -114,12 +114,12 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 		//	if conn := stream.Conn(); conn != nil {
 		//		metricsStreams.WithLabelValues(string(stream.Protocol())).Inc()
 		//	}
-		//},
+		// },
 		//ClosedStreamF: func(network libp2pnetwork.Network, stream libp2pnetwork.Stream) {
 		//	if conn := stream.Conn(); conn != nil {
 		//		metricsStreams.WithLabelValues(string(stream.Protocol())).Dec()
 		//	}
-		//},
+		// },
 	}
 }
 

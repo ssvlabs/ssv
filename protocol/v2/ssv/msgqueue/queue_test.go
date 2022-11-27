@@ -1,7 +1,6 @@
 package msgqueue
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/message"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,6 +9,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 func TestNewMsgQueue(t *testing.T) {

@@ -84,7 +84,7 @@ func getRoundChangeJustification(state *specqbft.State, config types.IConfig, pr
 }
 
 // validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
-//func validPreparesForHeightRoundAndValue(
+// func validPreparesForHeightRoundAndValue(
 //	config IConfig,
 //	prepareMessages []*SignedMessage,
 //	height Height,

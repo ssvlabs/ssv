@@ -89,7 +89,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 		PrivateKey: privKey,
 	}
 	ipAddr, err := network.ExternalIP()
-	//ipAddr = "127.0.0.1"
+	// ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
@@ -164,10 +164,10 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	//fVersion := params.BeaconConfig().GenesisForkVersion
+	// fVersion := params.BeaconConfig().GenesisForkVersion
 	fVersion := params.BeaconConfig().GenesisForkVersion
 
-	//if *forkVersion != "" {
+	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
 	//	if err != nil {
 	//		return nil, errors.Wrap(err, "Could not retrieve fork version")
@@ -177,7 +177,7 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//}
 	genRoot := [32]byte{}
-	//if *genesisValidatorRoot != "" {
+	// if *genesisValidatorRoot != "" {
 	//	retRoot, err := hex.DecodeString(*genesisValidatorRoot)
 	//	if err != nil {
 	//		return nil, errors.Wrap(err, "Could not retrieve genesis validator root")

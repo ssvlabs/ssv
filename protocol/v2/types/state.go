@@ -3,46 +3,47 @@ package types
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/pkg/errors"
 )
 
 type signing interface {
 	// GetSigner returns a Signer instance
-	GetSigner() types.SSVSigner
+	GetSigner() spectypes.SSVSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
-	GetSignatureDomainType() types.DomainType
+	GetSignatureDomainType() spectypes.DomainType
 }
 
 type IConfig interface {
 	signing
 	// GetValueCheckF returns value check function
-	GetValueCheckF() qbft.ProposedValueCheckF
+	GetValueCheckF() specqbft.ProposedValueCheckF
 	// GetProposerF returns func used to calculate proposer
-	GetProposerF() qbft.ProposerF
+	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() qbft.Network
+	GetNetwork() specqbft.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
-	GetTimer() qbft.Timer
+	GetTimer() specqbft.Timer
 }
 
 type Config struct {
-	Signer      types.SSVSigner
+	Signer      spectypes.SSVSigner
 	SigningPK   []byte
-	Domain      types.DomainType
-	ValueCheckF qbft.ProposedValueCheckF
-	ProposerF   qbft.ProposerF
+	Domain      spectypes.DomainType
+	ValueCheckF specqbft.ProposedValueCheckF
+	ProposerF   specqbft.ProposerF
 	Storage     qbftstorage.QBFTStore
-	Network     qbft.Network
-	Timer       qbft.Timer
+	Network     specqbft.Network
+	Timer       specqbft.Timer
 }
 
 // GetSigner returns a Signer instance
-func (c *Config) GetSigner() types.SSVSigner {
+func (c *Config) GetSigner() spectypes.SSVSigner {
 	return c.Signer
 }
 
@@ -52,22 +53,22 @@ func (c *Config) GetSigningPubKey() []byte {
 }
 
 // GetSignatureDomainType returns the Domain type used for signatures
-func (c *Config) GetSignatureDomainType() types.DomainType {
+func (c *Config) GetSignatureDomainType() spectypes.DomainType {
 	return c.Domain
 }
 
 // GetValueCheckF returns value check instance
-func (c *Config) GetValueCheckF() qbft.ProposedValueCheckF {
+func (c *Config) GetValueCheckF() specqbft.ProposedValueCheckF {
 	return c.ValueCheckF
 }
 
 // GetProposerF returns func used to calculate proposer
-func (c *Config) GetProposerF() qbft.ProposerF {
+func (c *Config) GetProposerF() specqbft.ProposerF {
 	return c.ProposerF
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() qbft.Network {
+func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
 }
 
@@ -77,25 +78,25 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() qbft.Timer {
+func (c *Config) GetTimer() specqbft.Timer {
 	return c.Timer
 }
 
 type State struct {
-	Share                           *types.Share
+	Share                           *spectypes.Share
 	ID                              []byte // instance Identifier
-	Round                           qbft.Round
-	Height                          qbft.Height
-	LastPreparedRound               qbft.Round
+	Round                           specqbft.Round
+	Height                          specqbft.Height
+	LastPreparedRound               specqbft.Round
 	LastPreparedValue               []byte
-	ProposalAcceptedForCurrentRound *qbft.SignedMessage
+	ProposalAcceptedForCurrentRound *specqbft.SignedMessage
 	Decided                         bool
 	DecidedValue                    []byte
 
-	ProposeContainer     *qbft.MsgContainer
-	PrepareContainer     *qbft.MsgContainer
-	CommitContainer      *qbft.MsgContainer
-	RoundChangeContainer *qbft.MsgContainer
+	ProposeContainer     *specqbft.MsgContainer
+	PrepareContainer     *specqbft.MsgContainer
+	CommitContainer      *specqbft.MsgContainer
+	RoundChangeContainer *specqbft.MsgContainer
 }
 
 // GetRoot returns the state's deterministic root
@@ -118,5 +119,5 @@ func (s *State) Decode(data []byte) error {
 	return json.Unmarshal(data, &s)
 }
 
-//type ProposedValueCheckF func(data []byte) error
-//type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID
+// type ProposedValueCheckF func(data []byte) error
+// type ProposerF func(state *qbft.State, round qbft.Round) types.OperatorID

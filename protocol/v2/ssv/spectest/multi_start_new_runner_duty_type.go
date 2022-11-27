@@ -2,12 +2,14 @@ package spectest
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -93,6 +95,7 @@ func (tests *MultiStartNewRunnerDutySpecTest) TestName() string {
 
 func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T) {
 	for _, test := range tests.Tests {
+		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
 			test.Run(t)
 		})

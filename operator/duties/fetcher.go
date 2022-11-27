@@ -13,7 +13,7 @@ import (
 	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/fetcher.go -source=./fetcher.go
@@ -88,7 +88,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]spectypes.Duty, error) {
 	}
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
-			zap.Int("count", len(duties)), //zap.Any("duties", duties),
+			zap.Int("count", len(duties)), // zap.Any("duties", duties),
 			zap.Duration("duration", time.Since(start)))
 	}
 

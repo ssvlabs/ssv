@@ -3,32 +3,34 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *ssv.PartialSigContainer
-	PostConsensusContainer *ssv.PartialSigContainer
+	PreConsensusContainer  *specssv.PartialSigContainer
+	PostConsensusContainer *specssv.PartialSigContainer
 	RunningInstance        *instance.Instance
-	DecidedValue           *types.ConsensusData
+	DecidedValue           *spectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty *types.Duty
+	StartingDuty *spectypes.Duty
 	// flags
-	Finished   bool        // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
-	LastSlot   phase0.Slot `json:"-"` // ignore in root
-	LastHeight qbft.Height `json:"-"` // ignore in root // TODO: move somewhere else?
+	Finished   bool            // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	LastSlot   phase0.Slot     `json:"-"` // ignore in root
+	LastHeight specqbft.Height `json:"-"` // ignore in root // TODO: move somewhere else?
 }
 
-func NewRunnerState(quorum uint64, duty *types.Duty) *State {
+func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 	return &State{
-		PreConsensusContainer:  ssv.NewPartialSigContainer(quorum),
-		PostConsensusContainer: ssv.NewPartialSigContainer(quorum),
+		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
@@ -36,7 +38,7 @@ func NewRunnerState(quorum uint64, duty *types.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *ssv.PartialSigContainer, root, validatorPubKey []byte) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := container.ReconstructSignature(root, validatorPubKey)
 	if err != nil {

@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -113,13 +113,13 @@ func TestSignAttestation(t *testing.T) {
 	}
 
 	t.Run("sign once", func(t *testing.T) {
-		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
+		_, sig, err := km.(*ethKeyManagerSigner).SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		attestationData.BeaconBlockRoot = [32]byte{2, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2}
-		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
+		_, sig, err := km.(*ethKeyManagerSigner).SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
 		require.EqualError(t, err, "could not sign attestation: slashable attestation (HighestAttestationVote), not signing")
 		require.Nil(t, sig)
 	})
@@ -159,9 +159,9 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 
 	t.Run("pk 2", func(t *testing.T) {
@@ -191,8 +191,8 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 }

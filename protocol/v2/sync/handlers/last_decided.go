@@ -3,17 +3,16 @@ package handlers
 import (
 	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 )
 
 // LastDecidedHandler handler for last-decided protocol
 // TODO: add msg validation and report scores
-func LastDecidedHandler(plogger *zap.Logger, storeMap *storagev2.QBFTSyncMap, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
+func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))

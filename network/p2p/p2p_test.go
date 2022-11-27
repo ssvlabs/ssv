@@ -19,8 +19,8 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -173,7 +173,7 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 }
 
 func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
+	// logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
 	logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
 		return logger.With(zap.String("who", who))
@@ -190,7 +190,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 
 	routers := make([]*dummyRouter, n)
 	// for now, skip routers for v0
-	//if forkVersion != forksprotocol.GenesisForkVersion {
+	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])

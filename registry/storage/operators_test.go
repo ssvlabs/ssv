@@ -103,8 +103,8 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 			},
 		}
 		for _, od := range ods {
-			err := storage.SaveOperatorData(&od)
-			require.NoError(t, err)
+			odCopy := od
+			require.NoError(t, storage.SaveOperatorData(&odCopy))
 		}
 
 		for _, od := range ods {

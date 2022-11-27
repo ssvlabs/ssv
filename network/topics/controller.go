@@ -204,10 +204,10 @@ func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
 		tc = newTopicContainer()
 		ctrl.setTopicContainerUnsafe(name, tc)
 		// initial setup for the topic, should happen only once
-		//ctrl.subFilter.Register(name)
+		// ctrl.subFilter.Register(name)
 		if err := ctrl.setupTopicValidator(name); err != nil {
 			// TODO: close topic?
-			//return err
+			// return err
 			ctrl.logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
 		}
 	}
@@ -327,7 +327,7 @@ func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
 		if p := ctrl.scoreParamsFactory(name); p != nil {
 			ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
 			if err := topic.SetScoreParams(p); err != nil {
-				//ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
+				// ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
 				return errors.Wrapf(err, "could not set topic score params for topic %s", name)
 			}
 		}

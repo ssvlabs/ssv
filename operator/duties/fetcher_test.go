@@ -11,8 +11,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/bloxapp/ssv/operator/duties/mocks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestDutyFetcher_GetDuties(t *testing.T) {
@@ -103,6 +104,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			entries := map[spec.Slot]cacheEntry{}
 			entries[test.slot] = cacheEntry{[]spectypes.Duty{}}

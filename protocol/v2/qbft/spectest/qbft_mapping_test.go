@@ -2,9 +2,6 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
 	"io"
 	"net/http"
 	"os"
@@ -13,10 +10,13 @@ import (
 	"testing"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func init() {
@@ -29,8 +29,7 @@ func TestQBFTMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
-		//resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2/qbft/spectest/generate/tests.json")
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/V0.2.6/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/v0.2.7/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {

@@ -3,12 +3,13 @@ package storage
 import (
 	"crypto/rsa"
 	"encoding/base64"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"math/big"
 
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/eth1"
-	registry "github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
+	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"

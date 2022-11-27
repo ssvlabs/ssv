@@ -79,7 +79,7 @@ func (b *broadcaster) Broadcast(msg Message) error {
 	b.mut.Unlock()
 	// send to all connections
 	for _, c := range conns {
-		c.Send(data[:])
+		c.Send(data)
 	}
 
 	return nil

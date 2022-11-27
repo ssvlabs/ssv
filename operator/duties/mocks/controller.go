@@ -5,10 +5,9 @@
 package mocks
 
 import (
-	reflect "reflect"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
+	reflect "reflect"
 )
 
 // MockDutyExecutor is a mock of DutyExecutor interface
@@ -35,7 +34,7 @@ func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 }
 
 // ExecuteDuty mocks base method
-func (m *MockDutyExecutor) ExecuteDuty(duty *spectypes.Duty) error {
+func (m *MockDutyExecutor) ExecuteDuty(duty *types.Duty) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecuteDuty", duty)
 	ret0, _ := ret[0].(error)

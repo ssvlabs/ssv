@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"encoding/hex"
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -8,16 +9,17 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func UpdateShareMetadata(share *beaconprotocol.Share, bc beaconprotocol.Beacon) (bool, error) {
-	pk := share.PublicKey.SerializeToHexStr()
-	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.PublicKey.Serialize()})
+func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool, error) {
+	pk := hex.EncodeToString(share.ValidatorPubKey)
+	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
 	if err != nil {
 		return false, errors.Wrap(err, "failed to fetch metadata for share")
 	}
@@ -25,7 +27,7 @@ func UpdateShareMetadata(share *beaconprotocol.Share, bc beaconprotocol.Beacon) 
 	if !ok {
 		return false, nil
 	}
-	share.Metadata = meta
+	share.BeaconMetadata = meta
 	return true, nil
 }
 
@@ -36,33 +38,34 @@ func ShareFromValidatorEvent(
 	registryStorage registrystorage.OperatorsCollection,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorPubKey string,
-) (*beaconprotocol.Share, *bls.SecretKey, error) {
-	validatorShare := beaconprotocol.Share{}
+) (*types.SSVShare, *bls.SecretKey, error) {
+	validatorShare := types.SSVShare{}
 
 	// extract operator public keys from storage and fill the event
 	if err := SetOperatorPublicKeys(registryStorage, &validatorRegistrationEvent); err != nil {
 		return nil, nil, errors.Wrap(err, "could not set operator public keys")
 	}
 
-	validatorShare.PublicKey = &bls.PublicKey{}
-	if err := validatorShare.PublicKey.Deserialize(validatorRegistrationEvent.PublicKey); err != nil {
+	publicKey := &bls.PublicKey{}
+	if err := publicKey.Deserialize(validatorRegistrationEvent.PublicKey); err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize share public key"),
 		}
 	}
-
+	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = validatorRegistrationEvent.OwnerAddress.String()
 	var shareSecret *bls.SecretKey
 
-	ibftCommittee := map[spectypes.OperatorID]*beaconprotocol.Node{}
+	committee := make([]*spectypes.Operator, 0)
 	for i := range validatorRegistrationEvent.OperatorPublicKeys {
 		nodeID := spectypes.OperatorID(validatorRegistrationEvent.OperatorIds[i])
-		ibftCommittee[nodeID] = &beaconprotocol.Node{
-			IbftID: uint64(nodeID),
-			Pk:     validatorRegistrationEvent.SharesPublicKeys[i],
-		}
+		committee = append(committee, &spectypes.Operator{
+			OperatorID: nodeID,
+			PubKey:     validatorRegistrationEvent.SharesPublicKeys[i],
+		})
 		if strings.EqualFold(string(validatorRegistrationEvent.OperatorPublicKeys[i]), operatorPubKey) {
-			validatorShare.NodeID = nodeID
+			validatorShare.OperatorID = nodeID
+			validatorShare.SharePubKey = validatorRegistrationEvent.SharesPublicKeys[i]
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
@@ -87,9 +90,13 @@ func ShareFromValidatorEvent(
 			}
 		}
 	}
-	validatorShare.Committee = ibftCommittee
+
+	f := uint64(len(committee)-1) / 3
+	validatorShare.Quorum = 3 * f
+	validatorShare.PartialQuorum = 2 * f
+	validatorShare.DomainType = types.GetDefaultDomain()
+	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
-	validatorShare.SetOperatorIds(validatorRegistrationEvent.OperatorIds)
 
 	return &validatorShare, shareSecret, nil
 }

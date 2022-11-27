@@ -1,9 +1,13 @@
 package validator
 
 import (
+	"encoding/hex"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // initShares initializes shares, should be called upon creation of controller
@@ -26,43 +30,47 @@ func (c *controller) loadSharesFromConfig(items []ShareOptions) {
 	if len(items) > 0 {
 		c.logger.Info("loading validators share from config", zap.Int("count", len(items)))
 		for _, opts := range items {
-			pubkey, err := c.loadShare(opts)
+			share, err := c.loadShare(opts)
 			if err != nil {
 				c.logger.Error("failed to load validator share data from config", zap.Error(err))
 				continue
 			}
-			addedValidators = append(addedValidators, pubkey)
+			addedValidators = append(addedValidators, hex.EncodeToString(share.ValidatorPubKey))
 		}
 		c.logger.Info("successfully loaded validators from config", zap.Strings("pubkeys", addedValidators))
 	}
 }
 
-func (c *controller) loadShare(options ShareOptions) (string, error) {
-	if len(options.PublicKey) == 0 || len(options.ShareKey) == 0 || len(options.Committee) == 0 {
-		return "", errors.New("one or more fields are missing (PublicKey, ShareKey, Committee)")
+func (c *controller) loadShare(options ShareOptions) (*types.SSVShare, error) {
+	if len(options.PublicKey) == 0 || len(options.Committee) == 0 {
+		return nil, errors.New("one or more fields are missing (PublicKey, Committee)")
 	}
 	share, err := options.ToShare()
 	if err != nil {
-		return "", errors.WithMessage(err, "failed to create share object")
-	}
-	shareKey := &bls.SecretKey{}
-	if err = shareKey.SetHexString(options.ShareKey); err != nil {
-		return "", errors.Wrap(err, "failed to set hex private key")
-	}
-	if share != nil {
-		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
-			return "", errors.Wrap(err, "could not update validator metadata")
-		} else if !updated {
-			return "", errors.New("could not find validator metadata")
-		}
-		if err := c.keyManager.AddShare(shareKey); err != nil {
-			return "", errors.Wrap(err, "could not save share key from share options")
-		}
-		if err := c.collection.SaveValidatorShare(share); err != nil {
-			return "", errors.Wrap(err, "could not save share from share options")
-		}
-		return options.PublicKey, err
+		return nil, errors.WithMessage(err, "failed to create share object")
 	}
 
-	return "", errors.New("returned nil share")
+	sharePrivateKey := &bls.SecretKey{}
+	if err = sharePrivateKey.SetHexString(options.ShareKey); err != nil {
+		return nil, errors.Wrap(err, "failed to set hex private key")
+	}
+
+	if share == nil {
+		return nil, errors.New("returned nil share")
+	}
+
+	if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
+		return nil, errors.Wrap(err, "could not update share stats")
+	} else if !updated {
+		return nil, errors.New("could not find validator metadata")
+	}
+
+	if err := c.keyManager.AddShare(sharePrivateKey); err != nil {
+		return nil, errors.Wrap(err, "could not save share key from share options")
+	}
+	if err := c.collection.SaveValidatorShare(share); err != nil {
+		return nil, errors.Wrap(err, "could not save share from share options")
+	}
+
+	return share, err
 }

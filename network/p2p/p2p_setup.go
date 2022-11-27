@@ -108,11 +108,11 @@ func (n *p2pNetwork) SetupHost() error {
 	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 	// TODO: enable and extract resource manager params as config
-	//rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
-	//if err != nil {
+	// rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
+	// if err != nil {
 	//	return errors.Wrap(err, "could not create resource manager")
 	//}
-	//opts = append(opts, libp2p.ResourceManager(rmgr))
+	// opts = append(opts, libp2p.ResourceManager(rmgr))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")

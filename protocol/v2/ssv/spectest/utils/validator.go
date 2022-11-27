@@ -2,25 +2,26 @@ package utils
 
 import (
 	"context"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-var BaseValidator = func(keySet *testingutils.TestKeySet) *validator.Validator {
-
+var BaseValidator = func(keySet *spectestingutils.TestKeySet) *validator.Validator {
 	return validator.NewValidator(
 		context.TODO(),
 		validator.Options{
-			Network: testingutils.NewTestingNetwork(),
-			Beacon:  testingutils.NewTestingBeaconNode(),
-			Storage: TestingStorage(),
+			Network: spectestingutils.NewTestingNetwork(),
+			Beacon:  spectestingutils.NewTestingBeaconNode(),
+			Storage: TestingStores(),
 			SSVShare: &types.SSVShare{
-				Share: *testingutils.TestingShare(keySet),
+				Share: *spectestingutils.TestingShare(keySet),
 			},
-			Signer: testingutils.NewTestingKeyManager(),
+			Signer: spectestingutils.NewTestingKeyManager(),
 			DutyRunners: map[spectypes.BeaconRole]runner.Runner{
 				spectypes.BNRoleAttester:                  AttesterRunner(keySet),
 				spectypes.BNRoleProposer:                  ProposerRunner(keySet),

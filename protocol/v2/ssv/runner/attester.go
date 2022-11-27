@@ -53,7 +53,7 @@ func (r *AttesterRunner) StartNewDuty(duty *spectypes.Duty) error {
 	r.BaseRunner.State = NewRunnerState(r.BaseRunner.Share.Quorum, duty)
 	r.logger.Debug("runner state", zap.Any("state", r.BaseRunner.State))
 	return r.executeDuty(duty)
-	//return r.GetBaseRunner().baseStartNewDuty(r, duty)
+	// return r.GetBaseRunner().baseStartNewDuty(r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
