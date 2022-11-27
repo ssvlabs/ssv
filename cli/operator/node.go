@@ -235,11 +235,7 @@ var StartNodeCmd = &cobra.Command{
 		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
-		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
-			Logger.Fatal("failed to start eth1", zap.Error(err))
-		}
-
-		// load & parse local events yaml[json] if exists
+		// load & parse local events yaml if exists
 		if len(cfg.LocalEventsPath) > 0 {
 			if err := validator2.LoadLocalEvents(
 				Logger,
@@ -247,6 +243,10 @@ var StartNodeCmd = &cobra.Command{
 				cfg.LocalEventsPath,
 			); err != nil {
 				Logger.Fatal("failed to load local events", zap.Error(err))
+			}
+		} else {
+			if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+				Logger.Fatal("failed to start eth1", zap.Error(err))
 			}
 		}
 
