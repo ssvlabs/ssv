@@ -1,8 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	qbftstorage2 "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -12,7 +13,7 @@ import (
 
 // LastDecidedHandler handler for last-decided protocol
 // TODO: add msg validation and report scores
-func LastDecidedHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbftstorage2.QBFTStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
+func LastDecidedHandler(plogger *zap.Logger, storeMap *storagev2.QBFTSyncMap, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))
@@ -28,7 +29,11 @@ func LastDecidedHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbft
 			return nil, nil
 		} else {
 			msgID := msg.GetID()
-			res, err := store[msgID.GetRoleType()].GetHighestDecided(msgID[:])
+			store := storeMap.Get(msgID.GetRoleType())
+			if store == nil {
+				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
+			}
+			res, err := store.GetHighestDecided(msgID[:])
 			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}

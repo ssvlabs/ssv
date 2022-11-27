@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"fmt"
-	qbftstorage2 "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -16,7 +15,7 @@ import (
 
 // HistoryHandler handler for decided history protocol
 // TODO: add msg validation and report scores
-func HistoryHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbftstorage2.QBFTStore, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
+func HistoryHandler(plogger *zap.Logger, storeMap *storagev2.QBFTSyncMap, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
@@ -36,7 +35,11 @@ func HistoryHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbftstor
 				sm.Params.Height[1] = sm.Params.Height[0] + specqbft.Height(maxBatchSize)
 			}
 			msgID := msg.GetID()
-			results, err := store[msgID.GetRoleType()].GetDecided(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			store := storeMap.Get(msgID.GetRoleType())
+			if store == nil {
+				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
+			}
+			results, err := store.GetDecided(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
 			sm.UpdateResults(err, results...)
 		}
 

@@ -2,8 +2,8 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/ibft/storage/v2"
 	instance2 "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"sync/atomic"
 	"time"
 
@@ -25,7 +25,7 @@ type Options struct {
 	Logger      *zap.Logger
 	Network     qbft.Network
 	Beacon      ssv.BeaconNode
-	Storage     map[spectypes.BeaconRole]qbftstorage.QBFTStore
+	Storage     *storage.QBFTSyncMap
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
@@ -60,7 +60,7 @@ type Validator struct {
 	Beacon ssv.BeaconNode
 	Signer spectypes.KeyManager
 
-	Storage map[spectypes.BeaconRole]qbftstorage.QBFTStore
+	Storage *storage.QBFTSyncMap
 	Network qbft.Network
 
 	Q msgqueue.MsgQueue
@@ -235,7 +235,11 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMess
 }
 
 func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
-	highestState, err := v.Storage[identifier.GetRoleType()].GetHighestInstance(identifier[:])
+	storage := v.Storage.Get(identifier.GetRoleType())
+	if storage == nil {
+		return errors.New("storage not found")
+	}
+	highestState, err := storage.GetHighestInstance(identifier[:])
 	if err != nil {
 		return errors.Wrap(err, "failed to get heights instance state")
 	}

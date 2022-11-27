@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	qbftstorage2 "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"sync"
 	"time"
 
@@ -32,7 +31,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/commons"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -106,7 +104,7 @@ type controller struct {
 	context        context.Context
 	collection     ICollection
 	storage        registrystorage.OperatorsCollection
-	ibftStorageMap map[spectypes.BeaconRole]qbftstorage.QBFTStore
+	ibftStorageMap *storagev2.QBFTSyncMap
 	logger         *zap.Logger
 	beacon         beaconprotocol.Beacon
 	keyManager     spectypes.KeyManager
@@ -134,13 +132,12 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	storageMap := map[spectypes.BeaconRole]qbftstorage2.QBFTStore{
-		spectypes.BNRoleAttester:                  storagev2.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion),
-		spectypes.BNRoleProposer:                  storagev2.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion),
-		spectypes.BNRoleAggregator:                storagev2.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion),
-		spectypes.BNRoleSyncCommittee:             storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion),
-		spectypes.BNRoleSyncCommitteeContribution: storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion),
-	}
+	storageMap := &storagev2.QBFTSyncMap{}
+	storageMap.Add(spectypes.BNRoleAttester, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleProposer, storagev2.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleAggregator, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommittee, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -589,7 +586,7 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 				options.Logger.Debug("leader", zap.Int("", int(leader)))
 				return leader
 			},
-			Storage: options.Storage[role],
+			Storage: options.Storage.Get(role),
 			Network: options.Network,
 			Timer:   roundtimer.New(ctx, options.Logger, nil),
 		}

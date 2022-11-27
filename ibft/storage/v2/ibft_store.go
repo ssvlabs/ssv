@@ -75,7 +75,7 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-// GetLastDecided gets a signed message for an ibft instance which is the highest
+// GetHighestDecided gets a signed message for an ibft instance which is the highest
 // it tries to read current fork items, and if not found it tries to read v0 items
 func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
 	i.forkLock.RLock()
@@ -91,7 +91,7 @@ func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMess
 	return i.fork.DecodeSignedMsg(val)
 }
 
-// SaveLastDecided saves a signed message for an ibft instance which is currently highest
+// SaveHighestDecided saves a signed message for an ibft instance which is currently highest
 func (i *ibftStorage) SaveHighestDecided(signedMsgs ...*specqbft.SignedMessage) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()

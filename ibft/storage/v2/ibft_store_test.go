@@ -6,14 +6,12 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v1/message"
-	"github.com/bloxapp/ssv/protocol/v1/qbft"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -178,38 +176,38 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 
 func TestSaveAndFetchLastState(t *testing.T) {
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
-	var identifierAtomic, height, round, preparedRound, preparedValue, iv atomic.Value
-	height.Store(specqbft.Height(10))
-	round.Store(specqbft.Round(2))
-	identifierAtomic.Store(identifier[:])
-	preparedRound.Store(specqbft.Round(8))
-	preparedValue.Store([]byte("value"))
-	iv.Store([]byte("input"))
 
-	state := &qbft.State{
-		Stage:         *atomic.NewInt32(int32(qbft.RoundStateDecided)),
-		Identifier:    identifierAtomic,
-		Height:        height,
-		InputValue:    iv,
-		Round:         round,
-		PreparedRound: preparedRound,
-		PreparedValue: preparedValue,
+	state := &specqbft.State{
+		Share:                           nil,
+		ID:                              identifier[:],
+		Round:                           1,
+		Height:                          1,
+		LastPreparedRound:               1,
+		LastPreparedValue:               []byte("value"),
+		ProposalAcceptedForCurrentRound: nil,
+		Decided:                         true,
+		DecidedValue:                    []byte("value"),
+		ProposeContainer:                specqbft.NewMsgContainer(),
+		PrepareContainer:                specqbft.NewMsgContainer(),
+		CommitContainer:                 specqbft.NewMsgContainer(),
+		RoundChangeContainer:            specqbft.NewMsgContainer(),
 	}
 
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
-	require.NoError(t, storage.SaveCurrentInstance(identifier[:], state))
+	require.NoError(t, storage.SaveHighestInstance(state))
 
-	savedState, found, err := storage.GetCurrentInstance(identifier[:])
+	savedState, err := storage.GetHighestInstance(identifier[:])
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, specqbft.Height(10), savedState.GetHeight())
-	require.Equal(t, specqbft.Round(2), savedState.GetRound())
-	require.Equal(t, identifier.String(), message.ToMessageID(savedState.GetIdentifier()).String())
-	require.Equal(t, specqbft.Round(8), savedState.GetPreparedRound())
-	require.Equal(t, []byte("value"), savedState.GetPreparedValue())
-	require.Equal(t, []byte("input"), savedState.GetInputValue())
+	require.NotNil(t, savedState)
+	require.Equal(t, specqbft.Height(1), savedState.Height)
+	require.Equal(t, specqbft.Round(1), savedState.Round)
+	require.Equal(t, identifier.String(), message.ToMessageID(savedState.ID).String())
+	require.Equal(t, specqbft.Round(1), savedState.LastPreparedRound)
+	require.Equal(t, true, savedState.Decided)
+	require.Equal(t, []byte("value"), savedState.LastPreparedValue)
+	require.Equal(t, []byte("value"), savedState.DecidedValue)
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {

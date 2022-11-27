@@ -2,9 +2,8 @@ package handlers
 
 import (
 	"fmt"
-	qbftstorage2 "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -15,7 +14,7 @@ import (
 
 // LastChangeRoundHandler handler for last-decided protocol
 // TODO: add msg validation and report scores
-func LastChangeRoundHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]qbftstorage2.QBFTStore, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
+func LastChangeRoundHandler(plogger *zap.Logger, storeMap *storagev2.QBFTSyncMap, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	//plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
@@ -29,7 +28,11 @@ func LastChangeRoundHandler(plogger *zap.Logger, store map[spectypes.BeaconRole]
 			// TODO: remove after v0
 			return nil, nil
 		} else {
-			res, err := store[msg.MsgID.GetRoleType()].GetLastChangeRoundMsg(msg.MsgID[:])
+			store := storeMap.Get(msg.MsgID.GetRoleType())
+			if store == nil {
+				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msg.MsgID.GetRoleType().String()))
+			}
+			res, err := store.GetLastChangeRoundMsg(msg.MsgID[:])
 			if err != nil {
 				logger.Warn("change round sync msg error", zap.Error(err))
 			}

@@ -204,13 +204,17 @@ func (c *controller) handleValidatorRemovalEvent(
 
 	// remove decided messages
 	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
-	if err := c.ibftStorageMap[messageID.GetRoleType()].CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean all decided messages")
+	store := c.ibftStorageMap.Get(messageID.GetRoleType())
+	if store != nil {
+		if err := store.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+			return nil, errors.Wrap(err, "could not clean all decided messages")
+		}
+		// remove change round messages
+		if err := store.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+			return nil, errors.Wrap(err, "could not clean last change round")
+		}
 	}
-	// remove change round messages
-	if err := c.ibftStorageMap[messageID.GetRoleType()].CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-		return nil, errors.Wrap(err, "could not clean last change round")
-	}
+
 	// remove from storage
 	if err := c.collection.DeleteValidatorShare(share.ValidatorPubKey); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
