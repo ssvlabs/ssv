@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func (i *Instance) uponPrepare(
@@ -34,7 +33,6 @@ func (i *Instance) uponPrepare(
 		return errors.Wrap(err, "invalid prepare msg")
 	}
 
-	logex.GetLogger().Info("received valid prepare")
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
@@ -64,7 +62,6 @@ func (i *Instance) uponPrepare(
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
-	logex.GetLogger().Info("broadcast commit")
 	return nil
 }
 
@@ -108,7 +105,13 @@ func getRoundChangeJustification(state *specqbft.State, config types.IConfig, pr
 
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndValue(config types.IConfig, signedPrepare *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, value []byte, operators []*spectypes.Operator) error {
+func validSignedPrepareForHeightRoundAndValue(
+	config types.IConfig,
+	signedPrepare *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	value []byte,
+	operators []*spectypes.Operator) error {
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}

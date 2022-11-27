@@ -76,7 +76,8 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	return nil, nil
 }
 
-func validateDecided(config types.IConfig,
+func validateDecided(
+	config types.IConfig,
 	signedDecided *specqbft.SignedMessage,
 	share *spectypes.Share,
 ) error {

@@ -3,14 +3,14 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"io/ioutil"
-
+	"github.com/bloxapp/ssv/scripts/spec_align_report/mapping"
 	"github.com/pkg/errors"
+	"io/ioutil"
 )
 
 type Compare struct {
-	Replace     map[string]string
-	SpecReplace map[string]string
+	Replace     []mapping.KeyValue
+	SpecReplace []mapping.KeyValue
 	SSVPath     string
 	SpecPath    string
 }
@@ -21,12 +21,12 @@ func (c *Compare) ReplaceMap() error {
 		return err
 	}
 
-	for k, v := range c.Replace {
-		if cnt := bytes.Count(output, []byte(k)); cnt == 0 {
-			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in ssv", k))
+	for _, kv := range c.Replace {
+		if cnt := bytes.Count(output, []byte(kv.Key)); cnt == 0 {
+			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in ssv", kv.Key))
 		}
 
-		output = bytes.Replace(output, []byte(k), []byte(v), -1)
+		output = bytes.Replace(output, []byte(kv.Key), []byte(kv.Value), -1)
 	}
 	if err = ioutil.WriteFile(c.SSVPath, output, 0666); err != nil {
 		return err
@@ -37,12 +37,12 @@ func (c *Compare) ReplaceMap() error {
 		return err
 	}
 
-	for k, v := range c.SpecReplace {
-		if cnt := bytes.Count(output, []byte(k)); cnt == 0 {
-			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", k))
+	for _, kv := range c.SpecReplace {
+		if cnt := bytes.Count(output, []byte(kv.Key)); cnt == 0 {
+			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", kv.Value))
 		}
 
-		output = bytes.Replace(output, []byte(k), []byte(v), -1)
+		output = bytes.Replace(output, []byte(kv.Key), []byte(kv.Value), -1)
 	}
 	if err = ioutil.WriteFile(c.SpecPath, output, 0666); err != nil {
 		return err
