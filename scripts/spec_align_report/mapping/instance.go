@@ -15,8 +15,6 @@ func InstanceSet()  []KeyValue {
 	instanceMap.Set("types.IConfig", "IConfig")
 	//TODO need to fix nil check on spec https://github.com/bloxapp/ssv-spec/pull/104
 	instanceMap.Set("state := i.State\n\tif state == nil {\n\t\treturn false, nil\n\t}\n\treturn state.Decided, state.DecidedValue", "return i.State.Decided, i.State.DecidedValue")
-	//TODO remove log
-	instanceMap.Set("fmt.Println(fmt.Sprintf(\"operator %d is the leader!\", i.State.Share.OperatorID))", "")
 	//TODO remove after instance container to storage spec PR https://github.com/bloxapp/ssv-spec/pull/96
 	instanceMap.Set("// SetConfig returns the instance config\nfunc (i *Instance) SetConfig(config IConfig) {\n\ti.config = config\n}", "")
 
