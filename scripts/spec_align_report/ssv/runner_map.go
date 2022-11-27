@@ -21,8 +21,27 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("controller.Controller", "qbft.Controller")
 	return runnerSet.Range()
 }
-
 func SpecRunnerSet() []utils.KeyValue {
 	var specRunnerSet = utils.NewMap()
 	return specRunnerSet.Range()
 }
+
+func RunnerStateSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+	mapSet.Set("package runner", "package ssv")
+	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
+	mapSet.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	mapSet.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"", "")
+	mapSet.Set("specssv.", "")
+	mapSet.Set("instance.Instance", "qbft.Instance")
+	mapSet.Set("spectypes.", "types.")
+
+	return mapSet.Range()
+}
+func SpecRunnerStateSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+
+	mapSet.Set("\"github.com/bloxapp/ssv-spec/qbft\"\n", "")
+	return mapSet.Range()
+}
+

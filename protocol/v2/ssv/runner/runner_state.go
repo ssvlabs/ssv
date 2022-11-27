@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -23,8 +21,6 @@ type State struct {
 	StartingDuty *spectypes.Duty
 	// flags
 	Finished   bool            // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
-	LastSlot   phase0.Slot     `json:"-"` // ignore in root
-	LastHeight specqbft.Height `json:"-"` // ignore in root // TODO: move somewhere else?
 }
 
 func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
