@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
@@ -25,7 +26,7 @@ var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole)
 		ProposerF: func(state *qbft.State, round qbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage: TestingStorage()[role],
+		Storage: TestingStores().Get(role),
 		Network: testingutils.NewTestingNetwork(),
 		Timer:   testingutils.NewTestingTimer(),
 	}
@@ -70,9 +71,9 @@ var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, ide
 func NewTestingQBFTController(
 	identifier []byte,
 	share *types.Share,
-	config qbft.IConfig,
-) *qbft.Controller {
-	return qbft.NewController(
+	config ssvtypes.IConfig,
+) *controller.Controller {
+	return controller.NewController(
 		identifier,
 		share,
 		types.PrimusTestnet,

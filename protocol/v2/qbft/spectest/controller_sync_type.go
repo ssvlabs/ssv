@@ -14,7 +14,7 @@ import (
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
-	contr := NewTestingQBFTController(
+	contr := utils.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,

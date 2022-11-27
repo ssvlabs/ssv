@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"sync"
 	"time"
@@ -18,17 +19,16 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	storagev2 "github.com/bloxapp/ssv/ibft/storage/v2"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/commons"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
-	"github.com/bloxapp/ssv/protocol/v2/commons"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -71,7 +71,7 @@ type ControllerOptions struct {
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
 	//NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
+	DutyRoles []spectypes.BeaconRole
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"4096" env-description:"Number of goroutines to use for message workers"`
@@ -102,7 +102,7 @@ type controller struct {
 	context        context.Context
 	collection     ICollection
 	storage        registrystorage.OperatorsCollection
-	ibftStorageMap *storagev2.QBFTSyncMap
+	ibftStorageMap *storage.QBFTStores
 	logger         *zap.Logger
 	beacon         beaconprotocol.Beacon
 	keyManager     spectypes.KeyManager
@@ -130,12 +130,12 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	storageMap := &storagev2.QBFTSyncMap{}
-	storageMap.Add(spectypes.BNRoleAttester, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleProposer, storagev2.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleAggregator, storagev2.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommittee, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storagev2.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
+	storageMap := &storage.QBFTStores{}
+	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommittee, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}

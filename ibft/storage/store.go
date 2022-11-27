@@ -4,6 +4,9 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/bloxapp/ssv/ibft/storage/forks"
+	"github.com/bloxapp/ssv/ibft/storage/forks/factory"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"log"
 	"sync"
 
@@ -14,18 +17,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage/forks"
-	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const (
 	highestKey           = "highest"
 	decidedKey           = "decided"
-	currentKey           = "current"
 	highestInstanceState = "highest_instance_state"
 	lastChangeRoundKey   = "last_change_round"
 )

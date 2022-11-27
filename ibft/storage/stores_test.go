@@ -14,7 +14,7 @@ func init() {
 }
 
 func TestMap(t *testing.T) {
-	qbftMap := &QBFTSyncMap{}
+	qbftMap := &QBFTStores{}
 
 	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)

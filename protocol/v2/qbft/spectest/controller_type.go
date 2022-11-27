@@ -17,7 +17,7 @@ import (
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
-	contr := NewTestingQBFTController(
+	contr := utils.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,

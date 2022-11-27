@@ -241,7 +241,7 @@ func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *t
 }
 
 func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	config := testingutils.TestingConfig(ks)
+	config := utils.TestingConfig(ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.Share,

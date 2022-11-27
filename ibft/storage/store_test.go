@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,7 +12,6 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -175,29 +175,39 @@ func TestSaveAndFetchLastChangeRound(t *testing.T) {
 }
 
 func TestSaveAndFetchLastState(t *testing.T) {
-	id := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 
 	state := &specqbft.State{
-		ID:                id[:],
-		Height:            10,
-		Round:             2,
-		LastPreparedRound: 8,
-		LastPreparedValue: []byte("value"),
+		Share:                           nil,
+		ID:                              identifier[:],
+		Round:                           1,
+		Height:                          1,
+		LastPreparedRound:               1,
+		LastPreparedValue:               []byte("value"),
+		ProposalAcceptedForCurrentRound: nil,
+		Decided:                         true,
+		DecidedValue:                    []byte("value"),
+		ProposeContainer:                specqbft.NewMsgContainer(),
+		PrepareContainer:                specqbft.NewMsgContainer(),
+		CommitContainer:                 specqbft.NewMsgContainer(),
+		RoundChangeContainer:            specqbft.NewMsgContainer(),
 	}
 
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
-	require.NoError(t, storage.SaveCurrentInstance(id[:], state))
+	require.NoError(t, storage.SaveHighestInstance(state))
 
-	savedState, found, err := storage.GetCurrentInstance(id[:])
+	savedState, err := storage.GetHighestInstance(identifier[:])
 	require.NoError(t, err)
-	require.True(t, found)
-	require.Equal(t, specqbft.Height(10), savedState.Height)
-	require.Equal(t, specqbft.Round(2), savedState.Round)
-	require.Equal(t, id.String(), message.ToMessageID(savedState.ID).String())
-	require.Equal(t, specqbft.Round(8), savedState.LastPreparedRound)
+	require.NotNil(t, savedState)
+	require.Equal(t, specqbft.Height(1), savedState.Height)
+	require.Equal(t, specqbft.Round(1), savedState.Round)
+	require.Equal(t, identifier.String(), message.ToMessageID(savedState.ID).String())
+	require.Equal(t, specqbft.Round(1), savedState.LastPreparedRound)
+	require.Equal(t, true, savedState.Decided)
 	require.Equal(t, []byte("value"), savedState.LastPreparedValue)
+	require.Equal(t, []byte("value"), savedState.DecidedValue)
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {

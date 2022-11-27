@@ -2,6 +2,8 @@ package api
 
 import (
 	"fmt"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -12,8 +14,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -174,9 +176,9 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorage.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorageprotocol.QBFTStore) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.NewQBFTStore(db, logger, "attestation")
+	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion)
 	return sExporter, sIbft
 }
 

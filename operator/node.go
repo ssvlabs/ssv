@@ -3,15 +3,14 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	storage2 "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -74,7 +73,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	qbftStorage := storage2.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
 
 	node := &operatorNode{
 		context:        opts.Context,

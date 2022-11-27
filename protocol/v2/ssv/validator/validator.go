@@ -2,8 +2,8 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/ibft/storage/v2"
-	instance "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
 
@@ -25,7 +25,7 @@ type Options struct {
 	Logger      *zap.Logger
 	Network     specqbft.Network
 	Beacon      specssv.BeaconNode
-	Storage     *storage.QBFTSyncMap
+	Storage     *storage.QBFTStores
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
@@ -61,7 +61,7 @@ type Validator struct {
 	Beacon specssv.BeaconNode
 	Signer spectypes.KeyManager
 
-	Storage *storage.QBFTSyncMap
+	Storage *storage.QBFTStores
 	Network specqbft.Network
 
 	Q msgqueue.MsgQueue

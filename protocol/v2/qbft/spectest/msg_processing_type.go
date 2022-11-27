@@ -10,11 +10,11 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
