@@ -1,9 +1,11 @@
-package mapping
+package qbft
+
+import "github.com/bloxapp/ssv/scripts/spec_align_report/utils"
 
 // Instance mapping
 
-func InstanceSet() []KeyValue {
-	var instanceMap = NewMap()
+func InstanceSet() []utils.KeyValue {
+	var instanceMap = utils.NewMap()
 
 	// list of changes package names & imports between spec and implementation
 	instanceMap.Set("package instance", "package qbft")
@@ -23,8 +25,8 @@ func InstanceSet() []KeyValue {
 	return instanceMap.Range()
 }
 
-func SpecInstanceSet() []KeyValue {
-	var specInstanceMap = NewMap()
+func SpecInstanceSet() []utils.KeyValue {
+	var specInstanceMap = utils.NewMap()
 	// We import from spec - so for the diff we remove it from spec
 	specInstanceMap.Set("type ProposedValueCheckF func(data []byte) error", "")
 	specInstanceMap.Set("type ProposerF func(state *State, round Round) types.OperatorID", "")
@@ -33,8 +35,8 @@ func SpecInstanceSet() []KeyValue {
 
 }
 
-func ProposalSet() []KeyValue {
-	var proposalMap = NewMap()
+func ProposalSet() []utils.KeyValue {
+	var proposalMap = utils.NewMap()
 
 	// list of changes package names & imports between spec and implementation
 	proposalMap.Set("package instance", "package qbft")
@@ -50,8 +52,8 @@ func ProposalSet() []KeyValue {
 
 	return proposalMap.Range()
 }
-func SpecProposalSet() []KeyValue {
-	var specProposalMap = NewMap()
+func SpecProposalSet() []utils.KeyValue {
+	var specProposalMap = utils.NewMap()
 	// redundant else
 	specProposalMap.Set("if round == FirstRound {\n\t\treturn nil\n\t} else {", "if round == FirstRound {\n\t\treturn nil\n\t}")
 	specProposalMap.Set("if !previouslyPrepared {\n\t\t\treturn nil\n\t\t} else {", "if !previouslyPrepared {\n\t\t\treturn nil\n\t\t}")
@@ -61,8 +63,8 @@ func SpecProposalSet() []KeyValue {
 	return specProposalMap.Range()
 }
 
-func PrepareSet() []KeyValue {
-	var prepareMap = NewMap()
+func PrepareSet() []utils.KeyValue {
+	var prepareMap = utils.NewMap()
 	// list of changes package names & imports between spec and implementation
 
 	prepareMap.Set("package instance", "package qbft")
@@ -75,13 +77,13 @@ func PrepareSet() []KeyValue {
 	prepareMap.Set("spectypes.", "types.")
 	return prepareMap.Range()
 }
-func SpecPrepareSet() []KeyValue {
-	var specPrepareMap = NewMap()
+func SpecPrepareSet() []utils.KeyValue {
+	var specPrepareMap = utils.NewMap()
 	return specPrepareMap.Range()
 }
 
-func CommitSet() []KeyValue {
-	var commitMap = NewMap()
+func CommitSet() []utils.KeyValue {
+	var commitMap = utils.NewMap()
 	// list of changes package names & imports between spec and implementation
 
 	commitMap.Set("package instance", "package qbft")
@@ -95,13 +97,13 @@ func CommitSet() []KeyValue {
 	commitMap.Set("BaseCommitValidation", "baseCommitValidation")
 	return commitMap.Range()
 }
-func SpecCommitSet() []KeyValue {
-	var specCommitMap = NewMap()
+func SpecCommitSet() []utils.KeyValue {
+	var specCommitMap = utils.NewMap()
 	return specCommitMap.Range()
 }
 
-func RoundChangeSet() []KeyValue {
-	var roundChangeMap = NewMap()
+func RoundChangeSet() []utils.KeyValue {
+	var roundChangeMap = utils.NewMap()
 	// list of changes package names & imports between spec and implementation
 
 	roundChangeMap.Set("package instance", "package qbft")
@@ -114,7 +116,7 @@ func RoundChangeSet() []KeyValue {
 	roundChangeMap.Set("spectypes.", "types.")
 	return roundChangeMap.Range()
 }
-func SpecRoundChangeSet() []KeyValue {
-	var specRoundChangeMap = NewMap()
+func SpecRoundChangeSet() []utils.KeyValue {
+	var specRoundChangeMap = utils.NewMap()
 	return specRoundChangeMap.Range()
 }

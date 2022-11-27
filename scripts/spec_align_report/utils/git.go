@@ -2,11 +2,11 @@ package utils
 
 import (
 	"fmt"
+	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
 	"os/exec"
-
-	"github.com/pkg/errors"
+	"strings"
 )
 
 const ssvSpecRepo = "git@github.com:bloxapp/ssv-spec.git"
@@ -32,16 +32,22 @@ func CleanSpecPath() error {
 	}
 	return nil
 }
-func GitDiff(ssv string, spec string, outputPath string) error {
+func GitDiff(name string, ssv string, spec string) error {
 	cmd := exec.Command("git", "diff", "--color", "-w", "--word-diff", "--no-index", "--ignore-blank-lines",
 		ssv, spec)
-	fmt.Println(Info(cmd.Args))
 
 	if output, err := cmd.Output(); err != nil {
-		if err := ioutil.WriteFile(outputPath, output, 0644); err != nil {
+		diffPath := fmt.Sprintf("%s/%s.diff", DataPath, name)
+		if err := ioutil.WriteFile(diffPath, output, 0644); err != nil {
 			return err
 		}
+		fmt.Println(Error(fmt.Sprintf("%s is not aligned to spec: %s", name, diffPath)))
+
+		temp := fmt.Sprintf("%v", cmd.Args)
+		fmt.Println(Info(strings.Join(strings.Split(temp[1:len(temp)-1], " "), " ")))
+
 		return err
 	}
+	fmt.Println(Success(fmt.Sprintf("%s is aligned to spec", name)))
 	return nil
 }
