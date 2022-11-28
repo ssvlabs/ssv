@@ -152,9 +152,6 @@ func RunnerValidationsSet() []utils.KeyValue {
 	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
 	mapSet.Set("specssv.", "")
 
-
-
-
 	return mapSet.Range()
 }
 func SpecRunnerValidationsSet() []utils.KeyValue {

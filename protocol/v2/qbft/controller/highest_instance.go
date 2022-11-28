@@ -7,7 +7,7 @@ import (
 
 func (c *Controller) GetHighestInstance(identifier []byte) (*instance.Instance, error) {
 	state, err := c.config.GetStorage().GetHighestInstance(identifier)
-	if  err != nil {
+	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch highest instance")
 	}
 	if state == nil {
@@ -18,9 +18,9 @@ func (c *Controller) GetHighestInstance(identifier []byte) (*instance.Instance, 
 		state.Share,
 		identifier,
 		state.Height,
-		), nil
+	), nil
 }
 
-func (c *Controller) SaveHighestInstance(instance *instance.Instance) error  {
+func (c *Controller) SaveHighestInstance(instance *instance.Instance) error {
 	return c.config.GetStorage().SaveHighestInstance(instance.State)
 }

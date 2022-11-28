@@ -60,7 +60,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			// nolint
 			if err != nil {
 				fmt.Printf("%s\n", err.Error())
-			// TODO align spec to add else to avoid broadcast errored proposal
+				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {

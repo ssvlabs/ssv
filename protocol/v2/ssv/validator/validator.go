@@ -249,7 +249,7 @@ func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
 	}
 	r.GetBaseRunner().QBFTController.Height = highestInstance.GetHeight()
 	r.GetBaseRunner().QBFTController.StoredInstances = controller.InstanceContainer{
-		0 : highestInstance,
+		0: highestInstance,
 	}
 	return nil
 }

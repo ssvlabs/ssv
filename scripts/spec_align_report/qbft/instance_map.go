@@ -16,8 +16,6 @@ func InstanceSet() []utils.KeyValue {
 	instanceMap.Set("spectypes.", "types.")
 	instanceMap.Set("types.IConfig", "IConfig")
 
-
-
 	// list of approved changes in code between spec and implementation
 	instanceMap.Set("// TODO align spec to add else to avoid broadcast errored proposal\n\t\t\t} else {\n\t\t\t\t// nolint\n\t\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t\t}\n\t\t\t}",
 		"}\n\t\t\t// nolint\n\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}")
