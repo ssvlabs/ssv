@@ -27,7 +27,7 @@ func CloneSpec(tag string, commit string) error {
 		cmd = exec.Command("git", "checkout", commit)
 		cmd.Dir = ssvSpecPath
 		var errb bytes.Buffer
-		cmd.Stderr =  &errb
+		cmd.Stderr = &errb
 		if _, err := cmd.Output(); err != nil {
 			fmt.Println(Error(errb.String()))
 			return err

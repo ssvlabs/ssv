@@ -20,7 +20,6 @@ func ControllerSet() []utils.KeyValue {
 	controllerMap.Set("instance.NewInstance", "NewInstance")
 
 	// list of approved changes in code between spec and implementation
-	//TODO should be removed after instance container moved to storage in spec
 	controllerMap.Set("//  TODO-spec-align rethink if we need it", "")
 	controllerMap.Set("i.SetConfig(config)", "i.config = config")
 
