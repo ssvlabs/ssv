@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/scripts/spec_align_report/qbft"
+	"github.com/bloxapp/ssv/scripts/spec_align_report/ssv"
 	"github.com/bloxapp/ssv/scripts/spec_align_report/utils"
 )
 
@@ -18,9 +19,9 @@ func main() {
 
 	qbft.ProcessController()
 
-	//qbft.ProcessInstance()
+	qbft.ProcessInstance()
 
-	//ssv.ProcessRunner()
+	ssv.ProcessRunner()
 	//utils.CleanSpecPath()
 
 	fmt.Println("done")

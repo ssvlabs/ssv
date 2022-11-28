@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
@@ -241,24 +242,14 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMess
 }
 
 func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
-	storage := v.Storage.Get(identifier.GetRoleType())
-	if storage == nil {
-		return errors.New("storage not found")
-	}
-	highestState, err := storage.GetHighestInstance(identifier[:])
-	if err != nil {
-		return errors.Wrap(err, "failed to get heights instance state")
-	}
-	if highestState == nil {
-		return nil
-	}
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return errors.New("runner is nil")
+	highestInstance, err := instance.GetHighestInstance(identifier[:], r.GetBaseRunner().QBFTController.GetConfig())
+	if err != nil {
+		return err
 	}
-	instance := instance.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
-	r.GetBaseRunner().QBFTController.Height = instance.GetHeight()
-	r.GetBaseRunner().QBFTController.StoredInstances.AddNewInstance(instance)
-	v.logger.Info("highest instance loaded", zap.String("role", identifier.GetRoleType().String()), zap.Int64("h", int64(instance.GetHeight())))
+	r.GetBaseRunner().QBFTController.Height = highestInstance.GetHeight()
+	r.GetBaseRunner().QBFTController.StoredInstances = controller.InstanceContainer{
+		0 : highestInstance,
+	}
 	return nil
 }

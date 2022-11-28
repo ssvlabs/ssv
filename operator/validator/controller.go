@@ -599,6 +599,7 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 			config.ValueCheckF = valCheck
 			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleAttester)
 			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config)
+
 			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)

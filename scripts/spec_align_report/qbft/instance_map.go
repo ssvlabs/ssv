@@ -15,12 +15,16 @@ func InstanceSet() []utils.KeyValue {
 	instanceMap.Set("specqbft.", "")
 	instanceMap.Set("spectypes.", "types.")
 	instanceMap.Set("types.IConfig", "IConfig")
-	//TODO need to fix nil check on spec https://github.com/bloxapp/ssv-spec/pull/104
-	instanceMap.Set("state := i.State\n\tif state == nil {\n\t\treturn false, nil\n\t}\n\treturn state.Decided, state.DecidedValue", "return i.State.Decided, i.State.DecidedValue")
-	//TODO remove after instance container to storage spec PR https://github.com/bloxapp/ssv-spec/pull/96
-	instanceMap.Set("// SetConfig returns the instance config\nfunc (i *Instance) SetConfig(config IConfig) {\n\ti.config = config\n}", "")
+
+
 
 	// list of approved changes in code between spec and implementation
+	instanceMap.Set("// TODO align spec to add else to avoid broadcast errored proposal\n\t\t\t} else {\n\t\t\t\t// nolint\n\t\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t\t}\n\t\t\t}",
+		"}\n\t\t\t// nolint\n\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}")
+	instanceMap.Set("// SetConfig returns the instance config\nfunc (i *Instance) SetConfig(config IConfig) {\n\ti.config = config\n}", "")
+	instanceMap.Set("// TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md\n\t\tgo syncHighestRoundChange(i.config.GetNetwork(), types.MessageIDFromBytes(i.State.ID), i.State.Height)",
+		"if err := i.config.GetNetwork().SyncHighestRoundChange(types.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {\n\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t}")
+	instanceMap.Set("func syncHighestRoundChange(syncer Syncer, mid types.MessageID, h Height) {\n\tif err := syncer.SyncHighestRoundChange(mid, h); err != nil {\n\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t}\n}", "")
 
 	return instanceMap.Range()
 }
@@ -118,5 +122,7 @@ func RoundChangeSet() []utils.KeyValue {
 }
 func SpecRoundChangeSet() []utils.KeyValue {
 	var specRoundChangeMap = utils.NewMap()
+	specRoundChangeMap.Set("could not get proposal justification for leading ronud", "could not get proposal justification for leading round")
+
 	return specRoundChangeMap.Range()
 }
