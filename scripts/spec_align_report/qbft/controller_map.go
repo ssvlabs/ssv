@@ -38,9 +38,10 @@ func DecidedSet() []utils.KeyValue {
 
 	// list of changes package names & imports between spec and implementation
 	decidedMap.Set("package controller", "package qbft")
-	decidedMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"", "")
-	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"", "")
-	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"", "")
+	decidedMap.Set("\"fmt\"\n", "")
+	decidedMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
+	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/instance\"\n", "")
+	decidedMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"\n", "")
 	decidedMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
 	decidedMap.Set("specqbft.", "")
 	decidedMap.Set("spectypes.", "types.")
@@ -52,6 +53,8 @@ func DecidedSet() []utils.KeyValue {
 	decidedMap.Set("// isDecidedMsg", "//")
 
 	// list of approved changes in code between spec and implementation
+	// This handles storage of HighestInstance to storage - only implementation level
+	decidedMap.Set("if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {\n\t\t\tif err = c.GetConfig().GetStorage().SaveHighestInstance(futureInstance.State); err != nil {\n\t\t\t\tfmt.Printf(\"failed to save instance: %s\\n\", err.Error())\n\t\t\t}\n\t\t}", "")
 
 	return decidedMap.Range()
 }
