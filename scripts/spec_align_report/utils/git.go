@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/pkg/errors"
 	"io/ioutil"
@@ -12,20 +13,31 @@ import (
 const ssvSpecRepo = "git@github.com:bloxapp/ssv-spec.git"
 const ssvSpecPath = "./scripts/spec_align_report/ssv-spec"
 
-func CloneSpec(tag string) error {
+func CloneSpec(tag string, commit string) error {
 	if err := CleanSpecPath(); err != nil {
 		return err
 	}
 
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", tag, ssvSpecRepo, "./scripts/spec_align_report/ssv-spec")
-	_, err := cmd.Output()
-
-	if err != nil {
+	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", tag, ssvSpecRepo, ssvSpecPath)
+	if _, err := cmd.Output(); err != nil {
 		return err
 	}
+
+	if len(commit) > 0 {
+		cmd = exec.Command("git", "checkout", commit)
+		cmd.Dir = ssvSpecPath
+		var errb bytes.Buffer
+		cmd.Stderr =  &errb
+		if _, err := cmd.Output(); err != nil {
+			fmt.Println(Error(errb.String()))
+			return err
+		}
+	}
+
 	fmt.Println("successfully cloned ssv spec repo")
 	return nil
 }
+
 func CleanSpecPath() error {
 	if err := os.RemoveAll(ssvSpecPath); err != nil {
 		return errors.Wrap(err, "couldn't clean spec path:"+ssvSpecPath)
