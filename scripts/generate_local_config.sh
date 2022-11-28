@@ -53,7 +53,6 @@ done
 echo "generating ssv keys"
 ./ssv-keys-mac -of=./key_shares -ks="${KS_PATH}" -ps="${KS_PASSWORD}" -ssv=5 -oid="${OID}" -ok="$(yq e '.publicKeys | join(",")' operators.yaml)" > tmp.log
 KEY_SHARES_PATH=$(grep -o './key_shares.*json' tmp.log)
-echo "ssv keys generated at $KEY_SHARES_PATH"
 
 rm temp.yaml 2> /dev/null
 touch temp.yaml
@@ -82,4 +81,6 @@ rm ./config/events.yaml 2> /dev/null
 touch ./config/events.yaml
 yq '.operators, .validators' temp.yaml > ./config/events.yaml
 rm temp.yaml 2> /dev/null
+rm operators.yaml 2> /dev/null
+rm -rf key_shares 2> /dev/null
 echo "./config is ready"
