@@ -129,7 +129,7 @@ $ make build
 1. Download the latest executable from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases)
 2. Generate local config using [script](../config/generate_local_config.sh) \
    example ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD``` \
-   `OP_SIZE` - number of operators to create (e.g. 4) \
+   `OP_SIZE` - number of operators to create [3f+1]. (e.g. 4 or 7 or 10 ...) \
    `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
    `KS_PASSWORD` - keystore password (e.g. 12345678)
 3. Place the generated yaml files to `./config` [directory](../config)
