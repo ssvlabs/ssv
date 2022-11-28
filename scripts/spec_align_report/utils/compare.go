@@ -3,14 +3,14 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/bloxapp/ssv/scripts/spec_align_report/mapping"
 	"github.com/pkg/errors"
 	"io/ioutil"
 )
 
 type Compare struct {
-	Replace     []mapping.KeyValue
-	SpecReplace []mapping.KeyValue
+	Name        string
+	Replace     []KeyValue
+	SpecReplace []KeyValue
 	SSVPath     string
 	SpecPath    string
 }
@@ -48,4 +48,7 @@ func (c *Compare) ReplaceMap() error {
 		return err
 	}
 	return nil
+}
+func (c *Compare) Run() error {
+	return GitDiff(c.Name, c.SSVPath, c.SpecPath)
 }

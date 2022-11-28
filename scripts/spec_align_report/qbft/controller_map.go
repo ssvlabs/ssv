@@ -1,9 +1,11 @@
-package mapping
+package qbft
+
+import "github.com/bloxapp/ssv/scripts/spec_align_report/utils"
 
 // Controller mapping
 
-func ControllerSet() []KeyValue {
-	var controllerMap = NewMap()
+func ControllerSet() []utils.KeyValue {
+	var controllerMap = utils.NewMap()
 
 	// list of changes package names & imports between spec and implementation
 	controllerMap.Set("package controller", "package qbft")
@@ -25,15 +27,15 @@ func ControllerSet() []KeyValue {
 	return controllerMap.Range()
 }
 
-func SpecControllerSet() []KeyValue {
-	var specControllerSet = NewMap()
+func SpecControllerSet() []utils.KeyValue {
+	var specControllerSet = utils.NewMap()
 	return specControllerSet.Range()
 }
 
 // Decided mapping
 
-func DecidedSet() []KeyValue {
-	var decidedMap = NewMap()
+func DecidedSet() []utils.KeyValue {
+	var decidedMap = utils.NewMap()
 
 	// list of changes package names & imports between spec and implementation
 	decidedMap.Set("package controller", "package qbft")
@@ -54,15 +56,15 @@ func DecidedSet() []KeyValue {
 
 	return decidedMap.Range()
 }
-func SpecDecidedSet() []KeyValue {
-	var specDecidedSet = NewMap()
+func SpecDecidedSet() []utils.KeyValue {
+	var specDecidedSet = utils.NewMap()
 	return specDecidedSet.Range()
 }
 
 // FutureMessage mapping
 
-func FutureMessageSet() []KeyValue {
-	var futureMessageMap = NewMap()
+func FutureMessageSet() []utils.KeyValue {
+	var futureMessageMap = utils.NewMap()
 
 	// list of changes package names & imports between spec and implementation
 	futureMessageMap.Set("package controller", "package qbft")
@@ -77,7 +79,7 @@ func FutureMessageSet() []KeyValue {
 
 	return futureMessageMap.Range()
 }
-func SpecFutureMessageSet() []KeyValue {
-	var specFutureMessageSet = NewMap()
+func SpecFutureMessageSet() []utils.KeyValue {
+	var specFutureMessageSet = utils.NewMap()
 	return specFutureMessageSet.Range()
 }

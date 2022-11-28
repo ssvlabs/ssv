@@ -1,4 +1,4 @@
-package mapping
+package utils
 
 type KeyValue struct {
 	Key   string
