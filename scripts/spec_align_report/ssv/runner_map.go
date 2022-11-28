@@ -144,3 +144,34 @@ func SpecSyncCommitteeAggregatorSet() []utils.KeyValue {
 	var mapSet = utils.NewMap()
 	return mapSet.Range()
 }
+
+func RunnerValidationsSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+
+	mapSet.Set("package runner", "package ssv")
+	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
+	mapSet.Set("specssv.", "")
+
+
+
+
+	return mapSet.Range()
+}
+func SpecRunnerValidationsSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+	return mapSet.Range()
+}
+
+func RunnerSignaturesSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+
+	mapSet.Set("package runner", "package ssv")
+	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
+	mapSet.Set("specssv.", "")
+
+	return mapSet.Range()
+}
+func SpecSRunnerSignaturesSet() []utils.KeyValue {
+	var mapSet = utils.NewMap()
+	return mapSet.Range()
+}
