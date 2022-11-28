@@ -66,20 +66,16 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			zap.Int("consensusMsgType", int(sm.Message.MsgType)),
 			zap.Any("signers", sm.GetSigners()))
 	}
-	go n.broadcast(raw, topics...)
-	return nil
-}
-
-func (n *p2pNetwork) broadcast(data []byte, topics ...string) {
 	for _, topic := range topics {
 		if topic == genesisFork.UnknownSubnet {
 			n.logger.Debug("unknown topic", zap.String("topic", topic))
 			continue
 		}
-		if err := n.topicsCtrl.Broadcast(topic, data, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", zap.String("topic", topic), zap.Error(err))
+		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
+	return nil
 }
 
 // Subscribe subscribes to validator subnet
