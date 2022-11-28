@@ -58,8 +58,6 @@ func AggregatorSet() []utils.KeyValue {
 	mapSet.Set("specqbft.", "qbft.")
 	mapSet.Set("spectypes.", "types.")
 	mapSet.Set("controller.Controller", "qbft.Controller")
-	// ignored typo in spec
-	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
 	return mapSet.Range()
 }
 func SpecAggregatorSet() []utils.KeyValue {
@@ -79,8 +77,7 @@ func AttesterSet() []utils.KeyValue {
 	mapSet.Set("specqbft.", "qbft.")
 	mapSet.Set("spectypes.", "types.")
 	mapSet.Set("controller.Controller", "qbft.Controller")
-	// ignored typo in spec
-	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
+
 	return mapSet.Range()
 }
 func SpecAttesterSet() []utils.KeyValue {
@@ -100,8 +97,7 @@ func ProposerSet() []utils.KeyValue {
 	mapSet.Set("specqbft.", "qbft.")
 	mapSet.Set("spectypes.", "types.")
 	mapSet.Set("controller.Controller", "qbft.Controller")
-	// ignored typo in spec
-	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
+
 	return mapSet.Range()
 }
 func SpecProposerSet() []utils.KeyValue {
@@ -121,8 +117,7 @@ func SyncCommitteeSet() []utils.KeyValue {
 	mapSet.Set("specqbft.", "qbft.")
 	mapSet.Set("spectypes.", "types.")
 	mapSet.Set("controller.Controller", "qbft.Controller")
-	// ignored typo in spec
-	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
+
 	return mapSet.Range()
 }
 func SpecSyncCommitteeSet() []utils.KeyValue {
@@ -142,8 +137,7 @@ func SyncCommitteeAggregatorSet() []utils.KeyValue {
 	mapSet.Set("specqbft.", "qbft.")
 	mapSet.Set("spectypes.", "types.")
 	mapSet.Set("controller.Controller", "qbft.Controller")
-	// ignored typo in spec
-	mapSet.Set("BaseRunner.HasRunningDuty()", "BaseRunner.HashRunningDuty()")
+
 	return mapSet.Range()
 }
 func SpecSyncCommitteeAggregatorSet() []utils.KeyValue {
