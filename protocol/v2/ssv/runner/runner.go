@@ -51,13 +51,21 @@ type Runner interface {
 	spectypes.Root
 	Getters
 
+	// StartNewDuty starts a new duty for the runner, returns error if can't
 	StartNewDuty(duty *spectypes.Duty) error
+	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
+	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
 	ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
+	// ProcessConsensus processes all consensus msgs, returns error if can't process
 	ProcessConsensus(msg *specqbft.SignedMessage) error
+	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
-
+	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
+	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
+	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
+	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(duty *spectypes.Duty) error
 }
 
@@ -69,6 +77,7 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 }
 
+// baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
 		return err
@@ -77,6 +86,7 @@ func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error
 	return runner.executeDuty(duty)
 }
 
+// canStartNewDuty is a base func that all runner implementation can call to decide if a new duty can start
 func (b *BaseRunner) canStartNewDuty() error {
 	if b.State == nil {
 		return nil
@@ -92,34 +102,17 @@ func (b *BaseRunner) canStartNewDuty() error {
 	return nil
 }
 
+// basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
 func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
 	if err := b.validatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
-	roots := make([][]byte, 0)
-	anyQuorum := false
-	for _, msg := range signedMsg.Message.Messages {
-		prevQuorum := b.State.PreConsensusContainer.HasQuorum(msg.SigningRoot)
-
-		if err := b.State.PreConsensusContainer.AddSignature(msg); err != nil {
-			return false, nil, errors.Wrap(err, "could not add partial randao signature")
-		}
-
-		if prevQuorum {
-			continue
-		}
-
-		quorum := b.State.PreConsensusContainer.HasQuorum(msg.SigningRoot)
-		if quorum {
-			roots = append(roots, msg.SigningRoot)
-			anyQuorum = true
-		}
-	}
-
-	return anyQuorum, roots, nil
+	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	return hasQuorum, roots, errors.Wrap(err, "could not process pre-consensus partial signature msg")
 }
 
+// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	if err := b.validateConsensusMsg(msg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid consensus message")
@@ -139,7 +132,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			if err = b.QBFTController.GetConfig().GetStorage().SaveHighestInstance(inst.State); err != nil {
+			if err = b.QBFTController.SaveHighestInstance(inst); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
 		}

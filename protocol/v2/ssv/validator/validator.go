@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
 
@@ -243,7 +242,8 @@ func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMess
 
 func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	highestInstance, err := instance.GetHighestInstance(identifier[:], r.GetBaseRunner().QBFTController.GetConfig())
+	// TODO can we move all below inside GetHighestInstance / LoadHighestInstance?
+	highestInstance, err := r.GetBaseRunner().QBFTController.GetHighestInstance(identifier[:])
 	if err != nil {
 		return err
 	}
