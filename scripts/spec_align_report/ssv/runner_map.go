@@ -9,7 +9,6 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"", "\"github.com/bloxapp/ssv-spec/qbft\"")
 	runnerSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
 	runnerSet.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
-	runnerSet.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer\"", "")
 	runnerSet.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/controller\"\n", "")
 
 	//TODO in spec its in type file - should we move it out too? why do we need Identifiers function
@@ -19,6 +18,9 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("specqbft.", "qbft.")
 	runnerSet.Set("spectypes.", "types.")
 	runnerSet.Set("controller.Controller", "qbft.Controller")
+	runnerSet.Set(" else {\n\t\tif inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {\n\t\t\tif err = b.QBFTController.SaveHighestInstance(inst); err != nil {\n\t\t\t\tfmt.Printf(\"failed to save instance: %s\\n\", err.Error())\n\t\t\t}\n\t\t}\n\t}", "")
+
+	runnerSet.Set("// registers a timeout handler\n\tb.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)", "")
 	return runnerSet.Range()
 }
 func SpecRunnerSet() []utils.KeyValue {

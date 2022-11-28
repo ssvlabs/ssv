@@ -148,6 +148,8 @@ github.com/bloxapp/ssv-spec v0.2.3-0.20221102120541-7e6168947071 h1:O9zhQxspgFgQ
 github.com/bloxapp/ssv-spec v0.2.3-0.20221102120541-7e6168947071/go.mod h1:x8OOkoSaJTxbHoeQhHjTSZX/1TyUvCbEj+QYjf+KF7k=
 github.com/bloxapp/ssv-spec v0.2.7 h1:GW/GtAQxZw6zFC0Fzb5QHQAltSjPacsEHiK2yCk7kNk=
 github.com/bloxapp/ssv-spec v0.2.7/go.mod h1:x8OOkoSaJTxbHoeQhHjTSZX/1TyUvCbEj+QYjf+KF7k=
+github.com/bloxapp/ssv-spec v0.2.8-0.20221127111311-7e96c8b78191 h1:Pjm+XMVP9EJMp+GsnC7R1hRrRiP1ZQaBmUPXuP7fgDY=
+github.com/bloxapp/ssv-spec v0.2.8-0.20221127111311-7e96c8b78191/go.mod h1:V/fCzJJ1+c+6IDF5y5UfwU6tZPLrg/6O8tyHUfSnpGw=
 github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40/go.mod h1:8rLXio+WjiTceGBHIoTvn60HIbs7Hm7bcHjyrSqYB9c=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
@@ -1662,6 +1664,8 @@ golang.org/x/crypto v0.0.0-20210921155107-089bfa567519/go.mod h1:GvvjBRRGRdwPK5y
 golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e/go.mod h1:P+XmwS30IXTQdn5tA2iutPOUgjI07+tq3H3K9MVA1s8=
 golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 h1:kUhD7nTDoI3fVd9G4ORWrbV5NY0liEs/Jg2pv5f+bBA=
 golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
+golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122 h1:NvGWuYG8dkDHFSKksI1P9faiVJ9rayE6l0+ouWVIDs8=
+golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122/go.mod h1:IxCIyHEi3zRg3s0A5j5BB6A9Jmi73HwBIUl50j+osU4=
 golang.org/x/exp v0.0.0-20180321215751-8460e604b9de/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
 golang.org/x/exp v0.0.0-20180807140117-3d87b88a115f/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
 golang.org/x/exp v0.0.0-20190121172915-509febef88a4/go.mod h1:CJ0aWSM057203Lf6IL+f9T1iT9GByDxfZKAQTCR3kQA=
