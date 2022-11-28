@@ -108,6 +108,8 @@ $ make build
 
 ### Configuration
 
+#### Use manual steps:
+
 1. Generate 4 operator keys - [Generating an Operator Key](#generating-an-operator-key)
 2. Create 4 .yaml files with the corresponding configuration, based on the [template file](../config/example_share.yaml). \
    The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
@@ -121,6 +123,20 @@ $ make build
 8. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
    Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
 9. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+
+#### Use script:
+
+1. Download the latest executable from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases)
+2. Generate local config using [script](../config/generate_local_config.sh) \
+   example ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD``` \
+   `OP_SIZE` - number of operators to create (e.g. 4) \
+   `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
+   `KS_PASSWORD` - keystore password (e.g. 12345678)
+3. Place the generated yaml files to `./config` [directory](../config)
+4. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
+5. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
+   Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
+6. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 ### Run
 
