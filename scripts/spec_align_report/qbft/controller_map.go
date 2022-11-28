@@ -20,7 +20,7 @@ func ControllerSet() []utils.KeyValue {
 	controllerMap.Set("instance.NewInstance", "NewInstance")
 
 	// list of approved changes in code between spec and implementation
-	controllerMap.Set("//  TODO-spec-align rethink if we need it", "")
+	controllerMap.Set("// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?", "")
 	controllerMap.Set("i.SetConfig(config)", "i.config = config")
 
 	return controllerMap.Range()

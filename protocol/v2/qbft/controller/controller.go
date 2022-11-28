@@ -236,7 +236,7 @@ func (c *Controller) Decode(data []byte) error {
 	config := c.GetConfig()
 	for _, i := range c.StoredInstances {
 		if i != nil {
-			//  TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
+			// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
 			i.SetConfig(config)
 		}
 	}
