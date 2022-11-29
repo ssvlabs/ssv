@@ -62,11 +62,15 @@ func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
 	}
 	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
 	if r == nil {
-		return errors.New("runner is nil")
+		return errors.New("runner is not defined")
 	}
-	instance := instance.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
-	r.GetBaseRunner().QBFTController.Height = instance.GetHeight()
-	r.GetBaseRunner().QBFTController.StoredInstances.AddNewInstance(instance)
+	ctrl := r.GetBaseRunner().QBFTController
+	if ctrl == nil {
+		return errors.New("qbft controller is not defined")
+	}
+	instance := instance.NewInstanceFromState(ctrl.GetConfig(), highestState)
+	ctrl.Height = instance.GetHeight()
+	ctrl.StoredInstances.AddNewInstance(instance)
 	v.logger.Info("highest instance loaded", zap.String("role", identifier.GetRoleType().String()), zap.Int64("h", int64(instance.GetHeight())))
 	return nil
 }
