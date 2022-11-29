@@ -2,12 +2,17 @@ package validator
 
 import (
 	"encoding/hex"
+	"io/ioutil"
+	"path/filepath"
 	"strings"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -119,5 +124,29 @@ func SetOperatorPublicKeys(
 		}
 		validatorRegistrationEvent.OperatorPublicKeys[i] = []byte(od.PublicKey)
 	}
+	return nil
+}
+
+func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {
+	yamlFile, err := ioutil.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return err
+	}
+
+	var parsedData []*eth1.Event
+	err = yaml.Unmarshal(yamlFile, &parsedData)
+	if err != nil {
+		return err
+	}
+	for _, ev := range parsedData {
+		logFields, err := handler(*ev)
+		errs := eth1.HandleEventResult(logger, *ev, logFields, err, false)
+		if len(errs) > 0 {
+			logger.Warn("could not handle some of the events during local events sync", zap.Any("errs", errs))
+			return errors.New("could not handle some of the events during local events sync")
+		}
+	}
+
+	logger.Info("managed to sync local events")
 	return nil
 }

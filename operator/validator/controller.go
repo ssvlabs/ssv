@@ -62,7 +62,6 @@ type ControllerOptions struct {
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.Beacon
-	Shares                     []ShareOptions `yaml:"Shares"`
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`

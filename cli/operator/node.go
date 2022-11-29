@@ -57,6 +57,8 @@ type config struct {
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+
+	LocalEventsPath string `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 }
 
 var cfg config
@@ -231,9 +233,21 @@ var StartNodeCmd = &cobra.Command{
 		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
-		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
-			Logger.Fatal("failed to start eth1", zap.Error(err))
+		// load & parse local events yaml if exists, otherwise sync from contract
+		if len(cfg.LocalEventsPath) > 0 {
+			if err := validator.LoadLocalEvents(
+				Logger,
+				validatorCtrl.Eth1EventHandler(false),
+				cfg.LocalEventsPath,
+			); err != nil {
+				Logger.Fatal("failed to load local events", zap.Error(err))
+			}
+		} else {
+			if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+				Logger.Fatal("failed to start eth1", zap.Error(err))
+			}
 		}
+
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
