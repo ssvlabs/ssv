@@ -14,7 +14,7 @@ import (
 
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -120,7 +120,9 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 				return
 			}
 			logger.Info("starting duty processing")
-			v.StartDuty(duty)
+			if err := v.StartDuty(duty); err != nil {
+				logger.Warn("could not start duty", zap.Error(err))
+			}
 		}()
 	} else {
 		logger.Warn("could not find validator")

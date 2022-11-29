@@ -2,12 +2,14 @@ package spectest
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {

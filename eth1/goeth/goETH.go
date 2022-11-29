@@ -172,7 +172,7 @@ func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
 	e := eth1.Event{Log: log, Name: name, Data: data}
 	_ = ec.eventsFeed.Send(&e)
 	// TODO: add trace
-	//ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
+	// ec.logger.Debug("events was sent to subscribers", zap.Int("num of subscribers", n))
 }
 
 // streamSmartContractEvents sync events history of the given contract

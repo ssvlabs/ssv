@@ -2,17 +2,17 @@ package msgqueue
 
 import (
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 // Cleaner is a function for iterating over keys and clean irrelevant ones

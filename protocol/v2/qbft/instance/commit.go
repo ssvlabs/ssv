@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -27,7 +26,6 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 	); err != nil {
 		return false, nil, nil, errors.Wrap(err, "commit msg invalid")
 	}
-	logex.GetLogger().Info("received valid commit")
 	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(signedCommit)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
@@ -139,7 +137,12 @@ func CreateCommit(state *specqbft.State, config types.IConfig, value []byte) (*s
 	return signedMsg, nil
 }
 
-func BaseCommitValidation(config types.IConfig, signedCommit *specqbft.SignedMessage, height specqbft.Height, operators []*spectypes.Operator) error {
+func BaseCommitValidation(
+	config types.IConfig,
+	signedCommit *specqbft.SignedMessage,
+	height specqbft.Height,
+	operators []*spectypes.Operator,
+) error {
 	if signedCommit.Message.MsgType != specqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
@@ -163,7 +166,14 @@ func BaseCommitValidation(config types.IConfig, signedCommit *specqbft.SignedMes
 	return nil
 }
 
-func validateCommit(config types.IConfig, signedCommit *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round, proposedMsg *specqbft.SignedMessage, operators []*spectypes.Operator) error {
+func validateCommit(
+	config types.IConfig,
+	signedCommit *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	proposedMsg *specqbft.SignedMessage,
+	operators []*spectypes.Operator,
+) error {
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return errors.Wrap(err, "invalid commit msg")
 	}

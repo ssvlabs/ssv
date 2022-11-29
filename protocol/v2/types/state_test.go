@@ -1,40 +1,41 @@
 package types
 
 import (
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestState_Decoding(t *testing.T) {
 	state := &State{
-		Share: &types.Share{
+		Share: &spectypes.Share{
 			OperatorID:      1,
 			ValidatorPubKey: []byte{1, 2, 3, 4},
-			Committee: []*types.Operator{
+			Committee: []*spectypes.Operator{
 				{
 					OperatorID: 1,
 					PubKey:     []byte{1, 2, 3, 4},
 				},
 			},
-			DomainType: types.PrimusTestnet,
+			DomainType: spectypes.PrimusTestnet,
 		},
 		ID:                []byte{1, 2, 3, 4},
 		Round:             1,
 		Height:            2,
 		LastPreparedRound: 3,
 		LastPreparedValue: []byte{1, 2, 3, 4},
-		ProposalAcceptedForCurrentRound: &qbft.SignedMessage{
-			Message: &qbft.Message{
-				MsgType:    qbft.CommitMsgType,
+		ProposalAcceptedForCurrentRound: &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
 				Height:     1,
 				Round:      2,
 				Identifier: []byte{1, 2, 3, 4},
 				Data:       []byte{1, 2, 3, 4},
 			},
 			Signature: []byte{1, 2, 3, 4},
-			Signers:   []types.OperatorID{1},
+			Signers:   []spectypes.OperatorID{1},
 		},
 	}
 
@@ -48,7 +49,7 @@ func TestState_Decoding(t *testing.T) {
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.Share.ValidatorPubKey)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.Share.Committee[0].PubKey)
 	require.EqualValues(t, 1, decodedState.Share.Committee[0].OperatorID)
-	require.EqualValues(t, types.PrimusTestnet, decodedState.Share.DomainType)
+	require.EqualValues(t, spectypes.PrimusTestnet, decodedState.Share.DomainType)
 
 	require.EqualValues(t, 3, decodedState.LastPreparedRound)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.LastPreparedValue)
@@ -57,8 +58,8 @@ func TestState_Decoding(t *testing.T) {
 	require.EqualValues(t, 1, decodedState.Round)
 
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.ProposalAcceptedForCurrentRound.Signature)
-	require.EqualValues(t, []types.OperatorID{1}, decodedState.ProposalAcceptedForCurrentRound.Signers)
-	require.EqualValues(t, qbft.CommitMsgType, decodedState.ProposalAcceptedForCurrentRound.Message.MsgType)
+	require.EqualValues(t, []spectypes.OperatorID{1}, decodedState.ProposalAcceptedForCurrentRound.Signers)
+	require.EqualValues(t, specqbft.CommitMsgType, decodedState.ProposalAcceptedForCurrentRound.Message.MsgType)
 	require.EqualValues(t, 1, decodedState.ProposalAcceptedForCurrentRound.Message.Height)
 	require.EqualValues(t, 2, decodedState.ProposalAcceptedForCurrentRound.Message.Round)
 	require.EqualValues(t, []byte{1, 2, 3, 4}, decodedState.ProposalAcceptedForCurrentRound.Message.Identifier)

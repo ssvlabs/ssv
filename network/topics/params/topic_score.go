@@ -42,7 +42,7 @@ type NetworkOpts struct {
 	// Subnets is the number of subnets in the network
 	Subnets int
 	//// Groups is the amount of groups used in the network
-	//Groups int
+	// Groups int
 	// OneEpochDuration is used as a time-frame length to control scoring in a dynamic way
 	OneEpochDuration time.Duration
 	// TotalTopicsWeight is the weight of all the topics in the network

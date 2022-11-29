@@ -2,13 +2,15 @@ package tasks
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestExecWithTimeout(t *testing.T) {
@@ -36,6 +38,7 @@ func TestExecWithTimeout(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			var count uint32
 			var stopped sync.WaitGroup

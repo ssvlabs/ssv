@@ -3,23 +3,22 @@ package operator
 import (
 	"context"
 	"fmt"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	storage2 "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -64,7 +63,7 @@ type operatorNode struct {
 	qbftStorage    qbftstorageprotocol.QBFTStore
 	eth1Client     eth1.Client
 	dutyCtrl       duties.DutyController
-	//fork           *forks.Forker
+	// fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
 
@@ -74,7 +73,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	qbftStorage := storage2.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
 
 	node := &operatorNode{
 		context:        opts.Context,

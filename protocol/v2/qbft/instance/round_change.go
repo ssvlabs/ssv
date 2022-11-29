@@ -8,7 +8,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (i *Instance) uponRoundChange(instanceStartValue []byte, signedRoundChange *specqbft.SignedMessage, roundChangeMsgContainer *specqbft.MsgContainer, valCheck specqbft.ProposedValueCheckF) error {
+func (i *Instance) uponRoundChange(
+	instanceStartValue []byte,
+	signedRoundChange *specqbft.SignedMessage,
+	roundChangeMsgContainer *specqbft.MsgContainer,
+	valCheck specqbft.ProposedValueCheckF,
+) error {
 	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, signedRoundChange.Message.Round); err != nil {
 		return errors.Wrap(err, "round change msg invalid")
 	}
@@ -163,7 +168,14 @@ func isReceivedProposalJustificationForLeadingRound(state *specqbft.State, confi
 }
 
 // isReceivedProposalJustification - returns nil if we have a quorum of round change msgs and highest justified value
-func isReceivedProposalJustification(state *specqbft.State, config types.IConfig, roundChanges, prepares []*specqbft.SignedMessage, newRound specqbft.Round, value []byte, valCheck specqbft.ProposedValueCheckF) error {
+func isReceivedProposalJustification(
+	state *specqbft.State,
+	config types.IConfig,
+	roundChanges, prepares []*specqbft.SignedMessage,
+	newRound specqbft.Round,
+	value []byte,
+	valCheck specqbft.ProposedValueCheckF,
+) error {
 	if err := isProposalJustification(
 		state,
 		config,

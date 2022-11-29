@@ -19,7 +19,7 @@ func TestForkV1_ValidatorTopicID(t *testing.T) {
 		t.Log("topic:", topic)
 		require.Greater(t, len(topic), 0)
 		require.Greater(t, len(topic[0]), 0)
-		//require.Equal(t, 0, strings.Index(topic[0], "ssv.subnet."))
+		// require.Equal(t, 0, strings.Index(topic[0], "ssv.subnet."))
 	})
 
 	t.Run("deterministic", func(t *testing.T) {

@@ -3,7 +3,8 @@ package msgqueue
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
@@ -63,7 +64,7 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 			H:    h,
 			Cmt:  mt,
 		})
-		//res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
+		// res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
 	return res
 }
@@ -96,7 +97,7 @@ func DecidedMsgIndex(mid string) Index {
 		Cmt:  specqbft.CommitMsgType,
 		H:    -1,
 	}
-	//return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
+	// return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 // getRound returns the round of the message if applicable

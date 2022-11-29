@@ -1,10 +1,11 @@
 package qbft
 
 import (
-	"github.com/bloxapp/ssv-spec/qbft"
+	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
@@ -17,32 +18,32 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 		}
 
 		switch msg.Message.MsgType {
-		case qbft.RoundChangeMsgType:
-			rc := qbft.RoundChangeData{}
+		case specqbft.RoundChangeMsgType:
+			rc := specqbft.RoundChangeData{}
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}
 			if err := rc.Validate(); err != nil {
 				lastErr = err
 			}
-		case qbft.CommitMsgType:
-			rc := qbft.CommitData{}
+		case specqbft.CommitMsgType:
+			rc := specqbft.CommitData{}
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}
 			if err := rc.Validate(); err != nil {
 				lastErr = err
 			}
-		case qbft.PrepareMsgType:
-			rc := qbft.PrepareData{}
+		case specqbft.PrepareMsgType:
+			rc := specqbft.PrepareData{}
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}
 			if err := rc.Validate(); err != nil {
 				lastErr = err
 			}
-		case qbft.ProposalMsgType:
-			rc := qbft.ProposalData{}
+		case specqbft.ProposalMsgType:
+			rc := specqbft.ProposalData{}
 			if err := rc.Decode(msg.Message.Data); err != nil {
 				lastErr = err
 			}

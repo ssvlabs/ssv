@@ -6,7 +6,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSSVShareMetadata_BelongsToOperatorID(t *testing.T) {

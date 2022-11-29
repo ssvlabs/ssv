@@ -112,7 +112,7 @@ func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 				return err
 			}
 			cp = make([]byte, len(value))
-			copy(cp, value[:])
+			copy(cp, value)
 			if err := iterator(basedb.Obj{
 				Key:   k,
 				Value: cp,

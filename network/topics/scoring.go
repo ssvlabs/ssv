@@ -23,7 +23,7 @@ func DefaultScoringConfig() *ScoringConfig {
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
-			//scores := []*peers.NodeScore{
+			// scores := []*peers.NodeScore{
 			//	{
 			//		Name:  "PS_Score",
 			//		Value: peerScores.Score,
@@ -38,10 +38,10 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			logger.Debug("peer scores", zap.String("peer", pid.String()),
 				zap.Any("peerScores", peerScores))
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
-			//err := scoreIdx.Score(pid, scores...)
-			//if err != nil {
+			// err := scoreIdx.Score(pid, scores...)
+			// if err != nil {
 			//	logger.Warn("could not score peer", zap.String("peer", pid.String()), zap.Error(err))
-			//} else {
+			// } else {
 			//	logger.Debug("peer scores were updated", zap.String("peer", pid.String()),
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}

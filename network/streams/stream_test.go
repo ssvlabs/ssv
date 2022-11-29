@@ -26,7 +26,7 @@ func TestStream(t *testing.T) {
 		s := NewStream(stream)
 		defer s.Close()
 		<-time.After(timeout * 3)
-		//require.Error(t, s.WriteWithTimeout([]byte("xxx"), timeout))
+		// require.Error(t, s.WriteWithTimeout([]byte("xxx"), timeout))
 	})
 
 	hosts[2].SetStreamHandler(prot, func(stream core.Stream) {

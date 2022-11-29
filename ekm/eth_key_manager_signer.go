@@ -21,8 +21,8 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -82,7 +82,7 @@ func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty 
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get domain for signing")
 	}
-	root, err := km.signingUtils.ComputeSigningRoot(data, domain[:])
+	root, err := km.signingUtils.ComputeSigningRoot(data, domain)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
@@ -119,16 +119,16 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	//sig := k.SignByte(r[:])
+	// sig := k.SignByte(r[:])
 	sig, err := account.ValidationKeySign(r[:])
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign message")
 	}
 	blsSig := spec.BLSSignature{}
-	//copy(blsSig[:], sig.Serialize())
+	// copy(blsSig[:], sig.Serialize())
 	copy(blsSig[:], sig)
 
-	//return sig.Serialize(), r[:], nil
+	// return sig.Serialize(), r[:], nil
 	return sig, r[:], nil
 }
 

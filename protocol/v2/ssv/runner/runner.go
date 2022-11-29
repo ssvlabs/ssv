@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
@@ -25,6 +24,7 @@ func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	return dr[role]
 }
 
+// Identifiers gathers identifiers of all shares.
 func (dr DutyRunners) Identifiers() []spectypes.MessageID {
 	var identifiers []spectypes.MessageID
 	for role, r := range dr {
@@ -51,7 +51,6 @@ type Runner interface {
 	spectypes.Root
 	Getters
 
-	Init() error
 	StartNewDuty(duty *spectypes.Duty) error
 	HasRunningDuty() bool
 	ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
@@ -70,10 +69,6 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 }
 
-func (b *BaseRunner) Init() error {
-	return nil
-}
-
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
 		return err
@@ -88,9 +83,9 @@ func (b *BaseRunner) canStartNewDuty() error {
 	}
 
 	// check if instance running first as we can't start new duty if it does
-	if instance := b.State.RunningInstance; instance != nil {
+	if b.State.RunningInstance != nil {
 		// check consensus decided
-		if decided, _ := instance.IsDecided(); !decided {
+		if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
 			return errors.New("consensus on duty is running")
 		}
 	}
@@ -126,8 +121,12 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 }
 
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
-	prevDecided := false
-	if b.HasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
+	if err := b.validateConsensusMsg(msg); err != nil {
+		return false, nil, errors.Wrap(err, "invalid consensus message")
+	}
+
+	var prevDecided bool
+	if b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
@@ -136,10 +135,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, errors.Wrap(err, "failed to process consensus msg")
 	}
 
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	if !b.HasRunningDuty() {
-		return false, nil, err
-	}
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
 	} else {
@@ -166,7 +161,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 
 	runner.GetBaseRunner().State.DecidedValue = decidedValue
-	runner.GetBaseRunner().State.LastHeight = decidedMsg.Message.Height
 
 	return true, decidedValue, nil
 }
@@ -176,13 +170,11 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPar
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
-	logex.GetLogger().Info("received valid partial signature")
 	roots := make([][]byte, 0)
 	anyQuorum := false
 	for _, msg := range signedMsg.Message.Messages {
 		prevQuorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
 
-		logex.GetLogger().Info("signature added to container")
 		if err := b.State.PostConsensusContainer.AddSignature(msg); err != nil {
 			return false, nil, errors.Wrap(err, "could not add partial post consensus signature")
 		}
@@ -193,7 +185,6 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPar
 
 		quorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
 		if quorum {
-			logex.GetLogger().Info("signature quorum achieved")
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
 		}
@@ -235,6 +226,13 @@ func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.S
 	}
 
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+}
+
+func (b *BaseRunner) validateConsensusMsg(msg *specqbft.SignedMessage) error {
+	if !b.HasRunningDuty() {
+		return errors.New("no running duty")
+	}
+	return nil
 }
 
 func (b *BaseRunner) validatePostConsensusMsg(msg *specssv.SignedPartialSignatureMessage) error {

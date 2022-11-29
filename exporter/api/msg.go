@@ -5,7 +5,7 @@ import (
 	"github.com/pkg/errors"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/message"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 // Message represents an exporter message

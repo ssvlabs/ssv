@@ -167,7 +167,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		}
 	}
 	r.GetState().Finished = true
-	r.GetState().LastSlot = r.GetState().DecidedValue.Duty.Slot
 
 	return nil
 }
@@ -238,10 +237,6 @@ func (r *AggregatorRunner) GetShare() *spectypes.Share {
 
 func (r *AggregatorRunner) GetState() *State {
 	return r.BaseRunner.State
-}
-
-func (r *AggregatorRunner) Init() error {
-	return r.BaseRunner.Init()
 }
 
 func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {

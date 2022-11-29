@@ -4,21 +4,23 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"testing"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/google/uuid"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"math/big"
-	"testing"
+
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func _byteArray(input string) []byte {
@@ -141,7 +143,9 @@ func TestWalletStorage(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
+
 			wallet, storage := testWallet(t)
 			defer storage.db.Close()
 
@@ -236,6 +240,7 @@ func TestSavingProposal(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
 			err := storage.SaveHighestProposal(test.account.ValidatorPublicKey(), test.proposal)
@@ -307,6 +312,7 @@ func TestSavingAttestation(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
 			err := storage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
@@ -378,6 +384,7 @@ func TestSavingHighestAttestation(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
 			err := storage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)

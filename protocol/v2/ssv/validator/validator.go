@@ -2,34 +2,35 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/ibft/storage/v2"
-	instance2 "github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/p2p"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specp2p "github.com/bloxapp/ssv-spec/p2p"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v1/message"
-	v1types "github.com/bloxapp/ssv/protocol/v1/types"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+// Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Logger      *zap.Logger
-	Network     qbft.Network
-	Beacon      ssv.BeaconNode
-	Storage     *storage.QBFTSyncMap
+	Network     specqbft.Network
+	Beacon      specssv.BeaconNode
+	Storage     *storage.QBFTStores
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
-	Mode        ValidatorMode
+	Mode        Mode
+	FullNode    bool
 }
 
 func (o *Options) defaults() {
@@ -57,11 +58,11 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 
 	Share  *types.SSVShare
-	Beacon ssv.BeaconNode
+	Beacon specssv.BeaconNode
 	Signer spectypes.KeyManager
 
-	Storage *storage.QBFTSyncMap
-	Network qbft.Network
+	Storage *storage.QBFTStores
+	Network specqbft.Network
 
 	Q msgqueue.MsgQueue
 
@@ -70,13 +71,15 @@ type Validator struct {
 	State uint32
 }
 
-type ValidatorMode int32
+// Mode defines a mode Validator operates in.
+type Mode int32
 
-var (
-	ModeRW ValidatorMode = 0
-	ModeR  ValidatorMode = 1
+const (
+	ModeRW Mode = iota
+	ModeR
 )
 
+// NewValidator creates a new instance of Validator.
 func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
@@ -91,7 +94,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  v1types.GetDefaultDomain(),
+		DomainType:  types.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -106,9 +109,10 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	return v
 }
 
+// Start starts a Validator.
 func (v *Validator) Start() error {
 	if atomic.CompareAndSwapUint32(&v.State, NotStarted, Started) {
-		n, ok := v.Network.(p2p.Subscriber)
+		n, ok := v.Network.(specp2p.Subscriber)
 		if !ok {
 			return nil
 		}
@@ -150,6 +154,7 @@ func (v *Validator) sync(mid spectypes.MessageID) {
 	}
 }
 
+// Stop stops a Validator.
 func (v *Validator) Stop() error {
 	v.cancel()
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
@@ -162,6 +167,7 @@ func (v *Validator) Stop() error {
 	return nil
 }
 
+// HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 	if atomic.LoadInt32(&v.mode) == int32(ModeR) {
 		err := v.ProcessMessage(msg)
@@ -201,18 +207,18 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		signedMsg := &qbft.SignedMessage{}
+		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg := &ssv.SignedPartialSignatureMessage{}
+		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 
-		if signedMsg.Message.Type == ssv.PostConsensusPartialSig {
+		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			v.logger.Info("process post consensus")
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
@@ -250,7 +256,7 @@ func (v *Validator) loadLastHeight(identifier spectypes.MessageID) error {
 	if r == nil {
 		return errors.New("runner is nil")
 	}
-	instance := instance2.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
+	instance := instance.NewInstanceFromState(r.GetBaseRunner().QBFTController.GetConfig(), highestState)
 	r.GetBaseRunner().QBFTController.Height = instance.GetHeight()
 	r.GetBaseRunner().QBFTController.StoredInstances.AddNewInstance(instance)
 	v.logger.Info("highest instance loaded", zap.String("role", identifier.GetRoleType().String()), zap.Int64("h", int64(instance.GetHeight())))

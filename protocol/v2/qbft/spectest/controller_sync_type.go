@@ -7,16 +7,16 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
-	identifier := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := utils.TestingConfig(testingutils.Testing4SharesSet(), identifier.GetRoleType())
-	contr := NewTestingQBFTController(
+	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
+	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
+	contr := utils.NewTestingQBFTController(
 		identifier[:],
-		testingutils.TestingShare(testingutils.Testing4SharesSet()),
+		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,
 	)
 
@@ -33,7 +33,7 @@ func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 		}
 	}
 
-	syncedDecidedCnt := config.GetNetwork().(*testingutils.TestingNetwork).SyncHighestDecidedCnt
+	syncedDecidedCnt := config.GetNetwork().(*spectestingutils.TestingNetwork).SyncHighestDecidedCnt
 	require.EqualValues(t, test.SyncDecidedCalledCnt, syncedDecidedCnt)
 
 	r, err := contr.GetRoot()

@@ -2,14 +2,16 @@ package streams
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
+	"time"
+
 	core "github.com/libp2p/go-libp2p-core"
 	"github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
+
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 // StreamResponder abstracts the stream access with a simpler interface that accepts only the data to send
@@ -82,22 +84,24 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 
 	protocolID := stream.Protocol()
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
-	//logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
+	// logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
+		//TODO: remove line below after TODO inside the if-statement is resolved
+		// nolint: staticcheck
 		if err := s.Close(); err != nil {
 			// TODO (amir): investigate
-			//logger.Warn("could not close stream", zap.Error(err))
+			// logger.Warn("could not close stream", zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
-		//logger.Warn("could not read stream msg", zap.Error(err))
+		// logger.Warn("could not read stream msg", zap.Error(err))
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
 	return data, func(res []byte) error {
 		if err := s.WriteWithTimeout(res, n.requestTimeout); err != nil {
-			//logger.Warn("could not write to stream", zap.Error(err))
+			// logger.Warn("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
 		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()

@@ -13,7 +13,7 @@ func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
 }
 
 //// forkVersionFilter checks if the node has the same fork version
-//func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
+// func (dvs *DiscV5Service) forkVersionFilter(node *enode.Node) bool {
 //	forkv, err := records.GetForkVersionEntry(node.Record())
 //	if err != nil {
 //		dvs.logger.Warn("could not read fork version from node record", zap.Error(err))
@@ -62,7 +62,7 @@ func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool
 			return false
 		}
 		shared := records.SharedSubnets(dvs.subnets, nodeSubnets, n)
-		//dvs.logger.Debug("shared subnets", zap.Ints("shared", shared),
+		// dvs.logger.Debug("shared subnets", zap.Ints("shared", shared),
 		//	zap.String("node", node.String()))
 
 		return len(shared) >= n

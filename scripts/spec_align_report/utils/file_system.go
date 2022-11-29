@@ -37,8 +37,11 @@ func Copy(srcPath, dstPath string) (err error) {
 	return nil
 }
 
-func Mkdir(path string)(err error) {
-	os.RemoveAll(path)
+func Mkdir(path string, clean bool) (err error) {
+	if clean == true {
+		os.RemoveAll(path)
+	}
+
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(path, os.ModePerm)
 		if err != nil {
