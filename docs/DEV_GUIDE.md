@@ -93,6 +93,7 @@ In order to run a local environment, install the following:
 * go (1.17)
 * docker
 * make
+* yq
 
 #### Clone Repository
 
