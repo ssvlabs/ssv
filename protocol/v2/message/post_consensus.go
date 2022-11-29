@@ -21,10 +21,6 @@ func ValidatePartialSigMsg(signedMsg *specssv.SignedPartialSignatureMessage, com
 	}
 
 	for _, msg := range signedMsg.Message.Messages {
-		if slot != msg.Slot {
-			return errors.New("wrong slot")
-		}
-
 		if err := verifyBeaconPartialSignature(msg, committee); err != nil {
 			return errors.Wrap(err, "could not verify beacon partial Signature")
 		}

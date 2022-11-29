@@ -3,7 +3,6 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"reflect"
 	"testing"
 
@@ -12,6 +11,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -28,6 +29,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		err := contr.StartNewInstance(runData.InputValue)
 		if err != nil {
 			lastErr = err
+		} else if runData.ExpectedTimerState != nil {
+			if timer, ok := config.GetTimer().(*spectestingutils.TestQBFTTimer); ok {
+				require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
+				require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
+			}
 		}
 
 		decidedCnt := 0
@@ -46,21 +52,6 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 		require.EqualValues(t, runData.DecidedCnt, decidedCnt)
 
-		if runData.SavedDecided != nil {
-			// test saved to storage
-			decided, err := config.GetStorage().GetHighestDecided(identifier[:])
-			require.NoError(t, err)
-			require.NotNil(t, decided)
-			r1, err := decided.GetRoot()
-			require.NoError(t, err)
-
-			r2, err := runData.SavedDecided.GetRoot()
-			require.NoError(t, err)
-
-			require.EqualValues(t, r2, r1)
-			require.EqualValues(t, runData.SavedDecided.Signers, decided.Signers)
-			require.EqualValues(t, runData.SavedDecided.Signature, decided.Signature)
-		}
 		if runData.BroadcastedDecided != nil {
 			// test broadcasted
 			broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs

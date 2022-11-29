@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/patrickmn/go-cache"
@@ -26,19 +25,6 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	//}
 	// return state.LastHeight
 	return r.GetBaseRunner().QBFTController.Height
-}
-
-// GetLastSlot returns the last slot for the given identifier
-func (v *Validator) GetLastSlot(identifier spectypes.MessageID) spec.Slot {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return spec.Slot(0)
-	}
-	state := r.GetBaseRunner().State
-	if state == nil {
-		return spec.Slot(0)
-	}
-	return state.StartingDuty.Slot
 }
 
 // MessageHandler process the msg. return error if exist
@@ -83,14 +69,13 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		//	time.Sleep(interval)
 		//	continue
 		//}
-		lastSlot := v.GetLastSlot(msgID)
 		lastHeight := v.GetLastHeight(msgID)
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			logger.Debug("process higher height is done")
 			continue
 		}
-		if processed := v.processNoRunningInstance(handler, msgID, identifier, lastHeight, lastSlot); processed {
+		if processed := v.processNoRunningInstance(handler, msgID, identifier, lastHeight); processed {
 			logger.Debug("process none running instance is done")
 			continue
 		}
@@ -105,9 +90,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
 		cleaned := v.Q.Clean(func(index msgqueue.Index) bool {
-			oldHeight := index.H >= 0 && index.H <= (lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
-			oldSlot := index.S > 0 && index.S < lastSlot
-			return oldHeight || oldSlot
+			return index.H <= (lastHeight - 2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
 		if cleaned > 0 {
 			logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
@@ -120,7 +103,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
-func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spectypes.MessageID, identifier string, lastHeight specqbft.Height, lastSlot spec.Slot) bool {
+func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spectypes.MessageID, identifier string, lastHeight specqbft.Height) bool {
 	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
 		return false // only pop when already decided
@@ -128,11 +111,10 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 
 	logger := v.logger.With(
 		// zap.String("sig state", c.SignatureState.getState().toString()),
-		zap.Int32("height", int32(lastHeight)),
-		zap.Int32("slot", int32(lastSlot)))
+		zap.Int32("height", int32(lastHeight)))
 
 	iterator := msgqueue.NewIndexIterator().Add(func() msgqueue.Index {
-		return msgqueue.SignedPostConsensusMsgIndex(identifier, lastSlot)
+		return msgqueue.SignedPostConsensusMsgIndex(identifier)
 	}, func() msgqueue.Index {
 		return msgqueue.DecidedMsgIndex(identifier)
 	}, func() msgqueue.Index {

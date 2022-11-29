@@ -2,10 +2,11 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"sync/atomic"
 	"time"
+
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 
 	specp2p "github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -86,7 +87,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	var q msgqueue.MsgQueue
 	if options.Mode == ModeRW {
-		indexers := msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+		indexers := msgqueue.WithIndexers( /*msgqueue.TestMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 

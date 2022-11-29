@@ -2,9 +2,11 @@ package msgqueue
 
 import (
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -22,7 +24,7 @@ func TestIndexIterator(t *testing.T) {
 		})
 	}
 
-	q, err := New(logger, WithIndexers(DefaultMsgIndexer(),
+	q, err := New(logger, WithIndexers(TestMsgIndexer(),
 		dummyIndexer("data-2"),
 		dummyIndexer("data-3"),
 		dummyIndexer("data-8")))
@@ -47,7 +49,7 @@ func dummyIndex(msg *spectypes.SSVMessage) Index {
 	return Index{
 		Mt:  msg.GetType(),
 		ID:  msg.GetID().String(),
-		H:   -1,
+		H:   qbft.FirstHeight,
 		Cmt: -1,
 	}
 }

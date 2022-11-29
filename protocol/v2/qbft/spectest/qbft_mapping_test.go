@@ -29,7 +29,7 @@ func TestQBFTMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/v0.2.7/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
