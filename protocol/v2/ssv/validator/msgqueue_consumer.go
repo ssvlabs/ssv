@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -13,22 +14,26 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
-// GetLastHeight returns the last height for the given identifier
-func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Height(0)
-	}
-	// state := r.GetBaseRunner().State
-	// if state == nil {
-	//	return specqbft.Height(0)
-	//}
-	// return state.LastHeight
-	return r.GetBaseRunner().QBFTController.Height
-}
-
 // MessageHandler process the msg. return error if exist
 type MessageHandler func(msg *spectypes.SSVMessage) error
+
+// HandleMessage handles a spectypes.SSVMessage.
+func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
+	if atomic.LoadUint32(&v.mode) == uint32(ModeR) {
+		err := v.ProcessMessage(msg)
+		if err != nil {
+			v.logger.Warn("could not handle msg", zap.Error(err))
+		}
+		return
+	}
+	fields := []zap.Field{
+		zap.Int("queue_len", v.Q.Len()),
+		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+		zap.String("msgID", msg.MsgID.String()),
+	}
+	v.logger.Debug("got message, add to queue", fields...)
+	v.Q.Add(msg)
+}
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
@@ -100,6 +105,20 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	logger.Warn("queue consumer is closed")
 
 	return nil
+}
+
+// GetLastHeight returns the last height for the given identifier
+func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return specqbft.Height(0)
+	}
+	// ctrl := r.GetBaseRunner().QBFTController
+	// if ctrl == nil {
+	//	return specqbft.Height(0)
+	//}
+	// return state.LastHeight
+	return r.GetBaseRunner().QBFTController.Height
 }
 
 // processNoRunningInstance pop msg's only if no current instance running
