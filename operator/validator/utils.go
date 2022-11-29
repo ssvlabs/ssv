@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/hex"
 	"io/ioutil"
+	"path/filepath"
 	"strings"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -127,7 +128,7 @@ func SetOperatorPublicKeys(
 }
 
 func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {
-	yamlFile, err := ioutil.ReadFile(path)
+	yamlFile, err := ioutil.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return err
 	}
