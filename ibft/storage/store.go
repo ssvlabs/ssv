@@ -223,7 +223,7 @@ func (i *ibftStorage) GetInstance(identifier []byte, from specqbft.Height, to sp
 		if found {
 			state := &specqbft.State{}
 			if err := state.Decode(val); err != nil {
-				return states, errors.Wrap(err, "could not unmarshal signed message v1")
+				return states, errors.Wrap(err, "could not unmarshal state")
 			}
 
 			states = append(states, state)
