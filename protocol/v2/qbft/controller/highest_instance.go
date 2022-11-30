@@ -5,7 +5,22 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (c *Controller) GetHighestInstance(identifier []byte) (*instance.Instance, error) {
+func (c *Controller) LoadHighestInstance(identifier []byte) error {
+	highestInstance, err := c.getHighestInstance(identifier[:])
+	if err != nil {
+		return err
+	}
+	if highestInstance == nil {
+		return nil
+	}
+	c.Height = highestInstance.GetHeight()
+	c.StoredInstances = InstanceContainer{
+		0: highestInstance,
+	}
+	return nil
+}
+
+func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, error) {
 	state, err := c.config.GetStorage().GetHighestInstance(identifier)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch highest instance")

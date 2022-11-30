@@ -22,20 +22,6 @@ func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	return dr[role]
 }
 
-// Identifiers gathers identifiers of all shares.
-func (dr DutyRunners) Identifiers() []spectypes.MessageID {
-	var identifiers []spectypes.MessageID
-	for role, r := range dr {
-		share := r.GetBaseRunner().Share
-		if share == nil { // TODO: handle missing share?
-			continue
-		}
-		i := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
-		identifiers = append(identifiers, i)
-	}
-	return identifiers
-}
-
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() specssv.BeaconNode
