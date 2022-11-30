@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/attestantio/go-eth2-client v0.11.3
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
-	github.com/bloxapp/ssv-spec v0.2.8-0.20221127111311-7e96c8b78191 // v0.2.6
+	github.com/bloxapp/ssv-spec v0.2.8-0.20221127111311-7e96c8b78191
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.10.18
@@ -40,9 +40,8 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/zap v1.19.1
 	google.golang.org/grpc v1.40.0
+	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
-
-require gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 
 require (
 	github.com/BurntSushi/toml v0.3.1 // indirect
