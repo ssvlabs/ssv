@@ -218,7 +218,6 @@ func (i *ibftStorage) GetInstance(identifier []byte, from specqbft.Height, to sp
 	states := make([]*specqbft.State, 0)
 
 	for seq := from; seq <= to; seq++ {
-		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
 		val, found, err := i.get(instanceState, identifier[:], uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
 			return states, err
