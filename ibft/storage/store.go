@@ -205,9 +205,7 @@ func (i *ibftStorage) SaveInstance(state *specqbft.State) error {
 		return errors.Wrap(err, "marshaling error")
 	}
 
-	k := i.key(instanceState, uInt64ToByteSlice(uint64(state.Height)))
-	key := append(state.ID, k...)
-	return i.save(value, instanceState, key)
+	return i.save(value, instanceState, state.ID, uInt64ToByteSlice(uint64(state.Height)))
 }
 
 // GetInstance returns the state for the instance
