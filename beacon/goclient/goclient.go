@@ -33,18 +33,29 @@ const (
 type beaconNodeStatus int32
 
 var (
+	allMetrics = []prometheus.Collector{
+		metricsBeaconNodeStatus,
+		metricsAttestationDataRequest,
+	}
 	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:beacon:node_status",
 		Help: "Status of the connected beacon node",
 	})
+	metricsAttestationDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:beacon:attestation_data_request_duration_seconds",
+		Help:    "Attestation data request duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{})
 	statusUnknown beaconNodeStatus = 0
 	statusSyncing beaconNodeStatus = 1
 	statusOK      beaconNodeStatus = 2
 )
 
 func init() {
-	if err := prometheus.Register(metricsBeaconNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
+	for _, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			log.Println("could not register prometheus collector")
+		}
 	}
 }
 

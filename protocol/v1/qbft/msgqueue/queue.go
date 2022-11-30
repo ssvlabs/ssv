@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -73,7 +74,8 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 
 // MsgContainer is a container for a message
 type MsgContainer struct {
-	msg *spectypes.SSVMessage
+	msg     *spectypes.SSVMessage
+	addTime time.Time
 }
 
 // Index is a struct representing an index in msg queue
@@ -110,7 +112,8 @@ func (q *queue) Add(msg *spectypes.SSVMessage) {
 
 	indices := q.indexMessage(msg)
 	mc := &MsgContainer{
-		msg: msg,
+		msg:     msg,
+		addTime: time.Now(),
 	}
 	for _, idx := range indices {
 		if idx == (Index{}) {
@@ -231,6 +234,9 @@ func (q *queue) Pop(n int, idx Index) []*spectypes.SSVMessage {
 	for _, mc := range msgContainers {
 		if mc.msg != nil {
 			msgs = append(msgs, mc.msg)
+			metricsMsgQProcessingDuration.
+				WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).
+				Observe(time.Since(mc.addTime).Seconds())
 		}
 	}
 	if nMsgs := len(msgs); nMsgs > 0 {

@@ -2,15 +2,18 @@ package validator
 
 import (
 	"encoding/hex"
+	"time"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 )
 
 func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *spectypes.Duty) (controller.IController, int, []byte, error) {
-	var inputByts []byte
+	var inputBytes []byte
 	var err error
 
 	qbftCtrl, ok := v.ibfts[duty.Type]
@@ -25,12 +28,13 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 			return nil, 0, nil, errors.Wrap(err, "failed to get attestation data")
 		}
 		v.logger.Debug("attestation data", zap.Any("attData", attData))
+
 		// TODO(olegshmuelov): use SSZ encoding
 		input := &spectypes.ConsensusData{
 			Duty:            duty,
 			AttestationData: attData,
 		}
-		inputByts, err = input.Encode()
+		inputBytes, err = input.Encode()
 		if err != nil {
 			return nil, 0, nil, errors.Wrap(err, "could not encode ConsensusData")
 		}
@@ -38,6 +42,8 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 	default:
 		return nil, 0, nil, errors.Errorf("unknown role: %s", duty.Type.String())
 	}
+
+	consensusStartTime := time.Now()
 
 	// calculate next seq
 	height, err := qbftCtrl.NextHeightNumber()
@@ -49,7 +55,7 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 	result, err := qbftCtrl.StartInstance(instance.ControllerStartInstanceOptions{
 		Logger:          logger,
 		Height:          height,
-		Value:           inputByts,
+		Value:           inputBytes,
 		RequireMinPeers: true,
 	}, nil)
 	if err != nil {
@@ -66,6 +72,9 @@ func (v *Validator) comeToConsensusOnInputValue(logger *zap.Logger, duty *specty
 	if err != nil {
 		return nil, 0, nil, errors.Wrap(err, "could not get commit data")
 	}
+
+	metricsDurationConsensus.WithLabelValues(v.Share.PublicKey.SerializeToHexStr()).
+		Observe(time.Since(consensusStartTime).Seconds())
 
 	return qbftCtrl, len(result.Msg.Signers), commitData.Data, nil
 }

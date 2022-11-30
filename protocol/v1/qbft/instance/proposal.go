@@ -2,6 +2,7 @@ package instance
 
 import (
 	"fmt"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -73,6 +74,8 @@ func (i *Instance) UponProposalMsg() pipelines.SignedMessagePipeline {
 
 		// mark state
 		i.ProcessStageChange(qbft.RoundStateProposal)
+		i.observeStageDurationMetric("proposal", time.Since(i.stageStartTime).Seconds())
+		i.stageStartTime = time.Now()
 
 		// broadcast prepare msg
 		broadcastMsg, err := i.GeneratePrepareMessage(proposalData.Data)

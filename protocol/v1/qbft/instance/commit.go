@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -80,6 +81,8 @@ func (i *Instance) uponCommitMsg() pipelines.SignedMessagePipeline {
 			i.decidedMsg = agg
 			// mark instance commit
 			i.ProcessStageChange(qbft.RoundStateDecided)
+			i.observeStageDurationMetric("commit", time.Since(i.stageStartTime).Seconds())
+			i.stageStartTime = time.Now()
 		})
 
 		return onceErr

@@ -7,7 +7,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -16,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/instance/leader/roundrobin"
 	"github.com/bloxapp/ssv/protocol/v1/qbft/msgqueue"
+	"github.com/bloxapp/ssv/protocol/v1/qbft/validation/signedmsg"
 	"github.com/bloxapp/ssv/protocol/v1/sync/changeround"
 )
 

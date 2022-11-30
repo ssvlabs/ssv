@@ -8,7 +8,14 @@ import (
 )
 
 var (
-	// metricsCurrentSequence for current instance
+	allMetrics = []prometheus.Collector{
+		metricsCurrentSequence,
+		metricsRunningIBFTsCount,
+		metricsRunningIBFTs,
+		metricsSignatureCollectionDuration,
+		metricsAttestationSubmissionDuration,
+		metricsAttestationFullFlowDuration,
+	}
 	metricsCurrentSequence = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:ibft_current_sequence",
 		Help: "The highest decided sequence number",
@@ -21,17 +28,28 @@ var (
 		Name: "ssv:validator:running_ibfts_count",
 		Help: "Count running IBFTs by validator pub key",
 	}, []string{"pubKey"})
+	metricsSignatureCollectionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:signature_collection_duration_seconds",
+		Help:    "Signature collection duration (seconds)",
+		Buckets: []float64{0.2, 0.5, 1, 1.5, 2, 3, 5},
+	}, []string{"pubKey"})
+	metricsAttestationSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:attestation_submission_duration_seconds",
+		Help:    "Attestation duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"pubKey"})
+	metricsAttestationFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:validator:attestation_full_flow_duration_seconds",
+		Help:    "Attestation full flow duration (seconds)",
+		Buckets: []float64{0.5, 1, 2, 3, 4, 10},
+	}, []string{"pubKey"})
 )
 
 func init() {
-	if err := prometheus.Register(metricsCurrentSequence); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTsCount); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRunningIBFTs); err != nil {
-		log.Println("could not register prometheus collector")
+	for _, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			log.Println("could not register prometheus collector")
+		}
 	}
 }
 
