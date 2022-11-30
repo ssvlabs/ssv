@@ -132,11 +132,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
-	err = tc.Publish(ctx, data)
-	if err == nil {
-		metricPubsubOutbound.WithLabelValues(name).Inc()
-	}
-	return err
+	return tc.Publish(ctx, data)
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic

@@ -3,8 +3,13 @@ package topics
 import (
 	"context"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/pkg/errors"
 	"sync"
 	"sync/atomic"
+)
+
+const (
+	publishLimit = int32(32)
 )
 
 type topicContainer struct {
@@ -12,7 +17,8 @@ type topicContainer struct {
 	sub    *pubsub.Subscription
 	locker *sync.Mutex
 	// count is the number of subscriptions made for this topic
-	subsCount int32
+	subsCount  int32
+	activePubs int32
 }
 
 func newTopicContainer() *topicContainer {
@@ -44,6 +50,33 @@ func (tc *topicContainer) decSubCount() int32 {
 }
 
 func (tc *topicContainer) Publish(ctx context.Context, data []byte) error {
+	if atomic.AddInt32(&tc.activePubs, 1) > publishLimit {
+		defer atomic.AddInt32(&tc.activePubs, -1)
+		return errors.New("could not publish msg as outbound q is full")
+	}
+	go func() {
+		topic := tc.name()
+		defer atomic.AddInt32(&tc.activePubs, -1)
+		err := tc.publish(ctx, data)
+		// TODO: log error?
+		if err == nil {
+			metricPubsubOutbound.WithLabelValues(topic).Inc()
+		}
+	}()
+	return nil
+}
+
+func (tc *topicContainer) name() string {
+	tc.locker.Lock()
+	defer tc.locker.Unlock()
+
+	if tc.topic == nil {
+		return ""
+	}
+	return tc.topic.String()
+}
+
+func (tc *topicContainer) publish(ctx context.Context, data []byte) error {
 	tc.locker.Lock()
 	defer tc.locker.Unlock()
 

@@ -8,18 +8,18 @@ import (
 
 // QBFTStores wraps sync map with cast functions to qbft store
 type QBFTStores struct {
-	m *sync.Map
+	m sync.Map
 }
 
 func NewStores() *QBFTStores {
 	return &QBFTStores{
-		m: &sync.Map{},
+		m: sync.Map{},
 	}
 }
 
 // Get store from sync map by role type
-func (m *QBFTStores) Get(role types.BeaconRole) qbftstorage.QBFTStore {
-	s, ok := m.m.Load(role)
+func (qs *QBFTStores) Get(role types.BeaconRole) qbftstorage.QBFTStore {
+	s, ok := qs.m.Load(role)
 	if ok {
 		qbftStorage := s.(qbftstorage.QBFTStore)
 		return qbftStorage
@@ -28,6 +28,6 @@ func (m *QBFTStores) Get(role types.BeaconRole) qbftstorage.QBFTStore {
 }
 
 // Add store to sync map by role as a key
-func (m *QBFTStores) Add(role types.BeaconRole, store qbftstorage.QBFTStore) {
-	m.m.Store(role, store)
+func (qs *QBFTStores) Add(role types.BeaconRole, store qbftstorage.QBFTStore) {
+	qs.m.Store(role, store)
 }

@@ -78,7 +78,10 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			}
 		}
 
-		go syncHighestRoundChange(i.config.GetNetwork(), spectypes.MessageIDFromBytes(i.State.ID), i.State.Height)
+		mid := spectypes.MessageIDFromBytes(i.State.ID)
+		if err := i.config.GetNetwork().SyncHighestRoundChange(mid, i.State.Height); err != nil {
+			fmt.Printf("%s\n", err.Error())
+		}
 	})
 }
 
@@ -167,10 +170,4 @@ func (i *Instance) Encode() ([]byte, error) {
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
-}
-
-func syncHighestRoundChange(syncer specqbft.Syncer, mid spectypes.MessageID, h specqbft.Height) {
-	if err := syncer.SyncHighestRoundChange(mid, h); err != nil {
-		fmt.Printf("%s\n", err.Error())
-	}
 }
