@@ -10,7 +10,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 // LastDecidedHandler handler for last-decided protocol
@@ -36,8 +35,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
 			state, err := store.GetHighestInstance(msgID[:])
-			_, msgs := state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.LastPreparedRound, state.DecidedValue)
-			res, err2 := instance.AggregateCommitMsgs(msgs)
+			res, err2 := extractSignedMessage(state)
 			if err == nil {
 				err = err2
 			}
