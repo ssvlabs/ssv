@@ -281,11 +281,9 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 
 	opts := *c.validatorOptions
 	opts.SSVShare = share
-	opts.Mode = validator.ModeR
-	opts.DutyRunners = setupRunners(c.context, opts)
 
-	v := validator.NewValidator(c.context, opts)
-	v.HandleMessage(msg)
+	v := validator.NewNonCommitteeValidator(c.context, msg.GetID(), opts)
+	v.ProcessMessage(msg)
 	return v.Stop()
 }
 

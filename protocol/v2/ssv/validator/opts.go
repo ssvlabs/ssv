@@ -19,7 +19,6 @@ type Options struct {
 	SSVShare    *types.SSVShare
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
-	Mode        Mode
 	FullNode    bool
 }
 
@@ -37,14 +36,4 @@ const (
 	NotStarted State = iota
 	// Started validator is running
 	Started
-)
-
-// Mode defines a mode Validator operates in.
-type Mode int32
-
-const (
-	// ModeRW for validators that we operate
-	ModeRW Mode = iota
-	// ModeR for non-committee validators
-	ModeR
 )

@@ -41,9 +41,6 @@ func (v *Validator) Start() error {
 // Stop stops a Validator.
 func (v *Validator) Stop() error {
 	v.cancel()
-	if atomic.LoadUint32(&v.mode) == uint32(ModeR) {
-		return nil
-	}
 	// clear the msg q
 	v.Q.Clean(func(index msgqueue.Index) bool {
 		return true
