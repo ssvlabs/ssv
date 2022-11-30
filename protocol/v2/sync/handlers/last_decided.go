@@ -36,7 +36,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
 			state, err := store.GetHighestInstance(msgID[:])
-			_, msgs := state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+			_, msgs := state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.LastPreparedRound, state.DecidedValue)
 			res, err2 := instance.AggregateCommitMsgs(msgs)
 			if err == nil {
 				err = err2
