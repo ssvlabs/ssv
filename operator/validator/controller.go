@@ -7,9 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -20,6 +17,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -30,6 +28,7 @@ import (
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
+	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -197,6 +196,9 @@ func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
+	), p2pprotocol.WithHandler(
+		p2pprotocol.LastChangeRoundProtocol,
+		handlers.LastChangeRoundHandler(c.logger, c.ibftStorageMap, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config

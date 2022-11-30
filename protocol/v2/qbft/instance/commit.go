@@ -45,7 +45,7 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			return false, nil, nil, errors.Wrap(err, "could not get msg commit data")
 		}
 
-		agg, err := aggregateCommitMsgs(commitMsgs)
+		agg, err := AggregateCommitMsgs(commitMsgs)
 		if err != nil {
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
@@ -60,7 +60,8 @@ func commitQuorumForRoundValue(state *specqbft.State, commitMsgContainer *specqb
 	return state.Share.HasQuorum(len(signers)), msgs, nil
 }
 
-func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+// AggregateCommitMsgs aggregates commit messages.
+func AggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("can't aggregate zero commit msgs")
 	}

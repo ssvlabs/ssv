@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 // HistoryHandler handler for decided history protocol
@@ -39,7 +40,18 @@ func HistoryHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting
 			if store == nil {
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
-			results, err := store.GetInstance(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			states, err := store.GetInstance(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			results := make([]*specqbft.SignedMessage, 0, len(states))
+			for _, state := range states {
+				_, msgs := state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+				res, newErr := instance.AggregateCommitMsgs(msgs)
+				if err == nil {
+					err = newErr
+				}
+				if newErr == nil {
+					results = append(results, res)
+				}
+			}
 			sm.UpdateResults(err, results...)
 		}
 

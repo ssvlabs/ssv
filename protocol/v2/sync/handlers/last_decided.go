@@ -2,12 +2,15 @@ package handlers
 
 import (
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 // LastDecidedHandler handler for last-decided protocol
@@ -32,7 +35,12 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 			if store == nil {
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
-			res, err := store.GetHighestInstance(msgID[:])
+			state, err := store.GetHighestInstance(msgID[:])
+			_, msgs := state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+			res, err2 := instance.AggregateCommitMsgs(msgs)
+			if err == nil {
+				err = err2
+			}
 			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, res)
 		}

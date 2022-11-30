@@ -13,7 +13,7 @@ import (
 // TODO: add missing tests
 
 // GetHighest returns the highest message from the given collection
-func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *specqbft.State, sender string) {
+func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highest *specqbft.SignedMessage, sender string) {
 	var height specqbft.Height
 
 	for _, remoteMsg := range remoteMsgs {
@@ -28,10 +28,10 @@ func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highe
 		if len(sm.Data) == 0 {
 			continue
 		}
-		state := sm.Data[0]
-		if state != nil && state.Height > height {
-			highest = state
-			height = highest.Height
+		signedMsg := sm.Data[0]
+		if signedMsg != nil && signedMsg.Message != nil && signedMsg.Message.Height > height {
+			highest = signedMsg
+			height = highest.Message.Height
 			sender = remoteMsg.Sender
 		}
 	}

@@ -29,7 +29,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 			return
 		}
 		results := p2pprotocol.SyncResults(lastDecided)
-		results.ForEachInstance(func(m *specqbft.State) {
+		results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
 			raw, err := m.Encode()
 			if err != nil {
 				logger.Warn("could not encode signed message")
@@ -59,7 +59,7 @@ func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spec
 			return
 		}
 		results := p2pprotocol.SyncResults(lastChangeRound)
-		results.ForEachInstance(func(m *specqbft.State) {
+		results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
 			raw, err := m.Encode()
 			if err != nil {
 				logger.Warn("could not encode signed message", zap.Error(err))
