@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	storage2 "github.com/bloxapp/ssv/ibft/storage"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -73,7 +73,7 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := storage2.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
 
 	node := &operatorNode{
 		context:        opts.Context,

@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
-	genesisFork "github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -67,11 +66,8 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			zap.Any("signers", sm.GetSigners()))
 	}
 	for _, topic := range topics {
-		if topic == genesisFork.UnknownSubnet {
-			return errors.New("unknown topic")
-		}
-		logger.Debug("trying to broadcast message", zap.String("topic", topic), zap.Any("msg", msg))
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+			logger.Debug("could not broadcast msg", zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
@@ -106,9 +102,6 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	}
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == genesisFork.UnknownSubnet {
-			return errors.New("unknown topic")
-		}
 		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
 			return err
 		}
@@ -117,13 +110,10 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
-// subscribe subscribes to validator topics, as defined in the fork
+// subscribe to validator topics, as defined in the fork
 func (n *p2pNetwork) subscribe(pk spectypes.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if topic == genesisFork.UnknownSubnet {
-			return errors.New("unknown topic")
-		}
 		if err := n.topicsCtrl.Subscribe(topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
 			return err
