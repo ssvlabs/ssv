@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
