@@ -17,7 +17,7 @@ import (
 var ErrNotFound = fmt.Errorf("not found")
 
 // MsgHandler handles incoming change round messages
-type MsgHandler func(*specqbft.SignedMessage) error
+type MsgHandler func(state *specqbft.State) error
 
 // Fetcher is responsible for fetching change round messages from other peers in the subnet
 type Fetcher interface {

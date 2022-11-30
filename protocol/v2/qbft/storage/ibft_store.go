@@ -24,6 +24,10 @@ type InstanceStore interface {
 	SaveHighestInstance(state *specqbft.State) error
 	// GetHighestInstance returns the state for the highest instance
 	GetHighestInstance(identifier []byte) (*specqbft.State, error)
+	// GetInstance returns historical decided messages in the given range
+	GetInstance(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.State, error)
+	// SaveInstance saves historical decided messages
+	SaveInstance(state *specqbft.State) error
 }
 
 // ChangeRoundStore manages change round data

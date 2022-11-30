@@ -21,11 +21,11 @@ const (
 )
 
 // GetLastDecided reads last decided message from store
-type GetLastDecided func(i spectypes.MessageID) (*specqbft.SignedMessage, error)
+type GetLastDecided func(i spectypes.MessageID) (*specqbft.State, error)
 
 // Fetcher is responsible for fetching last/highest decided messages from other peers in the network
 type Fetcher interface {
-	GetLastDecided(ctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error)
+	GetLastDecided(ctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.State, string, specqbft.Height, error)
 }
 
 type lastDecidedFetcher struct {
@@ -42,13 +42,13 @@ func NewLastDecidedFetcher(logger *zap.Logger, syncer p2pprotocol.Syncer) Fetche
 }
 
 // GetLastDecided returns last decided message from other peers in the network
-func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.SignedMessage, string, specqbft.Height, error) {
+func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spectypes.MessageID, getLastDecided GetLastDecided) (*specqbft.State, string, specqbft.Height, error) {
 	ctx, cancel := context.WithTimeout(pctx, lastDecidedTimeout)
 	defer cancel()
 	var err error
 	var sender string
 	var remoteMsgs []p2pprotocol.SyncResult
-	var localMsg, highest *specqbft.SignedMessage
+	var localState, state *specqbft.State
 
 	logger := l.logger.With(zap.String("identifier", identifier.String()))
 
@@ -68,27 +68,27 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spe
 			time.Sleep(lastDecidedInterval)
 		}
 
-		highest, sender = sync.GetHighest(l.logger, remoteMsgs...)
-		if highest == nil {
+		state, sender = sync.GetHighest(l.logger, remoteMsgs...)
+		if state == nil {
 			continue
 		}
 	}
-	if err != nil && highest == nil {
+	if err != nil && state == nil {
 		return nil, "", 0, errors.Wrap(err, "could not get highest decided from remote peers")
 	}
 
 	var localHeight specqbft.Height
-	localMsg, err = getLastDecided(identifier)
+	localState, err = getLastDecided(identifier)
 	if err != nil {
 		return nil, "", 0, errors.Wrap(err, "could not fetch local highest instance during sync")
 	}
-	if localMsg != nil && localMsg.Message != nil {
-		localHeight = localMsg.Message.Height
+	if localState != nil {
+		localHeight = localState.Height
 	}
 	logger = logger.With(zap.Int64("localHeight", int64(localHeight)))
 	// couldn't fetch highest from remote peers
-	if highest == nil || highest.Message == nil {
-		if localMsg == nil {
+	if state == nil {
+		if localState == nil {
 			// couldn't find local highest decided -> height is 0
 			logger.Debug("node is synced: local and remote highest decided not found, assuming 0")
 			return nil, "", 0, nil
@@ -98,14 +98,14 @@ func (l *lastDecidedFetcher) GetLastDecided(pctx context.Context, identifier spe
 		return nil, "", localHeight, nil
 	}
 
-	if highest.Message.Height <= localHeight {
+	if state.Height <= localHeight {
 		logger.Debug("node is synced: local is higher or equal to remote",
-			zap.Int64("remoteHeight", int64(highest.Message.Height)))
+			zap.Int64("remoteHeight", int64(state.Height)))
 		return nil, "", localHeight, nil
 	}
 
 	logger.Debug("fetched last decided from remote peer",
-		zap.Int64("remoteHeight", int64(highest.Message.Height)), zap.String("remotePeer", sender))
+		zap.Int64("remoteHeight", int64(state.Height)), zap.String("remotePeer", sender))
 
-	return highest, sender, localHeight, nil
+	return state, sender, localHeight, nil
 }

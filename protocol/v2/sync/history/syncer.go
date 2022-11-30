@@ -19,7 +19,7 @@ const (
 )
 
 // DecidedHandler handles incoming decided messages
-type DecidedHandler func(*specqbft.SignedMessage) error
+type DecidedHandler func(state *specqbft.State) error
 
 // Syncer takes care for syncing decided history
 type Syncer interface {
@@ -92,12 +92,12 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 			continue
 		}
 	signedMsgLoop:
-		for _, signedMsg := range sm.Data {
-			height := signedMsg.Message.Height
+		for _, state := range sm.Data {
+			height := state.Height
 			if visited[height] {
 				continue signedMsgLoop
 			}
-			if err := handler(signedMsg); err != nil {
+			if err := handler(state); err != nil {
 				s.logger.Warn("could not add decided with handler", zap.Error(err), zap.Int64("height", int64(height)))
 				continue
 			}

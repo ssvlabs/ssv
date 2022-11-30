@@ -4,9 +4,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/storage/forks"
-	"github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"log"
 	"sync"
 
@@ -17,8 +14,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/storage/forks"
+	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -26,6 +26,7 @@ const (
 	highestKey           = "highest"
 	decidedKey           = "decided"
 	highestInstanceState = "highest_instance_state"
+	instanceState        = "instance_state"
 	lastChangeRoundKey   = "last_change_round"
 )
 
@@ -192,6 +193,48 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*specqbft.State, er
 		return nil, errors.Wrap(err, "un-marshaling error")
 	}
 	return ret, nil
+}
+
+// SaveInstance saves the state for the instance
+func (i *ibftStorage) SaveInstance(state *specqbft.State) error {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	value, err := state.Encode()
+	if err != nil {
+		return errors.Wrap(err, "marshaling error")
+	}
+
+	k := i.key(instanceState, uInt64ToByteSlice(uint64(state.Height)))
+	key := append(state.ID, k...)
+	return i.save(value, instanceState, key)
+}
+
+// GetInstance returns the state for the instance
+func (i *ibftStorage) GetInstance(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.State, error) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	states := make([]*specqbft.State, 0)
+
+	for seq := from; seq <= to; seq++ {
+		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
+		val, found, err := i.get(instanceState, identifier[:], uInt64ToByteSlice(uint64(seq)))
+		if err != nil {
+			return states, err
+		}
+		if found {
+			state := &specqbft.State{}
+			if err := state.Decode(val); err != nil {
+				return states, errors.Wrap(err, "could not unmarshal signed message v1")
+			}
+
+			states = append(states, state)
+			continue
+		}
+	}
+
+	return states, nil
 }
 
 // SaveLastChangeRoundMsg updates last change round message

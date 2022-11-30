@@ -4,10 +4,11 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -196,9 +197,6 @@ func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
-		p2pprotocol.LastChangeRoundProtocol,
-		handlers.LastChangeRoundHandler(c.logger, c.ibftStorageMap, c.network),
 	), p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
