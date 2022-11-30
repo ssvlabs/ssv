@@ -43,11 +43,23 @@ func ProcessRunner() {
 	}
 	syncCommitteeCompareStruct.Run()
 
-	syncCommitteeAggregator := initSyncCommitteeAggregatorCompareStruct()
-	if err := syncCommitteeAggregator.ReplaceMap(); err != nil {
+	syncCommitteeAggregatorCompareStruct := initSyncCommitteeAggregatorCompareStruct()
+	if err := syncCommitteeAggregatorCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	syncCommitteeAggregator.Run()
+	syncCommitteeAggregatorCompareStruct.Run()
+
+	runnerValidationsCompareStruct := initRunnerValidationsCompareStruct()
+	if err := runnerValidationsCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+	runnerValidationsCompareStruct.Run()
+
+	runnerSignaturesCompareStruct := initRunnerSignaturesCompareStruct()
+	if err := runnerSignaturesCompareStruct.ReplaceMap(); err != nil {
+		panic(err)
+	}
+	runnerSignaturesCompareStruct.Run()
 
 }
 
@@ -165,6 +177,40 @@ func initSyncCommitteeAggregatorCompareStruct() *utils.Compare {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/sync_committee_aggregator.go", c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func initRunnerValidationsCompareStruct() *utils.Compare {
+	c := &utils.Compare{
+		Name:        "runner_validations",
+		Replace:     RunnerValidationsSet(),
+		SpecReplace: SpecRunnerValidationsSet(),
+		SSVPath:     utils.DataPath + "/runner/runner_validations.go",
+		SpecPath:    utils.DataPath + "/runner/runner_validations_spec.go",
+	}
+	if err := utils.Copy("./protocol/v2/ssv/runner/runner_validations.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_validations.go", c.SpecPath); err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func initRunnerSignaturesCompareStruct() *utils.Compare {
+	c := &utils.Compare{
+		Name:        "runner_signatures",
+		Replace:     RunnerSignaturesSet(),
+		SpecReplace: SpecSRunnerSignaturesSet(),
+		SSVPath:     utils.DataPath + "/runner/runner_signatures.go",
+		SpecPath:    utils.DataPath + "/runner/runner_signatures_spec.go",
+	}
+	if err := utils.Copy("./protocol/v2/ssv/runner/runner_signatures.go", c.SSVPath); err != nil {
+		panic(err)
+	}
+	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_signatures.go", c.SpecPath); err != nil {
 		panic(err)
 	}
 	return c

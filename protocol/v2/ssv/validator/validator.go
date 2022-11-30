@@ -2,15 +2,17 @@ package validator
 
 import (
 	"context"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -45,7 +47,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	var q msgqueue.MsgQueue
 	if options.Mode == ModeRW {
-		indexers := msgqueue.WithIndexers( /*msgqueue.DefaultMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+		indexers := msgqueue.WithIndexers( /*msgqueue.TestMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 

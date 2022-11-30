@@ -3,11 +3,10 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -29,26 +28,18 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
-	return NewInstanceFromState(config, &specqbft.State{
-		Share:                share,
-		ID:                   identifier,
-		Round:                specqbft.FirstRound,
-		Height:               height,
-		LastPreparedRound:    specqbft.NoRound,
-		ProposeContainer:     specqbft.NewMsgContainer(),
-		PrepareContainer:     specqbft.NewMsgContainer(),
-		CommitContainer:      specqbft.NewMsgContainer(),
-		RoundChangeContainer: specqbft.NewMsgContainer(),
-	})
-}
-
-// NewInstanceFromState return instance by state that provided
-func NewInstanceFromState(
-	config types.IConfig,
-	state *specqbft.State,
-) *Instance {
 	return &Instance{
-		State:       state,
+		State: &specqbft.State{
+			Share:                share,
+			ID:                   identifier,
+			Round:                specqbft.FirstRound,
+			Height:               height,
+			LastPreparedRound:    specqbft.NoRound,
+			ProposeContainer:     specqbft.NewMsgContainer(),
+			PrepareContainer:     specqbft.NewMsgContainer(),
+			CommitContainer:      specqbft.NewMsgContainer(),
+			RoundChangeContainer: specqbft.NewMsgContainer(),
+		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 	}
@@ -65,11 +56,11 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
-			fmt.Printf("operator %d is the leader!\n", i.State.Share.OperatorID)
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
 				fmt.Printf("%s\n", err.Error())
+				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
@@ -78,6 +69,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 			}
 		}
 
+		// TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md
 		mid := spectypes.MessageIDFromBytes(i.State.ID)
 		if err := i.config.GetNetwork().SyncHighestRoundChange(mid, i.State.Height); err != nil {
 			fmt.Printf("%s\n", err.Error())
@@ -135,11 +127,10 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 
 // IsDecided interface implementation
 func (i *Instance) IsDecided() (bool, []byte) {
-	state := i.State
-	if state == nil {
-		return false, nil
+	if state := i.State; state != nil {
+		return state.Decided, state.DecidedValue
 	}
-	return state.Decided, state.DecidedValue
+	return false, nil
 }
 
 // GetConfig returns the instance config

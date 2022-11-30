@@ -2,11 +2,11 @@ package msgqueue
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -85,14 +85,12 @@ type Index struct {
 	ID string
 	// H (optional) is the height, -1 is treated as nil
 	H specqbft.Height
-	// S (optional) is the slot
-	S spec.Slot
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
 	Cmt specqbft.MessageType
 }
 
 func (i *Index) String() string {
-	return fmt.Sprintf("%s-%d-%s-%d-%d-%d", i.Name, i.Mt, i.ID, i.H, i.S, i.Cmt)
+	return fmt.Sprintf("%s-%d-%s-%d-%d", i.Name, i.Mt, i.ID, i.H, i.Cmt)
 }
 
 // queue implements MsgQueue
@@ -305,24 +303,25 @@ func DefaultMsgCleaner(mid spectypes.MessageID, mts ...spectypes.MsgType) Cleane
 	}
 }
 
-// DefaultMsgIndexer returns the default msg indexer to use for message.SSVMessage
-func DefaultMsgIndexer() Indexer {
+// TODO move to testing utils -not used by code
+
+// TestMsgIndexer returns the test msg indexer to use for message.SSVMessage
+func TestMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
 		if msg == nil {
 			return Index{}
 		}
-		return DefaultMsgIndex(msg.MsgType, msg.MsgID)
+		return TestMsgIndex(msg.MsgType, msg.MsgID)
 	}
 }
 
-// DefaultMsgIndex is the default msg index
-func DefaultMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
+// TestMsgIndex is the test msg index
+func TestMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
 	return Index{
 		Name: "",
 		Mt:   mt,
 		ID:   mid.String(),
-		H:    0,
-		S:    0,
+		H:    math.MaxInt64,
 		Cmt:  -1,
 	}
 }

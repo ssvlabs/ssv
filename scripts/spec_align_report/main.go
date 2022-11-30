@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/scripts/spec_align_report/qbft"
 	"github.com/bloxapp/ssv/scripts/spec_align_report/ssv"
 	"github.com/bloxapp/ssv/scripts/spec_align_report/utils"
 )
 
 func main() {
-	if err := utils.CloneSpec("v0.2.7"); err != nil {
+	if err := utils.CloneSpec("main", "7e96c8b781915faaa12d29eba94e702445bd5945"); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -16,9 +17,9 @@ func main() {
 		return
 	}
 
-	//qbft.ProcessController()
-	//
-	//qbft.ProcessInstance()
+	qbft.ProcessController()
+
+	qbft.ProcessInstance()
 
 	ssv.ProcessRunner()
 	//utils.CleanSpecPath()

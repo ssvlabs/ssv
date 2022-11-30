@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -19,6 +20,11 @@ var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole)
 		Domain:    types.PrimusTestnet,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
+				return errors.New("invalid value")
+			}
+
+			// as a base validation we do not accept nil values
+			if len(data) == 0 {
 				return errors.New("invalid value")
 			}
 			return nil

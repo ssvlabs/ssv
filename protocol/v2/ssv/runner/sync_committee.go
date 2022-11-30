@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -54,7 +53,7 @@ func (r *SyncCommitteeRunner) StartNewDuty(duty *spectypes.Duty) error {
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *SyncCommitteeRunner) HasRunningDuty() bool {
-	return r.BaseRunner.HasRunningDuty()
+	return r.BaseRunner.hasRunningDuty()
 }
 
 func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
@@ -105,7 +104,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 }
 
 func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -139,6 +138,11 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 
 func (r *SyncCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return []ssz.HashRoot{}, spectypes.DomainError, errors.New("no expected pre consensus roots for sync committee")
+}
+
+// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return []ssz.HashRoot{spectypes.SSZBytes(r.BaseRunner.State.DecidedValue.SyncCommitteeBlockRoot[:])}, spectypes.DomainSyncCommittee, nil
 }
 
 // executeDuty steps:
