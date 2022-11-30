@@ -3,9 +3,10 @@ package ekm
 import (
 	"crypto/rsa"
 	"encoding/hex"
+	"sync"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	ssz "github.com/ferranbt/fastssz"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -168,7 +169,7 @@ func (km *ethKeyManagerSigner) SignContribution(contribution *altair.Contributio
 	panic("implement me")
 }
 
-func (km *ethKeyManagerSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+func (km *ethKeyManagerSigner) Decrypt(pk *rsa.PrivateKey, cipher []byte) ([]byte, error) {
 	panic("implement me")
 }
 

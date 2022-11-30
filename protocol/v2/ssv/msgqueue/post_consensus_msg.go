@@ -1,22 +1,19 @@
 package msgqueue
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // SignedPostConsensusMsgCleaner cleans post consensus messages from the queue
 // it will clean messages of the given identifier and under the given slot
-func SignedPostConsensusMsgCleaner(mid spectypes.MessageID, s spec.Slot) Cleaner {
+func SignedPostConsensusMsgCleaner(mid spectypes.MessageID) Cleaner {
 	return func(k Index) bool {
 		if k.Mt != spectypes.SSVPartialSignatureMsgType {
 			return false
 		}
 		if k.ID != mid.String() {
-			return false
-		}
-		if k.S > s {
 			return false
 		}
 		// clean
@@ -37,18 +34,17 @@ func SignedPostConsensusMsgIndexer() Indexer {
 		if err := sm.Decode(msg.Data); err != nil {
 			return Index{}
 		}
-		return SignedPostConsensusMsgIndex(msg.MsgID.String(), sm.Message.Messages[0].Slot)
+		return SignedPostConsensusMsgIndex(msg.MsgID.String())
 	}
 }
 
 // SignedPostConsensusMsgIndex indexes a message.SignedPostConsensusMessage by identifier and height
-func SignedPostConsensusMsgIndex(mid string, s spec.Slot) Index {
+func SignedPostConsensusMsgIndex(mid string) Index {
 	return Index{
 		Name: "post_consensus_index",
 		Mt:   spectypes.SSVPartialSignatureMsgType,
 		ID:   mid,
-		S:    s,
-		H:    -1,
+		H:    specqbft.FirstHeight,
 		Cmt:  -1, // as unknown
 	}
 }

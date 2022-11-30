@@ -159,7 +159,6 @@ var postConsensusAttestationMsg = func(
 		Type: specssv.PostConsensusPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed,
 				SigningRoot:      root,
 				Signer:           id,
@@ -210,7 +209,6 @@ var postConsensusBeaconBlockMsg = func(
 		Type: specssv.PostConsensusPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed.Signature[:],
 				SigningRoot:      root,
 				Signer:           id,
@@ -235,7 +233,6 @@ var PreConsensusFailedMsg = func(msgSigner *bls.SecretKey, msgSignerID spectypes
 		Type: specssv.RandaoPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed[:],
 				SigningRoot:      root,
 				Signer:           msgSignerID,
@@ -285,7 +282,6 @@ var PreConsensusRandaoDifferentSignerMsg = func(msgSigner, randaoSigner *bls.Sec
 		Type: specssv.RandaoPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed[:],
 				SigningRoot:      root,
 				Signer:           randaoSignerID,
@@ -319,7 +315,6 @@ var randaoMsg = func(
 	}
 	for i := 0; i < msgCnt; i++ {
 		msg := &specssv.PartialSignatureMessage{
-			Slot:             slot,
 			PartialSignature: signed[:],
 			SigningRoot:      root,
 			Signer:           id,
@@ -375,7 +370,6 @@ var selectionProofMsg = func(
 	_msgs := make([]*specssv.PartialSignatureMessage, 0)
 	for i := 0; i < msgCnt; i++ {
 		_msgs = append(_msgs, &specssv.PartialSignatureMessage{
-			Slot:             msgSlot,
 			PartialSignature: signed[:],
 			SigningRoot:      root,
 			Signer:           beaconid,
@@ -422,7 +416,6 @@ var postConsensusAggregatorMsg = func(
 		Type: specssv.PostConsensusPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed,
 				SigningRoot:      root,
 				Signer:           id,
@@ -465,7 +458,6 @@ var postConsensusSyncCommitteeMsg = func(
 		Type: specssv.PostConsensusPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{
 			{
-				Slot:             testingutils.TestingDutySlot,
 				PartialSignature: signed,
 				SigningRoot:      root,
 				Signer:           id,
@@ -485,30 +477,29 @@ var PreConsensusContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgI
 }
 
 var PreConsensusContributionProofNextEpochMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID) *specssv.SignedPartialSignatureMessage {
-	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot2, testingutils.TestingDutySlot2, false, false)
+	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot2, false, false)
 }
 
 var PreConsensusCustomSlotContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID, slot spec.Slot) *specssv.SignedPartialSignatureMessage {
-	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, slot, testingutils.TestingDutySlot, false, false)
+	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, slot, false, false)
 }
 
 var PreConsensusWrongMsgSlotContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID) *specssv.SignedPartialSignatureMessage {
-	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, testingutils.TestingDutySlot+1, false, false)
+	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, false, false)
 }
 
 var PreConsensusWrongOrderContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID) *specssv.SignedPartialSignatureMessage {
-	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, testingutils.TestingDutySlot, true, false)
+	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, true, false)
 }
 
 var PreConsensusWrongCountContributionProofMsg = func(msgSK, beaconSK *bls.SecretKey, msgID, beaconID spectypes.OperatorID) *specssv.SignedPartialSignatureMessage {
-	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, testingutils.TestingDutySlot, false, true)
+	return contributionProofMsg(msgSK, beaconSK, msgID, beaconID, testingutils.TestingDutySlot, false, true)
 }
 
 var contributionProofMsg = func(
 	sk, beaconsk *bls.SecretKey,
 	id, beaconid spectypes.OperatorID,
 	slot spec.Slot,
-	msgSlot spec.Slot,
 	wrongMsgOrder bool,
 	dropLastMsg bool,
 ) *specssv.SignedPartialSignatureMessage {
@@ -525,7 +516,6 @@ var contributionProofMsg = func(
 		}
 		sig, root, _ := signer.SignBeaconObject(data, d, beaconsk.GetPublicKey().Serialize())
 		msg := &specssv.PartialSignatureMessage{
-			Slot:             msgSlot,
 			PartialSignature: sig[:],
 			SigningRoot:      ensureRoot(root),
 			Signer:           beaconid,
@@ -602,7 +592,6 @@ var postConsensusSyncCommitteeContributionMsg = func(
 		}
 
 		msg := &specssv.PartialSignatureMessage{
-			Slot:             testingutils.TestingDutySlot,
 			PartialSignature: signed,
 			SigningRoot:      root,
 			Signer:           id,

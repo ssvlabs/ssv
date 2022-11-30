@@ -95,7 +95,7 @@ func DecidedMsgIndex(mid string) Index {
 		Mt:   message.SSVDecidedMsgType,
 		ID:   mid,
 		Cmt:  specqbft.CommitMsgType,
-		H:    -1,
+		H:    specqbft.FirstHeight,
 	}
 	// return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
 }

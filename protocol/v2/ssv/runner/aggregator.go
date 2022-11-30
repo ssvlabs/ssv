@@ -53,7 +53,7 @@ func (r *AggregatorRunner) StartNewDuty(duty *spectypes.Duty) error {
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *AggregatorRunner) HasRunningDuty() bool {
-	return r.BaseRunner.HasRunningDuty()
+	return r.BaseRunner.hasRunningDuty()
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
@@ -141,7 +141,7 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 }
 
 func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -173,6 +173,11 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 
 func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	return []ssz.HashRoot{spectypes.SSZUint64(r.GetState().StartingDuty.Slot)}, spectypes.DomainSelectionProof, nil
+}
+
+// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AggregateAndProof}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:

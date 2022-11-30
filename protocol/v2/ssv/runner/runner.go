@@ -1,15 +1,13 @@
 package runner
 
 import (
-	"bytes"
 	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/herumi/bls-eth-go-binary/bls"
+
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
@@ -22,20 +20,6 @@ type DutyRunners map[spectypes.BeaconRole]Runner
 func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	role := msgID.GetRoleType()
 	return dr[role]
-}
-
-// Identifiers gathers identifiers of all shares.
-func (dr DutyRunners) Identifiers() []spectypes.MessageID {
-	var identifiers []spectypes.MessageID
-	for role, r := range dr {
-		share := r.GetBaseRunner().Share
-		if share == nil { // TODO: handle missing share?
-			continue
-		}
-		i := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
-		identifiers = append(identifiers, i)
-	}
-	return identifiers
 }
 
 type Getters interface {
@@ -51,13 +35,21 @@ type Runner interface {
 	spectypes.Root
 	Getters
 
+	// StartNewDuty starts a new duty for the runner, returns error if can't
 	StartNewDuty(duty *spectypes.Duty) error
+	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
+	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
 	ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
+	// ProcessConsensus processes all consensus msgs, returns error if can't process
 	ProcessConsensus(msg *specqbft.SignedMessage) error
+	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
-
+	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
+	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
+	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
+	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(duty *spectypes.Duty) error
 }
 
@@ -69,6 +61,7 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 }
 
+// baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
 		return err
@@ -77,6 +70,7 @@ func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error
 	return runner.executeDuty(duty)
 }
 
+// canStartNewDuty is a base func that all runner implementation can call to decide if a new duty can start
 func (b *BaseRunner) canStartNewDuty() error {
 	if b.State == nil {
 		return nil
@@ -92,54 +86,38 @@ func (b *BaseRunner) canStartNewDuty() error {
 	return nil
 }
 
+// basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
 func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
 	if err := b.validatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
 
-	roots := make([][]byte, 0)
-	anyQuorum := false
-	for _, msg := range signedMsg.Message.Messages {
-		prevQuorum := b.State.PreConsensusContainer.HasQuorum(msg.SigningRoot)
-
-		if err := b.State.PreConsensusContainer.AddSignature(msg); err != nil {
-			return false, nil, errors.Wrap(err, "could not add partial randao signature")
-		}
-
-		if prevQuorum {
-			continue
-		}
-
-		quorum := b.State.PreConsensusContainer.HasQuorum(msg.SigningRoot)
-		if quorum {
-			roots = append(roots, msg.SigningRoot)
-			anyQuorum = true
-		}
-	}
-
-	return anyQuorum, roots, nil
+	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PreConsensusContainer)
+	return hasQuorum, roots, errors.Wrap(err, "could not process pre-consensus partial signature msg")
 }
 
+// baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
-	if err := b.validateConsensusMsg(msg); err != nil {
-		return false, nil, errors.Wrap(err, "invalid consensus message")
-	}
-
-	var prevDecided bool
-	if b.State != nil && b.State.RunningInstance != nil {
+	prevDecided := false
+	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
-		return false, nil, errors.Wrap(err, "failed to process consensus msg")
+		return false, nil, err
+	}
+
+	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
+	if !b.hasRunningDuty() {
+		return false, nil, err
 	}
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			if err = b.QBFTController.GetConfig().GetStorage().SaveHighestInstance(inst.State); err != nil {
+			if err = b.QBFTController.SaveHighestInstance(inst); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
 		}
@@ -165,25 +143,33 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	return true, decidedValue, nil
 }
 
-func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
-	if err := b.validatePostConsensusMsg(signedMsg); err != nil {
+// basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
+func (b *BaseRunner) basePostConsensusMsgProcessing(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
+	if err := b.validatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
 
+	hasQuorum, roots, err := b.basePartialSigMsgProcessing(signedMsg, b.State.PostConsensusContainer)
+	return hasQuorum, roots, errors.Wrap(err, "could not process post-consensus partial signature msg")
+}
+
+// basePartialSigMsgProcessing adds an already validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
+func (b *BaseRunner) basePartialSigMsgProcessing(
+	signedMsg *specssv.SignedPartialSignatureMessage,
+	container *specssv.PartialSigContainer,
+) (bool, [][]byte, error) {
 	roots := make([][]byte, 0)
 	anyQuorum := false
 	for _, msg := range signedMsg.Message.Messages {
-		prevQuorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
+		prevQuorum := container.HasQuorum(msg.SigningRoot)
 
-		if err := b.State.PostConsensusContainer.AddSignature(msg); err != nil {
-			return false, nil, errors.Wrap(err, "could not add partial post consensus signature")
-		}
+		container.AddSignature(msg)
 
 		if prevQuorum {
 			continue
 		}
 
-		quorum := b.State.PostConsensusContainer.HasQuorum(msg.SigningRoot)
+		quorum := container.HasQuorum(msg.SigningRoot)
 		if quorum {
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
@@ -193,6 +179,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(signedMsg *specssv.SignedPar
 	return anyQuorum, roots, nil
 }
 
+// didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
 	decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
@@ -211,224 +198,36 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.S
 	return true, nil
 }
 
-func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
-	if !b.HasRunningDuty() {
-		return errors.New("no running duty")
-	}
-
-	if err := b.validatePartialSigMsg(signedMsg, b.State.StartingDuty.Slot); err != nil {
-		return err
-	}
-
-	roots, domain, err := runner.expectedPreConsensusRootsAndDomain()
-	if err != nil {
-		return err
-	}
-
-	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
-}
-
-func (b *BaseRunner) validateConsensusMsg(msg *specqbft.SignedMessage) error {
-	if !b.HasRunningDuty() {
-		return errors.New("no running duty")
-	}
-	return nil
-}
-
-func (b *BaseRunner) validatePostConsensusMsg(msg *specssv.SignedPartialSignatureMessage) error {
-	if !b.HasRunningDuty() {
-		return errors.New("no running duty")
-	}
-
-	if err := b.validatePartialSigMsg(msg, b.State.DecidedValue.Duty.Slot); err != nil {
-		return errors.Wrap(err, "post consensus msg invalid")
-	}
-
-	return nil
-}
-
 func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error {
 	byts, err := input.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode ConsensusData")
 	}
 
-	valc := runner.GetValCheckF()
-	if valc == nil {
-		return errors.New("val check nil")
-	}
-	if err := valc(byts); err != nil {
+	if err := runner.GetValCheckF()(byts); err != nil {
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	ctrl := runner.GetBaseRunner().QBFTController
-
-	if err := ctrl.StartNewInstance(byts); err != nil {
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := ctrl.InstanceForHeight(ctrl.Height)
+	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}
+
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
 	// registers a timeout handler
-	timer, ok := newInstance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
-	if ok {
-		timer.OnTimeout(b.onTimeout(ctrl.Height))
-	}
+	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }
 
-// onTimeout is trigger upon timeout for the given height
-func (b *BaseRunner) onTimeout(h specqbft.Height) func() {
-	return func() {
-		if !b.HasRunningDuty() && b.QBFTController.Height == h {
-			return
-		}
-		instance := b.State.RunningInstance
-		if instance == nil {
-			return
-		}
-		decided, _ := instance.IsDecided()
-		if decided {
-			return
-		}
-		err := instance.UponRoundTimeout()
-		if err != nil {
-			// TODO: handle?
-			fmt.Println("failed to handle timeout:", err.Error())
-		}
-	}
-}
-
-func (b *BaseRunner) HasRunningDuty() bool {
+// hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
+func (b *BaseRunner) hasRunningDuty() bool {
 	if b.State == nil {
 		return false
 	}
 	return !b.State.Finished
-}
-
-func (b *BaseRunner) signBeaconObject(
-	runner Runner,
-	obj ssz.HashRoot,
-	slot spec.Slot,
-	domainType spec.DomainType,
-) (*specssv.PartialSignatureMessage, error) {
-	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
-	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get beacon domain")
-	}
-
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share.SharePubKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign beacon object")
-	}
-
-	return &specssv.PartialSignatureMessage{
-		Slot:             slot,
-		PartialSignature: sig,
-		SigningRoot:      r,
-		Signer:           runner.GetBaseRunner().Share.OperatorID,
-	}, nil
-}
-
-func (b *BaseRunner) validatePartialSigMsg(
-	signedMsg *specssv.SignedPartialSignatureMessage,
-	slot spec.Slot,
-) error {
-	if err := signedMsg.Validate(); err != nil {
-		return errors.Wrap(err, "SignedPartialSignatureMessage invalid")
-	}
-
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
-		return errors.Wrap(err, "failed to verify PartialSignature")
-	}
-
-	for _, msg := range signedMsg.Message.Messages {
-		if slot != msg.Slot {
-			return errors.New("wrong slot")
-		}
-
-		if err := b.verifyBeaconPartialSignature(msg); err != nil {
-			return errors.Wrap(err, "could not verify Beacon partial Signature")
-		}
-	}
-
-	return nil
-}
-
-func (b *BaseRunner) verifyBeaconPartialSignature(msg *specssv.PartialSignatureMessage) error {
-	signer := msg.Signer
-	signature := msg.PartialSignature
-	root := msg.SigningRoot
-
-	for _, n := range b.Share.Committee {
-		if n.GetID() == signer {
-			pk := &bls.PublicKey{}
-			if err := pk.Deserialize(n.GetPublicKey()); err != nil {
-				return errors.Wrap(err, "could not deserialized pk")
-			}
-			sig := &bls.Sign{}
-			if err := sig.Deserialize(signature); err != nil {
-				return errors.Wrap(err, "could not deserialized Signature")
-			}
-
-			// verify
-			if !sig.VerifyByte(pk, root) {
-				return errors.New("wrong signature")
-			}
-			return nil
-		}
-	}
-	return errors.New("unknown signer")
-}
-
-func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *spectypes.ConsensusData) error {
-	byts, err := val.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode decided value")
-	}
-	if err := runner.GetValCheckF()(byts); err != nil {
-		return errors.Wrap(err, "decided value is invalid")
-	}
-
-	return nil
-}
-
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
-	if len(expectedRootObjs) != len(signedMsg.Message.Messages) {
-		return errors.New("wrong expected roots count")
-	}
-	for i, msg := range signedMsg.Message.Messages {
-		epoch := b.BeaconNetwork.EstimatedEpochAtSlot(b.State.StartingDuty.Slot)
-		d, err := runner.GetBeaconNode().DomainData(epoch, domain)
-		if err != nil {
-			return errors.Wrap(err, "could not get pre consensus root domain")
-		}
-
-		r, err := spectypes.ComputeETHSigningRoot(expectedRootObjs[i], d)
-		if err != nil {
-			return errors.Wrap(err, "could not compute ETH signing root")
-		}
-		if !bytes.Equal(r[:], msg.SigningRoot) {
-			return errors.New("wrong pre consensus signing root")
-		}
-	}
-	return nil
-}
-
-func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *specssv.PartialSignatureMessages) (*specssv.SignedPartialSignatureMessage, error) {
-	signature, err := runner.GetSigner().SignRoot(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
-	}
-
-	return &specssv.SignedPartialSignatureMessage{
-		Message:   *msg,
-		Signature: signature,
-		Signer:    b.Share.OperatorID,
-	}, nil
 }

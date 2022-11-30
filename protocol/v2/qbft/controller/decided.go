@@ -37,14 +37,11 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	prevDecided := inst != nil && inst.State.Decided
 
 	// Mark current instance decided
-	currentInstance := c.InstanceForHeight(c.Height)
-	if currentInstance != nil && !currentInstance.State.Decided {
-		currentInstance.State.Decided = true
+	if inst := c.InstanceForHeight(c.Height); inst != nil && !inst.State.Decided {
+		inst.State.Decided = true
 		if c.Height == msg.Message.Height {
-			if msg.Message.Round > currentInstance.State.Round {
-				currentInstance.State.Round = msg.Message.Round
-			}
-			currentInstance.State.DecidedValue = data.Data
+			inst.State.Round = msg.Message.Round
+			inst.State.DecidedValue = data.Data
 		}
 	}
 
@@ -55,21 +52,16 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
-		c.StoredInstances.AddNewInstance(i)
+		c.StoredInstances.addNewInstance(i)
 		// bump height
 		c.Height = msg.Message.Height
 	}
 
 	if !prevDecided {
 		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
-			if err = c.GetConfig().GetStorage().SaveHighestInstance(futureInstance.State); err != nil {
+			if err = c.SaveHighestInstance(futureInstance); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
-		}
-
-		if err = c.GetConfig().GetStorage().SaveHighestDecided(msg); err != nil {
-			// no need to fail processing the decided msg if failed to save
-			fmt.Printf("failed to save decided: %s\n", err.Error())
 		}
 		return msg, nil
 	}
