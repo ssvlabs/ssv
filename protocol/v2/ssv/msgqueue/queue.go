@@ -303,6 +303,8 @@ func DefaultMsgCleaner(mid spectypes.MessageID, mts ...spectypes.MsgType) Cleane
 	}
 }
 
+// TODO move to testing utils -not used by code
+
 // TestMsgIndexer returns the test msg indexer to use for message.SSVMessage
 func TestMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {

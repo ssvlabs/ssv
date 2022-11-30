@@ -167,13 +167,13 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	return i
 }
 
+// canStartInstance start new instance only if current was decided
 func (c *Controller) canStartInstance(value []byte) error {
 	// check value
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
 	}
 
-	// check prev instance if prev instance is not the first instance
 	inst := c.StoredInstances.FindInstance(c.Height)
 	if inst == nil {
 		return nil
