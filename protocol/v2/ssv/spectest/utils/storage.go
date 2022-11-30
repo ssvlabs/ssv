@@ -7,16 +7,17 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap"
 )
 
 func TestingStores() *qbftstorage.QBFTStores {
+	//logger := logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
+	logger := zap.L()
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
 		Reporting: false,
-		Logger:    logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{}),
+		Logger:    logger,
 		Ctx:       context.TODO(),
 	})
 	if err != nil {
@@ -24,11 +25,11 @@ func TestingStores() *qbftstorage.QBFTStores {
 	}
 
 	stores := qbftstorage.NewStores()
-	stores.Add(spectypes.BNRoleAttester, qbftstorage.New(db, nil, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion))
-	stores.Add(spectypes.BNRoleProposer, qbftstorage.New(db, nil, spectypes.BNRoleProposer.String(), forksprotocol.GenesisForkVersion))
-	stores.Add(spectypes.BNRoleAggregator, qbftstorage.New(db, nil, spectypes.BNRoleAggregator.String(), forksprotocol.GenesisForkVersion))
-	stores.Add(spectypes.BNRoleSyncCommittee, qbftstorage.New(db, nil, spectypes.BNRoleSyncCommittee.String(), forksprotocol.GenesisForkVersion))
-	stores.Add(spectypes.BNRoleSyncCommitteeContribution, qbftstorage.New(db, nil, spectypes.BNRoleSyncCommitteeContribution.String(), forksprotocol.GenesisForkVersion))
+	stores.Add(spectypes.BNRoleAttester, qbftstorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion))
+	stores.Add(spectypes.BNRoleProposer, qbftstorage.New(db, logger, spectypes.BNRoleProposer.String(), forksprotocol.GenesisForkVersion))
+	stores.Add(spectypes.BNRoleAggregator, qbftstorage.New(db, logger, spectypes.BNRoleAggregator.String(), forksprotocol.GenesisForkVersion))
+	stores.Add(spectypes.BNRoleSyncCommittee, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommittee.String(), forksprotocol.GenesisForkVersion))
+	stores.Add(spectypes.BNRoleSyncCommitteeContribution, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommitteeContribution.String(), forksprotocol.GenesisForkVersion))
 
 	return stores
 }
