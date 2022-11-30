@@ -145,12 +145,18 @@ func (i *Instance) SetConfig(config types.IConfig) {
 
 // GetHeight interface implementation
 func (i *Instance) GetHeight() specqbft.Height {
-	return i.State.Height
+	if s := i.State; s != nil {
+		return s.Height
+	}
+	return specqbft.Height(0)
 }
 
 // GetRoot returns the state's deterministic root
 func (i *Instance) GetRoot() ([]byte, error) {
-	return i.State.GetRoot()
+	if s := i.State; s != nil {
+		return s.GetRoot()
+	}
+	return nil, nil
 }
 
 // Encode implementation
