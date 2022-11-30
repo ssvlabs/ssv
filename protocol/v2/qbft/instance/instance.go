@@ -68,8 +68,8 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 				}
 			}
 		}
-    
-    // TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md
+
+		// TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md
 		mid := spectypes.MessageIDFromBytes(i.State.ID)
 		if err := i.config.GetNetwork().SyncHighestRoundChange(mid, i.State.Height); err != nil {
 			fmt.Printf("%s\n", err.Error())
