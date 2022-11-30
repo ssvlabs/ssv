@@ -99,9 +99,13 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
+	fmt.Println("BaseRunner:baseConsensusMsgProcessing:Height", b.QBFTController.Height)
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
+	fmt.Println("BaseRunner:baseConsensusMsgProcessing:prevDecided", prevDecided)
+	fmt.Println("BaseRunner:baseConsensusMsgProcessing:RunningInstance", b.State.RunningInstance)
+	fmt.Println("BaseRunner:baseConsensusMsgProcessing:isState", b.State != nil)
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
@@ -182,6 +186,13 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
+	fmt.Println("BaseRunner:didDecideCorrectly:decided", decided)
+	if decidedMsg != nil {
+		fmt.Println("BaseRunner:didDecideCorrectly:Height", decidedMsg.Message.Height)
+	}
+	fmt.Println("BaseRunner:didDecideCorrectly:State.DecidedValue", b.State.DecidedValue)
+	fmt.Println("BaseRunner:didDecideCorrectly:State.RunningInstance", b.State.RunningInstance)
+	fmt.Println("BaseRunner:didDecideCorrectly:State.Finished", b.State.Finished)
 	decidedRunningInstance := b.State != nil && b.State.RunningInstance != nil &&
 		decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
 
@@ -227,6 +238,10 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
+	fmt.Println("BaseRunner.hasRunningDuty:IsState", b.State != nil)
+	if b.State != nil {
+		fmt.Println("BaseRunner.hasRunningDuty:State.Finished", b.State.Finished)
+	}
 	if b.State == nil {
 		return false
 	}

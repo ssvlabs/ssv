@@ -96,8 +96,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
 		cleaned := v.Q.Clean(func(index msgqueue.Index) bool {
 			// remove all msg's that are 2 heights old, besides height 0
-			// TODO: will be fixed (messages with height 0) in the new q implementation
-			return index.H > 0 && index.H <= (lastHeight-2)
+			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
 		if cleaned > 0 {
 			logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
