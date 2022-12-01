@@ -66,7 +66,7 @@ func TestCleanInstances(t *testing.T) {
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
 
-	res, err := storage.GetInstance(msgID[:], 0, specqbft.Height(msgsCount))
+	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, msgsCount, len(res))
 
@@ -77,7 +77,7 @@ func TestCleanInstances(t *testing.T) {
 
 	// remove all instances
 	require.NoError(t, storage.CleanAllInstances(msgID[:]))
-	res, err = storage.GetInstance(msgID[:], 0, specqbft.Height(msgsCount))
+	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
 
@@ -86,7 +86,7 @@ func TestCleanInstances(t *testing.T) {
 	require.Nil(t, last)
 
 	// check other msgID
-	res, err = storage.GetInstance(differMsgID[:], 0, specqbft.Height(msgsCount))
+	res, err = storage.GetInstancesInRange(differMsgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res))
 
@@ -253,7 +253,7 @@ func TestSaveAndFetchState(t *testing.T) {
 
 	require.NoError(t, storage.SaveInstance(instance))
 
-	savedInstances, err := storage.GetInstance(identifier[:], 1, 1)
+	savedInstances, err := storage.GetInstancesInRange(identifier[:], 1, 1)
 	require.NoError(t, err)
 	require.NotNil(t, savedInstances)
 	require.Len(t, savedInstances, 1)

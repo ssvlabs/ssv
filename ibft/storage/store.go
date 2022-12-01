@@ -71,7 +71,7 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-// SaveHighestInstance saves the state for the highest instance
+// SaveHighestInstance saves the StoredInstance for the highest instance.
 func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
 	value, err := instance.Encode()
 	if err != nil {
@@ -80,7 +80,7 @@ func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) 
 	return i.save(value, highestInstanceKey, instance.State.ID)
 }
 
-// GetHighestInstance returns the state for the highest instance
+// GetHighestInstance returns the StoredInstance for the highest instance.
 func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
 	val, found, err := i.get(highestInstanceKey, identifier[:])
 	if !found {
@@ -96,7 +96,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	return ret, nil
 }
 
-// SaveInstance saves the state for the instance
+// SaveInstance saves historical StoredInstance.
 func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
@@ -109,8 +109,8 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	return i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
 }
 
-// GetInstance returns the state for the instance
-func (i *ibftStorage) GetInstance(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
+// GetInstancesInRange returns historical StoredInstance's in the given range.
+func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -135,6 +135,7 @@ func (i *ibftStorage) GetInstance(identifier []byte, from specqbft.Height, to sp
 	return instances, nil
 }
 
+// CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
 func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()

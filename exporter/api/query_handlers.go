@@ -40,7 +40,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, n
 	msgID := spectypes.NewMsgID(pkRaw, message.RoleTypeFromString(string(nm.Msg.Filter.Role)))
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
-	instances, err := qbftStorage.GetInstance(msgID[:], from, to)
+	instances, err := qbftStorage.GetInstancesInRange(msgID[:], from, to)
 	if err != nil {
 		logger.Warn("failed to get instances", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}
