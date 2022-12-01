@@ -13,19 +13,19 @@ func ProcessController() {
 	if err := controllerCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	controllerCompareStruct.Run()
+	_ = controllerCompareStruct.Run()
 
 	decidedCompareStruct := initDecidedCompareStruct()
 	if err := decidedCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	decidedCompareStruct.Run()
+	_ = decidedCompareStruct.Run()
 
 	futureMsgCompareStruct := initFutureMsgCompareStruct()
 	if err := futureMsgCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	futureMsgCompareStruct.Run()
+	_ = futureMsgCompareStruct.Run()
 
 }
 func initControllerCompareStruct() *utils.Compare {

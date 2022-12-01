@@ -18,7 +18,7 @@ func CloneSpec(tag string, commit string) error {
 		return err
 	}
 
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", tag, ssvSpecRepo, ssvSpecPath)
+	cmd := exec.Command("git", "clone", "--depth", "100", "--branch", tag, ssvSpecRepo, ssvSpecPath)
 	if _, err := cmd.Output(); err != nil {
 		return err
 	}

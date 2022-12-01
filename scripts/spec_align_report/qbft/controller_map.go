@@ -23,11 +23,18 @@ func ControllerSet() []utils.KeyValue {
 	controllerMap.Set("// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?", "")
 	controllerMap.Set("i.SetConfig(config)", "i.config = config")
 
+	// TODO will be removed when fixed in spec
+	controllerMap.Set("// canStartInstance start new instance only if current was decided\n", "")
+
 	return controllerMap.Range()
 }
 
 func SpecControllerSet() []utils.KeyValue {
 	var specControllerSet = utils.NewMap()
+
+	// TODO remove incorrect comment from spec to function description
+	specControllerSet.Set("// check prev instance if prev instance is not the first instance", "")
+
 	return specControllerSet.Range()
 }
 

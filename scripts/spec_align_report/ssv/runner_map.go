@@ -11,9 +11,6 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
 	runnerSet.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft/controller\"\n", "")
 
-	//TODO in spec its in type file - should we move it out too? why do we need Identifiers function
-	runnerSet.Set("// DutyRunners is a map of duty runners mapped by msg id hex.\ntype DutyRunners map[spectypes.BeaconRole]Runner\n\n// DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found\nfunc (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {\n\trole := msgID.GetRoleType()\n\treturn dr[role]\n}\n\n// Identifiers gathers identifiers of all shares.\nfunc (dr DutyRunners) Identifiers() []spectypes.MessageID {\n\tvar identifiers []spectypes.MessageID\n\tfor role, r := range dr {\n\t\tshare := r.GetBaseRunner().Share\n\t\tif share == nil { // TODO: handle missing share?\n\t\t\tcontinue\n\t\t}\n\t\ti := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)\n\t\tidentifiers = append(identifiers, i)\n\t}\n\treturn identifiers\n}", "")
-
 	runnerSet.Set("specssv.", "")
 	runnerSet.Set("specqbft.", "qbft.")
 	runnerSet.Set("spectypes.", "types.")

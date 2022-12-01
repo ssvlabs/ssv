@@ -47,7 +47,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	var q msgqueue.MsgQueue
 	if options.Mode == ModeRW {
-		indexers := msgqueue.WithIndexers( /*msgqueue.TestMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+		indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
 		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
 	}
 
