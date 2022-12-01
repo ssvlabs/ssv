@@ -176,6 +176,7 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 
 // canStartInstance start new instance only if current was decided
 func (c *Controller) canStartInstance(value []byte) error {
+	c.logger.Debug("canStartInstance", zap.Int("Height", int(c.Height)))
 	// check value
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
