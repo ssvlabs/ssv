@@ -62,8 +62,14 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 			return
 		}
 
-		if _, err := ncv.qbftController.ProcessMsg(signedMsg); err != nil {
+		if decided, err := ncv.qbftController.ProcessMsg(signedMsg); err != nil {
 			logger.Warn("failed to process message", zap.Error(err))
+		} else if decided != nil {
+			if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
+				if err = ncv.qbftController.SaveHighestInstance(inst); err != nil {
+					fmt.Printf("failed to save instance: %s\n", err.Error())
+				}
+			}
 		}
 		return
 	}
