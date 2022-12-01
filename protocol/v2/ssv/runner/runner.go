@@ -99,7 +99,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	b.logger.Debug("baseConsensusMsgProcessing",
 		zap.Int("Height", int(b.QBFTController.Height)),
 		zap.Bool("prevDecided", prevDecided),
-		zap.Any("RunningInstance", b.State.RunningInstance),
+		//zap.Any("RunningInstance", b.State.RunningInstance),
 		zap.Bool("isState", b.State != nil))
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
