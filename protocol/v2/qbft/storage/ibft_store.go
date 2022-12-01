@@ -13,12 +13,12 @@ type StoredInstance struct {
 	DecidedMessage *specqbft.SignedMessage
 }
 
-// Encode returns a msg encoded bytes or error
+// Encode returns a StoredInstance encoded bytes or error.
 func (si *StoredInstance) Encode() ([]byte, error) {
 	return json.Marshal(si)
 }
 
-// Decode returns error if decoding failed
+// Decode returns error if decoding failed.
 func (si *StoredInstance) Decode(data []byte) error {
 	return json.Unmarshal(data, &si)
 }
