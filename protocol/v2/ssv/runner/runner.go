@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -11,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
@@ -117,7 +119,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			if err = b.QBFTController.SaveHighestInstance(inst); err != nil {
+			storedInstance := &qbftstorage.StoredInstance{
+				State:          inst.State,
+				DecidedMessage: decidedMsg,
+			}
+			if err = b.QBFTController.SaveHighestInstance(storedInstance); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
 		}

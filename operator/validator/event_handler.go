@@ -205,7 +205,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
 	store := c.ibftStorageMap.Get(messageID.GetRoleType())
 	if store != nil {
-		if err := store.CleanAllDecided(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+		if err := store.CleanAllInstances(messageID[:]); err != nil { // TODO need to delete for multi duty as well
 			return nil, errors.Wrap(err, "could not clean all decided messages")
 		}
 		// remove change round messages

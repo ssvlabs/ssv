@@ -39,16 +39,10 @@ func HistoryHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting
 			if store == nil {
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
-			states, err := store.GetInstance(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
-			results := make([]*specqbft.SignedMessage, 0, len(states))
-			for _, state := range states {
-				res, newErr := extractSignedMessage(state)
-				if err == nil {
-					err = newErr
-				}
-				if newErr == nil {
-					results = append(results, res)
-				}
+			instances, err := store.GetInstance(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			results := make([]*specqbft.SignedMessage, 0, len(instances))
+			for _, instance := range instances {
+				results = append(results, instance.DecidedMessage)
 			}
 			sm.UpdateResults(err, results...)
 		}

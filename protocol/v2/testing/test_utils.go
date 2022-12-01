@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -41,10 +42,14 @@ func GenerateBLSKeys(oids ...spectypes.OperatorID) (map[spectypes.OperatorID]*bl
 // MsgGenerator represents a message generator
 type MsgGenerator func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message)
 
-// CreateMultipleSignedMessages enables to create multiple decided messages
-func CreateMultipleSignedMessages(sks map[spectypes.OperatorID]*bls.SecretKey, start specqbft.Height, end specqbft.Height,
-	generator MsgGenerator) ([]*specqbft.SignedMessage, error) {
-	results := make([]*specqbft.SignedMessage, 0)
+// CreateMultipleStoredInstances enables to create multiple stored instances (with decided messages).
+func CreateMultipleStoredInstances(
+	sks map[spectypes.OperatorID]*bls.SecretKey,
+	start specqbft.Height,
+	end specqbft.Height,
+	generator MsgGenerator,
+) ([]*qbftstorage.StoredInstance, error) {
+	results := make([]*qbftstorage.StoredInstance, 0)
 	for i := start; i <= end; i++ {
 		signers, msg := generator(i)
 		if msg == nil {
@@ -54,7 +59,22 @@ func CreateMultipleSignedMessages(sks map[spectypes.OperatorID]*bls.SecretKey, s
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, sm)
+		results = append(results, &qbftstorage.StoredInstance{
+			State: &specqbft.State{
+				ID:                   sm.Message.Identifier,
+				Round:                sm.Message.Round,
+				Height:               sm.Message.Height,
+				LastPreparedRound:    sm.Message.Round,
+				LastPreparedValue:    sm.Message.Data,
+				Decided:              true,
+				DecidedValue:         sm.Message.Data,
+				ProposeContainer:     specqbft.NewMsgContainer(),
+				PrepareContainer:     specqbft.NewMsgContainer(),
+				CommitContainer:      specqbft.NewMsgContainer(),
+				RoundChangeContainer: specqbft.NewMsgContainer(),
+			},
+			DecidedMessage: sm,
+		})
 	}
 	return results, nil
 }

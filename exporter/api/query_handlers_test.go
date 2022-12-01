@@ -2,8 +2,6 @@ package api
 
 import (
 	"fmt"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -16,6 +14,8 @@ import (
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -94,7 +94,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
@@ -114,7 +114,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	// save decided
 	for _, d := range decided250Seq {
-		require.NoError(t, ibftStorage.SaveDecided(d))
+		require.NoError(t, ibftStorage.SaveInstance(d))
 	}
 
 	t.Run("valid range", func(t *testing.T) {
