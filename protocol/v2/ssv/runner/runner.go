@@ -68,6 +68,7 @@ func (b *BaseRunner) canStartNewDuty() error {
 	if b.State == nil {
 		return nil
 	}
+	b.logger.Debug("canStartNewDuty", zap.Any("State", b.State))
 
 	// check if instance running first as we can't start new duty if it does
 	if b.State.RunningInstance != nil {
