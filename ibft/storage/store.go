@@ -75,7 +75,7 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
 	value, err := instance.Encode()
 	if err != nil {
-		return errors.Wrap(err, "marshaling error")
+		return errors.Wrap(err, "save highest instance failed - could not encode")
 	}
 	return i.save(value, highestInstanceKey, instance.State.ID)
 }
@@ -91,7 +91,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	}
 	ret := &qbftstorage.StoredInstance{}
 	if err := ret.Decode(val); err != nil {
-		return nil, errors.Wrap(err, "un-marshaling error")
+		return nil, errors.Wrap(err, "get highest instance failed - could not decode")
 	}
 	return ret, nil
 }
@@ -103,7 +103,7 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 
 	value, err := instance.Encode()
 	if err != nil {
-		return errors.Wrap(err, "marshaling error")
+		return errors.Wrap(err, "save instance failed - could not encode")
 	}
 
 	return i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
@@ -124,7 +124,7 @@ func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Heigh
 		if found {
 			instance := &qbftstorage.StoredInstance{}
 			if err := instance.Decode(val); err != nil {
-				return instances, errors.Wrap(err, "could not unmarshal instance")
+				return instances, errors.Wrap(err, "get highest instance failed - could not decode")
 			}
 
 			instances = append(instances, instance)
