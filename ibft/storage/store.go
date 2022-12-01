@@ -16,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -288,11 +287,4 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
-}
-
-func reportHighestDecided(signedMsg *specqbft.SignedMessage) {
-	msgID := message.ToMessageID(signedMsg.Message.Identifier)
-	pk := hex.EncodeToString(msgID.GetPubKey())
-	metricsHighestDecided.WithLabelValues(hex.EncodeToString(signedMsg.Message.Identifier), pk).
-		Set(float64(signedMsg.Message.Height))
 }
