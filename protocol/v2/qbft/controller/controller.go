@@ -3,8 +3,11 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -50,6 +53,7 @@ type Controller struct {
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
 	config              types.IConfig
+	logger              *zap.Logger
 }
 
 func NewController(
@@ -66,6 +70,7 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
+		logger:              logex.GetLogger(zap.String("who", "qbft_ctrl"), zap.String("identifier", hex.EncodeToString(identifier))),
 	}
 }
 
@@ -82,6 +87,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 
 	newInstance := c.addAndStoreNewInstance()
 	newInstance.Start(value, c.Height)
+	c.logger.Debug("starting instance")
 
 	return nil
 }
@@ -109,6 +115,7 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 }
 
 func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("UponExistingInstanceMsg")
 	inst := c.InstanceForHeight(msg.Message.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")

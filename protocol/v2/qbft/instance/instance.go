@@ -1,11 +1,14 @@
 package instance
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -20,6 +23,7 @@ type Instance struct {
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 	StartValue  []byte
+	logger      *zap.Logger
 }
 
 func NewInstance(
@@ -42,6 +46,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
+		logger:      logex.GetLogger(zap.String("who", "qbft_instance"), zap.String("identifier", hex.EncodeToString(identifier))),
 	}
 }
 
@@ -56,6 +61,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
+			i.logger.Debug("creating proposal")
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -101,6 +107,7 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 	}
 
 	res := i.processMsgF.Run(func() interface{} {
+		i.logger.Debug("processing msg", zap.Int("msg_type", int(msg.Message.MsgType)))
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
 			return i.uponProposal(msg, i.State.ProposeContainer)

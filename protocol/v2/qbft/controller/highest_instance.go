@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -15,7 +15,7 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 		return nil
 	}
 	c.Height = highestInstance.GetHeight()
-	fmt.Println("Controller:LoadHighestInstance:Height", c.Height)
+	c.logger.Debug("LoadHighestInstance", zap.Int("Height", int(c.Height)))
 	c.StoredInstances = InstanceContainer{
 		0: highestInstance,
 	}

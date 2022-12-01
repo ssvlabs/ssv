@@ -9,6 +9,7 @@ import (
 )
 
 func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("UponFutureMsg")
 	if err := validateFutureMsg(c.GetConfig(), msg, c.Share.Committee); err != nil {
 		return nil, errors.Wrap(err, "invalid future msg")
 	}

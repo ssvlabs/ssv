@@ -13,6 +13,7 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("UponDecided")
 	// decided msgs for past (already decided) instances will not decide again, just return
 	if msg.Message.Height < c.Height {
 		return nil, nil
@@ -59,6 +60,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	if !prevDecided {
 		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
+			c.logger.Debug("saving instance")
 			if err = c.SaveHighestInstance(futureInstance); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}

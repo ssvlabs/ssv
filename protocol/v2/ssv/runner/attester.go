@@ -2,11 +2,14 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -39,6 +42,7 @@ func NewAttesterRunnner(
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
+			logger:         logex.GetLogger(zap.String("who", "base_runner"), zap.String("identifier", hex.EncodeToString(qbftController.Identifier))),
 		},
 
 		beacon:   beacon,

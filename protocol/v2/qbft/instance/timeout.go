@@ -1,13 +1,13 @@
 package instance
 
 import (
-	"fmt"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (i *Instance) UponRoundTimeout() error {
 	newRound := i.State.Round + 1
-	fmt.Println("UponRoundTimeout:", newRound)
+	i.logger.Debug("UponRoundTimeout", zap.Int("newRound", int(newRound)))
 	i.State.Round = newRound
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)

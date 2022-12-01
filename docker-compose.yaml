@@ -5,7 +5,7 @@ x-base:
   build:
     context: .
     dockerfile: Dockerfile
-  image: ssvnode:latest
+#  image: ssvnode:latest
   command: make BUILD_PATH=/go/bin/ssvnode start-node
 #  network_mode: host
   networks:

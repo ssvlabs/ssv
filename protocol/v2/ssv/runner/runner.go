@@ -7,6 +7,7 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
 
@@ -59,6 +60,7 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
+	logger         *zap.Logger
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -99,13 +101,14 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
-	fmt.Println("BaseRunner:baseConsensusMsgProcessing:Height", b.QBFTController.Height)
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
-	fmt.Println("BaseRunner:baseConsensusMsgProcessing:prevDecided", prevDecided)
-	fmt.Println("BaseRunner:baseConsensusMsgProcessing:RunningInstance", b.State.RunningInstance)
-	fmt.Println("BaseRunner:baseConsensusMsgProcessing:isState", b.State != nil)
+	b.logger.Debug("baseConsensusMsgProcessing",
+		zap.Int("Height", int(b.QBFTController.Height)),
+		zap.Bool("prevDecided", prevDecided),
+		zap.Any("RunningInstance", b.State.RunningInstance),
+		zap.Bool("isState", b.State != nil))
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
@@ -186,13 +189,14 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
-	fmt.Println("BaseRunner:didDecideCorrectly:decided", decided)
+	logger := b.logger.With(zap.Bool("decided", decided))
 	if decidedMsg != nil {
-		fmt.Println("BaseRunner:didDecideCorrectly:Height", decidedMsg.Message.Height)
+		logger.With(zap.Int("Height", int(decidedMsg.Message.Height)))
 	}
-	fmt.Println("BaseRunner:didDecideCorrectly:State.DecidedValue", b.State.DecidedValue)
-	fmt.Println("BaseRunner:didDecideCorrectly:State.RunningInstance", b.State.RunningInstance)
-	fmt.Println("BaseRunner:didDecideCorrectly:State.Finished", b.State.Finished)
+	logger.With(
+		zap.Any("RunningInstance", b.State.RunningInstance),
+		zap.Bool("Finished", b.State.Finished))
+	logger.Debug("didDecideCorrectly")
 	decidedRunningInstance := b.State != nil && b.State.RunningInstance != nil &&
 		decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
 
@@ -238,10 +242,11 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	fmt.Println("BaseRunner.hasRunningDuty:IsState", b.State != nil)
+	logger := b.logger.With(zap.Bool("IsState", b.State != nil))
 	if b.State != nil {
-		fmt.Println("BaseRunner.hasRunningDuty:State.Finished", b.State.Finished)
+		logger.With(zap.Bool("Finished", b.State.Finished))
 	}
+	logger.Debug("hasRunningDuty")
 	if b.State == nil {
 		return false
 	}
