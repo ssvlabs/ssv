@@ -281,12 +281,10 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 
 	opts := *c.validatorOptions
 	opts.SSVShare = share
-	opts.Mode = validator.ModeR
-	opts.DutyRunners = setupRunners(c.context, opts)
 
-	v := validator.NewValidator(c.context, opts)
-	v.HandleMessage(msg)
-	return v.Stop()
+	v := validator.NewNonCommitteeValidator(msg.GetID(), opts)
+	v.ProcessMessage(msg)
+	return nil
 }
 
 // ListenToEth1Events is listening to events coming from eth1 client
