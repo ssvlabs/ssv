@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 type Getters interface {
@@ -110,11 +109,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			storedInstance := &qbftstorage.StoredInstance{
-				State:          inst.State,
-				DecidedMessage: decidedMsg,
-			}
-			if err = b.QBFTController.SaveHighestInstance(storedInstance); err != nil {
+			if err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
 		}
