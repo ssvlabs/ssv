@@ -15,15 +15,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
-// DutyRunners is a map of duty runners mapped by msg id hex.
-type DutyRunners map[spectypes.BeaconRole]Runner
-
-// DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found
-func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
-	role := msgID.GetRoleType()
-	return dr[role]
-}
-
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() specssv.BeaconNode
