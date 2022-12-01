@@ -35,6 +35,7 @@ function create_operators() {
 OP_SIZE=$1
 KS_PATH=$2
 KS_PASSWORD=$3
+SSV_KEYS_PATH=${4:-'./bin/ssv-keys-mac'}
 
 create_operators "$1"
 
@@ -51,7 +52,7 @@ do
 done
 
 echo "generating ssv keys"
-./ssv-keys-mac -of=./key_shares -ks="${KS_PATH}" -ps="${KS_PASSWORD}" -ssv=5 -oid="${OID}" -ok="$(yq e '.publicKeys | join(",")' operators.yaml)" > tmp.log
+$SSV_KEYS_PATH -of=./key_shares -ks="${KS_PATH}" -ps="${KS_PASSWORD}" -ssv=5 -oid="${OID}" -ok="$(yq e '.publicKeys | join(",")' operators.yaml)" > tmp.log
 KEY_SHARES_PATH=$(grep -o './key_shares.*json' tmp.log)
 
 rm temp.yaml 2> /dev/null

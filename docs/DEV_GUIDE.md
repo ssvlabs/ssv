@@ -113,12 +113,12 @@ $ make build
 
 1. Download the latest executable from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases)
    1. Adjust permissions for ssv-keys executable ```chmod +x ssv-keys-mac```
-   2. Locate the executable in the same folder you are running the script
 2. Generate local config using [script](../scripts/generate_local_config.sh) \
-   1. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD``` \
+   1. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KEYS_PATH``` \
       `OP_SIZE` - number of operators to create [3f+1]. (e.g. 4 or 7 or 10 ...) \
-      `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
-      `KS_PASSWORD` - keystore password (e.g. 12345678)
+      `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json) \
+      `KS_PASSWORD` - keystore password (e.g. 12345678) \
+      `SSV_KEYS_PATH` - path to ssv-keys executable (default. ./bin/ssv-keys-mac)
 3. Place the generated yaml files to `./config` [directory](../config)
 4. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
 5. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \

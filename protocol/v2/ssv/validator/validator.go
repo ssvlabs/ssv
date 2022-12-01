@@ -36,7 +36,6 @@ type Validator struct {
 
 	Q msgqueue.MsgQueue
 
-	mode  uint32
 	state uint32
 }
 
@@ -45,11 +44,8 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
-	var q msgqueue.MsgQueue
-	if options.Mode == ModeRW {
-		indexers := msgqueue.WithIndexers( /*msgqueue.TestMsgIndexer(), */ msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
-		q, _ = msgqueue.New(options.Logger, indexers) // TODO: handle error
-	}
+	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+	q, _ := msgqueue.New(options.Logger, indexers) // TODO: handle error
 
 	v := &Validator{
 		ctx:         ctx,
@@ -63,7 +59,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
 		Q:           q,
-		mode:        uint32(options.Mode),
 		state:       uint32(NotStarted),
 	}
 
@@ -86,7 +81,7 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		return errors.Errorf("could not get duty runner for msg ID")
 	}
 
-	if err := v.validateMessage(dutyRunner, msg); err != nil {
+	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return errors.Wrap(err, "Message invalid")
 	}
 
@@ -113,8 +108,8 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 	}
 }
 
-func (v *Validator) validateMessage(runner runner.Runner, msg *spectypes.SSVMessage) error {
-	if !v.Share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
+func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
+	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
