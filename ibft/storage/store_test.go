@@ -21,7 +21,7 @@ func init() {
 	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 }
 
-func TestCleanDecided(t *testing.T) {
+func TestCleanInstances(t *testing.T) {
 	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestCleanDecided(t *testing.T) {
 	require.NotNil(t, last)
 	require.Equal(t, specqbft.Height(msgsCount), last.State.Height)
 
-	// remove all decided
+	// remove all instances
 	require.NoError(t, storage.CleanAllInstances(msgID[:]))
 	res, err = storage.GetInstance(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
