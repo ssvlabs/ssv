@@ -182,7 +182,7 @@ func (c *Controller) canStartInstance(value []byte) error {
 		return errors.Wrap(err, "value invalid")
 	}
 
-	inst := c.StoredInstances.FindInstance(c.Height - 1)
+	inst := c.StoredInstances.FindInstance(c.Height)
 	if inst == nil {
 		return nil
 	}
