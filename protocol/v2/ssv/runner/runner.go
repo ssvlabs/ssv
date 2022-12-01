@@ -242,11 +242,6 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	logger := b.logger.With(zap.Bool("IsState", b.State != nil))
-	if b.State != nil {
-		logger.With(zap.Bool("Finished", b.State.Finished))
-	}
-	logger.Debug("hasRunningDuty")
 	if b.State == nil {
 		return false
 	}
