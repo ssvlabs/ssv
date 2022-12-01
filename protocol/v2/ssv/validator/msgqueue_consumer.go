@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -19,13 +18,6 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	if atomic.LoadUint32(&v.mode) == uint32(ModeR) {
-		err := v.ProcessMessage(msg)
-		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
-		}
-		return
-	}
 	fields := []zap.Field{
 		zap.Int("queue_len", v.Q.Len()),
 		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),

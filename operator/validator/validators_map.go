@@ -76,7 +76,6 @@ func (vm *validatorsMap) GetOrCreateValidator(share *types.SSVShare) *validator.
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.SSVShare = share
-		opts.Mode = validator.ModeRW
 		opts.DutyRunners = setupRunners(vm.ctx, opts)
 		vm.validatorsMap[pubKey] = validator.NewValidator(vm.ctx, opts)
 		printShare(share, vm.logger, "setup validator done")
