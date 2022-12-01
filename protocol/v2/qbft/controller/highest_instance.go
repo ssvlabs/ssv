@@ -30,14 +30,14 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	if state == nil {
 		return nil, nil
 	}
-	instance := instance.NewInstance(
+	i := instance.NewInstance(
 		c.config,
 		state.Share,
 		identifier,
 		state.Height,
 	)
-	instance.State = state
-	return instance, nil
+	i.State = state
+	return i, nil
 }
 
 func (c *Controller) SaveHighestInstance(instance *instance.Instance) error {
