@@ -1,29 +1,40 @@
 package qbftstorage
 
 import (
+	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-// DecidedMsgStore manages persistence of messages
-type DecidedMsgStore interface {
-	GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error)
-	// SaveHighestDecided saves the given decided message, after checking that it is indeed the highest
-	SaveHighestDecided(signedMsg ...*specqbft.SignedMessage) error
-	// GetDecided returns historical decided messages in the given range
-	GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error)
-	// SaveDecided saves historical decided messages
-	SaveDecided(signedMsg ...*specqbft.SignedMessage) error
-	// CleanAllDecided removes all decided & last decided for msgId
-	CleanAllDecided(msgID []byte) error
+// StoredInstance contains instance state alongside with a decided message (aggregated commits).
+type StoredInstance struct {
+	State          *specqbft.State
+	DecidedMessage *specqbft.SignedMessage
 }
 
-// InstanceStore manages instance data
+// Encode returns a StoredInstance encoded bytes or error.
+func (si *StoredInstance) Encode() ([]byte, error) {
+	return json.Marshal(si)
+}
+
+// Decode returns error if decoding failed.
+func (si *StoredInstance) Decode(data []byte) error {
+	return json.Unmarshal(data, &si)
+}
+
+// InstanceStore manages instance data.
 type InstanceStore interface {
-	// SaveHighestInstance saves the state for the highest instance
-	SaveHighestInstance(state *specqbft.State) error
-	// GetHighestInstance returns the state for the highest instance
-	GetHighestInstance(identifier []byte) (*specqbft.State, error)
+	// SaveHighestInstance saves the StoredInstance for the highest instance.
+	SaveHighestInstance(instance *StoredInstance) error
+	// GetHighestInstance returns the StoredInstance for the highest instance.
+	GetHighestInstance(identifier []byte) (*StoredInstance, error)
+	// GetInstancesInRange returns historical StoredInstance's in the given range.
+	GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*StoredInstance, error)
+	// SaveInstance saves historical StoredInstance.
+	SaveInstance(instance *StoredInstance) error
+	// CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
+	CleanAllInstances(msgID []byte) error
 }
 
 // ChangeRoundStore manages change round data
@@ -38,7 +49,6 @@ type ChangeRoundStore interface {
 
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
-	DecidedMsgStore
 	InstanceStore
 	ChangeRoundStore
 }

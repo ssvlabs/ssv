@@ -3,10 +3,6 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
-	"github.com/bloxapp/ssv/ibft/storage/forks"
-	"github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"log"
 	"sync"
 
@@ -17,16 +13,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/storage/forks"
+	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const (
-	highestKey           = "highest"
-	decidedKey           = "decided"
-	highestInstanceState = "highest_instance_state"
-	lastChangeRoundKey   = "last_change_round"
+	highestInstanceKey = "highest_instance"
+	instanceKey        = "instance"
+	lastChangeRoundKey = "last_change_round"
 )
 
 var (
@@ -74,124 +71,88 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-// GetHighestDecided gets a signed message for an ibft instance which is the highest
-// it tries to read current fork items, and if not found it tries to read v0 items
-func (i *ibftStorage) GetHighestDecided(identifier []byte) (*specqbft.SignedMessage, error) {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
-	val, found, err := i.get(highestKey, identifier[:])
+// SaveHighestInstance saves the StoredInstance for the highest instance.
+func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
+	value, err := instance.Encode()
 	if err != nil {
-		return nil, err
+		return errors.Wrap(err, "could not encode instance")
 	}
+	return i.save(value, highestInstanceKey, instance.State.ID)
+}
+
+// GetHighestInstance returns the StoredInstance for the highest instance.
+func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
+	val, found, err := i.get(highestInstanceKey, identifier[:])
 	if !found {
 		return nil, nil
 	}
-	return i.fork.DecodeSignedMsg(val)
+	if err != nil {
+		return nil, err
+	}
+	ret := &qbftstorage.StoredInstance{}
+	if err := ret.Decode(val); err != nil {
+		return nil, errors.Wrap(err, "could not decode instance")
+	}
+	return ret, nil
 }
 
-// SaveHighestDecided saves a signed message for an ibft instance which is currently highest
-func (i *ibftStorage) SaveHighestDecided(signedMsgs ...*specqbft.SignedMessage) error {
+// SaveInstance saves historical StoredInstance.
+func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	for _, signedMsg := range signedMsgs {
-		value, err := i.fork.EncodeSignedMsg(signedMsg)
-		if err != nil {
-			return errors.Wrap(err, "could not encode signed message")
-		}
-		if err = i.save(value, highestKey, signedMsg.Message.Identifier); err != nil {
-			return err
-		}
-		reportHighestDecided(signedMsg)
+	value, err := instance.Encode()
+	if err != nil {
+		return errors.Wrap(err, "could not encode instance")
 	}
 
-	return nil
+	return i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
 }
 
-func (i *ibftStorage) GetDecided(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*specqbft.SignedMessage, error) {
+// GetInstancesInRange returns historical StoredInstance's in the given range.
+func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	msgs := make([]*specqbft.SignedMessage, 0)
+	instances := make([]*qbftstorage.StoredInstance, 0)
 
 	for seq := from; seq <= to; seq++ {
-		// use the v1 identifier, if not found use the v0. this is to support old msg types when sync history
-		val, found, err := i.get(decidedKey, identifier[:], uInt64ToByteSlice(uint64(seq)))
+		val, found, err := i.get(instanceKey, identifier[:], uInt64ToByteSlice(uint64(seq)))
 		if err != nil {
-			return msgs, err
+			return instances, err
 		}
 		if found {
-			msg := specqbft.SignedMessage{}
-			if err := json.Unmarshal(val, &msg); err != nil {
-				return msgs, errors.Wrap(err, "could not unmarshal signed message v1")
+			instance := &qbftstorage.StoredInstance{}
+			if err := instance.Decode(val); err != nil {
+				return instances, errors.Wrap(err, "could not decode instance")
 			}
-			msgs = append(msgs, &msg)
+
+			instances = append(instances, instance)
 			continue
 		}
 	}
 
-	return msgs, nil
+	return instances, nil
 }
 
-func (i *ibftStorage) SaveDecided(signedMsg ...*specqbft.SignedMessage) error {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
-	return i.db.SetMany(i.prefix, len(signedMsg), func(j int) (basedb.Obj, error) {
-		msg := signedMsg[j]
-		k := i.key(decidedKey, uInt64ToByteSlice(uint64(msg.Message.Height)))
-		value, err := i.fork.EncodeSignedMsg(msg)
-		if err != nil {
-			return basedb.Obj{}, err
-		}
-		key := append(msg.Message.Identifier, k...)
-		return basedb.Obj{Key: key, Value: value}, nil
-	})
-}
-
-func (i *ibftStorage) CleanAllDecided(msgID []byte) error {
+// CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
+func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
-	prefix = append(prefix, []byte(decidedKey)...)
+	prefix = append(prefix, []byte(instanceKey)...)
 	n, err := i.db.DeleteByPrefix(prefix)
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
 	i.logger.Debug("removed decided", zap.Int("count", n),
 		zap.String("identifier", hex.EncodeToString(msgID)))
-	if err := i.delete(highestKey, msgID[:]); err != nil {
+	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
 	return nil
-}
-
-// SaveHighestInstance saves the state for the highest instance
-func (i *ibftStorage) SaveHighestInstance(state *specqbft.State) error {
-	value, err := state.Encode()
-	if err != nil {
-		return errors.Wrap(err, "marshaling error")
-	}
-	return i.save(value, highestInstanceState, state.ID)
-}
-
-// GetHighestInstance returns the state for the highest instance
-func (i *ibftStorage) GetHighestInstance(identifier []byte) (*specqbft.State, error) {
-	val, found, err := i.get(highestInstanceState, identifier[:])
-	if !found {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	ret := &specqbft.State{}
-	if err := ret.Decode(val); err != nil {
-		return nil, errors.Wrap(err, "un-marshaling error")
-	}
-	return ret, nil
 }
 
 // SaveLastChangeRoundMsg updates last change round message
@@ -327,11 +288,4 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
-}
-
-func reportHighestDecided(signedMsg *specqbft.SignedMessage) {
-	msgID := message.ToMessageID(signedMsg.Message.Identifier)
-	pk := hex.EncodeToString(msgID.GetPubKey())
-	metricsHighestDecided.WithLabelValues(hex.EncodeToString(signedMsg.Message.Identifier), pk).
-		Set(float64(signedMsg.Message.Height))
 }

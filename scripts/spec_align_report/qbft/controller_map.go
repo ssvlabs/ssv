@@ -61,7 +61,7 @@ func DecidedSet() []utils.KeyValue {
 
 	// list of approved changes in code between spec and implementation
 	// This handles storage of HighestInstance to storage - only implementation level
-	decidedMap.Set("if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {\n\t\t\tif err = c.SaveHighestInstance(futureInstance); err != nil {\n\t\t\t\tfmt.Printf(\"failed to save instance: %s\\n\", err.Error())\n\t\t\t}\n\t\t}", "")
+	decidedMap.Set("if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {\n\t\t\tif err = c.SaveHighestInstance(futureInstance, msg); err != nil {\n\t\t\t\tfmt.Printf(\"failed to save instance: %s\\n\", err.Error())\n\t\t\t}\n\t\t}", "")
 
 	return decidedMap.Range()
 }

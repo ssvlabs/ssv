@@ -1,7 +1,10 @@
 package controller
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+
 	"github.com/pkg/errors"
 )
 
@@ -21,21 +24,25 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 }
 
 func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, error) {
-	state, err := c.config.GetStorage().GetHighestInstance(identifier)
+	highestInstance, err := c.config.GetStorage().GetHighestInstance(identifier)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch highest instance")
 	}
-	if state == nil {
+	if highestInstance == nil {
 		return nil, nil
 	}
 	return instance.NewInstance(
 		c.config,
-		state.Share,
+		highestInstance.State.Share,
 		identifier,
-		state.Height,
+		highestInstance.State.Height,
 	), nil
 }
 
-func (c *Controller) SaveHighestInstance(instance *instance.Instance) error {
-	return c.config.GetStorage().SaveHighestInstance(instance.State)
+func (c *Controller) SaveHighestInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+	storedInstance := &qbftstorage.StoredInstance{
+		State:          i.State,
+		DecidedMessage: msg,
+	}
+	return c.config.GetStorage().SaveHighestInstance(storedInstance)
 }

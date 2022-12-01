@@ -2,12 +2,13 @@ package handlers
 
 import (
 	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -38,7 +39,11 @@ func HistoryHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting
 			if store == nil {
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
-			results, err := store.GetDecided(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			instances, err := store.GetInstancesInRange(msgID[:], sm.Params.Height[0], sm.Params.Height[1])
+			results := make([]*specqbft.SignedMessage, 0, len(instances))
+			for _, instance := range instances {
+				results = append(results, instance.DecidedMessage)
+			}
 			sm.UpdateResults(err, results...)
 		}
 
