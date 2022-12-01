@@ -11,55 +11,55 @@ func ProcessRunner() {
 	if err := runnerCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	runnerCompareStruct.Run()
+	_ = runnerCompareStruct.Run()
 
 	runnerStateCompareStruct := initRunnerStateCompareStruct()
 	if err := runnerStateCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	runnerStateCompareStruct.Run()
+	_ = runnerStateCompareStruct.Run()
 
 	aggregatorCompareStruct := initAggregatorCompareStruct()
 	if err := aggregatorCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	aggregatorCompareStruct.Run()
+	_ = aggregatorCompareStruct.Run()
 
 	attesterCompareStruct := initAttesterCompareStruct()
 	if err := attesterCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	attesterCompareStruct.Run()
+	_ = attesterCompareStruct.Run()
 
 	proposerCompareStruct := initProposerCompareStruct()
 	if err := proposerCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	proposerCompareStruct.Run()
+	_ = proposerCompareStruct.Run()
 
 	syncCommitteeCompareStruct := initSyncCommitteeCompareStruct()
 	if err := syncCommitteeCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	syncCommitteeCompareStruct.Run()
+	_ = syncCommitteeCompareStruct.Run()
 
 	syncCommitteeAggregatorCompareStruct := initSyncCommitteeAggregatorCompareStruct()
 	if err := syncCommitteeAggregatorCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	syncCommitteeAggregatorCompareStruct.Run()
+	_ = syncCommitteeAggregatorCompareStruct.Run()
 
 	runnerValidationsCompareStruct := initRunnerValidationsCompareStruct()
 	if err := runnerValidationsCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	runnerValidationsCompareStruct.Run()
+	_ = runnerValidationsCompareStruct.Run()
 
 	runnerSignaturesCompareStruct := initRunnerSignaturesCompareStruct()
 	if err := runnerSignaturesCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	runnerSignaturesCompareStruct.Run()
+	_ = runnerSignaturesCompareStruct.Run()
 
 }
 

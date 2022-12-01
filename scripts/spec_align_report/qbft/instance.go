@@ -13,31 +13,31 @@ func ProcessInstance() {
 	if err := instanceCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	instanceCompareStruct.Run()
+	_ = instanceCompareStruct.Run()
 
 	proposalCompareStruct := initProposalCompareStruct()
 	if err := proposalCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	proposalCompareStruct.Run()
+	_ = proposalCompareStruct.Run()
 
 	prepareCompareStruct := initPrepareCompareStruct()
 	if err := prepareCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	prepareCompareStruct.Run()
+	_ = prepareCompareStruct.Run()
 
 	commitCompareStruct := initCommitCompareStruct()
 	if err := commitCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	commitCompareStruct.Run()
+	_ = commitCompareStruct.Run()
 
 	roundChangeCompareStruct := initRoundChangeCompareStruct()
 	if err := roundChangeCompareStruct.ReplaceMap(); err != nil {
 		panic(err)
 	}
-	roundChangeCompareStruct.Run()
+	_ = roundChangeCompareStruct.Run()
 
 }
 func initInstanceCompareStruct() *utils.Compare {
