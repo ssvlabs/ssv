@@ -30,6 +30,9 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	if state == nil {
 		return nil, nil
 	}
+	if !state.Decided {
+		return nil, errors.New("invalid state: non decided instance stored")
+	}
 	return instance.NewInstance(
 		c.config,
 		state.Share,
