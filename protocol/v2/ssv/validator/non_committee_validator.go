@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -12,17 +11,13 @@ import (
 )
 
 type NonCommitteeValidator struct {
-	ctx            context.Context
-	cancel         context.CancelFunc
 	logger         *zap.Logger
 	Share          *types.SSVShare
 	Storage        *storage.QBFTStores
 	qbftController *qbftcontroller.Controller
 }
 
-func NewNonCommitteeValidator(pctx context.Context, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
-	ctx, cancel := context.WithCancel(pctx)
-
+func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &types.Config{
 		Domain:  types.GetDefaultDomain(),
@@ -34,8 +29,6 @@ func NewNonCommitteeValidator(pctx context.Context, identifier spectypes.Message
 	}
 
 	return &NonCommitteeValidator{
-		ctx:            ctx,
-		cancel:         cancel,
 		logger:         opts.Logger,
 		Share:          opts.SSVShare,
 		Storage:        opts.Storage,
@@ -45,7 +38,7 @@ func NewNonCommitteeValidator(pctx context.Context, identifier spectypes.Message
 
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 	logger := ncv.logger.With(zap.String("id", msg.GetID().String()))
-	if err := ValidateMessage(ncv.Share.Share, msg); err != nil {
+	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Warn("Message invalid", zap.Error(err))
 		return
 	}
@@ -73,10 +66,4 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 		}
 		return
 	}
-}
-
-// Stop stops a Validator.
-func (ncv *NonCommitteeValidator) Stop() error {
-	ncv.cancel()
-	return nil
 }
