@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -60,11 +59,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	if !prevDecided {
 		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
-			storedInstance := &qbftstorage.StoredInstance{
-				State:          futureInstance.State,
-				DecidedMessage: msg,
-			}
-			if err = c.SaveHighestInstance(storedInstance); err != nil {
+			if err = c.SaveHighestInstance(futureInstance, msg); err != nil {
 				fmt.Printf("failed to save instance: %s\n", err.Error())
 			}
 		}
