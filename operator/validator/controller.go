@@ -197,9 +197,6 @@ func (c *controller) setupNetworkHandlers() error {
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
 	), p2pprotocol.WithHandler(
-		p2pprotocol.LastChangeRoundProtocol,
-		handlers.LastChangeRoundHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
 		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),

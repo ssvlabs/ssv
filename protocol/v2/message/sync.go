@@ -65,8 +65,6 @@ type SyncMsgType int32
 const (
 	// LastDecidedType is the last decided message type
 	LastDecidedType SyncMsgType = iota
-	// LastChangeRoundType is the last change round message type
-	LastChangeRoundType
 	// DecidedHistoryType is the decided history message type
 	DecidedHistoryType
 )
