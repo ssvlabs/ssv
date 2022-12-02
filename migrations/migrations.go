@@ -27,6 +27,7 @@ var (
 		migrationCleanSyncOffset,
 		migrationCleanOperatorRemovalCorruptions,
 		migrationCleanShares,
+		migrationRemoveChangeRoundSync,
 	}
 )
 
