@@ -2,7 +2,6 @@ package roundtimer
 
 import (
 	"context"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -10,16 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RoundTimeout is a function that determines the next round timeout.
-type RoundTimeout func(round specqbft.Round) time.Duration
-
-// DefaultRoundTimeout returns the default timeout function (base^round seconds).
-func DefaultRoundTimeout(base float64) RoundTimeout {
-	return func(round specqbft.Round) time.Duration {
-		roundTimeout := math.Pow(base, float64(round))
-		return time.Duration(float64(time.Second) * roundTimeout)
-	}
-}
+const DefaultRoundDuration = 2 * time.Second
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
@@ -34,19 +24,19 @@ type RoundTimer struct {
 	// round is the current round of the timer
 	round int64
 
-	roundTimeout RoundTimeout
+	roundDuration time.Duration
 }
 
 // New creates a new instance of RoundTimer.
 func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
-		ctx:          ctx,
-		cancelCtx:    cancelCtx,
-		logger:       logger,
-		timer:        nil,
-		done:         done,
-		roundTimeout: DefaultRoundTimeout(3),
+		ctx:           ctx,
+		cancelCtx:     cancelCtx,
+		logger:        logger,
+		timer:         nil,
+		done:          done,
+		roundDuration: DefaultRoundDuration,
 	}
 }
 
@@ -63,11 +53,10 @@ func (t *RoundTimer) Round() specqbft.Round {
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
-	timeout := t.roundTimeout(round)
 	// preparing the underlying timer
 	timer := t.timer
 	if timer == nil {
-		timer = time.NewTimer(timeout)
+		timer = time.NewTimer(t.roundDuration)
 	} else {
 		timer.Stop()
 		// draining the channel of existing timer
@@ -76,7 +65,7 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 		default:
 		}
 	}
-	timer.Reset(timeout)
+	timer.Reset(t.roundDuration)
 	// spawns a new goroutine to listen to the timer
 	go t.waitForRound(round, timer.C)
 }
