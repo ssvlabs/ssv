@@ -3,10 +3,11 @@ package instance
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -67,12 +68,6 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 					fmt.Printf("%s\n", err.Error())
 				}
 			}
-		}
-
-		// TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md
-		mid := spectypes.MessageIDFromBytes(i.State.ID)
-		if err := i.config.GetNetwork().SyncHighestRoundChange(mid, i.State.Height); err != nil {
-			fmt.Printf("%s\n", err.Error())
 		}
 	})
 }

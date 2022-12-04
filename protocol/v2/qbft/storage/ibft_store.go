@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
@@ -37,18 +36,7 @@ type InstanceStore interface {
 	CleanAllInstances(msgID []byte) error
 }
 
-// ChangeRoundStore manages change round data
-type ChangeRoundStore interface {
-	// GetLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	GetLastChangeRoundMsg(identifier []byte, signers ...spectypes.OperatorID) ([]*specqbft.SignedMessage, error)
-	// SaveLastChangeRoundMsg returns the latest broadcasted msg from the instance
-	SaveLastChangeRoundMsg(msg *specqbft.SignedMessage) error
-	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
-	CleanLastChangeRound(identifier []byte) error
-}
-
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
 	InstanceStore
-	ChangeRoundStore
 }

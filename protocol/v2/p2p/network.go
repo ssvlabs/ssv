@@ -79,8 +79,6 @@ type SyncProtocol int32
 const (
 	// LastDecidedProtocol is the last decided protocol type
 	LastDecidedProtocol SyncProtocol = iota
-	// LastChangeRoundProtocol is the last change round protocol type
-	LastChangeRoundProtocol
 	// DecidedHistoryProtocol is the decided history protocol type
 	DecidedHistoryProtocol
 )
@@ -112,10 +110,6 @@ type Syncer interface {
 	// LastDecided fetches last decided from a random set of peers
 	// TODO: replace with specqbft.SyncHighestDecided
 	LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
-
-	// LastChangeRound fetches last change round message from a random set of peers
-	// TODO: replace with specqbft.SyncHighestRoundChange
-	LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]SyncResult, error)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
