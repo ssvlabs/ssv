@@ -2,11 +2,11 @@ package migrations
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 var migrationRemoveChangeRoundSync = Migration{
@@ -21,7 +21,7 @@ var migrationRemoveChangeRoundSync = Migration{
 		for _, share := range shares {
 			role := spectypes.BNRoleAttester
 			messageID := spectypes.NewMsgID(share.ValidatorPubKey, role)
-			if err := cleanLastChangeRound(opt, []byte(role.String()), messageID[:]); err != nil {
+			if err := cleanLastChangeRound(opt.Db, []byte(role.String()), messageID[:]); err != nil {
 				return err
 			}
 		}
@@ -30,18 +30,15 @@ var migrationRemoveChangeRoundSync = Migration{
 	},
 }
 
-func cleanLastChangeRound(opt Options, prefix []byte, identifier []byte) error {
+func cleanLastChangeRound(db basedb.IDb, prefix []byte, identifier []byte) error {
 	const lastChangeRoundKey = "last_change_round"
 	prefix = append(prefix, identifier[:]...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
 
-	n, err := opt.Db.DeleteByPrefix(prefix)
+	_, err := db.DeleteByPrefix(prefix)
 	if err != nil {
 		return fmt.Errorf("failed to remove last change round: %w", err)
 	}
-
-	opt.Logger.Debug("removed last change round", zap.Int("count", n),
-		zap.String("identifier", hex.EncodeToString(identifier)))
 
 	return nil
 }
