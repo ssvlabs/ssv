@@ -3,8 +3,6 @@ package message
 import spectypes "github.com/bloxapp/ssv-spec/types"
 
 const (
-	// SSVDecidedMsgType extends spec msg type
-	SSVDecidedMsgType spectypes.MsgType = 3
 	// SSVSyncMsgType extends spec msg type
 	SSVSyncMsgType spectypes.MsgType = 4
 )
@@ -14,8 +12,6 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 	switch mt {
 	case spectypes.SSVConsensusMsgType:
 		return "consensus"
-	case SSVDecidedMsgType:
-		return "decided"
 	case spectypes.SSVPartialSignatureMsgType:
 		return "partialSignature"
 	case spectypes.DKGMsgType:

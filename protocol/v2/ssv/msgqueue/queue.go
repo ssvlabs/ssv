@@ -87,10 +87,12 @@ type Index struct {
 	H specqbft.Height
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
 	Cmt specqbft.MessageType
+	// D is decided
+	D bool
 }
 
 func (i *Index) String() string {
-	return fmt.Sprintf("%s-%d-%s-%d-%d", i.Name, i.Mt, i.ID, i.H, i.Cmt)
+	return fmt.Sprintf("%s-%d-%s-%d-%d-%v", i.Name, i.Mt, i.ID, i.H, i.Cmt, i.D)
 }
 
 // queue implements MsgQueue
@@ -323,5 +325,6 @@ func TestMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
 		ID:   mid.String(),
 		H:    math.MaxInt64,
 		Cmt:  -1,
+		D:    false,
 	}
 }

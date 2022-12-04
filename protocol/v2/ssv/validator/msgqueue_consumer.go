@@ -215,13 +215,7 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 				return msgqueue.Index{}
 			}
 			return indices[0]
-		}).Add(func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
-		if len(indices) == 0 {
-			return msgqueue.Index{}
-		}
-		return indices[0]
-	})
+		})
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {

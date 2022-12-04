@@ -9,8 +9,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 func TestNewMsgQueue(t *testing.T) {
@@ -69,11 +67,8 @@ func TestNewMsgQueue(t *testing.T) {
 		require.NoError(t, err)
 		identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
-		q.Add(generateConsensusMsg(t, message.SSVDecidedMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
 
 		for i := 0; i <= 2; i++ {
 			height := specqbft.Height(i)
@@ -81,7 +76,7 @@ func TestNewMsgQueue(t *testing.T) {
 			require.Equal(t, len(idxs), 1)
 			idx := idxs[0]
 			require.Equal(t, 1, q.Count(idx))
-			require.Equal(t, int64(2), q.Clean(SignedMsgCleaner(identifier, height)))
+			require.Equal(t, int64(1), q.Clean(SignedMsgCleaner(identifier, height)))
 			require.Equal(t, 0, q.Count(idx))
 		}
 	})

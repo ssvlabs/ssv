@@ -39,14 +39,9 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(2)
+	wg.Add(1)
 
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
-	ctr.messageRouter.Route(spectypes.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
-		MsgID:   identifier,
-		Data:    []byte("data"),
-	})
 
 	ctr.messageRouter.Route(spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
@@ -59,17 +54,19 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
+
 	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
+
 	go func() {
 		time.Sleep(time.Second * 4)
 		panic("time out!")
 	}()
-	wg.Wait()
 
+	wg.Wait()
 }
 
 func TestGetIndices(t *testing.T) {
