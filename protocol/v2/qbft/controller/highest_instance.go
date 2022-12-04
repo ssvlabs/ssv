@@ -31,12 +31,14 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	if highestInstance == nil {
 		return nil, nil
 	}
-	return instance.NewInstance(
+	i := instance.NewInstance(
 		c.config,
 		highestInstance.State.Share,
 		identifier,
 		highestInstance.State.Height,
-	), nil
+	)
+	i.State = highestInstance.State
+	return i, nil
 }
 
 func (c *Controller) SaveHighestInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
