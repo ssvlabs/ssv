@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -126,7 +125,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 	require.NotNil(t, savedInstance)
 	require.Equal(t, specqbft.Height(1), savedInstance.State.Height)
 	require.Equal(t, specqbft.Round(1), savedInstance.State.Round)
-	require.Equal(t, identifier.String(), message.ToMessageID(savedInstance.State.ID).String())
+	require.Equal(t, identifier.String(), specqbft.ControllerIdToMessageID(savedInstance.State.ID).String())
 	require.Equal(t, specqbft.Round(1), savedInstance.State.LastPreparedRound)
 	require.Equal(t, true, savedInstance.State.Decided)
 	require.Equal(t, []byte("value"), savedInstance.State.LastPreparedValue)
@@ -167,7 +166,7 @@ func TestSaveAndFetchState(t *testing.T) {
 
 	require.Equal(t, specqbft.Height(1), savedInstance.State.Height)
 	require.Equal(t, specqbft.Round(1), savedInstance.State.Round)
-	require.Equal(t, identifier.String(), message.ToMessageID(savedInstance.State.ID).String())
+	require.Equal(t, identifier.String(), specqbft.ControllerIdToMessageID(savedInstance.State.ID).String())
 	require.Equal(t, specqbft.Round(1), savedInstance.State.LastPreparedRound)
 	require.Equal(t, true, savedInstance.State.Decided)
 	require.Equal(t, []byte("value"), savedInstance.State.LastPreparedValue)
