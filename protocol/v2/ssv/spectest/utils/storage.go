@@ -8,21 +8,35 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
+	"sync"
 )
 
+var db basedb.IDb
+var dbOnce sync.Once
+
+func getDB() basedb.IDb {
+	dbOnce.Do(func() {
+		logger := zap.L()
+		dbInstance, err := storage.GetStorageFactory(basedb.Options{
+			Type:      "badger-memory",
+			Path:      "",
+			Reporting: false,
+			Logger:    logger,
+			Ctx:       context.TODO(),
+		})
+		if err != nil {
+			panic(err)
+		}
+		db = dbInstance
+	})
+	return db
+}
+
 func TestingStores() *qbftstorage.QBFTStores {
+	db = getDB()
+
 	//logger := logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 	logger := zap.L()
-	db, err := storage.GetStorageFactory(basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
-		Reporting: false,
-		Logger:    logger,
-		Ctx:       context.TODO(),
-	})
-	if err != nil {
-		panic(err)
-	}
 
 	stores := qbftstorage.NewStores()
 	stores.Add(spectypes.BNRoleAttester, qbftstorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion))
