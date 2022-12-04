@@ -6,8 +6,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 func TestSSVMsgID(t *testing.T) {
@@ -16,7 +14,7 @@ func TestSSVMsgID(t *testing.T) {
 		msgData := `{"message":{"type":3,"round":1,"identifier":"OTFiZGZjOWQxYzU4NzZkYTEwY...","height":28276,"value":"mB0aAAAAAAA4AAAAAAAAADpTC1djq..."},"signature":"jrB0+Z9zyzzVaUpDMTlCt6Om9mj...","signer_ids":[2,3,4]}`
 		msg := spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   message.ToMessageID([]byte("OTFiZGZjOWQxYzU4NzZkYTEwY")),
+			MsgID:   specqbft.ControllerIdToMessageID([]byte("OTFiZGZjOWQxYzU4NzZkYTEwY")),
 			Data:    []byte(msgData),
 		}
 		raw, err := msg.Encode()

@@ -10,7 +10,6 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -21,7 +20,7 @@ import (
 func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
-	msgId := message.ToMessageID(test.Pre.State.ID)
+	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	pre := instance.NewInstance(
 		utils.TestingConfig(spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,

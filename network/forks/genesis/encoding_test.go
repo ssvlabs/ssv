@@ -6,14 +6,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 func TestForkV1_Encoding(t *testing.T) {
 	msg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   message.ToMessageID([]byte("xxxxxxxxxxx_ATTESTER")),
+		MsgID:   specqbft.ControllerIdToMessageID([]byte("xxxxxxxxxxx_ATTESTER")),
 		Data:    []byte("data"),
 	}
 	f := &ForkGenesis{}
