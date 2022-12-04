@@ -2,8 +2,10 @@ package genesis
 
 import (
 	"bytes"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"testing"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/stretchr/testify/require"
 )
