@@ -22,7 +22,6 @@ import (
 const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
-	lastChangeRoundKey = "last_change_round"
 )
 
 var (
@@ -151,24 +150,6 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}
-	return nil
-}
-
-// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
-// NOTE: It needs to be kept for migration.
-func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
-	prefix := i.prefix
-	prefix = append(prefix, identifier[:]...)
-	prefix = append(prefix, []byte(lastChangeRoundKey)...)
-	n, err := i.db.DeleteByPrefix(prefix)
-	if err != nil {
-		return errors.Wrap(err, "failed to remove last change round")
-	}
-	i.logger.Debug("removed last change round", zap.Int("count", n),
-		zap.String("identifier", hex.EncodeToString(identifier)))
 	return nil
 }
 
