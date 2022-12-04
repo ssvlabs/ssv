@@ -36,6 +36,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		highestInstance.State.Share,
 		identifier,
 		highestInstance.State.Height,
+		highestInstance.State.Round,
 	), nil
 }
 

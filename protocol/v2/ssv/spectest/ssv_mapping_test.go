@@ -3,6 +3,7 @@ package spectest
 import (
 	"encoding/json"
 	"fmt"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"io"
 	"net/http"
 	"os"
@@ -266,7 +267,8 @@ func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
-		contr.Height)
+		contr.Height,
+		specqbft.FirstRound)
 
 	newInst.State.DecidedValue = inst.State.DecidedValue
 	newInst.State.Decided = inst.State.Decided

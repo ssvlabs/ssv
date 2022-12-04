@@ -162,7 +162,7 @@ func (c *Controller) GetIdentifier() []byte {
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height, specqbft.FirstRound)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }
