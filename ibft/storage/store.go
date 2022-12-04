@@ -191,23 +191,6 @@ func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 	return obj.Value, found, nil
 }
 
-func (i *ibftStorage) getAll(id string, pk []byte) ([]*specqbft.SignedMessage, error) {
-	prefix := append(i.prefix, pk...)
-	prefix = append(prefix, id...)
-
-	var res []*specqbft.SignedMessage
-	err := i.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
-		msg := new(specqbft.SignedMessage)
-		if err := msg.Decode(obj.Value); err != nil {
-			return err
-		}
-		res = append(res, msg)
-		return nil
-	})
-
-	return res, err
-}
-
 func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
