@@ -26,10 +26,3 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return ""
 	}
 }
-
-// ToMessageID extension for spec msg id, returns spec messageID
-func ToMessageID(b []byte) spectypes.MessageID {
-	ret := spectypes.MessageID{}
-	copy(ret[0:52], b)
-	return ret
-}
