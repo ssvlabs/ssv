@@ -36,7 +36,15 @@ type InstanceStore interface {
 	CleanAllInstances(msgID []byte) error
 }
 
+// ChangeRoundStore manages change round data
+type ChangeRoundStore interface {
+	// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
+	// It needs to be kept for migration.
+	CleanLastChangeRound(identifier []byte) error
+}
+
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
 	InstanceStore
+	ChangeRoundStore
 }

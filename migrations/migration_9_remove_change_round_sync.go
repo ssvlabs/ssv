@@ -18,7 +18,7 @@ var migrationRemoveChangeRoundSync = Migration{
 		qbftStorage := opt.qbftStorage()
 		for _, share := range shares {
 			messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
-			if err := qbftStorage.CleanAllInstances(messageID[:]); err != nil {
+			if err := qbftStorage.CleanLastChangeRound(messageID[:]); err != nil {
 				return err
 			}
 		}

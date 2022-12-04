@@ -76,6 +76,7 @@ func (o Options) nodeStorage() operatorstorage.Storage {
 }
 
 func (o Options) qbftStorage() qbftstorageprotocol.QBFTStore {
+	// TODO: handle other duty types too
 	return qbftstorage.New(o.Db, o.Logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion)
 }
 

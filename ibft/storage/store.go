@@ -154,19 +154,21 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	return nil
 }
 
-// CleanAllChangeRound removes all change round messages from storage.
+// CleanLastChangeRound cleans last change round message of some validator, should be called upon controller init
 // NOTE: It needs to be kept for migration.
-func (i *ibftStorage) CleanAllChangeRound() error {
+func (i *ibftStorage) CleanLastChangeRound(identifier []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
 	prefix := i.prefix
+	prefix = append(prefix, identifier[:]...)
 	prefix = append(prefix, []byte(lastChangeRoundKey)...)
 	n, err := i.db.DeleteByPrefix(prefix)
 	if err != nil {
-		return errors.Wrap(err, "failed to remove change round")
+		return errors.Wrap(err, "failed to remove last change round")
 	}
-	i.logger.Debug("removed change round", zap.Int("count", n))
+	i.logger.Debug("removed last change round", zap.Int("count", n),
+		zap.String("identifier", hex.EncodeToString(identifier)))
 	return nil
 }
 
@@ -187,6 +189,23 @@ func (i *ibftStorage) get(id string, pk []byte, keyParams ...[]byte) ([]byte, bo
 		return nil, found, err
 	}
 	return obj.Value, found, nil
+}
+
+func (i *ibftStorage) getAll(id string, pk []byte) ([]*specqbft.SignedMessage, error) {
+	prefix := append(i.prefix, pk...)
+	prefix = append(prefix, id...)
+
+	var res []*specqbft.SignedMessage
+	err := i.db.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		msg := new(specqbft.SignedMessage)
+		if err := msg.Decode(obj.Value); err != nil {
+			return err
+		}
+		res = append(res, msg)
+		return nil
+	})
+
+	return res, err
 }
 
 func (i *ibftStorage) delete(id string, pk []byte, keyParams ...[]byte) error {
