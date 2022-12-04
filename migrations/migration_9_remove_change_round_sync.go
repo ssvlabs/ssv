@@ -2,18 +2,27 @@ package migrations
 
 import (
 	"context"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 var migrationRemoveChangeRoundSync = Migration{
-	Name: "migration_8_remove_change_round_sync",
+	Name: "migration_9_remove_change_round_sync",
 	Run: func(ctx context.Context, opt Options, key []byte) error {
-		stores := opt.getRegistryStores()
-		for _, store := range stores {
-			err := store.CleanRegistryData()
-			if err != nil {
+		validatorStorage := opt.validatorStorage()
+		shares, err := validatorStorage.GetAllValidatorShares()
+		if err != nil {
+			return err
+		}
+
+		qbftStorage := opt.qbftStorage()
+		for _, share := range shares {
+			messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
+			if err := qbftStorage.CleanAllInstances(messageID[:]); err != nil {
 				return err
 			}
 		}
+
 		return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
 	},
 }

@@ -9,7 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
-const DefaultRoundDuration = 2 * time.Second
+type RoundTimeoutFunc func(specqbft.Round) time.Duration
+
+// RoundTimeout returns the number of seconds until next timeout for a give round
+func RoundTimeout(specqbft.Round) time.Duration {
+	return 2 * time.Second
+}
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
@@ -24,19 +29,19 @@ type RoundTimer struct {
 	// round is the current round of the timer
 	round int64
 
-	roundDuration time.Duration
+	roundTimeout RoundTimeoutFunc
 }
 
 // New creates a new instance of RoundTimer.
 func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
-		ctx:           ctx,
-		cancelCtx:     cancelCtx,
-		logger:        logger,
-		timer:         nil,
-		done:          done,
-		roundDuration: DefaultRoundDuration,
+		ctx:          ctx,
+		cancelCtx:    cancelCtx,
+		logger:       logger,
+		timer:        nil,
+		done:         done,
+		roundTimeout: RoundTimeout,
 	}
 }
 
@@ -53,10 +58,11 @@ func (t *RoundTimer) Round() specqbft.Round {
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
+	timeout := t.roundTimeout(round)
 	// preparing the underlying timer
 	timer := t.timer
 	if timer == nil {
-		timer = time.NewTimer(t.roundDuration)
+		timer = time.NewTimer(timeout)
 	} else {
 		timer.Stop()
 		// draining the channel of existing timer
@@ -65,7 +71,7 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 		default:
 		}
 	}
-	timer.Reset(t.roundDuration)
+	timer.Reset(timeout)
 	// spawns a new goroutine to listen to the timer
 	go t.waitForRound(round, timer.C)
 }

@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"context"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -56,7 +60,7 @@ type Options struct {
 	DbPath string
 }
 
-func (o *Options) getRegistryStores() []eth1.RegistryStore {
+func (o Options) getRegistryStores() []eth1.RegistryStore {
 	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage()}
 }
 
@@ -66,8 +70,13 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 		Logger: o.Logger,
 	})
 }
+
 func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db, o.Logger)
+}
+
+func (o Options) qbftStorage() qbftstorageprotocol.QBFTStore {
+	return qbftstorage.New(o.Db, o.Logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion)
 }
 
 // Run executes the migrations.
