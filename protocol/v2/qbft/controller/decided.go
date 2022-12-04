@@ -48,7 +48,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	isFutureDecided := msg.Message.Height > c.Height
 	if isFutureDecided {
 		// add an instance for the decided msg
-		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height, msg.Message.Round)
+		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data

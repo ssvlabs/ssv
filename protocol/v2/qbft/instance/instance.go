@@ -27,13 +27,12 @@ func NewInstance(
 	share *spectypes.Share,
 	identifier []byte,
 	height specqbft.Height,
-	round specqbft.Round,
 ) *Instance {
 	return &Instance{
 		State: &specqbft.State{
 			Share:                share,
 			ID:                   identifier,
-			Round:                round,
+			Round:                specqbft.FirstRound,
 			Height:               height,
 			LastPreparedRound:    specqbft.NoRound,
 			ProposeContainer:     specqbft.NewMsgContainer(),

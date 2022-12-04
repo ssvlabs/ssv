@@ -26,7 +26,6 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
-		test.Pre.State.Round,
 	)
 	require.NoError(t, pre.Decode(preByts))
 
