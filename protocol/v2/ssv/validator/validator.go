@@ -34,7 +34,8 @@ type Validator struct {
 	Storage *storage.QBFTStores
 	Network specqbft.Network
 
-	Q queue.Queue
+	Q          queue.Queue
+	queueState *queue.State
 
 	state uint32
 }
@@ -56,7 +57,13 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
 		Q:           queue.New(nil),
-		state:       uint32(NotStarted),
+		queueState: &queue.State{
+			HasRunningInstance: false,
+			Height:             0,
+			Slot:               0,
+			Quorum:             options.SSVShare.Quorum,
+		},
+		state: uint32(NotStarted),
 	}
 
 	return v

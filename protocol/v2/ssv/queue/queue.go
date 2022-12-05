@@ -69,7 +69,7 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	q.messages.PushBack(msg)
 }
 
-// Pop removes & returns the highest priority message with the given BeaconRole.
+// Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
 func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
 	q.mu.Lock()

@@ -69,17 +69,14 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			}
 
 			// Construct a representation of the current state.
+			state := *v.queueState
 			runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-			state := &queue.State{
-				HasRunningInstance: runner != nil && runner.HasRunningDuty() &&
-					runner.GetBaseRunner().State.RunningInstance != nil,
-				Height: v.GetLastHeight(msgID),
-				Slot:   0,
-				Quorum: v.Share.Quorum,
-			}
+			state.HasRunningInstance = runner != nil && runner.HasRunningDuty() &&
+				runner.GetBaseRunner().State.RunningInstance != nil
+			state.Height = v.GetLastHeight(msgID)
 
 			// Sort the queue according to the current state.
-			v.Q.Sort(queue.NewMessagePrioritizer(state))
+			v.Q.Sort(queue.NewMessagePrioritizer(&state))
 
 			// Pop the highest priority message and handle it.
 			msg := v.Q.Pop(queue.FilterByRole(msgID.GetRoleType()))
