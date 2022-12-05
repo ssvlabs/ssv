@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 
+	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -35,7 +36,11 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
 			instance, err := store.GetHighestInstance(msgID[:])
-			logger.Debug("last decided results", zap.Any("res", instance.DecidedMessage), zap.Error(err))
+			var res *qbft.SignedMessage
+			if instance != nil {
+				res = instance.DecidedMessage
+			}
+			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
 			sm.UpdateResults(err, instance.DecidedMessage)
 		}
 

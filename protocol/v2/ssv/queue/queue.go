@@ -32,15 +32,6 @@ type Queue interface {
 	Len() int
 }
 
-// New initialized a PriorityQueue with the given MessagePrioritizer.
-// If prioritizer is nil, the messages will be returned in the order they were pushed.
-func New(prioritizer MessagePrioritizer) Queue {
-	return &PriorityQueue{
-		prioritizer: prioritizer,
-		messages:    list.New(),
-	}
-}
-
 // PriorityQueue is queue of DecodedSSVMessage ordered by a MessagePrioritizer.
 type PriorityQueue struct {
 	prioritizer MessagePrioritizer
@@ -54,6 +45,15 @@ type PriorityQueue struct {
 	messages *list.List
 
 	mu sync.RWMutex
+}
+
+// New initialized a PriorityQueue with the given MessagePrioritizer.
+// If prioritizer is nil, the messages will be returned in the order they were pushed.
+func New(prioritizer MessagePrioritizer) Queue {
+	return &PriorityQueue{
+		prioritizer: prioritizer,
+		messages:    list.New(),
+	}
 }
 
 // Sort updates the queue's MessagePrioritizer.

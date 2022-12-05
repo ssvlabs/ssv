@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestPushAndPop(t *testing.T) {
+func TestQueuePushAndPop(t *testing.T) {
 	mockState := &State{
 		HasRunningInstance: true,
 		Height:             100,
@@ -36,7 +36,7 @@ func TestPushAndPop(t *testing.T) {
 	require.Nil(t, popped)
 }
 
-func BenchmarkConcurrentPushAndPop(b *testing.B) {
+func BenchmarkQueueConcurrent(b *testing.B) {
 	mockState := &State{
 		HasRunningInstance: true,
 		Height:             100,
