@@ -63,12 +63,12 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
 				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
 				zap.Any("signers", sm.GetSigners()))
-		}
 
-		// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
-		if sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
-			if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-				topics = append([]string{decidedTopic}, topics...)
+			// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
+			if sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
+				if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
+					topics = append([]string{decidedTopic}, topics...)
+				}
 			}
 		}
 	}
