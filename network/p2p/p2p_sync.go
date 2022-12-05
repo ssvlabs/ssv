@@ -46,10 +46,6 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return nil
 }
 
-func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	panic("deprecated; remove after specqbft.Syncer is adjusted")
-}
-
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
