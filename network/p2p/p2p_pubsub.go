@@ -57,17 +57,19 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	// for decided message, send on decided channel first
 	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
 
-	sm := specqbft.SignedMessage{}
-	if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
-		logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-			zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-			zap.Any("signers", sm.GetSigners()))
-	}
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		sm := specqbft.SignedMessage{}
+		if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
+			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
+				zap.Any("signers", sm.GetSigners()))
+		}
 
-	// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
-	if msg.MsgType == spectypes.SSVConsensusMsgType && sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
-		if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-			topics = append([]string{decidedTopic}, topics...)
+		// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
+		if sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
+			if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
+				topics = append([]string{decidedTopic}, topics...)
+			}
 		}
 	}
 
