@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -34,7 +34,7 @@ type Validator struct {
 	Storage *storage.QBFTStores
 	Network specqbft.Network
 
-	Q msgqueue.MsgQueue
+	Q queue.Queue
 
 	state uint32
 }
@@ -43,9 +43,6 @@ type Validator struct {
 func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
-
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
-	q, _ := msgqueue.New(options.Logger, indexers) // TODO: handle error
 
 	v := &Validator{
 		ctx:         ctx,
@@ -58,7 +55,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
-		Q:           q,
+		Q:           queue.New(nil),
 		state:       uint32(NotStarted),
 	}
 

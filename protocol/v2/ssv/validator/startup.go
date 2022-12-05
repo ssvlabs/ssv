@@ -7,9 +7,8 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
 // Start starts a Validator.
@@ -19,6 +18,10 @@ func (v *Validator) Start() error {
 		if !ok {
 			return nil
 		}
+
+		// Initialize the message queue.
+		v.Q = queue.New(nil)
+
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
@@ -41,10 +44,10 @@ func (v *Validator) Start() error {
 // Stop stops a Validator.
 func (v *Validator) Stop() error {
 	v.cancel()
-	// clear the msg q
-	v.Q.Clean(func(index msgqueue.Index) bool {
-		return true
-	})
+
+	// Discard the message queue.
+	v.Q = nil
+
 	return nil
 }
 
