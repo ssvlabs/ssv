@@ -67,16 +67,19 @@ func TestNewMsgQueue(t *testing.T) {
 		require.NoError(t, err)
 		identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateDecidedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(0), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateDecidedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(1), 1, identifier, specqbft.CommitMsgType))
 		q.Add(generateConsensusMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
+		q.Add(generateDecidedMsg(t, spectypes.SSVConsensusMsgType, specqbft.Height(2), 1, identifier, specqbft.CommitMsgType))
 
 		for i := 0; i <= 2; i++ {
 			height := specqbft.Height(i)
-			idxs := SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier.String(), height, specqbft.CommitMsgType)
+			idxs := SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier.String(), height, false, specqbft.CommitMsgType)
 			require.Equal(t, len(idxs), 1)
 			idx := idxs[0]
 			require.Equal(t, 1, q.Count(idx))
-			require.Equal(t, int64(1), q.Clean(SignedMsgCleaner(identifier, height)))
+			require.Equal(t, int64(2), q.Clean(SignedMsgCleaner(identifier, height)))
 			require.Equal(t, 0, q.Count(idx))
 		}
 	})
@@ -113,6 +116,35 @@ func generateConsensusMsg(t *testing.T, ssvMsgType spectypes.MsgType, height spe
 			Round:      round,
 			Identifier: nil,
 			Data:       nil,
+		},
+	}
+	data, err := signedMsg.Encode()
+	require.NoError(t, err)
+	ssvMsg.Data = data
+	return ssvMsg
+}
+
+func generateDecidedMsg(t *testing.T, ssvMsgType spectypes.MsgType, height specqbft.Height, round specqbft.Round, id spectypes.MessageID, consensusType specqbft.MessageType) *spectypes.SSVMessage {
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: ssvMsgType,
+		MsgID:   id,
+	}
+
+	commitData, err := (&specqbft.CommitData{
+		Data: []byte("data"),
+	}).Encode()
+
+	require.NoError(t, err)
+
+	signedMsg := specqbft.SignedMessage{
+		Signature: nil,
+		Signers:   []spectypes.OperatorID{1, 2, 3},
+		Message: &specqbft.Message{
+			MsgType:    consensusType,
+			Height:     height,
+			Round:      round,
+			Identifier: nil,
+			Data:       commitData,
 		},
 	}
 	data, err := signedMsg.Encode()

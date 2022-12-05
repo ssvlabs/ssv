@@ -10,7 +10,7 @@ import (
 func SignedMsgCleaner(mid spectypes.MessageID, h specqbft.Height) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
-		if k.Mt != spectypes.SSVConsensusMsgType {
+		if k.Mt != spectypes.SSVConsensusMsgType && !k.D {
 			return false
 		}
 		if k.ID != identifier {
@@ -45,14 +45,14 @@ func signedMsgIndexValidator(msg *spectypes.SSVMessage) *specqbft.SignedMessage 
 func SignedMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(msg.MsgType, msg.MsgID.String(), sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.MsgID.String(), sm.Message.Height, len(sm.GetSigners()) >= 3, sm.Message.MsgType)[0]
 		}
 		return Index{}
 	}
 }
 
-// SignedMsgIndex indexes a specqbft.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cmt ...specqbft.MessageType) []Index {
+// SignedMsgIndex indexes a specqbft.SignedMessage by identifier, msg type, height and decided.
+func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, d bool, cmt ...specqbft.MessageType) []Index {
 	var res []Index
 	for _, mt := range cmt {
 		res = append(res, Index{
@@ -61,7 +61,7 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 			ID:   mid,
 			H:    h,
 			Cmt:  mt,
-			D:    false,
+			D:    d,
 		})
 		// res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
