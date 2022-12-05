@@ -3,8 +3,6 @@ package msgqueue
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 // SignedMsgCleaner cleans consensus messages from the queue
@@ -12,7 +10,7 @@ import (
 func SignedMsgCleaner(mid spectypes.MessageID, h specqbft.Height) Cleaner {
 	identifier := mid.String()
 	return func(k Index) bool {
-		if k.Mt != spectypes.SSVConsensusMsgType && k.Mt != message.SSVDecidedMsgType {
+		if k.Mt != spectypes.SSVConsensusMsgType && !k.D {
 			return false
 		}
 		if k.ID != identifier {
@@ -30,7 +28,7 @@ func signedMsgIndexValidator(msg *spectypes.SSVMessage) *specqbft.SignedMessage 
 	if msg == nil {
 		return nil
 	}
-	if msg.MsgType != spectypes.SSVConsensusMsgType && msg.MsgType != message.SSVDecidedMsgType {
+	if msg.MsgType != spectypes.SSVConsensusMsgType {
 		return nil
 	}
 	sm := &specqbft.SignedMessage{}
@@ -47,14 +45,14 @@ func signedMsgIndexValidator(msg *spectypes.SSVMessage) *specqbft.SignedMessage 
 func SignedMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
 		if sm := signedMsgIndexValidator(msg); sm != nil {
-			return SignedMsgIndex(msg.MsgType, msg.MsgID.String(), sm.Message.Height, sm.Message.MsgType)[0]
+			return SignedMsgIndex(msg.MsgType, msg.MsgID.String(), sm.Message.Height, len(sm.GetSigners()) >= 3, sm.Message.MsgType)[0]
 		}
 		return Index{}
 	}
 }
 
-// SignedMsgIndex indexes a specqbft.SignedMessage by identifier, msg type and height
-func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cmt ...specqbft.MessageType) []Index {
+// SignedMsgIndex indexes a specqbft.SignedMessage by identifier, msg type, height and decided.
+func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, d bool, cmt ...specqbft.MessageType) []Index {
 	var res []Index
 	for _, mt := range cmt {
 		res = append(res, Index{
@@ -63,6 +61,7 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 			ID:   mid,
 			H:    h,
 			Cmt:  mt,
+			D:    d,
 		})
 		// res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
@@ -73,7 +72,7 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, cm
 // TODO: identify decided messages by: 1) type commit; 2) quorum of signers
 func DecidedMsgIndexer() Indexer {
 	return func(msg *spectypes.SSVMessage) Index {
-		if msg.MsgType != message.SSVDecidedMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
+		if msg.MsgType != spectypes.SSVConsensusMsgType {
 			return Index{}
 		}
 		sm := signedMsgIndexValidator(msg)
@@ -92,12 +91,13 @@ func DecidedMsgIndexer() Indexer {
 func DecidedMsgIndex(mid string) Index {
 	return Index{
 		Name: "decided_index",
-		Mt:   message.SSVDecidedMsgType,
+		Mt:   spectypes.SSVConsensusMsgType,
 		ID:   mid,
 		Cmt:  specqbft.CommitMsgType,
 		H:    specqbft.FirstHeight,
+		D:    true,
 	}
-	// return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVDecidedMsgType.String(), mid, message.CommitMsgType.String())
+	// return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVConsensusMsgType.String(), mid, message.CommitMsgType.String())
 }
 
 // getRound returns the round of the message if applicable

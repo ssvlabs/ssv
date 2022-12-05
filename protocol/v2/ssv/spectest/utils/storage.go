@@ -2,13 +2,15 @@ package utils
 
 import (
 	"context"
+	"sync"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
+
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"go.uber.org/zap"
-	"sync"
 )
 
 var db basedb.IDb

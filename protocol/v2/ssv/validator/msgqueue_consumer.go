@@ -130,7 +130,7 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 	}, func() msgqueue.Index {
 		return msgqueue.DecidedMsgIndex(identifier)
 	}, func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight, specqbft.CommitMsgType)
+		indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight, false, specqbft.CommitMsgType)
 		if len(indices) == 0 {
 			return msgqueue.Index{}
 		}
@@ -210,18 +210,19 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 func (v *Validator) processLateCommit(handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	iterator := msgqueue.NewIndexIterator().
 		Add(func() msgqueue.Index {
-			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
+			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, false, specqbft.CommitMsgType)
 			if len(indices) == 0 {
 				return msgqueue.Index{}
 			}
 			return indices[0]
-		}).Add(func() msgqueue.Index {
-		indices := msgqueue.SignedMsgIndex(message.SSVDecidedMsgType, identifier, lastHeight-1, specqbft.CommitMsgType)
-		if len(indices) == 0 {
-			return msgqueue.Index{}
-		}
-		return indices[0]
-	})
+		}).
+		Add(func() msgqueue.Index {
+			indices := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, lastHeight-1, true, specqbft.CommitMsgType)
+			if len(indices) == 0 {
+				return msgqueue.Index{}
+			}
+			return indices[0]
+		})
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
@@ -239,7 +240,7 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height) *spectypes.SSVMessage {
 	iterator := msgqueue.NewIndexIterator()
 
-	idxs := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height,
+	idxs := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, false,
 		specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType)
 	for _, idx := range idxs {
 		iterator.AddIndex(idx)

@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
@@ -266,7 +265,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &spectypes.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
+		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}, nil
