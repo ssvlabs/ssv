@@ -41,7 +41,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				res = instance.DecidedMessage
 			}
 			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
-			sm.UpdateResults(err, instance.DecidedMessage)
+			sm.UpdateResults(err, res)
 		}
 
 		data, err := sm.Encode()
