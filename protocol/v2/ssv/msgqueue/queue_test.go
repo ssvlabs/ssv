@@ -114,7 +114,7 @@ func generateConsensusMsg(t *testing.T, ssvMsgType spectypes.MsgType, height spe
 			MsgType:    consensusType,
 			Height:     height,
 			Round:      round,
-			Identifier: nil,
+			Identifier: []byte{1, 2, 3, 4},
 			Data:       nil,
 		},
 	}
@@ -143,7 +143,7 @@ func generateDecidedMsg(t *testing.T, ssvMsgType spectypes.MsgType, height specq
 			MsgType:    consensusType,
 			Height:     height,
 			Round:      round,
-			Identifier: nil,
+			Identifier: []byte{1, 2, 3, 4},
 			Data:       commitData,
 		},
 	}
