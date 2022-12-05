@@ -36,7 +36,28 @@ func TestPushAndPop(t *testing.T) {
 	require.Nil(t, popped)
 }
 
-func decodeAndPush(t *testing.T, queue Queue, msg mockMessage, state *State) *DecodedSSVMessage {
+func BenchmarkConcurrentPushAndPop(b *testing.B) {
+	mockState := &State{
+		HasRunningInstance: true,
+		Height:             100,
+		Slot:               64,
+		Quorum:             4,
+	}
+	prioritizer := NewMessagePrioritizer(mockState)
+	queue := New(prioritizer)
+
+	decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(b, err)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			queue.Push(decoded)
+			queue.Pop(FilterByRole(types.BNRoleProposer))
+		}
+	})
+}
+
+func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *DecodedSSVMessage {
 	decoded, err := DecodeSSVMessage(msg.ssvMessage(state))
 	require.NoError(t, err)
 	queue.Push(decoded)
