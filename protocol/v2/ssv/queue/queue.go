@@ -2,9 +2,20 @@ package queue
 
 import (
 	"container/list"
+	"sync"
 
 	"github.com/bloxapp/ssv-spec/types"
 )
+
+// Filter is a function that returns true if the given message should be included.
+type Filter func(*DecodedSSVMessage) bool
+
+// FilterByRole returns a Filter that returns true if the given message's BeaconRole is the same as the given role.
+func FilterByRole(role types.BeaconRole) Filter {
+	return func(msg *DecodedSSVMessage) bool {
+		return msg.MsgID.GetRoleType() == role
+	}
+}
 
 // Queue is a queue of DecodedSSVMessage.
 type Queue interface {
@@ -15,7 +26,7 @@ type Queue interface {
 	Sort(MessagePrioritizer)
 
 	// Pop removes and returns the front message in the queue.
-	Pop(types.BeaconRole) *DecodedSSVMessage
+	Pop(Filter) *DecodedSSVMessage
 
 	// Len returns the count of messages in the queue.
 	Len() int
@@ -41,6 +52,8 @@ type PriorityQueue struct {
 	// - https://github.com/gammazero/deque
 	// - https://github.com/edwingeng/deque
 	messages *list.List
+
+	mu sync.RWMutex
 }
 
 // Sort updates the queue's MessagePrioritizer.
@@ -50,19 +63,29 @@ func (p *PriorityQueue) Sort(prioritizer MessagePrioritizer) {
 
 // Push inserts a message to the queue.
 func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	q.messages.PushBack(msg)
 }
 
 // Pop removes & returns the highest priority message with the given BeaconRole.
 // Returns nil if no message is found.
-func (q *PriorityQueue) Pop(role types.BeaconRole) *DecodedSSVMessage {
-	var (
-		highest        *DecodedSSVMessage
-		highestElement *list.Element
-	)
+func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	highest, highestElement := q.peek(filter)
+	if highestElement != nil {
+		q.messages.Remove(highestElement)
+	}
+	return highest
+}
+
+func (q *PriorityQueue) peek(filter Filter) (highest *DecodedSSVMessage, highestElement *list.Element) {
 	for e := q.messages.Front(); e != nil; e = e.Next() {
 		msg := e.Value.(*DecodedSSVMessage)
-		if msg.MsgID.GetRoleType() != role {
+		if !filter(msg) {
 			continue
 		}
 		if highest == nil || (q.prioritizer != nil && q.prioritizer.Prior(msg, highest)) {
@@ -70,12 +93,13 @@ func (q *PriorityQueue) Pop(role types.BeaconRole) *DecodedSSVMessage {
 			highestElement = e
 		}
 	}
-	if highestElement != nil {
-		q.messages.Remove(highestElement)
-	}
-	return highest
+	return
 }
 
+// Len returns the count of messages in the queue.
 func (q *PriorityQueue) Len() int {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
 	return q.messages.Len()
 }

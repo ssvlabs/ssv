@@ -23,16 +23,16 @@ func TestPushAndPop(t *testing.T) {
 	require.Equal(t, 1, queue.Len())
 
 	// Pop non-existing BeaconRole.
-	popped := queue.Pop(types.BNRoleProposer)
+	popped := queue.Pop(FilterByRole(types.BNRoleProposer))
 	require.Nil(t, popped)
 
 	// Pop one.
-	popped = queue.Pop(msg.MsgID.GetRoleType())
+	popped = queue.Pop(FilterByRole(msg.MsgID.GetRoleType()))
 	require.Equal(t, 0, queue.Len())
 	require.Equal(t, msg, popped)
 
 	// Pop nil.
-	popped = queue.Pop(msg.MsgID.GetRoleType())
+	popped = queue.Pop(FilterByRole(msg.MsgID.GetRoleType()))
 	require.Nil(t, popped)
 }
 

@@ -16,6 +16,7 @@ import (
 type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
+// TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 	v.logger.Debug("got message, pushing to queue",
 		zap.Int("queue_len", v.Q.Len()),
@@ -59,6 +60,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	for {
 		select {
 		case <-v.ctx.Done():
+			logger.Warn("queue consumer is closed")
 			return nil
 		case <-ticker.C:
 			if v.Q.Len() == 0 {
@@ -80,14 +82,14 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			v.Q.Sort(queue.NewMessagePrioritizer(state))
 
 			// Pop the highest priority message and handle it.
-			msg := v.Q.Pop(msgID.GetRoleType())
-			handler(msg.SSVMessage)
+			msg := v.Q.Pop(queue.FilterByRole(msgID.GetRoleType()))
+			err := handler(msg.SSVMessage)
+			if err != nil {
+				logger.Error("could not handle message", zap.Error(err))
+				continue
+			}
 		}
 	}
-
-	logger.Warn("queue consumer is closed")
-
-	return nil
 }
 
 // GetLastHeight returns the last height for the given identifier
