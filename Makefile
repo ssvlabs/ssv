@@ -48,7 +48,7 @@ full-test:
 
 #Test
 .PHONY: unit-test
-full-test:
+unit-test:
 	@echo "Running unit tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|automation\|ssv/scripts/"`
 
