@@ -18,101 +18,101 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMessagePrioritizerSlice(t *testing.T) {
-	tests := []struct {
-		name     string
-		state    *State
-		messages []mockMessage
-	}{
-		{
-			name: "Running instance",
-			state: &State{
-				HasRunningInstance: true,
-				Height:             100,
-				Slot:               64,
-				Quorum:             4,
-			},
-			messages: []mockMessage{
-				// 1. Current height/slot:
-				// 1.1. Consensus
-				// 1.1.1. Consensus/Prepare
-				mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
-				// 1.1.2. Consensus/Proposal
-				mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
-				// 1.1.3. Consensus/Commit
-				mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
-				// 1.1.4. Consensus/<Other>
-				mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
-				// 1.2. Pre-consensus
-				mockNonConsensusMessage{Slot: 64, Type: ssv.SelectionProofPartialSig},
-				// 1.3. Post-consensus
-				mockNonConsensusMessage{Slot: 64, Type: ssv.PostConsensusPartialSig},
-
-				// 2. Higher height/slot:
-				// 2.1 Decided
-				mockConsensusMessage{Height: 101, Decided: true},
-				// 2.2. Pre-consensus
-				mockNonConsensusMessage{Slot: 65, Type: ssv.SelectionProofPartialSig},
-				// 2.3. Consensus
-				mockConsensusMessage{Height: 101},
-				// 2.4. Post-consensus
-				mockNonConsensusMessage{Slot: 65, Type: ssv.PostConsensusPartialSig},
-
-				// 3. Lower height/slot:
-				// 3.1 Decided
-				mockConsensusMessage{Height: 99, Decided: true},
-				// 3.2. Commit
-				mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
-				// 3.3. Pre-consensus
-				mockNonConsensusMessage{Slot: 63, Type: ssv.SelectionProofPartialSig},
-			},
+var messagePriorityTests = []struct {
+	name     string
+	state    *State
+	messages []mockMessage
+}{
+	{
+		name: "Running instance",
+		state: &State{
+			HasRunningInstance: true,
+			Height:             100,
+			Slot:               64,
+			Quorum:             4,
 		},
-		{
-			name: "No running instance",
-			state: &State{
-				HasRunningInstance: false,
-				Height:             100,
-				Slot:               64,
-				Quorum:             4,
-			},
-			messages: []mockMessage{
-				// 1. Current height/slot:
-				// 1.1. Pre-consensus
-				mockNonConsensusMessage{Slot: 64, Type: ssv.SelectionProofPartialSig},
-				// 1.2. Post-consensus
-				mockNonConsensusMessage{Slot: 64, Type: ssv.PostConsensusPartialSig},
-				// 1.3. Consensus
-				// 1.3.1. Consensus/Prepare
-				mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
-				// 1.3.2. Consensus/Proposal
-				mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
-				// 1.3.3. Consensus/Commit
-				mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
-				// 1.3.4. Consensus/<Other>
-				mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
+		messages: []mockMessage{
+			// 1. Current height/slot:
+			// 1.1. Consensus
+			// 1.1.1. Consensus/Prepare
+			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
+			// 1.1.2. Consensus/Proposal
+			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			// 1.1.3. Consensus/Commit
+			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
+			// 1.1.4. Consensus/<Other>
+			mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
+			// 1.2. Pre-consensus
+			mockNonConsensusMessage{Slot: 64, Type: ssv.SelectionProofPartialSig},
+			// 1.3. Post-consensus
+			mockNonConsensusMessage{Slot: 64, Type: ssv.PostConsensusPartialSig},
 
-				// 2. Higher height/slot:
-				// 2.1 Decided
-				mockConsensusMessage{Height: 101, Decided: true},
-				// 2.2. Pre-consensus
-				mockNonConsensusMessage{Slot: 65, Type: ssv.SelectionProofPartialSig},
-				// 2.3. Consensus
-				mockConsensusMessage{Height: 101},
-				// 2.4. Post-consensus
-				mockNonConsensusMessage{Slot: 65, Type: ssv.PostConsensusPartialSig},
+			// 2. Higher height/slot:
+			// 2.1 Decided
+			mockConsensusMessage{Height: 101, Decided: true},
+			// 2.2. Pre-consensus
+			mockNonConsensusMessage{Slot: 65, Type: ssv.SelectionProofPartialSig},
+			// 2.3. Consensus
+			mockConsensusMessage{Height: 101},
+			// 2.4. Post-consensus
+			mockNonConsensusMessage{Slot: 65, Type: ssv.PostConsensusPartialSig},
 
-				// 3. Lower height/slot:
-				// 3.1 Decided
-				mockConsensusMessage{Height: 99, Decided: true},
-				// 3.2. Commit
-				mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
-				// 3.3. Pre-consensus
-				mockNonConsensusMessage{Slot: 63, Type: ssv.SelectionProofPartialSig},
-			},
+			// 3. Lower height/slot:
+			// 3.1 Decided
+			mockConsensusMessage{Height: 99, Decided: true},
+			// 3.2. Commit
+			mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
+			// 3.3. Pre-consensus
+			mockNonConsensusMessage{Slot: 63, Type: ssv.SelectionProofPartialSig},
 		},
-	}
+	},
+	{
+		name: "No running instance",
+		state: &State{
+			HasRunningInstance: false,
+			Height:             100,
+			Slot:               64,
+			Quorum:             4,
+		},
+		messages: []mockMessage{
+			// 1. Current height/slot:
+			// 1.1. Pre-consensus
+			mockNonConsensusMessage{Slot: 64, Type: ssv.SelectionProofPartialSig},
+			// 1.2. Post-consensus
+			mockNonConsensusMessage{Slot: 64, Type: ssv.PostConsensusPartialSig},
+			// 1.3. Consensus
+			// 1.3.1. Consensus/Prepare
+			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
+			// 1.3.2. Consensus/Proposal
+			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			// 1.3.3. Consensus/Commit
+			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
+			// 1.3.4. Consensus/<Other>
+			mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
 
-	for _, test := range tests {
+			// 2. Higher height/slot:
+			// 2.1 Decided
+			mockConsensusMessage{Height: 101, Decided: true},
+			// 2.2. Pre-consensus
+			mockNonConsensusMessage{Slot: 65, Type: ssv.SelectionProofPartialSig},
+			// 2.3. Consensus
+			mockConsensusMessage{Height: 101},
+			// 2.4. Post-consensus
+			mockNonConsensusMessage{Slot: 65, Type: ssv.PostConsensusPartialSig},
+
+			// 3. Lower height/slot:
+			// 3.1 Decided
+			mockConsensusMessage{Height: 99, Decided: true},
+			// 3.2. Commit
+			mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
+			// 3.3. Pre-consensus
+			mockNonConsensusMessage{Slot: 63, Type: ssv.SelectionProofPartialSig},
+		},
+	},
+}
+
+func TestMessagePrioritizer(t *testing.T) {
+	for _, test := range messagePriorityTests {
 		t.Run(test.name, func(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
@@ -171,56 +171,49 @@ func (m mockConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
 		signers = append(signers, types.OperatorID(i))
 	}
 
-	var factory func(*qbft.SignedMessage, *ssv.SignedPartialSignatureMessage) *types.SSVMessage
-	switch m.Role {
-	case types.BNRoleAttester:
-		factory = testingutils.SSVMsgAttester
-	case types.BNRoleProposer:
-		factory = testingutils.SSVMsgProposer
-	case types.BNRoleAggregator:
-		factory = testingutils.SSVMsgAggregator
-	case types.BNRoleSyncCommittee:
-		factory = testingutils.SSVMsgSyncCommittee
-	case types.BNRoleSyncCommitteeContribution:
-		factory = testingutils.SSVMsgSyncCommitteeContribution
-	default:
-		panic("invalid role")
-	}
-
-	return factory(&qbft.SignedMessage{
-		Message: &qbft.Message{
-			MsgType:    typ,
-			Height:     m.Height,
-			Round:      2,
-			Identifier: []byte{1, 2, 3, 4},
-			Data:       []byte{1, 2, 3, 4},
+	factory := ssvMessageFactory(m.Role)
+	return factory(
+		&qbft.SignedMessage{
+			Message: &qbft.Message{
+				MsgType:    typ,
+				Height:     m.Height,
+				Round:      2,
+				Identifier: []byte{1, 2, 3, 4},
+				Data:       []byte{1, 2, 3, 4},
+			},
+			Signature: []byte{1, 2, 3, 4},
+			Signers:   signers,
 		},
-		Signature: []byte{1, 2, 3, 4},
-		Signers:   signers,
-	}, nil)
+		nil,
+	)
 }
 
 type mockNonConsensusMessage struct {
+	Role types.BeaconRole
 	Type ssv.PartialSigMsgType
 	Slot phase0.Slot
 }
 
 func (m mockNonConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
-	return testingutils.SSVMsgAttester(nil, &ssv.SignedPartialSignatureMessage{
-		Message: ssv.PartialSignatureMessages{
-			Type: m.Type,
-			Messages: []*ssv.PartialSignatureMessage{
-				{
-					// Slot:             m.Slot,
-					PartialSignature: []byte{},
-					SigningRoot:      []byte{},
-					Signer:           0,
+	factory := ssvMessageFactory(m.Role)
+	return factory(
+		nil,
+		&ssv.SignedPartialSignatureMessage{
+			Message: ssv.PartialSignatureMessages{
+				Type: m.Type,
+				Messages: []*ssv.PartialSignatureMessage{
+					{
+						// Slot:             m.Slot,
+						PartialSignature: []byte{},
+						SigningRoot:      []byte{},
+						Signer:           0,
+					},
 				},
 			},
+			Signature: []byte{1, 2, 3, 4},
+			Signer:    types.OperatorID(1),
 		},
-		Signature: []byte{1, 2, 3, 4},
-		Signer:    types.OperatorID(1),
-	})
+	)
 }
 
 type messageSlice []*DecodedSSVMessage
@@ -305,4 +298,21 @@ func (m messageSlice) dump(s *State) string {
 	}
 	tbl.Render()
 	return b.String()
+}
+
+func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *ssv.SignedPartialSignatureMessage) *types.SSVMessage {
+	switch role {
+	case types.BNRoleAttester:
+		return testingutils.SSVMsgAttester
+	case types.BNRoleProposer:
+		return testingutils.SSVMsgProposer
+	case types.BNRoleAggregator:
+		return testingutils.SSVMsgAggregator
+	case types.BNRoleSyncCommittee:
+		return testingutils.SSVMsgSyncCommittee
+	case types.BNRoleSyncCommitteeContribution:
+		return testingutils.SSVMsgSyncCommitteeContribution
+	default:
+		panic("invalid role")
+	}
 }
