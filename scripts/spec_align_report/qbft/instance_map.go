@@ -9,9 +9,9 @@ func InstanceSet() []utils.KeyValue {
 
 	// list of changes package names & imports between spec and implementation
 	instanceMap.Set("package instance", "package qbft")
-	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"\n", "")
 	instanceMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
-	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"\n", "")
+	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
 	instanceMap.Set("specqbft.", "")
 	instanceMap.Set("spectypes.", "types.")
 	instanceMap.Set("types.IConfig", "IConfig")
