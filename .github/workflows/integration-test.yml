@@ -1,4 +1,4 @@
-name: spec-test
+name: Integration tests
 
 on:
   push:

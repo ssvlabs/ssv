@@ -1,4 +1,4 @@
-name: full-test
+name: All tests
 
 on:
   push:
