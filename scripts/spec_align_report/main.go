@@ -22,6 +22,8 @@ func main() {
 	qbft.ProcessInstance()
 
 	ssv.ProcessRunner()
+
+	ssv.ProcessValidator()
 	//utils.CleanSpecPath()
 
 	fmt.Println("done")

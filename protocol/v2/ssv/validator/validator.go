@@ -23,18 +23,14 @@ type Validator struct {
 	cancel context.CancelFunc
 	logger *zap.Logger
 
-	DomainType spectypes.DomainType
-
 	DutyRunners runner.DutyRunners
-
-	Share  *types.SSVShare
-	Beacon specssv.BeaconNode
-	Signer spectypes.KeyManager
+	Network     specqbft.Network
+	Beacon      specssv.BeaconNode
+	Share       *types.SSVShare
+	Signer      spectypes.KeyManager
 
 	Storage *storage.QBFTStores
-	Network specqbft.Network
-
-	Q msgqueue.MsgQueue
+	Q       msgqueue.MsgQueue
 
 	state uint32
 }
@@ -51,7 +47,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		ctx:         ctx,
 		cancel:      cancel,
 		logger:      options.Logger,
-		DomainType:  types.GetDefaultDomain(),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -99,7 +94,6 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		}
 
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			v.logger.Info("process post consensus")
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
