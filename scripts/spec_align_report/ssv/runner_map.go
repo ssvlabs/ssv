@@ -16,7 +16,8 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("spectypes.", "types.")
 	runnerSet.Set("controller.Controller", "qbft.Controller")
 	runnerSet.Set(" else {\n\t\tif inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {\n\t\t\tif err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {\n\t\t\t\tfmt.Printf(\"failed to save instance: %s\\n\", err.Error())\n\t\t\t}\n\t\t}\n\t}", "")
-
+	// TODO change in spec to didDecideCorrectly to didDecideRunningInstanceCorrectly  decided := decidedMsg != nil && b.State.RunningInstance != nil
+	runnerSet.Set("decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()", "decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()")
 	runnerSet.Set("// registers a timeout handler\n\tb.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)", "")
 	return runnerSet.Range()
 }
