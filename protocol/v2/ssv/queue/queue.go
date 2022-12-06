@@ -43,8 +43,7 @@ type PriorityQueue struct {
 	// - https://github.com/gammazero/deque
 	// - https://github.com/edwingeng/deque
 	messages *list.List
-
-	mu sync.RWMutex
+	mu       sync.RWMutex
 }
 
 // New initialized a PriorityQueue with the given MessagePrioritizer.
@@ -72,20 +71,23 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 // Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
 func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
 	highest, highestElement := q.peek(filter)
 	if highestElement != nil {
+		q.mu.Lock()
+		defer q.mu.Unlock()
+
 		q.messages.Remove(highestElement)
 	}
 	return highest
 }
 
 func (q *PriorityQueue) peek(filter Filter) (highest *DecodedSSVMessage, highestElement *list.Element) {
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+
 	for e := q.messages.Front(); e != nil; e = e.Next() {
 		msg := e.Value.(*DecodedSSVMessage)
-		if !filter(msg) {
+		if filter != nil && !filter(msg) {
 			continue
 		}
 		if highest == nil || (q.prioritizer != nil && q.prioritizer.Prior(msg, highest)) {
