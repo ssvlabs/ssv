@@ -1,7 +1,12 @@
-name: All tests
+name: Integration tests
 
 on:
   push:
+    branches:
+      - 'main'
+      - 'stage'
+#      - 'spec-align-qbft'
+  pull_request:
     branches:
       - 'main'
       - 'stage'
@@ -19,5 +24,5 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Full-test
-        run: make full-test
+      - name: Run spec tests
+        run: make integration-test
