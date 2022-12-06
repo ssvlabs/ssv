@@ -1,9 +1,11 @@
 name: spec-test
 
 on:
-#  push:
-#    branches:
-#      - '**'
+  push:
+    branches:
+      - 'stage'
+      - 'main'
+      - 'spec-align-qbft'
   pull_request:
     branches: 
       - '**'        

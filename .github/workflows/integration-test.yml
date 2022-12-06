@@ -6,7 +6,7 @@ on:
       - 'main'
       - 'stage'
 #      - 'spec-align-qbft'
-  pull_request: 
+  pull_request:
     branches:
       - 'main'
       - 'stage'

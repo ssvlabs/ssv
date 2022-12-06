@@ -6,11 +6,6 @@ on:
       - 'main'
       - 'stage'
 #      - 'spec-align-qbft'
-  pull_request:
-    branches:
-      - 'main'
-      - 'stage'
-#      - 'spec-align-qbft'
 
   workflow_dispatch:
 
