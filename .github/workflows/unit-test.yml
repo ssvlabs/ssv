@@ -1,11 +1,9 @@
-name: All tests
+name: Unit tests
 
 on:
   push:
-    branches:
-      - 'main'
-      - 'stage'
-#      - 'spec-align-qbft'
+    branches: 
+      - '**'
 
   workflow_dispatch:
 
@@ -19,5 +17,5 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Full-test
-        run: make full-test
+      - name: Run unit tests
+        run: make unit-test

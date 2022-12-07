@@ -46,36 +46,6 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return nil
 }
 
-func (n *p2pNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	go func() {
-		logger := n.logger.With(zap.String("identifier", mid.String()))
-		lastChangeRound, err := n.LastChangeRound(mid, height)
-		if err != nil {
-			logger.Debug("highest change round: sync failed", zap.Error(err))
-			return
-		}
-		if len(lastChangeRound) == 0 {
-			logger.Debug("highest change round: no messages were synced")
-			return
-		}
-		results := p2pprotocol.SyncResults(lastChangeRound)
-		results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
-			raw, err := m.Encode()
-			if err != nil {
-				logger.Warn("could not encode signed message", zap.Error(err))
-				return
-			}
-			n.msgRouter.Route(spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
-				Data:    raw,
-			})
-		})
-	}()
-
-	return nil
-}
-
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
@@ -139,25 +109,6 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 		return results, 0, err
 	}
 	return results, currentEnd, nil
-}
-
-// LastChangeRound fetches last change round message from a random set of peers
-func (n *p2pNetwork) LastChangeRound(mid spectypes.MessageID, height specqbft.Height) ([]p2pprotocol.SyncResult, error) {
-	if !n.isReady() {
-		return nil, p2pprotocol.ErrNetworkIsNotReady
-	}
-	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastChangeRoundProtocol)
-	peers, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, allPeersFilter)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get subset of peers")
-	}
-	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
-		Params: &message.SyncParams{
-			Height:     []specqbft.Height{height},
-			Identifier: mid,
-		},
-		Protocol: message.LastChangeRoundType,
-	})
 }
 
 // RegisterHandlers registers the given handlers

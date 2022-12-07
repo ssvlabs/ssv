@@ -399,52 +399,6 @@ only those who turn on the corresponding flag will support this protocol.
   ```
 </details>
 
-### 3. Last Change Round
-
-This protocol enables a node to catch up with change round messages.
-All the nodes in the network should support this protocol.
-
-`/ssv/sync/last_change_round/0.0.1`
-
-<details>
-  <summary>examples</summary>
-  
-  Request:
-  ```json
-  {
-    "protocol": "/ssv/sync/decided/history/0.0.1",
-    "identifier": "...",
-    "params": ["7554"]
-  }
-  ```
-
-  Response:
-  ```json
-  {
-    "protocol": "/ssv/sync/decided/history/0.0.1",
-    "identifier": "...",
-    "params": ["7554"],
-    "statusCode": 0,
-    "data": [
-      {
-        "message": {
-          "type": 4,
-          "round": 6,
-          "identifier": "...",
-          "seq_number": 7554,
-          "value": "Xmcg...sPM="
-        },
-        "signature": "g5y....7Dv",
-        "signer_ids": [1]
-      }
-    ]
-  }
-  ```
-</details>
-
----
-
-
 
 ## Networking
 

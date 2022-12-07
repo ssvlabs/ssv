@@ -43,8 +43,21 @@ lint:
 #Test
 .PHONY: full-test
 full-test:
-	@echo "Running the full test..."
+	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
+
+#Test
+.PHONY: unit-test
+unit-test:
+	@echo "Running unit tests"
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|automation\|ssv/scripts/"`
+
+#Test
+.PHONY: spec-test
+spec-test:
+	@echo "Running spec tests"
+	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -p 1 -v `go list ./... | grep spectest`
+
 
 #Build
 .PHONY: build

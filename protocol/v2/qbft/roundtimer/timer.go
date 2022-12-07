@@ -2,7 +2,6 @@ package roundtimer
 
 import (
 	"context"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -10,15 +9,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// RoundTimeout is a function that determines the next round timeout.
-type RoundTimeout func(round specqbft.Round) time.Duration
+type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
-// DefaultRoundTimeout returns the default timeout function (base^round seconds).
-func DefaultRoundTimeout(base float64) RoundTimeout {
-	return func(round specqbft.Round) time.Duration {
-		roundTimeout := math.Pow(base, float64(round))
-		return time.Duration(float64(time.Second) * roundTimeout)
-	}
+// RoundTimeout returns the number of seconds until next timeout for a give round
+func RoundTimeout(specqbft.Round) time.Duration {
+	return 2 * time.Second
 }
 
 // RoundTimer helps to manage current instance rounds.
@@ -34,7 +29,7 @@ type RoundTimer struct {
 	// round is the current round of the timer
 	round int64
 
-	roundTimeout RoundTimeout
+	roundTimeout RoundTimeoutFunc
 }
 
 // New creates a new instance of RoundTimer.
@@ -46,7 +41,7 @@ func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 		logger:       logger,
 		timer:        nil,
 		done:         done,
-		roundTimeout: DefaultRoundTimeout(3),
+		roundTimeout: RoundTimeout,
 	}
 }
 

@@ -18,7 +18,9 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 			atomic.AddInt32(&count, 1)
 		}
 		timer := New(context.Background(), zap.L(), onTimeout)
-		timer.roundTimeout = DefaultRoundTimeout(1.1)
+		timer.roundTimeout = func(round specqbft.Round) time.Duration {
+			return 1100 * time.Millisecond
+		}
 		timer.TimeoutForRound(specqbft.Round(1))
 		require.Equal(t, int32(0), atomic.LoadInt32(&count))
 		<-time.After(timer.roundTimeout(specqbft.Round(1)) + time.Millisecond*10)
@@ -31,7 +33,9 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 			atomic.AddInt32(&count, 1)
 		}
 		timer := New(context.Background(), zap.L(), onTimeout)
-		timer.roundTimeout = DefaultRoundTimeout(1.1)
+		timer.roundTimeout = func(round specqbft.Round) time.Duration {
+			return 1100 * time.Millisecond
+		}
 
 		timer.TimeoutForRound(specqbft.Round(1))
 		<-time.After(timer.roundTimeout(specqbft.Round(1)) / 2)

@@ -27,6 +27,7 @@ var (
 		migrationCleanSyncOffset,
 		migrationCleanOperatorRemovalCorruptions,
 		migrationCleanShares,
+		migrationRemoveChangeRoundSync,
 	}
 )
 
@@ -55,7 +56,7 @@ type Options struct {
 	DbPath string
 }
 
-func (o *Options) getRegistryStores() []eth1.RegistryStore {
+func (o Options) getRegistryStores() []eth1.RegistryStore {
 	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage()}
 }
 
@@ -65,6 +66,7 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 		Logger: o.Logger,
 	})
 }
+
 func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db, o.Logger)
 }

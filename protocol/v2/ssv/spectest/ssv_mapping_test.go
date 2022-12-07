@@ -83,11 +83,11 @@ func TestSSVMapping(t *testing.T) {
 				RunMsgProcessing(t, typedTest)
 			})
 		case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
-			//subtests := test.(map[string]interface{})["Tests"].([]interface{})
+			subtests := test.(map[string]interface{})["Tests"].([]interface{})
 			typedTests := make([]*MsgProcessingSpecTest, 0)
-			//for _, subtest := range subtests {
-			//	typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
-			//}
+			for _, subtest := range subtests {
+				typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
+			}
 
 			typedTest := &MultiMsgProcessingSpecTest{
 				Name:  test.(map[string]interface{})["Name"].(string),
@@ -154,45 +154,45 @@ func TestSSVMapping(t *testing.T) {
 	}
 }
 
-//func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
-//	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
-//
-//	duty := &spectypes.Duty{}
-//	byts, _ := json.Marshal(m["Duty"])
-//	require.NoError(t, json.Unmarshal(byts, duty))
-//
-//	msgs := make([]*spectypes.SSVMessage, 0)
-//	for _, msg := range m["Messages"].([]interface{}) {
-//		byts, _ = json.Marshal(msg)
-//		typedMsg := &spectypes.SSVMessage{}
-//		require.NoError(t, json.Unmarshal(byts, typedMsg))
-//		msgs = append(msgs, typedMsg)
-//	}
-//
-//	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
-//	for _, msg := range m["OutputMessages"].([]interface{}) {
-//		byts, _ = json.Marshal(msg)
-//		typedMsg := &ssv.SignedPartialSignatureMessage{}
-//		require.NoError(t, json.Unmarshal(byts, typedMsg))
-//		outputMsgs = append(outputMsgs, typedMsg)
-//	}
-//
-//	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
-//
-//	// runner
-//	runner := fixRunnerForRun(t, runnerMap, ks)
-//
-//	return &MsgProcessingSpecTest{
-//		Name:                    m["Name"].(string),
-//		Duty:                    duty,
-//		Runner:                  runner,
-//		Messages:                msgs,
-//		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
-//		DontStartDuty:           m["DontStartDuty"].(bool),
-//		ExpectedError:           m["ExpectedError"].(string),
-//		OutputMessages:          outputMsgs,
-//	}
-//}
+func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
+	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
+
+	duty := &spectypes.Duty{}
+	byts, _ := json.Marshal(m["Duty"])
+	require.NoError(t, json.Unmarshal(byts, duty))
+
+	msgs := make([]*spectypes.SSVMessage, 0)
+	for _, msg := range m["Messages"].([]interface{}) {
+		byts, _ = json.Marshal(msg)
+		typedMsg := &spectypes.SSVMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		msgs = append(msgs, typedMsg)
+	}
+
+	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	for _, msg := range m["OutputMessages"].([]interface{}) {
+		byts, _ = json.Marshal(msg)
+		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		outputMsgs = append(outputMsgs, typedMsg)
+	}
+
+	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(runnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
+
+	// runner
+	runner := fixRunnerForRun(t, runnerMap, ks)
+
+	return &MsgProcessingSpecTest{
+		Name:                    m["Name"].(string),
+		Duty:                    duty,
+		Runner:                  runner,
+		Messages:                msgs,
+		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
+		DontStartDuty:           m["DontStartDuty"].(bool),
+		ExpectedError:           m["ExpectedError"].(string),
+		OutputMessages:          outputMsgs,
+	}
+}
 
 func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	base := &runner.BaseRunner{}

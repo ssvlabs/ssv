@@ -9,9 +9,9 @@ func InstanceSet() []utils.KeyValue {
 
 	// list of changes package names & imports between spec and implementation
 	instanceMap.Set("package instance", "package qbft")
-	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"\n", "")
 	instanceMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
-	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"\n", "")
+	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
 	instanceMap.Set("specqbft.", "")
 	instanceMap.Set("spectypes.", "types.")
 	instanceMap.Set("types.IConfig", "IConfig")
@@ -20,8 +20,6 @@ func InstanceSet() []utils.KeyValue {
 	instanceMap.Set("// TODO align spec to add else to avoid broadcast errored proposal\n\t\t\t} else {\n\t\t\t\t// nolint\n\t\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t\t}\n\t\t\t}",
 		"}\n\t\t\t// nolint\n\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}")
 	instanceMap.Set("// SetConfig returns the instance config\nfunc (i *Instance) SetConfig(config IConfig) {\n\ti.config = config\n}", "")
-	instanceMap.Set("// TODO will be removed upon https://github.com/bloxapp/SIPs/blob/main/sips/constant_qbft_timeout.md\n\t\tmid := types.MessageIDFromBytes(i.State.ID)\n\t\tif err := i.config.GetNetwork().SyncHighestRoundChange(mid, i.State.Height); err != nil {\n\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t}",
-		"if err := i.config.GetNetwork().SyncHighestRoundChange(types.MessageIDFromBytes(i.State.ID), i.State.Height); err != nil {\n\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t}")
 
 	return instanceMap.Range()
 }

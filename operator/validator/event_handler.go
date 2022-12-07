@@ -208,10 +208,6 @@ func (c *controller) handleValidatorRemovalEvent(
 		if err := store.CleanAllInstances(messageID[:]); err != nil { // TODO need to delete for multi duty as well
 			return nil, errors.Wrap(err, "could not clean all decided messages")
 		}
-		// remove change round messages
-		if err := store.CleanLastChangeRound(messageID[:]); err != nil { // TODO need to delete for multi duty as well
-			return nil, errors.Wrap(err, "could not clean last change round")
-		}
 	}
 
 	// remove from storage

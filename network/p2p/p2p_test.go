@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
@@ -136,7 +135,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastChangeRound(mid, specqbft.Height(0))
+	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(res), 5)
 	require.Less(t, len(res), 7)
@@ -145,14 +144,14 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
 	node.RegisterHandlers(&protcolp2p.SyncHandler{
-		Protocol: protcolp2p.LastChangeRoundProtocol,
+		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
 				Signature: []byte("xxx"),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
 				Message: &specqbft.Message{
-					MsgType:    specqbft.RoundChangeMsgType,
+					MsgType:    specqbft.CommitMsgType,
 					Height:     height,
 					Round:      round,
 					Identifier: mid[:],
@@ -266,7 +265,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &spectypes.SSVMessage{
-		MsgType: message.SSVDecidedMsgType,
+		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}, nil

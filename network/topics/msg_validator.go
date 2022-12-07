@@ -2,10 +2,12 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
+
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 // MsgValidatorFunc represents a message validator
@@ -39,11 +41,6 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		// check decided topic
 		// currentTopic := pmsg.GetTopic()
 		// currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
-		// if msg.MsgType == spectypes.SSVDecidedMsgType {
-		//	if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
-		//		return pubsub.ValidationAccept
-		//	}
-		//}
 		// topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
 		// for _, tp := range topics {
 		//	if tp == currentTopicBaseName {
