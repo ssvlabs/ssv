@@ -10,6 +10,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -158,9 +159,7 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
 func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
-	// TODO - waitOneThirdOrValidBlock
-
-	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot()
+	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
@@ -184,7 +183,7 @@ func (r *SyncCommitteeRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *SyncCommitteeRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *SyncCommitteeRunner) GetBeaconNode() goclient.BeaconNode {
 	return r.beacon
 }
 

@@ -2,14 +2,13 @@ package runner
 
 import (
 	"encoding/hex"
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
+	logging "github.com/ipfs/go-log"
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
 

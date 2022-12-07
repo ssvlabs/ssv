@@ -3,7 +3,12 @@ package goclient
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	types2 "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/prysmaticlabs/prysm/time"
+	"github.com/prysmaticlabs/prysm/time/slots"
+	time2 "time"
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
@@ -33,4 +38,35 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 		return provider.SubmitAttestations(gc.ctx, []*spec.Attestation{attestation})
 	}
 	return nil
+}
+
+// getSigningRoot returns signing root
+func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
+	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
+	domain, err := gc.DomainData(spec.Epoch(epoch), types2.DomainAttester)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	root, err := gc.ComputeSigningRoot(data, domain)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return root, nil
+}
+
+// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
+	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
+	startTime := gc.slotStartTime(slot)
+	finalTime := startTime.Add(delay)
+	wait := time.Until(finalTime)
+	if wait <= 0 {
+		return
+	}
+
+	t := time2.NewTimer(wait)
+	defer t.Stop()
+	for range t.C {
+		return
+	}
 }
