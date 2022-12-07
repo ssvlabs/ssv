@@ -92,13 +92,30 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
+		if signedMsg == nil {
+			return nil
+		}
+		v.logger.Debug("got valid consensus message",
+			zap.Int64("type", int64(signedMsg.Message.MsgType)),
+			zap.Int64("msg_height", int64(signedMsg.Message.Height)),
+			zap.Int64("msg_round", int64(signedMsg.Message.Round)),
+			zap.Any("ctrl", dutyRunner.GetBaseRunner().QBFTController),
+			zap.Any("runner_state", dutyRunner.GetBaseRunner().State),
+		)
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
-
+		if signedMsg == nil {
+			return nil
+		}
+		v.logger.Debug("got valid post consensus message",
+			zap.Int64("type", int64(signedMsg.Message.Type)),
+			zap.Any("ctrl", dutyRunner.GetBaseRunner().QBFTController),
+			zap.Any("runner_state", dutyRunner.GetBaseRunner().State),
+		)
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			v.logger.Info("process post consensus", zap.String("identifier", hex.EncodeToString(v.Share.ValidatorPubKey)),
 				zap.Any("duty runner state", dutyRunner.GetBaseRunner().State),
