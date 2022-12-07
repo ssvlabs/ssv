@@ -7,6 +7,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -148,6 +150,8 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	l := logex.GetLogger(zap.String("who", "AttesterRunner"), zap.String("where", "expectedPostConsensusRootsAndDomain"))
+	l.Debug("calculates root and domain for post consensus", zap.Any("state", r.BaseRunner.State))
 	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AttestationData}, spectypes.DomainAttester, nil
 }
 
