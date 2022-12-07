@@ -57,7 +57,7 @@ type BaseRunner struct {
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
-	logex.GetLogger().Debug("baseStartNewDuty",zap.Any("c.h", b.QBFTController.Height), zap.Any("state",b.State))
+	logex.GetLogger().Debug("baseStartNewDuty",zap.Any("c.h", b.QBFTController.Height), zap.Any("RunningInstance",b.State.RunningInstance!=nil))
 	if err := b.canStartNewDuty(); err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
 	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(runner.GetBaseRunner().QBFTController.Height)
-	logex.GetLogger().Debug("BaseRunner.decide",zap.Any("RunningInstance", newInstance))
+	logex.GetLogger().Debug("BaseRunner.decide",zap.Any("DecidedValue", b.State.DecidedValue != nil))
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}
