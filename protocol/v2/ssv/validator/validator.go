@@ -95,11 +95,15 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if signedMsg == nil {
 			return nil
 		}
+		var ctrl_h uint64
+		if c := dutyRunner.GetBaseRunner().QBFTController; c != nil {
+			ctrl_h = uint64(c.Height)
+		}
 		v.logger.Debug("got valid consensus message",
 			zap.Int64("type", int64(signedMsg.Message.MsgType)),
 			zap.Int64("msg_height", int64(signedMsg.Message.Height)),
 			zap.Int64("msg_round", int64(signedMsg.Message.Round)),
-			zap.Any("ctrl", dutyRunner.GetBaseRunner().QBFTController),
+			zap.Any("ctrl_h", ctrl_h),
 			zap.Any("runner_state", dutyRunner.GetBaseRunner().State),
 		)
 		return dutyRunner.ProcessConsensus(signedMsg)
