@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -103,7 +104,9 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		}
 
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			v.logger.Info("process post consensus")
+			v.logger.Info("process post consensus", zap.String("identifier", hex.EncodeToString(v.Share.ValidatorPubKey)),
+				zap.Any("duty runner state", dutyRunner.GetBaseRunner().State),
+				zap.Any("ctrl", dutyRunner.GetBaseRunner().QBFTController))
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
