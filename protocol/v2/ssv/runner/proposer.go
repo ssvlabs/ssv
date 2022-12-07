@@ -8,6 +8,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 
@@ -188,6 +189,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
+
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
@@ -232,7 +234,7 @@ func (r *ProposerRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() goclient.BeaconNode {
 	return r.beacon
 }
 

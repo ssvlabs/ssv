@@ -1,0 +1,19 @@
+
+
+
+
+
+
+
+
+
+1, beacon/goclient/proposer.go:11 no need committee index
+2, proposer - do we need to use bellatrix?
+3, [in spec] /Users/nivmuroch/go/pkg/mod/github.com/bloxapp/ssv-spec@v0.2.8-0.20221127111311-7e96c8b78191/ssv/types.go:44
+    b. change return type to *phase0.Attestation
+    c. change input to "attestationDataRoot phase0.Root"
+4, sync committee -
+    a.
+
+
+5, Duty type change!!
