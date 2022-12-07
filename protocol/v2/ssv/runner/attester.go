@@ -2,7 +2,9 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -74,6 +76,12 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 		return nil
 	}
 
+	logex.GetLogger().Debug("AttesterRunner.ProcessConsensus",
+		zap.Any("msg.height", signedMsg.Message.Height),
+		zap.Any("msg.round", signedMsg.Message.Round),
+		zap.String("msg.identifier", hex.EncodeToString(signedMsg.Message.Identifier)),
+	)
+
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
@@ -107,6 +115,12 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 }
 
 func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+	logex.GetLogger().Debug("AttesterRunner.ProcessPostConsensus",
+		zap.Any("msg.type", signedMsg.Message.Type),
+		zap.String("controller.identifier", hex.EncodeToString(r.BaseRunner.QBFTController.Identifier)),
+		zap.Any("controller.height", r.BaseRunner.QBFTController.Height),
+	)
+
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
