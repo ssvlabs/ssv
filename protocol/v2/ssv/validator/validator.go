@@ -46,7 +46,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
-		logger:      options.Logger,
+		logger:      options.Logger.With(zap.String("pubkey", hex.EncodeToString(options.SSVShare.ValidatorPubKey))),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
