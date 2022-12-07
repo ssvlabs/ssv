@@ -152,6 +152,9 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	l := logex.GetLogger(zap.String("who", "AttesterRunner"), zap.String("where", "expectedPostConsensusRootsAndDomain"))
 	l.Debug("calculates root and domain for post consensus", zap.Any("state", r.BaseRunner.State))
+	if r.BaseRunner.State.DecidedValue == nil {
+		return nil, spectypes.DomainAttester, errors.New("no decided value")
+	}
 	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AttestationData}, spectypes.DomainAttester, nil
 }
 
