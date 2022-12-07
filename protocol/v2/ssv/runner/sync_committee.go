@@ -10,7 +10,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/beacon/goclient"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -183,7 +182,7 @@ func (r *SyncCommitteeRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *SyncCommitteeRunner) GetBeaconNode() goclient.BeaconNode {
+func (r *SyncCommitteeRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 

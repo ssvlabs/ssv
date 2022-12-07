@@ -11,7 +11,6 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -59,7 +58,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beaconprotocol.Options) (ssv.BeaconNode, error) { //TODo change to spec interface
+func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
 	logger.Info("connecting to beacon client...")
 

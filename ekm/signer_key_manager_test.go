@@ -1,16 +1,14 @@
 package ekm
 
 import (
+	"github.com/golang/mock/gomock"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-ssz"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
@@ -27,46 +25,14 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-type signingUtils struct {
-}
-
-func (s *signingUtils) GetDomain(data *spec.AttestationData) ([]byte, error) {
-	return make([]byte, 32), nil
-}
-
-func (s *signingUtils) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
-	if object == nil {
-		return [32]byte{}, errors.New("cannot compute signing root of nil")
-	}
-	return s.signingData(func() ([32]byte, error) {
-		if v, ok := object.(fssz.HashRoot); ok {
-			return v.HashTreeRoot()
-		}
-		return ssz.HashTreeRoot(object)
-	}, domain)
-}
-
-func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
-	objRoot, err := rootFunc()
-	if err != nil {
-		return [32]byte{}, err
-	}
-	root := spec.Root{}
-	copy(root[:], objRoot[:])
-	_domain := spec.Domain{}
-	copy(_domain[:], domain)
-	container := &spec.SigningData{
-		ObjectRoot: root,
-		Domain:     _domain,
-	}
-	return container.HashTreeRoot()
-}
-
 func testKeyManager(t *testing.T) spectypes.KeyManager {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	threshold.Init()
 
 	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
-	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
+	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewMockBeacon(ctrl)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

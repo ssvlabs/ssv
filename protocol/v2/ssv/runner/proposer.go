@@ -10,7 +10,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/beacon/goclient"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -86,7 +85,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 	duty := r.GetState().StartingDuty
 
 	// get block data
-	blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+	blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to get Beacon block")
 	}
@@ -241,7 +240,7 @@ func (r *ProposerRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *ProposerRunner) GetBeaconNode() goclient.BeaconNode {
+func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
 	return r.beacon
 }
 

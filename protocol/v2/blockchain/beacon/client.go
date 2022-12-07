@@ -2,14 +2,15 @@ package beacon
 
 import (
 	"context"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/storage/basedb"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 // TODO: add missing tests
@@ -35,12 +36,18 @@ type beaconValidator interface {
 	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*eth2apiv1.Validator, error)
 }
 
+// TODO need to handle differently (by spec)
+type signer interface {
+	ComputeSigningRoot(object interface{}, domain phase0spec.Domain) ([32]byte, error)
+}
+
 // Beacon interface for all beacon duty calls
 type Beacon interface {
 	ssv.BeaconNode // spec beacon interface
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
+	signer // TODO need to handle differently
 }
 
 // Options for controller struct creation
