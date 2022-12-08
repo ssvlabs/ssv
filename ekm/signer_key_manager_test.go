@@ -1,7 +1,6 @@
 package ekm
 
 import (
-	"github.com/golang/mock/gomock"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -26,13 +25,10 @@ const (
 )
 
 func testKeyManager(t *testing.T) spectypes.KeyManager {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	threshold.Init()
 
 	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), types.GetDefaultDomain())
-	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewMockBeacon(ctrl)
+	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewBeaconMock()
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
