@@ -3,16 +3,20 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/types"
+	logging "github.com/ipfs/go-log"
 )
+
+var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
 
 // HistoricalInstanceCapacity represents the upper bound of InstanceContainer a processmsg can process messages for as messages are not
 // guaranteed to arrive in a timely fashion, we physically limit how far back the processmsg will process messages for
@@ -50,6 +54,7 @@ type Controller struct {
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
 	config              types.IConfig
+	logger              *zap.Logger
 }
 
 func NewController(
@@ -66,6 +71,7 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
+		logger:              logger.With(zap.String("identifier", hex.EncodeToString(identifier))),
 	}
 }
 
@@ -133,7 +139,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		fmt.Printf("%s\n", err.Error())
+		c.logger.Warn("failed to broadcast decided msg", zap.Error(err))
 	}
 	return msg, nil
 }
