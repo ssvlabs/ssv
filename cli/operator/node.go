@@ -91,7 +91,9 @@ var StartNodeCmd = &cobra.Command{
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
-		_ = logging.SetLogLevelRegex(cfg.DebugRegexp, "debug")
+		if len(cfg.DebugServices) > 0 {
+			_ = logging.SetLogLevelRegex(cfg.DebugServices, "debug")
+		}
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()

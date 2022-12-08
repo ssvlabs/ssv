@@ -139,9 +139,14 @@ $ make build
    2. fill the validator registration event with the data generated in section 4
 6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)
 7. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
-8. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
+8. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components: 
+```yaml 
+global:
+    DebugServices: ssv/.*
+```
+9. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
    Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
-9. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+10. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 ### Run
 
