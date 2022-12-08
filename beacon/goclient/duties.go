@@ -11,24 +11,31 @@ import (
 func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	var duties []*spectypes.Duty
 
-	if err := gc.fetchAttesterDuties(duties, epoch, validatorIndices); err != nil {
+	if attesterDuties, err := gc.fetchAttesterDuties(epoch, validatorIndices); err != nil {
 		gc.logger.Warn("failed to get attestation duties", zap.Error(err))
+	} else {
+		duties = append(duties, attesterDuties...)
 	}
-	if err := gc.fetchProposerDuties(duties, epoch, validatorIndices); err != nil {
+	if proposerDuties, err := gc.fetchProposerDuties(epoch, validatorIndices); err != nil {
 		gc.logger.Warn("failed to get proposer duties", zap.Error(err))
+	} else {
+		duties = append(duties, proposerDuties...)
 	}
-	if err := gc.fetchSyncCommitteeDuties(duties, epoch, validatorIndices); err != nil {
+	if syncCommitteeDuties, err := gc.fetchSyncCommitteeDuties(epoch, validatorIndices); err != nil {
 		gc.logger.Warn("failed to get sync committee duties", zap.Error(err))
+	} else {
+		duties = append(duties, syncCommitteeDuties...)
 	}
 	return duties, nil
 }
 
 // fetchAttesterDuties applies attester + aggregator duties
-func (gc *goClient) fetchAttesterDuties(duties []*spectypes.Duty, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) error {
+func (gc *goClient) fetchAttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	var duties []*spectypes.Duty
 	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
 		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
-			return err
+			return duties, err
 		}
 		toBeaconDuty := func(duty *api.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
 			return &spectypes.Duty{
@@ -47,18 +54,20 @@ func (gc *goClient) fetchAttesterDuties(duties []*spectypes.Duty, epoch phase0.E
 			duties = append(duties, toBeaconDuty(attesterDuty, spectypes.BNRoleAttester))
 			duties = append(duties, toBeaconDuty(attesterDuty, spectypes.BNRoleAggregator)) // always trigger aggregator as well
 		}
+		return duties, nil
 	} else {
 		// print log?
 	}
-	return nil
+	return duties, nil
 }
 
 // fetchProposerDuties applies proposer duties
-func (gc *goClient) fetchProposerDuties(duties []*spectypes.Duty, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) error {
+func (gc *goClient) fetchProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	var duties []*spectypes.Duty
 	if provider, isProvider := gc.client.(eth2client.ProposerDutiesProvider); isProvider {
 		proposerDuties, err := provider.ProposerDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
-			return err
+			return duties, err
 		}
 		for _, proposerDuty := range proposerDuties {
 			duties = append(duties, &spectypes.Duty{
@@ -68,18 +77,20 @@ func (gc *goClient) fetchProposerDuties(duties []*spectypes.Duty, epoch phase0.E
 				ValidatorIndex: proposerDuty.ValidatorIndex,
 			})
 		}
+		return duties, nil
 	} else {
 		// print log?
 	}
-	return nil
+	return duties, nil
 }
 
 // fetchSyncCommitteeDuties applies sync committee + sync committee contributor duties
-func (gc *goClient) fetchSyncCommitteeDuties(duties []*spectypes.Duty, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) error {
+func (gc *goClient) fetchSyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	var duties []*spectypes.Duty
 	if provider, isProvider := gc.client.(eth2client.SyncCommitteeDutiesProvider); isProvider {
 		syncCommitteeDuties, err := provider.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
 		if err != nil {
-			return err
+			return duties, err
 		}
 		toBeaconDuty := func(duty *api.SyncCommitteeDuty, role spectypes.BeaconRole) *spectypes.Duty {
 			return &spectypes.Duty{
@@ -93,8 +104,9 @@ func (gc *goClient) fetchSyncCommitteeDuties(duties []*spectypes.Duty, epoch pha
 			duties = append(duties, toBeaconDuty(syncCommitteeDuty, spectypes.BNRoleSyncCommittee))
 			duties = append(duties, toBeaconDuty(syncCommitteeDuty, spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
 		}
+		return duties, nil
 	} else {
 		// print log?
 	}
-	return nil
+	return duties, nil
 }
