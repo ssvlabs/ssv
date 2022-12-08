@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"fmt"
-
 	"github.com/bloxapp/ssv-spec/qbft"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
