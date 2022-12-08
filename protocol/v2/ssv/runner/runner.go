@@ -2,6 +2,7 @@ package runner
 
 import (
 	"fmt"
+	logging "github.com/ipfs/go-log"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
+
+var logger = logging.Logger("ssv/protocol/ssv/runner").Desugar()
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner

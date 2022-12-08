@@ -2,11 +2,13 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -22,6 +24,8 @@ type AttesterRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
+
+	logger *zap.Logger
 }
 
 func NewAttesterRunnner(
@@ -45,6 +49,9 @@ func NewAttesterRunnner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
+
+		logger: logger.With(zap.String("who", "AttesterRunner"),
+			zap.String("validator", hex.EncodeToString(share.ValidatorPubKey))),
 	}
 }
 
@@ -124,6 +131,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		duty := r.GetState().DecidedValue.Duty
 
+		r.logger.Debug("reconstructed partial signature", zap.Int64("slot", int64(duty.Slot)))
+
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
@@ -136,6 +145,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
+
+		r.logger.Debug("submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
 	r.GetState().Finished = true
 
