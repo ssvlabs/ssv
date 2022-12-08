@@ -123,9 +123,18 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 			zap.Any("ctrl_h", ctrl_h),
 		)
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
+			var runningInstanceHeight, controllerHeight uint64
+			if dutyRunner.GetBaseRunner().State != nil && dutyRunner.GetBaseRunner().State.RunningInstance != nil {
+				runningInstanceHeight = uint64(dutyRunner.GetBaseRunner().State.RunningInstance.State.Height)
+			}
+			if dutyRunner.GetBaseRunner().QBFTController != nil {
+				controllerHeight = uint64(dutyRunner.GetBaseRunner().QBFTController.Height)
+			}
 			v.logger.Info("process post consensus", zap.String("identifier", hex.EncodeToString(v.Share.ValidatorPubKey)),
-				zap.Any("duty runner state", dutyRunner.GetBaseRunner().State),
-				zap.Any("ctrl", dutyRunner.GetBaseRunner().QBFTController))
+				zap.Bool("dutyRunnerStateNotNil", dutyRunner.GetBaseRunner().State != nil),
+				zap.Bool("dutyRunnerStateRunningInstanceNotNil", dutyRunner.GetBaseRunner().State.RunningInstance != nil),
+				zap.Uint64("runningInstanceHeight", runningInstanceHeight),
+				zap.Uint64("controllerHeight", controllerHeight))
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
