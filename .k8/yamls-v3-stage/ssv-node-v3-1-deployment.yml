@@ -107,6 +107,8 @@ spec:
               name: config-secrets
               key: abi_version
               optional: true
+        - name: DEBUG_SERVICES
+          value: "ssv/protocol/*."
         - name: LOG_LEVEL
           value: "debug"
         - name: DB_REPORTING
