@@ -2,10 +2,10 @@ package instance
 
 import (
 	"bytes"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -41,6 +41,8 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if err != nil {
 		return errors.Wrap(err, "could not create prepare msg")
 	}
+
+	i.logger.Debug("got proposal quorum, broadcasting prepare message", zap.Uint64("round", uint64(i.State.Round)))
 
 	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
