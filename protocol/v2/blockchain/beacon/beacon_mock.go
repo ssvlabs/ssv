@@ -135,4 +135,3 @@ func (b beaconMock) signingData(rootFunc func() ([32]byte, error), domain []byte
 	}
 	return container.HashTreeRoot()
 }
-
