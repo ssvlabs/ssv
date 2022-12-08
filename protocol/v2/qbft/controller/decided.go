@@ -6,11 +6,9 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
@@ -45,8 +43,6 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 			inst.State.Round = msg.Message.Round
 			inst.State.DecidedValue = data.Data
 		}
-		l := logex.GetLogger(zap.String("who", "qbft.Controller"), zap.String("where", "UponDecided"))
-		l.Debug("SettingDecidedValue", zap.Any("c.height", c.Height), zap.Any("msg.Height", msg.Message.Height))
 	}
 
 	isFutureDecided := msg.Message.Height > c.Height
