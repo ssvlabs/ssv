@@ -35,8 +35,12 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
 			instance, err := store.GetHighestInstance(msgID[:])
-			logger.Debug("last decided results", zap.Any("res", instance.DecidedMessage), zap.Error(err))
-			sm.UpdateResults(err, instance.DecidedMessage)
+			if err != nil {
+				logger.Debug("could not get highest instance", zap.Error(err))
+			} else if instance != nil {
+				logger.Debug("last decided results", zap.Any("res", instance.DecidedMessage), zap.Error(err))
+				sm.UpdateResults(err, instance.DecidedMessage)
+			}
 		}
 
 		data, err := sm.Encode()
