@@ -2,7 +2,9 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -163,6 +165,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
+		fmt.Printf("succesfull subminted propose - %s\n", hex.EncodeToString(r.BaseRunner.Share.ValidatorPubKey))
 	}
 	r.GetState().Finished = true
 

@@ -2,7 +2,8 @@ package instance
 
 import (
 	"bytes"
-
+	"encoding/hex"
+	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -22,7 +23,7 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if !addedMsg {
 		return nil // uponProposal was already called
 	}
-
+	fmt.Printf("recieve valid propose - %s\n", hex.EncodeToString(signedProposal.Message.Identifier))
 	newRound := signedProposal.Message.Round
 	i.State.ProposalAcceptedForCurrentRound = signedProposal
 

@@ -2,6 +2,8 @@ package instance
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -40,7 +42,7 @@ func (i *Instance) uponPrepare(
 	if !addedMsg {
 		return nil // uponPrepare was already called
 	}
-
+	fmt.Printf("recieve valid prepare - %s\n", hex.EncodeToString(signedPrepare.Message.Identifier))
 	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}

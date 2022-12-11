@@ -3,7 +3,9 @@ package runner
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -213,6 +215,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *specssv.
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
+			fmt.Printf("succesfull subminted sync commit aggregate - %s\n", hex.EncodeToString(r.BaseRunner.Share.ValidatorPubKey))
 			break
 		}
 	}

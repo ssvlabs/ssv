@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"encoding/hex"
+	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -25,7 +27,7 @@ func (i *Instance) uponRoundChange(
 	if !addedMsg {
 		return nil // UponCommit was already called
 	}
-
+	fmt.Printf("recieve valid change round - %s\n", hex.EncodeToString(signedRoundChange.Message.Identifier))
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		i.State,
 		i.config,

@@ -2,6 +2,8 @@ package instance
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -33,7 +35,7 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 	if !addMsg {
 		return false, nil, nil, nil // UponCommit was already called
 	}
-
+	fmt.Printf("recieve valid commit - %s\n", hex.EncodeToString(signedCommit.Message.Identifier))
 	// calculate commit quorum and act upon it
 	quorum, commitMsgs, err := commitQuorumForRoundValue(i.State, commitMsgContainer, signedCommit.Message.Data, signedCommit.Message.Round)
 	if err != nil {

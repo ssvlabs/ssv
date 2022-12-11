@@ -2,7 +2,9 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -130,6 +132,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
+		fmt.Printf("succesfull subminted sunc comit - %s\n", hex.EncodeToString(r.BaseRunner.Share.ValidatorPubKey))
 	}
 	r.GetState().Finished = true
 
