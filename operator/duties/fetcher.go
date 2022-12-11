@@ -128,15 +128,29 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*spectypes.Duty, error) {
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
+		var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
 		// entries holds all the new duties to add
 		entries := map[spec.Slot]cacheEntry{}
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
-			subscriptions = append(subscriptions, toSubscription(duty))
+			if duty.Type == spectypes.BNRoleSyncCommittee {
+				syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, &eth2apiv1.SyncCommitteeSubscription{
+					ValidatorIndex:       duty.ValidatorIndex,
+					SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+					UntilEpoch:           spec.Epoch(duty.Slot / 32),
+				})
+			} else {
+				subscriptions = append(subscriptions, toSubscription(duty))
+			}
 		}
 		df.populateCache(entries)
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+		}
+		if len(syncCommitteeSubscriptions) > 0 {
+			if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
+				df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+			}
 		}
 	}
 	return nil
@@ -216,7 +230,7 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		Slot:             duty.Slot,
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
-		IsAggregator:     false, // TODO need to handle agg case
+		IsAggregator:     duty.Type == spectypes.BNRoleAggregator, // TODO make sure it's the right way
 	}
 }
 
