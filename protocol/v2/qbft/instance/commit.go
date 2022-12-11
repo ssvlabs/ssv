@@ -2,13 +2,12 @@ package instance
 
 import (
 	"bytes"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -113,7 +112,7 @@ Commit(
                         )
                     );
 */
-func CreateCommit(state *specqbft.State, config types.IConfig, value []byte) (*specqbft.SignedMessage, error) {
+func CreateCommit(state *specqbft.State, config qbft.IConfig, value []byte) (*specqbft.SignedMessage, error) {
 	commitData := &specqbft.CommitData{
 		Data: value,
 	}
@@ -142,7 +141,7 @@ func CreateCommit(state *specqbft.State, config types.IConfig, value []byte) (*s
 }
 
 func BaseCommitValidation(
-	config types.IConfig,
+	config qbft.IConfig,
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
@@ -171,7 +170,7 @@ func BaseCommitValidation(
 }
 
 func validateCommit(
-	config types.IConfig,
+	config qbft.IConfig,
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,

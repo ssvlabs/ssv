@@ -3,6 +3,7 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/qbft"
 	"testing"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 )
 

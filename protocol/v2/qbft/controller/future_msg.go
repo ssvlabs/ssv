@@ -3,10 +3,9 @@ package controller
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
@@ -26,7 +25,7 @@ func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.Signe
 }
 
 func validateFutureMsg(
-	config types.IConfig,
+	config qbft.IConfig,
 	msg *specqbft.SignedMessage,
 	operators []*spectypes.Operator,
 ) error {

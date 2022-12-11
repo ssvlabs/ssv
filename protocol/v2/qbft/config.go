@@ -1,4 +1,4 @@
-package types
+package qbft
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
