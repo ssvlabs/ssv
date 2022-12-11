@@ -1,19 +1,17 @@
-package utils
+package testing
 
 import (
 	"bytes"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/qbft"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
-	"github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/pkg/errors"
 )
 
-var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole) *ssvtypes.Config {
-	return &ssvtypes.Config{
+var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+	return &qbft.Config{
 		Signer:    testingutils.NewTestingKeyManager(),
 		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
 		Domain:    types.PrimusTestnet,
@@ -28,7 +26,7 @@ var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole)
 			}
 			return nil
 		},
-		ProposerF: func(state *qbft.State, round qbft.Round) types.OperatorID {
+		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
 		Storage: TestingStores().Get(role),
@@ -51,24 +49,24 @@ var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
 	}
 }
 
-var BaseInstance = func() *qbft.Instance {
+var BaseInstance = func() *specqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing4SharesSet()), testingutils.Testing4SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var SevenOperatorsInstance = func() *qbft.Instance {
+var SevenOperatorsInstance = func() *specqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing7SharesSet()), testingutils.Testing7SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var TenOperatorsInstance = func() *qbft.Instance {
+var TenOperatorsInstance = func() *specqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing10SharesSet()), testingutils.Testing10SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var ThirteenOperatorsInstance = func() *qbft.Instance {
+var ThirteenOperatorsInstance = func() *specqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing13SharesSet()), testingutils.Testing13SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *qbft.Instance {
-	ret := qbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, qbft.FirstHeight)
+var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *specqbft.Instance {
+	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, specqbft.FirstHeight)
 	ret.StartValue = []byte{1, 2, 3, 4}
 	return ret
 }
@@ -76,7 +74,7 @@ var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, ide
 func NewTestingQBFTController(
 	identifier []byte,
 	share *types.Share,
-	config ssvtypes.IConfig,
+	config qbft.IConfig,
 ) *controller.Controller {
 	return controller.NewController(
 		identifier,

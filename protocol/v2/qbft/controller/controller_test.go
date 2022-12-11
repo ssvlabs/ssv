@@ -1,12 +1,12 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 

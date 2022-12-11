@@ -3,7 +3,8 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"testing"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +22,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	pre := instance.NewInstance(
-		utils.TestingConfig(spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
+		qbfttesting.TestingConfig(spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
@@ -33,7 +33,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 	// a simple hack to change the proposer func
 	if preInstance.State.Height == spectests.ChangeProposerFuncInstanceHeight {
-		preInstance.GetConfig().(*ssvtypes.Config).ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+		preInstance.GetConfig().(*qbft.Config).ProposerF = func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 			return 2
 		}
 	}

@@ -2,10 +2,9 @@ package instance
 
 import (
 	"bytes"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )

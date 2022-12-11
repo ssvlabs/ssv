@@ -14,6 +14,7 @@ var TestingMessage = &specqbft.Message{
 	Identifier: []byte{1, 2, 3, 4},
 	Data:       []byte{1, 2, 3, 4},
 }
+
 var testingSignedMsg = func() *specqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
@@ -40,6 +41,7 @@ var TestingSK = func() *bls.SecretKey {
 }()
 
 var testingValidatorPK = spec.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
+
 var testingShare = &types.Share{
 	OperatorID:      1,
 	ValidatorPubKey: testingValidatorPK[:],
