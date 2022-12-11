@@ -138,6 +138,9 @@ func (v *Validator) ProcessMsg(msg *spectypes.SSVMessage) error {
 	identifier := msg.GetID()
 	ibftController := v.ibfts.ControllerForIdentifier(identifier[:])
 	// synchronize process
+	if ibftController == nil { // unknown role
+		return nil
+	}
 	return ibftController.ProcessMsg(msg)
 }
 
