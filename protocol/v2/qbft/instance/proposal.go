@@ -23,7 +23,6 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if !addedMsg {
 		return nil // uponProposal was already called
 	}
-
 	newRound := signedProposal.Message.Round
 	i.State.ProposalAcceptedForCurrentRound = signedProposal
 

@@ -41,7 +41,6 @@ func (i *Instance) uponPrepare(
 	if !addedMsg {
 		return nil // uponPrepare was already called
 	}
-
 	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
