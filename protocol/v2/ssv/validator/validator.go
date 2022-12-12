@@ -2,10 +2,12 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -14,6 +16,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
+
+var logger = logging.Logger("ssv/protocol/ssv/validator").Desugar()
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
@@ -40,13 +44,15 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
+	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
+
 	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
-	q, _ := msgqueue.New(options.Logger, indexers) // TODO: handle error
+	q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
-		logger:      options.Logger,
+		logger:      logger,
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -64,7 +70,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
-		return errors.Errorf("duty type %s not supported", duty.Type.String())
+		return errors.Errorf("unsupported duty type %s", duty.Type.String())
 	}
 	return dutyRunner.StartNewDuty(duty)
 }
@@ -73,24 +79,24 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
-		return errors.Errorf("could not get duty runner for msg ID")
+		return errors.Errorf("failed to get duty runner for message ID")
 	}
 
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return errors.Wrap(err, "Message invalid")
+		return errors.Wrap(err, "invalid message")
 	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+			return errors.Wrap(err, "failed to decode consensus message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
+			return errors.Wrap(err, "failed to decode post consensus message")
 		}
 
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
@@ -104,11 +110,11 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 
 func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("msg ID doesn't match validator ID")
+		return errors.New("message ID doesn't match validator ID")
 	}
 
 	if len(msg.GetData()) == 0 {
-		return errors.New("msg data is invalid")
+		return errors.New("message data is invalid")
 	}
 
 	return nil

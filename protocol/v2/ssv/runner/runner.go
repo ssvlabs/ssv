@@ -1,8 +1,8 @@
 package runner
 
 import (
-	"fmt"
 	logging "github.com/ipfs/go-log"
+	"go.uber.org/zap"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -54,6 +54,7 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
+	logger         *zap.Logger
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -113,7 +114,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
 			if err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {
-				fmt.Printf("failed to save instance: %s\n", err.Error())
+				b.logger.Warn("Failed to save instance",
+					zap.Uint64("height", uint64(decidedMsg.Message.Height)),
+					zap.Error(err))
 			}
 		}
 	}

@@ -2,8 +2,9 @@ package worker
 
 import (
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"log"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"

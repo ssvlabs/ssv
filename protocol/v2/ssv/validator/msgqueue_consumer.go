@@ -35,7 +35,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 	for ctx.Err() == nil {
 		err := v.ConsumeQueue(msgID, handler, time.Millisecond*50)
 		if err != nil {
-			v.logger.Warn("could not consume queue", zap.Error(err))
+			v.logger.Debug("failed consuming queue", zap.Error(err))
 		}
 	}
 }
@@ -146,7 +146,7 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 
 	err := handler(msgs[0])
 	if err != nil {
-		logger.Warn("could not handle msg", zap.Error(err))
+		logger.Warn("could not handle message", zap.Error(err))
 	}
 	return true // msg processed
 }

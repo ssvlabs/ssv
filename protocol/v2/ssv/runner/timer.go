@@ -1,10 +1,10 @@
 package runner
 
 import (
-	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"go.uber.org/zap"
 )
 
 func (b *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height specqbft.Height) {
@@ -31,7 +31,7 @@ func (b *BaseRunner) onTimeout(h specqbft.Height) func() {
 		err := instance.UponRoundTimeout()
 		if err != nil {
 			// TODO: handle?
-			fmt.Println("failed to handle timeout:", err.Error())
+			b.logger.Warn("failed to handle timeout", zap.Error(err))
 		}
 	}
 }

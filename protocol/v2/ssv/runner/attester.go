@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -24,8 +25,7 @@ type AttesterRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-
-	logger *zap.Logger
+	logger   *zap.Logger
 }
 
 func NewAttesterRunnner(
@@ -37,12 +37,14 @@ func NewAttesterRunnner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
+	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleAttester,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
+			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
@@ -50,8 +52,7 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		logger: logger.With(zap.String("who", "AttesterRunner"),
-			zap.String("validator", hex.EncodeToString(share.ValidatorPubKey))),
+		logger: logger.With(zap.String("who", "AttesterRunner")),
 	}
 }
 
@@ -122,9 +123,10 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	}
 
 	for _, root := range roots {
+		// Reconstruct signature.
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
-			return errors.Wrap(err, "could not reconstruct post consensus signature")
+			return errors.Wrap(err, "failed to reconstruct post consensus signature")
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
@@ -133,6 +135,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		r.logger.Debug("reconstructed partial signature", zap.Int64("slot", int64(duty.Slot)))
 
+		// Produce signed Attestation.
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
@@ -141,9 +144,11 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			AggregationBits: aggregationBitfield,
 		}
 
-		// broadcast
+		// Publish it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
-			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+			r.logger.Error("failed to publish attestation to Beacon node",
+				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
+			return errors.Wrap(err, "failed to publish attestation to Beacon node")
 		}
 
 		r.logger.Debug("submitted attestation", zap.Int64("slot", int64(duty.Slot)))
