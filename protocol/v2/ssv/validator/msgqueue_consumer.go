@@ -9,7 +9,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
@@ -18,12 +17,12 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	fields := []zap.Field{
-		zap.Int("queue_len", v.Q.Len()),
-		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-		zap.String("msgID", msg.MsgID.String()),
-	}
-	v.logger.Debug("got message, adding to queue", fields...)
+	// fields := []zap.Field{
+	// 	zap.Int("queue_len", v.Q.Len()),
+	// 	zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+	// 	zap.String("msgID", msg.MsgID.String()),
+	// }
+	// v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
 }
 
@@ -77,7 +76,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			continue
 		}
 		if processed := v.processByState(handler, msgID, identifier, lastHeight); processed {
-			logger.Debug("process by state is done")
 			continue
 		}
 		if processed := v.processLateCommit(handler, identifier, lastHeight); processed {
@@ -142,7 +140,6 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	logger.Debug("found message in queue when no running instance")
 
 	err := handler(msgs[0])
 	if err != nil {
@@ -167,7 +164,6 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 	if msg == nil {
 		return false // no msg found
 	}
-	v.logger.Debug("found message by state in queue", zap.Int64("height", int64(height)))
 	// v.logger.Debug("queue found message for state",
 	//	zap.Int32("stage", currentState.Stage.Load()),
 	//	zap.Int32("seq", int32(currentState.GetHeight())),
@@ -195,7 +191,6 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	})
 
 	if len(msgs) > 0 {
-		v.logger.Debug("found higher height message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Warn("could not handle msg", zap.Error(err))
@@ -226,7 +221,6 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
-		v.logger.Debug("found late commit message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Warn("could not handle msg", zap.Error(err))
