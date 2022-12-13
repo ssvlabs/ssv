@@ -6,6 +6,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -49,6 +50,9 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 		if err != nil {
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
+
+		i.logger.Debug("got commit quorum", zap.Any("signers", agg.Signers))
+
 		return true, msgCommitData.Data, agg, nil
 	}
 	return false, nil, nil, nil

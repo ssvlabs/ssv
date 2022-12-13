@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -59,7 +60,9 @@ func (i *Instance) uponPrepare(
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
-	i.logger.Debug("got prepare quorum, broadcasting commit message", zap.Uint64("round", uint64(i.State.Round)))
+	i.logger.Debug("got prepare quorum, broadcasting commit message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("signers", signedPrepare.Signers))
 
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")

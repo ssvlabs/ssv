@@ -116,7 +116,6 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(msg, i.State.CommitContainer)
 			if decided {
-				i.logger.Debug("decided instance upon commit quorum")
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
