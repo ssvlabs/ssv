@@ -65,7 +65,7 @@ func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []b
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), types.GetDefaultDomain())
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
 	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
 	require.NoError(t, err)
 

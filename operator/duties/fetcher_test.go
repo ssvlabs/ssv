@@ -24,7 +24,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
 		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
-		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
@@ -39,7 +39,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
-		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
-		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -81,7 +81,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{})
-		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork))
+		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
@@ -91,7 +91,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
 		logger:     zap.L(),
-		ethNetwork: beacon.NewNetwork(core.PraterNetwork),
+		ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
 	}
 	tests := []struct {
 		name string
