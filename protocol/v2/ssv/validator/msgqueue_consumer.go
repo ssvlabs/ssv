@@ -49,8 +49,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	logger := v.logger.With(zap.String("identifier", identifier))
 	higherCache := cache.New(time.Second*12, time.Second*24)
 
-	logger.Warn("queue consumer is running")
-
 	for ctx.Err() == nil {
 		time.Sleep(interval)
 
@@ -68,18 +66,15 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		lastHeight := v.GetLastHeight(msgID)
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
-			logger.Debug("process higher height is done")
 			continue
 		}
 		if processed := v.processNoRunningInstance(handler, msgID, identifier, lastHeight); processed {
-			logger.Debug("process none running instance is done")
 			continue
 		}
 		if processed := v.processByState(handler, msgID, identifier, lastHeight); processed {
 			continue
 		}
 		if processed := v.processLateCommit(handler, identifier, lastHeight); processed {
-			logger.Debug("process default is done")
 			continue
 		}
 
@@ -88,9 +83,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			// remove all msg's that are 2 heights old, besides height 0
 			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
-		if cleaned > 0 {
-			logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
-		}
+		_ = cleaned
+		// if cleaned > 0 {
+		// 	logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
+		// }
 	}
 
 	logger.Warn("queue consumer is closed")
@@ -143,7 +139,7 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 
 	err := handler(msgs[0])
 	if err != nil {
-		logger.Warn("could not handle message", zap.Error(err))
+		logger.Debug("could not handle message", zap.Error(err))
 	}
 	return true // msg processed
 }
@@ -172,7 +168,7 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 
 	err := handler(msg)
 	if err != nil {
-		v.logger.Warn("could not handle msg", zap.Error(err))
+		v.logger.Debug("could not handle msg", zap.Error(err))
 	}
 	return true // msg processed
 }
@@ -193,7 +189,7 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
 		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
+			v.logger.Debug("could not handle msg", zap.Error(err))
 		}
 		return true
 	}
@@ -223,7 +219,7 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
 		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
+			v.logger.Debug("could not handle msg", zap.Error(err))
 		}
 		return true
 	}

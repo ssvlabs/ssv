@@ -61,8 +61,6 @@ func New(logger *zap.Logger, opt ...Option) (MsgQueue, error) {
 		return nil, err
 	}
 
-	logger.Debug("queue configuration", zap.Any("indexers", len(opts.Indexers)))
-
 	return &queue{
 		logger:    logger,
 		indexers:  opts.Indexers,
@@ -124,7 +122,6 @@ func (q *queue) Add(msg *spectypes.SSVMessage) {
 		q.items[idx] = msgs
 		metricsMsgQRatio.WithLabelValues(idx.ID, idx.Name, message.MsgTypeToString(idx.Mt), strconv.Itoa(int(idx.Cmt))).Inc()
 	}
-	q.logger.Debug("message added to queue", zap.Any("indices", indices))
 }
 
 func (q *queue) Purge(idx Index) int64 {
