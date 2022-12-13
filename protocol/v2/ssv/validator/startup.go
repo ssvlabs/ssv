@@ -26,7 +26,9 @@ func (v *Validator) Start() error {
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
 			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
-				v.logger.Warn("could not load highest", zap.String("identifier", identifier.String()), zap.Error(err))
+				v.logger.Warn("failed to load highest instance",
+					zap.String("identifier", identifier.String()),
+					zap.Error(err))
 			}
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 				return err
@@ -60,7 +62,9 @@ func (v *Validator) sync(mid spectypes.MessageID) {
 	for ctx.Err() == nil {
 		err := v.Network.SyncHighestDecided(mid)
 		if err != nil {
-			v.logger.Debug("could not sync highest decided", zap.String("identifier", mid.String()))
+			v.logger.Debug("failed to sync highest decided",
+				zap.String("identifier", mid.String()),
+				zap.Error(err))
 			retries--
 			if retries > 0 {
 				interval *= 2

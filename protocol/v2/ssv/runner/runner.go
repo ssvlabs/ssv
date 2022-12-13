@@ -114,7 +114,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
 			if err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {
-				b.logger.Warn("Failed to save instance",
+				b.logger.Warn("failed to save instance",
 					zap.Uint64("height", uint64(decidedMsg.Message.Height)),
 					zap.Error(err))
 			}

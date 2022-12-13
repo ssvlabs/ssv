@@ -31,7 +31,7 @@ type validatorsMap struct {
 
 func newValidatorsMap(ctx context.Context, logger *zap.Logger, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
-		logger:        logger.With(zap.String("component", "validatorsMap")),
+		logger:        logger.With(zap.String("who", "validatorsMap")),
 		ctx:           ctx,
 		db:            db,
 		lock:          sync.RWMutex{},
@@ -108,12 +108,12 @@ func (vm *validatorsMap) Size() int {
 }
 
 func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
-	var committee []string
-	for _, c := range s.Committee {
-		committee = append(committee, fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey))
+	committee := make([]string, len(s.Committee))
+	for i, c := range s.Committee {
+		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
 	}
 	logger.Debug(msg,
-		zap.String("pubKey", hex.EncodeToString(s.ValidatorPubKey)),
-		zap.Uint64("nodeID", uint64(s.OperatorID)),
+		zap.String("pub_key", hex.EncodeToString(s.ValidatorPubKey)),
+		zap.Uint64("node_id", uint64(s.OperatorID)),
 		zap.Strings("committee", committee))
 }

@@ -59,11 +59,11 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	if !prevDecided {
 		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
 			if err = c.SaveHighestInstance(futureInstance, msg); err != nil {
-				c.logger.Warn("failed to save instance",
+				c.logger.Debug("failed to save instance",
 					zap.Uint64("height", uint64(msg.Message.Height)),
 					zap.Error(err))
 			} else {
-				c.logger.Info("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
+				c.logger.Debug("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
 			}
 		}
 		return msg, nil

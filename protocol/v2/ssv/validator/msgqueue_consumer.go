@@ -23,7 +23,7 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
 		zap.String("msgID", msg.MsgID.String()),
 	}
-	v.logger.Debug("got message, add to queue", fields...)
+	v.logger.Debug("got message, adding to queue", fields...)
 	v.Q.Add(msg)
 }
 

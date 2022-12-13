@@ -139,7 +139,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		c.logger.Warn("failed to broadcast decided msg", zap.Error(err))
+		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
 	return msg, nil
 }

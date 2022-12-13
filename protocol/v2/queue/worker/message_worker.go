@@ -136,7 +136,7 @@ func (w *Worker) process(msg *spectypes.SSVMessage) {
 	}
 	if err := w.handler(msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			w.logger.Warn("could not handle message", zap.Error(handlerErr))
+			w.logger.Warn("failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}

@@ -3,9 +3,10 @@ package instance
 import (
 	"encoding/hex"
 	"encoding/json"
+	"sync"
+
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
-	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -66,17 +67,17 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		// propose if this node is the proposer
 		leader := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
 
-		i.logger.Debug("starting instance")
+		i.logger.Debug("starting QBFT instance")
 		if leader == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				i.logger.Warn("could not create proposal", zap.Error(err))
+				i.logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					i.logger.Warn("could not broadcast proposal", zap.Error(err))
+					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}

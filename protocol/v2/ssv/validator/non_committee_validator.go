@@ -41,7 +41,7 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 	logger := ncv.logger.With(zap.String("id", msg.GetID().String()))
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Debug("invalid message", zap.Error(err))
+		logger.Debug("got invalid message", zap.Error(err))
 		return
 	}
 
@@ -49,7 +49,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			logger.Debug("could not get consensus Message from network Message", zap.Error(err))
+			logger.Debug("failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
 		// only supports decided msg's

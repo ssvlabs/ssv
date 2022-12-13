@@ -151,7 +151,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			return errors.Wrap(err, "failed to publish attestation to Beacon node")
 		}
 
-		r.logger.Debug("submitted attestation", zap.Int64("slot", int64(duty.Slot)))
+		r.logger.Debug("successfully published attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
 	r.GetState().Finished = true
 
