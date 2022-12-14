@@ -98,7 +98,7 @@ docker-all:
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-local
-docker-all:
+docker-local:
 	@echo "nodes $(NODES)"
 	@docker-compose -f docker-compose-local.yaml up --build $(NODES)
 
