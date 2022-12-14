@@ -33,7 +33,6 @@ func (n Network) MinGenesisTime() uint64 {
 	}
 }
 
-
 // EstimatedCurrentSlot returns the estimation of the current slot
 func (n Network) EstimatedCurrentSlot() types.Slot {
 	return n.EstimatedSlotAtTime(prysmTime.Now().Unix())
