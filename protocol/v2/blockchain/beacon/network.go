@@ -33,10 +33,6 @@ func (n Network) MinGenesisTime() uint64 {
 	}
 }
 
-func (n Network) ForkVersion() []byte {
-	return []byte{0x10, 0x00, 0x00, 0x38}
-}
-
 func (n Network) DepositContractAddress() string {
 	return ""
 
