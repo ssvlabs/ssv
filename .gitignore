@@ -47,7 +47,6 @@ vendor/
 
 bin/
 /data/
-/config/
 /db
 /scripts/spec_align_report/data
 /scripts/spec_align_report/ssv-spec
