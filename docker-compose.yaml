@@ -13,8 +13,6 @@ x-base:
   restart: always
   environment:
     CONFIG_PATH: ./config/config.yaml
-  volumes:
-    - ./:/go/src/github.com/bloxapp/ssv
 
 x-base-dev:
   &default-dev
@@ -165,7 +163,6 @@ networks:
   blox-docker:
     driver: bridge
     name: blox-docker
-
 
 volumes:
   data_prometheus:
