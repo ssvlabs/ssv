@@ -1,7 +1,6 @@
 package beacon
 
 import (
-	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	types "github.com/prysmaticlabs/eth2-types"
 	prysmTime "github.com/prysmaticlabs/prysm/time"
