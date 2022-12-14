@@ -3,9 +3,20 @@
 <br>
 <br>
 
-# Logs for Operators
+# SSV - Logging
 
-In order to minimize clutter, SSV periodically logs statistics at every slot and epoch. For example:
+This document describes the logging standards and strategies used in ssv node. 
+
+## Logs for Operators
+
+In order to minimize clutter, SSV periodically logs statistics at every slot and epoch.
+
+Errors in logs can be of the following types:
+* `ERROR` - means the operator should take action
+* `WARN` - means the operator should pay attention
+
+For example:
+
 ```log
 INFO  Epoch started  {epoch: 1, duties: {proposals: 3, attestations: 2170, sync_committee: 3072}}
 ERROR  Failed to submit sync committee message  {error: "rpc error: code = Unavailable desc = connection error"}
@@ -16,7 +27,7 @@ INFO  Slot advanced  {epoch: 1, slot: 63, proposals: "0/0", attestations: "161/1
 INFO  Epoch completed  {epoch: 0, proposals: "3/3", attestations: "2161/2170", sync_committee: "2882/3072"}
 ```
 
-# Logs for Developers
+## Logs for Developers
 
 Debug logs can be enabled with the `--debug-services` flag or `DebugServices` environment variable.
 
