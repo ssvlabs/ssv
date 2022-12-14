@@ -70,7 +70,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
-		return errors.Errorf("unsupported duty type %s", duty.Type.String())
+		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 	return dutyRunner.StartNewDuty(duty)
 }
@@ -79,24 +79,24 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
-		return errors.Errorf("failed to get duty runner for message ID")
+		return errors.Errorf("could not get duty runner for msg ID")
 	}
 
 	if err := validateMessage(v.Share.Share, msg); err != nil {
-		return errors.Wrap(err, "invalid message")
+		return errors.Wrap(err, "Message invalid")
 	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "failed to decode consensus message")
+			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "failed to decode post consensus message")
+			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
@@ -110,11 +110,11 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 
 func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
-		return errors.New("message ID doesn't match validator ID")
+		return errors.New("msg ID doesn't match validator ID")
 	}
 
 	if len(msg.GetData()) == 0 {
-		return errors.New("message data is invalid")
+		return errors.New("msg data is invalid")
 	}
 
 	return nil

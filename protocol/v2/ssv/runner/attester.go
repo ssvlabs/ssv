@@ -126,7 +126,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		// Reconstruct signature.
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
-			return errors.Wrap(err, "failed to reconstruct post consensus signature")
+			return errors.Wrap(err, "could not reconstruct post consensus signature")
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
@@ -148,7 +148,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.logger.Error("failed to publish attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
-			return errors.Wrap(err, "failed to publish attestation to Beacon node")
+			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
 		r.logger.Debug("successfully published attestation", zap.Int64("slot", int64(duty.Slot)))
