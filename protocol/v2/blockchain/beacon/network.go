@@ -33,10 +33,6 @@ func (n Network) MinGenesisTime() uint64 {
 	}
 }
 
-func (n Network) DepositContractAddress() string {
-	return ""
-
-}
 
 // EstimatedCurrentSlot returns the estimation of the current slot
 func (n Network) EstimatedCurrentSlot() types.Slot {
