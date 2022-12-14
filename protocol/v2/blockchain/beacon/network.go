@@ -28,7 +28,6 @@ func (n *Network) GetSlotStartTime(slot uint64) time.Time {
 
 func (n Network) MinGenesisTime() uint64 {
 	if n.minGenesisTime > 0 {
-		fmt.Println("MinGenesisTime override")
 		return n.minGenesisTime
 	} else {
 		return n.Network.MinGenesisTime()
