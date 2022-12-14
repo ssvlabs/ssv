@@ -15,7 +15,6 @@ x-base:
     CONFIG_PATH: ./config/config.yaml
   volumes:
     - ./:/go/src/github.com/bloxapp/ssv
-    - ./data:/data
 
 x-base-dev:
   &default-dev
@@ -33,7 +32,6 @@ x-base-dev:
     - SYS_PTRACE
   volumes:
     - ./:/go/src/github.com/bloxapp/ssv
-    - ./data:/data
 
 services:
   ssv-node-1:
@@ -165,8 +163,8 @@ services:
 
 networks:
   blox-docker:
-    external:
-      name: hamlet
+    driver: bridge
+    name: blox-docker
 
 
 volumes:
