@@ -117,7 +117,7 @@ var StartNodeCmd = &cobra.Command{
 		Logger.Info("using ssv network", zap.String("domain", string(types.GetDefaultDomain())),
 			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
 
-		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
+		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)

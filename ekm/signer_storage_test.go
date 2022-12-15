@@ -40,7 +40,7 @@ func getStorage(t *testing.T) basedb.IDb {
 }
 
 func getWalletStorage(t *testing.T) *signerStorage {
-	network := beaconprotocol.NewNetwork(core.PraterNetwork)
+	network := beaconprotocol.NewNetwork(core.PraterNetwork, 0)
 	return newSignerStorage(getStorage(t), network)
 }
 
