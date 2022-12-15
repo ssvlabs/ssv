@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"sync"
 
@@ -50,8 +49,8 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		logger: logger.With(zap.String("identifier",
-			hex.EncodeToString(identifier)), zap.Uint64("height", uint64(height))),
+		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
+			zap.Uint64("height", uint64(height))),
 	}
 }
 

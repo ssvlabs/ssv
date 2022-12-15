@@ -45,8 +45,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	identifier := msgID.String()
-	logger := v.logger.With(zap.String("identifier", identifier))
+	logger := v.logger.With(zap.String("identifier", msgID.String()))
 	higherCache := cache.New(time.Second*12, time.Second*24)
 
 	for ctx.Err() == nil {

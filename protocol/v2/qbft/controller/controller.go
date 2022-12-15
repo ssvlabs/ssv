@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -71,7 +70,7 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger:              logger.With(zap.String("identifier", hex.EncodeToString(identifier))),
+		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
 	}
 }
 
