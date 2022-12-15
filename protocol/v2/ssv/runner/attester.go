@@ -144,14 +144,14 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			AggregationBits: aggregationBitfield,
 		}
 
-		// Publish it to the BN.
+		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
-			r.logger.Error("failed to publish attestation to Beacon node",
+			r.logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		r.logger.Debug("successfully published attestation", zap.Int64("slot", int64(duty.Slot)))
+		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
 	r.GetState().Finished = true
 
