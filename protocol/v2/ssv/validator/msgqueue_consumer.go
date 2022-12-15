@@ -124,7 +124,7 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 
 	err := handler(msgs[0])
 	if err != nil {
-		logger.Debug("could not handle message", zap.Error(err))
+		logger.Debug("could not handle message", zap.String("error", err.Error()))
 	}
 	return true // msg processed
 }
@@ -215,7 +215,6 @@ func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height
 	for _, idx := range idxs {
 		iterator.AddIndex(idx)
 	}
-
 	iterator.
 		Add(func() msgqueue.Index {
 			return msgqueue.DecidedMsgIndex(identifier)
