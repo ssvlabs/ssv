@@ -63,6 +63,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		//	continue
 		//}
 		lastHeight := v.GetLastHeight(msgID)
+		identifier := msgID.String()
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
 			continue
