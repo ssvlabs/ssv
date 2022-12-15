@@ -15,7 +15,7 @@ func (i *Instance) uponRoundChange(
 	roundChangeMsgContainer *specqbft.MsgContainer,
 	valCheck specqbft.ProposedValueCheckF,
 ) error {
-	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, signedRoundChange.Message.Round); err != nil {
+	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, i.State.Round); err != nil {
 		return errors.Wrap(err, "round change msg invalid")
 	}
 
@@ -224,7 +224,7 @@ func validRoundChange(state *specqbft.State, config types.IConfig, signedMsg *sp
 	if signedMsg.Message.Height != height {
 		return errors.New("round change Height is wrong")
 	}
-	if signedMsg.Message.Round != round {
+	if signedMsg.Message.Round < round {
 		return errors.New("msg round wrong")
 	}
 	if len(signedMsg.GetSigners()) != 1 {
