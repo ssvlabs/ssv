@@ -17,12 +17,6 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	// fields := []zap.Field{
-	// 	zap.Int("queue_len", v.Q.Len()),
-	// 	zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-	// 	zap.String("msgID", msg.MsgID.String()),
-	// }
-	// v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
 }
 
@@ -79,14 +73,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		cleaned := v.Q.Clean(func(index msgqueue.Index) bool {
+		v.Q.Clean(func(index msgqueue.Index) bool {
 			// remove all msg's that are 2 heights old, besides height 0
 			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
-		_ = cleaned
-		// if cleaned > 0 {
-		// 	logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
-		// }
 	}
 
 	logger.Warn("queue consumer is closed")
@@ -100,11 +90,6 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	// ctrl := r.GetBaseRunner().QBFTController
-	// if ctrl == nil {
-	//	return specqbft.Height(0)
-	//}
-	// return state.LastHeight
 	return r.GetBaseRunner().QBFTController.Height
 }
 
@@ -160,11 +145,6 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 	if msg == nil {
 		return false // no msg found
 	}
-	// v.logger.Debug("queue found message for state",
-	//	zap.Int32("stage", currentState.Stage.Load()),
-	//	zap.Int32("seq", int32(currentState.GetHeight())),
-	//	zap.Int32("round", int32(currentState.GetRound())),
-	//)
 
 	err := handler(msg)
 	if err != nil {
