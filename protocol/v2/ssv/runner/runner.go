@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"encoding/hex"
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
 
@@ -228,4 +229,13 @@ func (b *BaseRunner) hasRunningDuty() bool {
 		return false
 	}
 	return !b.State.Finished
+}
+
+func getPostConsensusSigners(state *State, root []byte) []spectypes.OperatorID {
+	sigs := state.PostConsensusContainer.Signatures[hex.EncodeToString(root)]
+	var signers []spectypes.OperatorID
+	for op := range sigs {
+		signers = append(signers, op)
+	}
+	return signers
 }

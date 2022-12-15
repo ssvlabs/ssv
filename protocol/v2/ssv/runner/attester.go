@@ -133,7 +133,9 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		duty := r.GetState().DecidedValue.Duty
 
-		r.logger.Debug("reconstructed partial signature", zap.Int64("slot", int64(duty.Slot)))
+		r.logger.Debug("reconstructed partial signatures",
+			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
+			zap.Int64("slot", int64(duty.Slot)))
 
 		// Produce signed Attestation.
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
