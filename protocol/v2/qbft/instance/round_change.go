@@ -83,8 +83,10 @@ func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanc
 		return errors.Wrap(err, "failed to create round change message")
 	}
 
-	i.logger.Debug("got change round partial quorum, broadcasting change round message",
-		zap.Uint64("new_round", uint64(newRound)), zap.Uint64("old_round", uint64(oldRound)))
+	if newRound%10 == 0 {
+		i.logger.Debug("got change round partial quorum, broadcasting change round message",
+			zap.Uint64("new_round", uint64(newRound)), zap.Uint64("old_round", uint64(oldRound)))
+	}
 
 	if err := i.Broadcast(roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
