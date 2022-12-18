@@ -69,7 +69,7 @@ func (s syncer) SyncRange(ctx context.Context, identifier spectypes.MessageID, h
 		zap.Uint64("from", uint64(from)))
 	// if we didn't visit all messages in range > log warning
 	if len(visited) < int(to-from) {
-		logger.Warn("not all messages in range were saved", zap.Any("visited", visited))
+		logger.Warn("failed to save all messages in range", zap.Any("visited", visited))
 		// return errors.Errorf("not all messages in range were saved (%d out of %d)", len(visited), int(to-from))
 	}
 	logger.Debug("done with range history sync")
@@ -98,10 +98,10 @@ func (s syncer) processMessages(ctx context.Context, msgs []p2pprotocol.SyncResu
 				continue signedMsgLoop
 			}
 			if err := handler(signedMsg); err != nil {
-				s.logger.Warn("could not add decided with handler", zap.Error(err), zap.Int64("height", int64(height)))
+				s.logger.Warn("failed to add decided with handler", zap.Error(err), zap.Int64("height", int64(height)))
 				continue
 			}
-			s.logger.Debug("mark sync msg as visited", zap.Int64("h", int64(height)))
+			s.logger.Debug("marked sync message as visited", zap.Int64("h", int64(height)))
 			visited[height] = true
 		}
 	}

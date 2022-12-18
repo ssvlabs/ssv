@@ -148,7 +148,6 @@ func NewController(options ControllerOptions) Controller {
 	}
 
 	validatorOptions := &validator.Options{ //TODO add vars
-		Logger:  options.Logger,
 		Network: options.Network,
 		Beacon:  commons.NewBeaconAdapter(options.Beacon),
 		Storage: storageMap,
@@ -551,9 +550,9 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-func setupRunners(ctx context.Context, options validator.Options) runner.DutyRunners {
+func setupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
-		options.Logger.Error("validator missing metadata", zap.String("pk", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
+		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 		return runner.DutyRunners{} // TODO need to find better way to fix it
 	}
 
@@ -574,12 +573,12 @@ func setupRunners(ctx context.Context, options validator.Options) runner.DutyRun
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
-				options.Logger.Debug("leader", zap.Int("", int(leader)))
+				logger.Debug("leader", zap.Int("", int(leader)))
 				return leader
 			},
 			Storage: options.Storage.Get(role),
 			Network: options.Network,
-			Timer:   roundtimer.New(ctx, options.Logger, nil),
+			Timer:   roundtimer.New(ctx, logger, nil),
 		}
 	}
 

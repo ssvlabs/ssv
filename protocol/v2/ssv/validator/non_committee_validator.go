@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"fmt"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -18,6 +17,9 @@ type NonCommitteeValidator struct {
 }
 
 func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
+	logger := logger.With(zap.String("who", "NonCommitteeValidator"),
+		zap.String("identifier", identifier.String()))
+
 	// currently, only need domain & storage
 	config := &types.Config{
 		Domain:  types.GetDefaultDomain(),
@@ -25,11 +27,11 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config)
 	if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
-		fmt.Printf("failed to load highest instance: %e", err)
+		logger.Debug("failed to load highest instance", zap.Error(err))
 	}
 
 	return &NonCommitteeValidator{
-		logger:         opts.Logger,
+		logger:         logger,
 		Share:          opts.SSVShare,
 		Storage:        opts.Storage,
 		qbftController: ctrl,
@@ -39,7 +41,7 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 	logger := ncv.logger.With(zap.String("id", msg.GetID().String()))
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Warn("Message invalid", zap.Error(err))
+		logger.Debug("got invalid message", zap.Error(err))
 		return
 	}
 
@@ -47,7 +49,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			logger.Warn("could not get consensus Message from network Message", zap.Error(err))
+			logger.Debug("failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
 		// only supports decided msg's
@@ -56,11 +58,11 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 		}
 
 		if decided, err := ncv.qbftController.ProcessMsg(signedMsg); err != nil {
-			logger.Warn("failed to process message", zap.Error(err))
+			logger.Debug("failed to process message", zap.Error(err))
 		} else if decided != nil {
 			if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
 				if err = ncv.qbftController.SaveHighestInstance(inst, signedMsg); err != nil {
-					fmt.Printf("failed to save instance: %s\n", err.Error())
+					ncv.logger.Debug("failed to save instance", zap.Error(err))
 				}
 			}
 		}

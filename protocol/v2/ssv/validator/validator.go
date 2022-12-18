@@ -2,10 +2,12 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -14,6 +16,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
+
+var logger = logging.Logger("ssv/protocol/ssv/validator").Desugar()
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
@@ -40,13 +44,15 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
+	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
+
 	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
-	q, _ := msgqueue.New(options.Logger, indexers) // TODO: handle error
+	q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
-		logger:      options.Logger,
+		logger:      logger,
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,

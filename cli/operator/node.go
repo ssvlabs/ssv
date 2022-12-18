@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	logging "github.com/ipfs/go-log"
 	"log"
 	"net/http"
 	"time"
@@ -89,6 +90,9 @@ var StartNodeCmd = &cobra.Command{
 		})
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
+		}
+		if len(cfg.DebugServices) > 0 {
+			_ = logging.SetLogLevelRegex(cfg.DebugServices, "debug")
 		}
 
 		cfg.DBOptions.Logger = Logger

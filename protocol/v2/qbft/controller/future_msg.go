@@ -4,6 +4,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -16,6 +17,9 @@ func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.Signe
 		return nil, errors.New("discarded future msg")
 	}
 	if c.f1SyncTrigger() {
+		c.logger.Debug("triggered f+1 sync",
+			zap.Uint64("ctrl_height", uint64(c.Height)),
+			zap.Uint64("msg_height", uint64(msg.Message.Height)))
 		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
 	}
 	return nil, nil

@@ -2,8 +2,10 @@ package instance
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
+
+	logging "github.com/ipfs/go-log"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -11,6 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
+
+var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
@@ -21,6 +25,8 @@ type Instance struct {
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 	StartValue  []byte
+
+	logger *zap.Logger
 }
 
 func NewInstance(
@@ -43,6 +49,8 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
+		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
+			zap.Uint64("height", uint64(height))),
 	}
 }
 
@@ -56,16 +64,19 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
 		// propose if this node is the proposer
-		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
+		leader := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+
+		i.logger.Debug("starting QBFT instance")
+		if leader == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				fmt.Printf("%s\n", err.Error())
+				i.logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					fmt.Printf("%s\n", err.Error())
+					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}

@@ -18,11 +18,11 @@ import (
 func HistoryHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
 	plogger = plogger.With(zap.String("who", "last decided handler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-		logger := plogger.With(zap.String("msg_id_hex", fmt.Sprintf("%x", msg.MsgID)))
+		logger := plogger.With(zap.String("msg_id", fmt.Sprintf("%x", msg.MsgID)))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
-			logger.Debug("could not decode msg data", zap.Error(err))
+			logger.Debug("failed to decode message data", zap.Error(err))
 			reporting.ReportValidation(msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
 		} else if sm.Protocol != message.DecidedHistoryType {

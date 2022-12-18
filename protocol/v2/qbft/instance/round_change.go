@@ -4,6 +4,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -53,6 +54,9 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
+		i.logger.Debug("got justified change round, broadcasting proposal message",
+			zap.Uint64("round", uint64(i.State.Round)))
+
 		if err := i.Broadcast(proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
 		}
@@ -70,12 +74,18 @@ func (i *Instance) uponRoundChange(
 }
 
 func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanceStartValue []byte) error {
+	oldRound := i.State.Round
 	i.State.Round = newRound
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
+	}
+
+	if newRound%10 == 0 {
+		i.logger.Debug("got change round partial quorum, broadcasting change round message",
+			zap.Uint64("new_round", uint64(newRound)), zap.Uint64("old_round", uint64(oldRound)))
 	}
 
 	if err := i.Broadcast(roundChange); err != nil {

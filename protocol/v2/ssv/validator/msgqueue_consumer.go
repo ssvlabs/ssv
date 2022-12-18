@@ -9,7 +9,6 @@ import (
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
@@ -18,12 +17,6 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	fields := []zap.Field{
-		zap.Int("queue_len", v.Q.Len()),
-		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-		zap.String("msgID", msg.MsgID.String()),
-	}
-	v.logger.Debug("got message, add to queue", fields...)
 	v.Q.Add(msg)
 }
 
@@ -35,7 +28,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 	for ctx.Err() == nil {
 		err := v.ConsumeQueue(msgID, handler, time.Millisecond*50)
 		if err != nil {
-			v.logger.Warn("could not consume queue", zap.Error(err))
+			v.logger.Debug("failed consuming queue", zap.Error(err))
 		}
 	}
 }
@@ -46,11 +39,8 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	identifier := msgID.String()
-	logger := v.logger.With(zap.String("identifier", identifier))
+	logger := v.logger.With(zap.String("identifier", msgID.String()))
 	higherCache := cache.New(time.Second*12, time.Second*24)
-
-	logger.Warn("queue consumer is running")
 
 	for ctx.Err() == nil {
 		time.Sleep(interval)
@@ -67,32 +57,26 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		//	continue
 		//}
 		lastHeight := v.GetLastHeight(msgID)
+		identifier := msgID.String()
 
 		if processed := v.processHigherHeight(handler, identifier, lastHeight, higherCache); processed {
-			logger.Debug("process higher height is done")
 			continue
 		}
 		if processed := v.processNoRunningInstance(handler, msgID, identifier, lastHeight); processed {
-			logger.Debug("process none running instance is done")
 			continue
 		}
 		if processed := v.processByState(handler, msgID, identifier, lastHeight); processed {
-			logger.Debug("process by state is done")
 			continue
 		}
 		if processed := v.processLateCommit(handler, identifier, lastHeight); processed {
-			logger.Debug("process default is done")
 			continue
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		cleaned := v.Q.Clean(func(index msgqueue.Index) bool {
+		v.Q.Clean(func(index msgqueue.Index) bool {
 			// remove all msg's that are 2 heights old, besides height 0
 			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
 		})
-		if cleaned > 0 {
-			logger.Debug("indexes cleaned from queue", zap.Int64("count", cleaned))
-		}
 	}
 
 	logger.Warn("queue consumer is closed")
@@ -106,11 +90,6 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	// ctrl := r.GetBaseRunner().QBFTController
-	// if ctrl == nil {
-	//	return specqbft.Height(0)
-	//}
-	// return state.LastHeight
 	return r.GetBaseRunner().QBFTController.Height
 }
 
@@ -142,11 +121,10 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 	if len(msgs) == 0 || msgs[0] == nil {
 		return false // no msg found
 	}
-	logger.Debug("found message in queue when no running instance")
 
 	err := handler(msgs[0])
 	if err != nil {
-		logger.Warn("could not handle msg", zap.Error(err))
+		logger.Debug("could not handle message", zap.String("error", err.Error()))
 	}
 	return true // msg processed
 }
@@ -167,16 +145,10 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 	if msg == nil {
 		return false // no msg found
 	}
-	v.logger.Debug("found message by state in queue", zap.Int64("height", int64(height)))
-	// v.logger.Debug("queue found message for state",
-	//	zap.Int32("stage", currentState.Stage.Load()),
-	//	zap.Int32("seq", int32(currentState.GetHeight())),
-	//	zap.Int32("round", int32(currentState.GetRound())),
-	//)
 
 	err := handler(msg)
 	if err != nil {
-		v.logger.Warn("could not handle msg", zap.Error(err))
+		v.logger.Debug("could not handle msg", zap.Error(err))
 	}
 	return true // msg processed
 }
@@ -195,10 +167,9 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	})
 
 	if len(msgs) > 0 {
-		v.logger.Debug("found higher height message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
+			v.logger.Debug("could not handle msg", zap.Error(err))
 		}
 		return true
 	}
@@ -226,10 +197,9 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
-		v.logger.Debug("found late commit message in queue", zap.Int64("last_height", int64(lastHeight)))
 		err := handler(msgs[0])
 		if err != nil {
-			v.logger.Warn("could not handle msg", zap.Error(err))
+			v.logger.Debug("could not handle msg", zap.Error(err))
 		}
 		return true
 	}
@@ -245,7 +215,6 @@ func (v *Validator) getNextMsgForState(identifier string, height specqbft.Height
 	for _, idx := range idxs {
 		iterator.AddIndex(idx)
 	}
-
 	iterator.
 		Add(func() msgqueue.Index {
 			return msgqueue.DecidedMsgIndex(identifier)

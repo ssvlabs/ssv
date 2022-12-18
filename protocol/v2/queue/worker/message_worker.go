@@ -2,8 +2,9 @@ package worker
 
 import (
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"log"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -135,7 +136,7 @@ func (w *Worker) process(msg *spectypes.SSVMessage) {
 	}
 	if err := w.handler(msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			w.logger.Warn("could not handle message", zap.Error(handlerErr))
+			w.logger.Debug("failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}

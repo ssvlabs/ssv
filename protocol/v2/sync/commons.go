@@ -19,7 +19,7 @@ func GetHighest(logger *zap.Logger, remoteMsgs ...p2pprotocol.SyncResult) (highe
 	for _, remoteMsg := range remoteMsgs {
 		sm, err := ExtractSyncMsg(remoteMsg.Msg)
 		if err != nil {
-			logger.Warn("bad sync message", zap.Error(err))
+			logger.Warn("failed to extract sync message", zap.Error(err))
 			continue
 		}
 		if sm == nil {
