@@ -26,21 +26,21 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 	require.Equal(t, 2, queue.Len())
 
 	// Pop non-existing BeaconRole.
-	popped := queue.Pop(FilterByRole(types.BNRoleProposer))
+	popped := queue.Pop(FilterRole(types.BNRoleProposer))
 	require.Nil(t, popped)
 
 	// Pop 1st message.
-	popped = queue.Pop(FilterByRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
 	require.Equal(t, 1, queue.Len())
 	require.Equal(t, msg, popped)
 
 	// Pop 2nd message.
-	popped = queue.Pop(FilterByRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
 	require.Equal(t, 0, queue.Len())
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.Pop(FilterByRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
 	require.Nil(t, popped)
 }
 
@@ -88,7 +88,7 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			queue.Push(decoded)
-			queue.Pop(FilterByRole(types.BNRoleProposer))
+			queue.Pop(FilterRole(types.BNRoleProposer))
 		}
 	})
 }

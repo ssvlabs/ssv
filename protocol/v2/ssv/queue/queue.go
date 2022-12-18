@@ -10,8 +10,8 @@ import (
 // Filter is a function that returns true if the given message should be included.
 type Filter func(*DecodedSSVMessage) bool
 
-// FilterByRole returns a Filter that returns true if the given message's BeaconRole is the same as the given role.
-func FilterByRole(role types.BeaconRole) Filter {
+// FilterRole returns a Filter which returns true for messages whose BeaconRole matches the given role.
+func FilterRole(role types.BeaconRole) Filter {
 	return func(msg *DecodedSSVMessage) bool {
 		return msg.MsgID.GetRoleType() == role
 	}

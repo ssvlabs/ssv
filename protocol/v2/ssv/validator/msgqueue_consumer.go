@@ -79,7 +79,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			v.Q.Sort(queue.NewMessagePrioritizer(&state))
 
 			// Pop the highest priority message and handle it.
-			msg := v.Q.Pop(queue.FilterByRole(msgID.GetRoleType()))
+			msg := v.Q.Pop(queue.FilterRole(msgID.GetRoleType()))
 			if msg == nil {
 				logger.Error("could not pop message from queue")
 				continue
