@@ -4,6 +4,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"go.uber.org/zap"
@@ -21,7 +22,7 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 		zap.String("identifier", identifier.String()))
 
 	// currently, only need domain & storage
-	config := &types.Config{
+	config := &qbft.Config{
 		Domain:  types.GetDefaultDomain(),
 		Storage: opts.Storage.Get(identifier.GetRoleType()),
 	}

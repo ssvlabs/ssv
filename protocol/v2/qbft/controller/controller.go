@@ -10,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	logging "github.com/ipfs/go-log"
 )
 
@@ -52,7 +52,7 @@ type Controller struct {
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
-	config              types.IConfig
+	config              qbft.IConfig
 	logger              *zap.Logger
 }
 
@@ -60,7 +60,7 @@ func NewController(
 	identifier []byte,
 	share *spectypes.Share,
 	domain spectypes.DomainType,
-	config types.IConfig,
+	config qbft.IConfig,
 ) *Controller {
 	return &Controller{
 		Identifier:          identifier,
@@ -267,6 +267,6 @@ func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) 
 	return nil
 }
 
-func (c *Controller) GetConfig() types.IConfig {
+func (c *Controller) GetConfig() qbft.IConfig {
 	return c.config
 }

@@ -2,6 +2,7 @@ package spectest
 
 import (
 	"encoding/hex"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"testing"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -10,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
 type MsgProcessingSpecTest struct {
@@ -30,7 +30,7 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	v := utils.BaseValidator(spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	v := ssvtesting.BaseValidator(spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	// v.Network = test.Runner.GetNetwork() // TODO need to align
 

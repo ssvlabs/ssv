@@ -2,13 +2,11 @@ package instance
 
 import (
 	"bytes"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (i *Instance) uponPrepare(
@@ -71,7 +69,7 @@ func (i *Instance) uponPrepare(
 	return nil
 }
 
-func getRoundChangeJustification(state *specqbft.State, config types.IConfig, prepareMsgContainer *specqbft.MsgContainer) []*specqbft.SignedMessage {
+func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) []*specqbft.SignedMessage {
 	if state.LastPreparedValue == nil {
 		return nil
 	}
@@ -112,7 +110,7 @@ func getRoundChangeJustification(state *specqbft.State, config types.IConfig, pr
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndValue(
-	config types.IConfig,
+	config qbft.IConfig,
 	signedPrepare *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
@@ -163,7 +161,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config types.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
+func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
 	prepareData := &specqbft.PrepareData{
 		Data: value,
 	}

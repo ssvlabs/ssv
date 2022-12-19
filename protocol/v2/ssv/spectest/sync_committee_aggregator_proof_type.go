@@ -2,20 +2,19 @@ package spectest
 
 import (
 	"encoding/hex"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks)
-	v := utils.BaseValidator(keySetForShare(share))
+	v := ssvtesting.BaseValidator(keySetForShare(share))
 	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()
