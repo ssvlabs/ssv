@@ -12,12 +12,12 @@ import (
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
 // RoundTimeout returns the number of seconds until next timeout for a give round.
-// it uses a linear function to calculate next round (2*round seconds), where round is limited to 10.
+// if the round is smaller than 3 -> 2s; otherwise -> 2m
 func RoundTimeout(r specqbft.Round) time.Duration {
-	if r > specqbft.Round(10) {
-		r = specqbft.Round(10)
+	if r <= specqbft.Round(3) {
+		return 2*time.Second
 	}
-	return time.Duration(2 * r) * time.Second
+	return 2*time.Minute
 }
 
 // RoundTimer helps to manage current instance rounds.
