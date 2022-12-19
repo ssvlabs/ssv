@@ -9,8 +9,8 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/pkg/errors"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
