@@ -153,7 +153,12 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
-	return topic.Publish(ctx, data)
+	err = topic.Publish(ctx, data)
+	if err == nil {
+		metricPubsubOutbound.WithLabelValues(name).Inc()
+	}
+
+	return err
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
@@ -182,7 +187,7 @@ func (ctrl *topicsCtrl) start(name string, sub *pubsub.Subscription) {
 			return
 		}
 		// rejoin in case failed
-		ctrl.logger.Warn("could not listen to topic", zap.String("topic", name), zap.Error(err))
+		ctrl.logger.Debug("could not listen to topic", zap.String("topic", name), zap.Error(err))
 		ctrl.container.Unsubscribe(name)
 		_ = ctrl.container.Leave(name)
 		sub, err = ctrl.container.Subscribe(name)
