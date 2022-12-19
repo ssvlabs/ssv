@@ -4,7 +4,7 @@ import (
 	"sort"
 	"testing"
 
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -13,12 +13,12 @@ import (
 
 func TestAggregateSorting(t *testing.T) {
 	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
-	secretKeys, _ := qbfttesting.GenerateBLSKeys(uids...)
+	secretKeys, _ := protocoltesting.GenerateBLSKeys(uids...)
 
 	identifier := []byte("pk")
 
 	generateSignedMsg := func(operatorId spectypes.OperatorID) *specqbft.SignedMessage {
-		return qbfttesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
+		return protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     0,
 			Round:      1,

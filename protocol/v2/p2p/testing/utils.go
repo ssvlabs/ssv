@@ -318,11 +318,6 @@ func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spe
 	return nil
 }
 
-//
-//func (m *mockNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error) {
-//	return m.PollGetHistoryMessages(), to, nil
-//}
-
 func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SSVMessage) error {
 	e := MockMessageEvent{
 		From:     m.self,
