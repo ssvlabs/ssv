@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	publishLimit = int32(32)
+	publishLimit = int32(256)
 )
 
 type topicContainer struct {
@@ -51,7 +51,7 @@ func (tc *topicContainer) decSubCount() int32 {
 
 func (tc *topicContainer) Publish(ctx context.Context, data []byte) error {
 	if atomic.AddInt32(&tc.activePubs, 1) > publishLimit {
-		defer atomic.AddInt32(&tc.activePubs, -1)
+		atomic.AddInt32(&tc.activePubs, -1)
 		return errors.New("could not publish msg as outbound q is full")
 	}
 	go func() {
