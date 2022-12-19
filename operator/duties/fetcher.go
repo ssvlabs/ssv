@@ -177,7 +177,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 			for _, newDuty := range e.Duties {
 				exist := false
 				for _, existDuty := range existingEntry.Duties {
-					if newDuty.ValidatorIndex == existDuty.ValidatorIndex {
+					if newDuty.ValidatorIndex == existDuty.ValidatorIndex && newDuty.Type == existDuty.Type {
 						exist = true
 						break // already exist, pass
 					}

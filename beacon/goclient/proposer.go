@@ -34,9 +34,7 @@ func (gc *goClient) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error 
 		}
 
 		// TODO check slashable event?
-		if err := provider.SubmitBeaconBlock(gc.ctx, versionedBlock); err != nil {
-			return err
-		}
+		return provider.SubmitBeaconBlock(gc.ctx, versionedBlock)
 	}
 	return errors.New("client does not support BeaconBlockSubmitter")
 }

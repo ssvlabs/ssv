@@ -182,8 +182,8 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) {
-		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, " +
-			"assuming diff caused by a time drift - ignoring and executing duty")
+		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, "+
+			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.Type.String()))
 		return true
 	}
 	return false
