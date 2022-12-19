@@ -3,6 +3,8 @@ package spectest
 import (
 	"encoding/json"
 	"fmt"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"io"
 	"net/http"
 	"os"
@@ -24,7 +26,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
@@ -212,27 +213,27 @@ func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testin
 func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
 	switch role {
 	case spectypes.BNRoleAttester:
-		ret := utils.AttesterRunner(ks)
+		ret := ssvtesting.AttesterRunner(ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleAggregator:
-		ret := utils.AggregatorRunner(ks)
+		ret := ssvtesting.AggregatorRunner(ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleProposer:
-		ret := utils.ProposerRunner(ks)
+		ret := ssvtesting.ProposerRunner(ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommittee:
-		ret := utils.SyncCommitteeRunner(ks)
+		ret := ssvtesting.SyncCommitteeRunner(ks)
 		ret.(*runner.SyncCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommitteeContribution:
-		ret := utils.SyncCommitteeContributionRunner(ks)
+		ret := ssvtesting.SyncCommitteeContributionRunner(ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
-		ret := utils.UnknownDutyTypeRunner(ks)
+		ret := ssvtesting.UnknownDutyTypeRunner(ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	default:
@@ -241,7 +242,7 @@ func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *t
 }
 
 func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	config := utils.TestingConfig(ks, spectypes.BNRoleAttester)
+	config := qbfttesting.TestingConfig(ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.Share,

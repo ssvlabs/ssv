@@ -14,9 +14,11 @@ var TestingMessage = &specqbft.Message{
 	Identifier: []byte{1, 2, 3, 4},
 	Data:       []byte{1, 2, 3, 4},
 }
+
 var testingSignedMsg = func() *specqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
+
 var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
 	domain := types.PrimusTestnet
 	sigType := types.QBFTSignatureType
@@ -30,13 +32,16 @@ var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message
 		Signature: sig.Serialize(),
 	}
 }
+
 var TestingSK = func() *bls.SecretKey {
 	types.InitBLS()
 	ret := &bls.SecretKey{}
 	ret.SetByCSPRNG()
 	return ret
 }()
+
 var testingValidatorPK = spec.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
+
 var testingShare = &types.Share{
 	OperatorID:      1,
 	ValidatorPubKey: testingValidatorPK[:],
@@ -51,6 +56,7 @@ var testingShare = &types.Share{
 		},
 	},
 }
+
 var TestingInstanceStruct = &specqbft.Instance{
 	State: &specqbft.State{
 		Share:                           testingShare,
@@ -93,6 +99,7 @@ var TestingInstanceStruct = &specqbft.Instance{
 		},
 	},
 }
+
 var TestingControllerStruct = &specqbft.Controller{
 	Identifier: []byte{1, 2, 3, 4},
 	Height:     specqbft.Height(1),

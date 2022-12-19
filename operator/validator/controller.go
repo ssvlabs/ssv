@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"sync"
 	"time"
 
@@ -565,8 +566,8 @@ func setupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	}
 
 	domainType := types.GetDefaultDomain()
-	generateConfig := func(role spectypes.BeaconRole) *types.Config {
-		return &types.Config{
+	generateConfig := func(role spectypes.BeaconRole) *qbft.Config {
+		return &qbft.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
 			Domain:      domainType,

@@ -1,7 +1,8 @@
-package utils
+package testing
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -17,7 +18,7 @@ var BaseValidator = func(keySet *spectestingutils.TestKeySet) *validator.Validat
 		validator.Options{
 			Network: spectestingutils.NewTestingNetwork(),
 			Beacon:  spectestingutils.NewTestingBeaconNode(),
-			Storage: TestingStores(),
+			Storage: testing.TestingStores(),
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
 			},

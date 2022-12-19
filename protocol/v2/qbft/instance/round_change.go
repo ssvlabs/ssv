@@ -3,10 +3,9 @@ package instance
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (i *Instance) uponRoundChange(
@@ -114,7 +113,7 @@ func hasReceivedPartialQuorum(state *specqbft.State, roundChangeMsgContainer *sp
 // (all the above considering the operator is a leader for the round
 func hasReceivedProposalJustificationForLeadingRound(
 	state *specqbft.State,
-	config types.IConfig,
+	config qbft.IConfig,
 	instanceStartValue []byte,
 	signedRoundChange *specqbft.SignedMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
@@ -160,7 +159,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 // isProposalJustificationForLeadingRound - returns nil if we have a quorum of round change msgs and highest justified value for leading round
 func isProposalJustificationForLeadingRound(
 	state *specqbft.State,
-	config types.IConfig,
+	config qbft.IConfig,
 	roundChangeMsg *specqbft.SignedMessage,
 	roundChanges []*specqbft.SignedMessage,
 	roundChangeJustifications []*specqbft.SignedMessage,
@@ -196,7 +195,7 @@ func isProposalJustificationForLeadingRound(
 // isReceivedProposalJustification - returns nil if we have a quorum of round change msgs and highest justified value
 func isReceivedProposalJustification(
 	state *specqbft.State,
-	config types.IConfig,
+	config qbft.IConfig,
 	roundChanges, prepares []*specqbft.SignedMessage,
 	newRound specqbft.Round,
 	value []byte,
@@ -217,7 +216,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChange(state *specqbft.State, config types.IConfig, signedMsg *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round) error {
+func validRoundChange(state *specqbft.State, config qbft.IConfig, signedMsg *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round) error {
 	if signedMsg.Message.MsgType != specqbft.RoundChangeMsgType {
 		return errors.New("round change msg type is wrong")
 	}
@@ -312,7 +311,7 @@ func minRound(roundChangeMsgs []*specqbft.SignedMessage) specqbft.Round {
 	return ret
 }
 
-func getRoundChangeData(state *specqbft.State, config types.IConfig, instanceStartValue []byte) (*specqbft.RoundChangeData, error) {
+func getRoundChangeData(state *specqbft.State, config qbft.IConfig, instanceStartValue []byte) (*specqbft.RoundChangeData, error) {
 	if state.LastPreparedRound != specqbft.NoRound && state.LastPreparedValue != nil {
 		justifications := getRoundChangeJustification(state, config, state.PrepareContainer)
 		return &specqbft.RoundChangeData{
@@ -340,7 +339,7 @@ RoundChange(
            getRoundChangeJustification(current)
        )
 */
-func CreateRoundChange(state *specqbft.State, config types.IConfig, newRound specqbft.Round, instanceStartValue []byte) (*specqbft.SignedMessage, error) {
+func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, instanceStartValue []byte) (*specqbft.SignedMessage, error) {
 	rcData, err := getRoundChangeData(state, config, instanceStartValue)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")

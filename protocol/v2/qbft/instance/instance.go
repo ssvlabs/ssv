@@ -9,9 +9,8 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
@@ -20,7 +19,7 @@ var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
 	State  *specqbft.State
-	config types.IConfig
+	config qbft.IConfig
 
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
@@ -30,7 +29,7 @@ type Instance struct {
 }
 
 func NewInstance(
-	config types.IConfig,
+	config qbft.IConfig,
 	share *spectypes.Share,
 	identifier []byte,
 	height specqbft.Height,
@@ -140,12 +139,12 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() types.IConfig {
+func (i *Instance) GetConfig() qbft.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config types.IConfig) {
+func (i *Instance) SetConfig(config qbft.IConfig) {
 	i.config = config
 }
 

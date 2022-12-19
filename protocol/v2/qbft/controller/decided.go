@@ -6,8 +6,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
@@ -72,7 +72,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 }
 
 func validateDecided(
-	config types.IConfig,
+	config qbft.IConfig,
 	signedDecided *specqbft.SignedMessage,
 	share *spectypes.Share,
 ) error {

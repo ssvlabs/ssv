@@ -3,6 +3,7 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"reflect"
 	"testing"
 
@@ -11,14 +12,12 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/spectest/utils"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := utils.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
-	contr := utils.NewTestingQBFTController(
+	config := qbfttesting.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
+	contr := qbfttesting.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,

@@ -2,13 +2,11 @@ package instance
 
 import (
 	"bytes"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
@@ -55,7 +53,7 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 
 func isValidProposal(
 	state *specqbft.State,
-	config types.IConfig,
+	config qbft.IConfig,
 	signedProposal *specqbft.SignedMessage,
 	valCheck specqbft.ProposedValueCheckF,
 	operators []*spectypes.Operator,
@@ -107,7 +105,7 @@ func isValidProposal(
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
 func isProposalJustification(
 	state *specqbft.State,
-	config types.IConfig,
+	config qbft.IConfig,
 	roundChangeMsgs []*specqbft.SignedMessage,
 	prepareMsgs []*specqbft.SignedMessage,
 	height specqbft.Height,
@@ -195,7 +193,7 @@ func isProposalJustification(
 	return nil
 }
 
-func proposer(state *specqbft.State, config types.IConfig, round specqbft.Round) spectypes.OperatorID {
+func proposer(state *specqbft.State, config qbft.IConfig, round specqbft.Round) spectypes.OperatorID {
 	// TODO - https://github.com/ConsenSys/qbft-formal-spec-and-verification/blob/29ae5a44551466453a84d4d17b9e083ecf189d97/dafny/spec/L1/node_auxiliary_functions.dfy#L304-L323
 	return config.GetProposerF()(state, round)
 }
@@ -213,7 +211,7 @@ func proposer(state *specqbft.State, config types.IConfig, round specqbft.Round)
                         extractSignedRoundChanges(roundChanges),
                         extractSignedPrepares(prepares));
 */
-func CreateProposal(state *specqbft.State, config types.IConfig, value []byte, roundChanges, prepares []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func CreateProposal(state *specqbft.State, config qbft.IConfig, value []byte, roundChanges, prepares []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	proposalData := &specqbft.ProposalData{
 		Data:                     value,
 		RoundChangeJustification: roundChanges,
