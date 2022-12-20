@@ -58,6 +58,12 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -p 1 -v `go list ./... | grep spectest`
 
+#Test
+.PHONY: docker-spec-test
+docker-spec-test:
+	@echo "Running spec tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make spec-test
 
 #Build
 .PHONY: build
