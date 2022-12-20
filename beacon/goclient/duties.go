@@ -92,18 +92,26 @@ func (gc *goClient) fetchSyncCommitteeDuties(epoch phase0.Epoch, validatorIndice
 		if err != nil {
 			return duties, err
 		}
-		toBeaconDuty := func(duty *api.SyncCommitteeDuty, role spectypes.BeaconRole) *spectypes.Duty {
+		toBeaconDuty := func(duty *api.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
 			return &spectypes.Duty{
 				Type:                          role,
 				PubKey:                        duty.PubKey,
+				Slot:                          slot, // in order for the duty ctrl to execute
 				ValidatorIndex:                duty.ValidatorIndex,
 				ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
 			}
 		}
-		for _, syncCommitteeDuty := range syncCommitteeDuties {
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, spectypes.BNRoleSyncCommittee))
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
+
+		startSlot := epoch * 32
+		endSlot := startSlot + 31
+		// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
+		for slot := startSlot; slot <= endSlot; slot++ {
+			for _, syncCommitteeDuty := range syncCommitteeDuties {
+				duties = append(duties, toBeaconDuty(syncCommitteeDuty, phase0.Slot(slot), spectypes.BNRoleSyncCommittee))
+				duties = append(duties, toBeaconDuty(syncCommitteeDuty, phase0.Slot(slot), spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
+			}
 		}
+
 		return duties, nil
 	} else {
 		// print log?

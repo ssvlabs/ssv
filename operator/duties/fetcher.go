@@ -3,6 +3,7 @@ package duties
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -134,16 +135,14 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
 			if duty.Type == spectypes.BNRoleSyncCommittee {
-				syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, &eth2apiv1.SyncCommitteeSubscription{
-					ValidatorIndex:       duty.ValidatorIndex,
-					SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-					UntilEpoch:           spec.Epoch(duty.Slot / 32),
-				})
+				syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, df.toSyncCommitteeSubscription(duty))
 			} else {
 				subscriptions = append(subscriptions, toSubscription(duty))
 			}
 		}
+
 		df.populateCache(entries)
+
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
 		}
@@ -231,6 +230,17 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
 		IsAggregator:     duty.Type == spectypes.BNRoleAggregator, // TODO make sure it's the right way
+	}
+}
+
+func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2apiv1.SyncCommitteeSubscription {
+	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch() // TODO can do this calculation one time outside this func
+	period := uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod
+	endEpoch := (period + 1) * goclient.EpochsPerSyncCommitteePeriod
+	return &eth2apiv1.SyncCommitteeSubscription{
+		ValidatorIndex:       duty.ValidatorIndex,
+		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+		UntilEpoch:           spec.Epoch(endEpoch),
 	}
 }
 

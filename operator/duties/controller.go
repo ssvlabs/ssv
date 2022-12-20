@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"encoding/hex"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -107,8 +108,12 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return dc.executor.ExecuteDuty(duty)
 	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
+
+	var pk phase0.BLSPubKey
+	copy(pk[:], duty.PubKey[:])
+
 	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+	if err := pubKey.Deserialize(pk[:]); err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
