@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -23,28 +24,25 @@ type ScenarioContext struct {
 	DBs         []basedb.IDb
 }
 
+// ScenarioConfig defines scenario properties.
+type ScenarioConfig struct {
+	Operators int
+	BootNodes int
+	FullNodes int
+	Roles     []spectypes.BeaconRole
+}
+
 // Bootstrapper bootstraps the given scenario.
 type Bootstrapper func(ctx context.Context, logger *zap.Logger, scenario Scenario) (*ScenarioContext, error)
 
-type scenarioCfg interface {
-	// NumOfOperators returns the desired number of operators for the test.
-	NumOfOperators() int
-	// NumOfBootnodes returns the desired number of bootnodes for the test.
-	// zero in case we want mdns
-	NumOfBootnodes() int
-	// NumOfFullNodes returns the desired number of full nodes for the test.
-	NumOfFullNodes() int
-}
-
 // Scenario represents a testplan for a specific scenario
 type Scenario interface {
-	scenarioCfg
+	// Config returns defines properties of scenario.
+	Config() ScenarioConfig
+	// ApplyCtx applies scenario context returned by bootstrapper.
+	ApplyCtx(sCtx *ScenarioContext)
 	// Name is the name of the scenario
 	Name() string
-	// PreExecution is invoked prior to the scenario, used for setup
-	PreExecution(ctx *ScenarioContext) error
-	// Execute is the actual test scenario to run
-	Execute(ctx *ScenarioContext) error
-	// PostExecution is invoked after execution, used for cleanup etc.
-	PostExecution(ctx *ScenarioContext) error
+	// Run is the test scenario to run.
+	Run(t *testing.T) error
 }

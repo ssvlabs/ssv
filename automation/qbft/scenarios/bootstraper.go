@@ -27,7 +27,10 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 		logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", scenario.Name()))
 		logger.Info("creating resources")
 
-		totalNodes := scenario.NumOfOperators() + scenario.NumOfFullNodes()
+		scenarioConfig := scenario.Config()
+		totalNodes := scenarioConfig.Operators + scenarioConfig.FullNodes
+		useDiscV5 := scenarioConfig.BootNodes > 0
+
 		dbs := make([]basedb.IDb, 0)
 		for i := 0; i < totalNodes; i++ {
 			db, err := storage.GetStorageFactory(basedb.Options{
@@ -43,7 +46,7 @@ func QBFTScenarioBootstrapper() runner.Bootstrapper {
 		}
 		forkVersion := forksprotocol.GenesisForkVersion
 
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, scenario.NumOfBootnodes() > 0)
+		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, useDiscV5)
 		if err != nil {
 			return nil, err
 		}

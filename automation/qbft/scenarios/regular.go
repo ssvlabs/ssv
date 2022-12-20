@@ -2,6 +2,7 @@ package scenarios
 
 import (
 	"sync"
+	"testing"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,9 +12,9 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/automation/commons"
 	"github.com/bloxapp/ssv/automation/qbft/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -22,6 +23,7 @@ const RegularScenario = "regular"
 
 // regularScenario is the most basic scenario where 4 operators starts qbft for a single validator
 type regularScenario struct {
+	sCtx       *runner.ScenarioContext
 	logger     *zap.Logger
 	sks        map[uint64]*bls.SecretKey
 	share      *ssvtypes.SSVShare
@@ -30,23 +32,26 @@ type regularScenario struct {
 
 // newRegularScenario creates a regular scenario instance
 func newRegularScenario(logger *zap.Logger) runner.Scenario {
-	return &regularScenario{logger: logger}
-}
-
-func (r *regularScenario) NumOfOperators() int {
-	return 4
-}
-
-func (r *regularScenario) NumOfBootnodes() int {
-	return 0
-}
-
-func (r *regularScenario) NumOfFullNodes() int {
-	return 0
+	return &regularScenario{
+		logger: logger,
+	}
 }
 
 func (r *regularScenario) Name() string {
 	return RegularScenario
+}
+
+func (r *regularScenario) ApplyCtx(sCtx *runner.ScenarioContext) {
+	r.sCtx = sCtx
+}
+
+func (r *regularScenario) Config() runner.ScenarioConfig {
+	return runner.ScenarioConfig{
+		Operators: 4,
+		BootNodes: 0,
+		FullNodes: 0,
+		Roles:     []spectypes.BeaconRole{spectypes.BNRoleAttester},
+	}
 }
 
 type msgRouter struct {
@@ -63,8 +68,10 @@ func newMsgRouter(v *validator.Validator) *msgRouter {
 	}
 }
 
-func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
-	share, sks, validators, err := commons.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
+func (r *regularScenario) Run(t *testing.T) error {
+	ctx := r.sCtx
+
+	share, sks, validators, err := protocoltesting.CreateShareAndValidators(ctx.Ctx, r.logger, ctx.LocalNet, ctx.KeyManagers, ctx.Stores)
 	if err != nil {
 		return errors.Wrap(err, "could not create share")
 	}
@@ -77,12 +84,8 @@ func (r *regularScenario) PreExecution(ctx *runner.ScenarioContext) error {
 	r.sks = sks
 	r.share = share
 
-	return nil
-}
-
-func (r *regularScenario) Execute(_ *runner.ScenarioContext) error {
 	if len(r.sks) == 0 || r.share == nil {
-		return errors.New("pre-execution failed")
+		return errors.New("failed to create share and validators")
 	}
 
 	var wg sync.WaitGroup
@@ -99,25 +102,41 @@ func (r *regularScenario) Execute(_ *runner.ScenarioContext) error {
 	}
 	wg.Wait()
 
-	return startErr
-}
+	if startErr != nil {
+		return startErr
+	}
 
-func (r *regularScenario) PostExecution(ctx *runner.ScenarioContext) error {
 	for i, v := range r.validators {
 		var pk [48]byte
 		copy(pk[:], v.Share.ValidatorPubKey)
 
-		if err := v.StartDuty(&spectypes.Duty{
-			Type:                    spectypes.BNRoleAttester,
-			PubKey:                  pk,
-			Slot:                    spectestingutils.TestingDutySlot,
-			ValidatorIndex:          spec.ValidatorIndex(i),
-			CommitteeIndex:          spectestingutils.TestingAttesterDuty.CommitteeIndex,
-			CommitteesAtSlot:        spectestingutils.TestingAttesterDuty.CommitteesAtSlot,
-			CommitteeLength:         spectestingutils.TestingAttesterDuty.CommitteeLength,
-			ValidatorCommitteeIndex: spectestingutils.TestingAttesterDuty.ValidatorCommitteeIndex,
-		}); err != nil {
-			return err
+		for _, role := range r.Config().Roles {
+			var testingDuty *spectypes.Duty
+			switch role {
+			case spectypes.BNRoleAttester:
+				testingDuty = spectestingutils.TestingAttesterDuty
+			case spectypes.BNRoleAggregator:
+				testingDuty = spectestingutils.TestingAggregatorDuty
+			case spectypes.BNRoleProposer:
+				testingDuty = spectestingutils.TestingProposerDuty
+			case spectypes.BNRoleSyncCommittee:
+				testingDuty = spectestingutils.TestingSyncCommitteeDuty
+			case spectypes.BNRoleSyncCommitteeContribution:
+				testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
+			}
+
+			if err := v.StartDuty(&spectypes.Duty{
+				Type:                    role,
+				PubKey:                  pk,
+				Slot:                    spectestingutils.TestingDutySlot,
+				ValidatorIndex:          spec.ValidatorIndex(i),
+				CommitteeIndex:          testingDuty.CommitteeIndex,
+				CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
+				CommitteeLength:         testingDuty.CommitteeLength,
+				ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
+			}); err != nil {
+				return err
+			}
 		}
 	}
 
