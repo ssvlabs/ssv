@@ -15,9 +15,9 @@ type RoundTimeoutFunc func(specqbft.Round) time.Duration
 // if the round is smaller than 3 -> 2s; otherwise -> 2m
 func RoundTimeout(r specqbft.Round) time.Duration {
 	if r <= specqbft.Round(3) {
-		return 2*time.Second
+		return 2 * time.Second
 	}
-	return 2*time.Minute
+	return 2 * time.Minute
 }
 
 // RoundTimer helps to manage current instance rounds.
