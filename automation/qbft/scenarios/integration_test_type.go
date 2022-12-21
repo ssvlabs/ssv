@@ -65,8 +65,6 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 		totalNodes += len(instances)
 	}
 
-	// TODO: consider putting all init in one loop
-
 	dbs := make(map[spectypes.OperatorID][]basedb.IDb)
 	for operatorID, instances := range it.InitialInstances {
 		for range instances {
