@@ -4,22 +4,19 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"go.uber.org/zap"
 
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 // Regular integration test.
-// TODO: avoid passing logger,
-// consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
-func Regular(logger *zap.Logger) *IntegrationTest {
+// TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
+func Regular() *IntegrationTest {
 	roles := []spectypes.BeaconRole{
 		spectypes.BNRoleAttester,
 	}
 
 	return &IntegrationTest{
-		Name:   "regular",
-		Logger: logger,
+		Name: "regular",
 		InitialInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
 			1: {
 				{

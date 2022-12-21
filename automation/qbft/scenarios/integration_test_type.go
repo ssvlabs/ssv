@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -43,10 +44,11 @@ type IntegrationTest struct {
 
 type scenarioContext struct {
 	ctx         context.Context
+	logger      *zap.Logger
 	localNet    *p2pv1.LocalNet
-	stores      map[spectypes.OperatorID]*qbftstorage.QBFTStores
-	keyManagers map[spectypes.OperatorID]spectypes.KeyManager
-	dbs         map[spectypes.OperatorID]basedb.IDb
+	stores      []*qbftstorage.QBFTStores
+	keyManagers []spectypes.KeyManager
+	dbs         []basedb.IDb
 }
 
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
@@ -61,7 +63,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 		totalNodes += len(instances)
 	}
 
-	dbs := make(map[spectypes.OperatorID]basedb.IDb)
+	dbs := make([]basedb.IDb, 0)
 	for i := 0; i < totalNodes; i++ {
 		db, err := storage.GetStorageFactory(basedb.Options{
 			Type:   "badger-memory",
@@ -72,8 +74,9 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 			logger.Panic("could not setup storage", zap.Error(err))
 		}
 
-		dbs[spectypes.OperatorID(i+1)] = db
+		dbs = append(dbs, db)
 	}
+
 	forkVersion := protocolforks.GenesisForkVersion
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, false)
@@ -81,10 +84,10 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 		return nil, err
 	}
 
-	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
-	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
+	stores := make([]*qbftstorage.QBFTStores, 0)
+	kms := make([]spectypes.KeyManager, 0)
 	for i, node := range ln.Nodes {
-		store := qbftstorage.New(dbs[spectypes.OperatorID(i)+1], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations", forkVersion)
+		store := qbftstorage.New(dbs[i], loggerFactory(fmt.Sprintf("qbft-store-%d", i+1)), "attestations", forkVersion)
 
 		storageMap := qbftstorage.NewStores()
 		storageMap.Add(spectypes.BNRoleAttester, store)
@@ -93,9 +96,9 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
 		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
 
-		stores[spectypes.OperatorID(i)+1] = storageMap
-		kms[spectypes.OperatorID(i)+1] = spectestingutils.NewTestingKeyManager()
-
+		stores = append(stores, storageMap)
+		km := spectestingutils.NewTestingKeyManager()
+		kms = append(kms, km)
 		node.RegisterHandlers(protocolp2p.WithHandler(
 			protocolp2p.LastDecidedProtocol,
 			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", i+1)), storageMap, node),
@@ -107,6 +110,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	sCtx := &scenarioContext{
 		ctx:         ctx,
+		logger:      logger,
 		localNet:    ln,
 		stores:      stores,
 		keyManagers: kms,
@@ -124,18 +128,32 @@ func (it *IntegrationTest) Run() error {
 		return err
 	}
 
-	validators, err := it.createValidators(sCtx.ctx, it.Logger, sCtx.localNet, sCtx.keyManagers, sCtx.stores)
+	validators, err := it.createValidators(sCtx.ctx, sCtx.logger, sCtx.localNet, sCtx.keyManagers, sCtx.stores)
 	if err != nil {
 		return fmt.Errorf("could not create share: %w", err)
 	}
 
-	for operatorID, instances := range it.InitialInstances {
-		for _, instance := range instances {
+	operatorIDs := make([]spectypes.OperatorID, 0)
+	for operatorID := range it.InitialInstances {
+		operatorIDs = append(operatorIDs, operatorID)
+	}
+
+	sort.Slice(operatorIDs, func(i, j int) bool {
+		return operatorIDs[i] < operatorIDs[j]
+	})
+
+	offset := 0
+	for _, operatorID := range operatorIDs {
+		for i, instance := range it.InitialInstances[operatorID] {
+			instanceIndex := offset + i
+
 			mid := spectypes.MessageIDFromBytes(instance.State.ID)
-			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveInstance(instance); err != nil {
+			if err := sCtx.stores[instanceIndex].Get(mid.GetRoleType()).SaveInstance(instance); err != nil {
 				return err
 			}
 		}
+
+		offset += len(it.InitialInstances[operatorID])
 	}
 
 	for i, v := range validators {
@@ -168,12 +186,24 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
-	for operatorID, expectedOperatorInstances := range it.ExpectedInstances {
-		for _, expectedInstance := range expectedOperatorInstances {
+	expectedOperatorIDs := make([]spectypes.OperatorID, 0)
+	for operatorID := range it.ExpectedInstances {
+		expectedOperatorIDs = append(expectedOperatorIDs, operatorID)
+	}
+
+	sort.Slice(expectedOperatorIDs, func(i, j int) bool {
+		return expectedOperatorIDs[i] < expectedOperatorIDs[j]
+	})
+
+	offset = 0
+	for _, operatorID := range expectedOperatorIDs {
+		for i, expectedInstance := range it.ExpectedInstances[operatorID] {
+			instanceIndex := offset + i
+
 			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
 			// TODO: check that we don't have more instances than we should have
 			expectedHeight := expectedInstance.State.Height
-			instancesInStore, err := sCtx.stores[operatorID].Get(mid.GetRoleType()).
+			instancesInStore, err := sCtx.stores[instanceIndex].Get(mid.GetRoleType()).
 				GetInstancesInRange(expectedInstance.State.ID, expectedHeight, expectedHeight)
 			if err != nil {
 				return err
@@ -197,6 +227,8 @@ func (it *IntegrationTest) Run() error {
 				return fmt.Errorf("roots are not equal")
 			}
 		}
+
+		offset += len(it.ExpectedInstances[operatorID])
 	}
 
 	return nil
@@ -206,8 +238,8 @@ func (it *IntegrationTest) createValidators(
 	ctx context.Context,
 	logger *zap.Logger,
 	net *p2pv1.LocalNet,
-	kms map[spectypes.OperatorID]spectypes.KeyManager,
-	stores map[spectypes.OperatorID]*qbftstorage.QBFTStores,
+	kms []spectypes.KeyManager,
+	stores []*qbftstorage.QBFTStores,
 ) (
 	[]*protocolvalidator.Validator,
 	error,
@@ -222,36 +254,52 @@ func (it *IntegrationTest) createValidators(
 		operators = append(operators, []byte(pub))
 	}
 
-	// add to key-managers and subscribe to topic
-	for i, km := range kms {
-		err := km.AddShare(spectestingutils.Testing4SharesSet().Shares[i])
-		if err != nil {
-			return nil, err
-		}
-
-		options := protocolvalidator.Options{
-			Storage: stores[i],
-			Network: net.Nodes[i-1], // TODO: fix
-			SSVShare: &types.SSVShare{
-				Share: *it.InitialInstances[i][0].State.Share,
-				Metadata: types.Metadata{
-					BeaconMetadata: &protocolbeacon.ValidatorMetadata{
-						Index: spec.ValidatorIndex(i - 1),
-					},
-					OwnerAddress: "0x0",
-					Operators:    operators,
-					Liquidated:   false,
-				},
-			},
-			Beacon: spectestingutils.NewTestingBeaconNode(),
-			Signer: km,
-		}
-
-		l := logger.With(zap.String("w", fmt.Sprintf("node-%d", i)))
-		val := protocolvalidator.NewValidator(ctx, options)
-		val.DutyRunners = validator.SetupRunners(ctx, l, options)
-		validators = append(validators, val)
+	operatorIDs := make([]spectypes.OperatorID, 0)
+	for operatorID := range it.InitialInstances {
+		operatorIDs = append(operatorIDs, operatorID)
 	}
+
+	sort.Slice(operatorIDs, func(i, j int) bool {
+		return operatorIDs[i] < operatorIDs[j]
+	})
+
+	offset := 0
+	for operatorIndex, operatorID := range operatorIDs {
+		for i, instance := range it.InitialInstances[operatorID] {
+			instanceIndex := offset + i
+
+			err := kms[instanceIndex].AddShare(spectestingutils.Testing4SharesSet().Shares[operatorID])
+			if err != nil {
+				return nil, err
+			}
+
+			options := protocolvalidator.Options{
+				Storage: stores[instanceIndex],
+				Network: net.Nodes[instanceIndex],
+				SSVShare: &types.SSVShare{
+					Share: *instance.State.Share,
+					Metadata: types.Metadata{
+						BeaconMetadata: &protocolbeacon.ValidatorMetadata{
+							Index: spec.ValidatorIndex(operatorIndex),
+						},
+						OwnerAddress: "0x0",
+						Operators:    operators,
+						Liquidated:   false,
+					},
+				},
+				Beacon: spectestingutils.NewTestingBeaconNode(),
+				Signer: kms[instanceIndex],
+			}
+
+			l := logger.With(zap.String("w", fmt.Sprintf("node-%d", i)))
+			val := protocolvalidator.NewValidator(ctx, options)
+			val.DutyRunners = validator.SetupRunners(ctx, l, options)
+			validators = append(validators, val)
+
+			offset += len(it.InitialInstances[operatorID])
+		}
+	}
+
 	return validators, nil
 }
 
