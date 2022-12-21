@@ -42,6 +42,7 @@ vendor/
 .idea/**/gradle.xml
 .idea/**/libraries
 
+docker-compose-local.yaml
 
 .DS_Store
 

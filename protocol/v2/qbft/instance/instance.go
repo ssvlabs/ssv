@@ -1,17 +1,16 @@
 package instance
 
 import (
-	"encoding/hex"
 	"encoding/json"
+	"sync"
+
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
-	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
@@ -20,7 +19,7 @@ var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
 	State  *specqbft.State
-	config types.IConfig
+	config qbft.IConfig
 
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
@@ -30,7 +29,7 @@ type Instance struct {
 }
 
 func NewInstance(
-	config types.IConfig,
+	config qbft.IConfig,
 	share *spectypes.Share,
 	identifier []byte,
 	height specqbft.Height,
@@ -49,8 +48,8 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		logger: logger.With(zap.String("identifier",
-			hex.EncodeToString(identifier)), zap.Uint64("height", uint64(height))),
+		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
+			zap.Uint64("height", uint64(height))),
 	}
 }
 
@@ -66,17 +65,17 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		// propose if this node is the proposer
 		leader := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
 
-		i.logger.Debug("starting instance")
+		i.logger.Debug("starting QBFT instance")
 		if leader == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				i.logger.Warn("could not create proposal", zap.Error(err))
+				i.logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					i.logger.Warn("could not broadcast proposal", zap.Error(err))
+					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}
@@ -115,7 +114,6 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(msg, i.State.CommitContainer)
 			if decided {
-				i.logger.Debug("decided instance upon commit quorum")
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
@@ -141,12 +139,12 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() types.IConfig {
+func (i *Instance) GetConfig() qbft.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config types.IConfig) {
+func (i *Instance) SetConfig(config qbft.IConfig) {
 	i.config = config
 }
 

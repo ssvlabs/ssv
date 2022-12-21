@@ -71,25 +71,25 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")
 	}
-	logger.Debug("got validators metadata", zap.Int("pks count", len(pubKeys)),
-		zap.Int("results count", len(results)))
+	logger.Debug("got validators metadata", zap.Int("requested", len(pubKeys)),
+		zap.Int("received", len(results)))
 
 	var errs []error
 	for pk, meta := range results {
 		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
 			logger.Error("failed to update validator metadata",
-				zap.String("pk", pk), zap.Error(err))
+				zap.String("validator", pk), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
-		logger.Debug("managed to update validator metadata",
+		logger.Debug("successfully updated validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
-		logger.Error("could not process validators returned from beacon",
-			zap.Int("count", len(errs)), zap.Any("errs", errs))
+		logger.Error("failed to process validators returned from Beacon node",
+			zap.Int("count", len(errs)), zap.Errors("errors", errs))
 		return errors.Errorf("could not process %d validators returned from beacon", len(errs))
 	}
 

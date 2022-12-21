@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv-spec/qbft"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -16,13 +15,13 @@ import (
 // LastDecidedHandler handler for last-decided protocol
 // TODO: add msg validation and report scores
 func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
-	plogger = plogger.With(zap.String("who", "last decided handler"))
+	plogger = plogger.With(zap.String("who", "LastDecidedHandler"))
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
-			logger.Debug("could not decode msg data", zap.Error(err))
+			logger.Debug("failed to decode message data", zap.Error(err))
 			reporting.ReportValidation(msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
 		} else if sm.Protocol != message.LastDecidedType {
@@ -36,12 +35,12 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 				return nil, errors.New(fmt.Sprintf("not storage found for type %s", msgID.GetRoleType().String()))
 			}
 			instance, err := store.GetHighestInstance(msgID[:])
-			var res *qbft.SignedMessage
-			if instance != nil {
-				res = instance.DecidedMessage
+			if err != nil {
+				logger.Debug("failed to get highest instance", zap.Error(err))
+			} else if instance != nil {
+				logger.Debug("last decided results", zap.Any("res", instance.DecidedMessage), zap.Error(err))
+				sm.UpdateResults(err, instance.DecidedMessage)
 			}
-			logger.Debug("last decided results", zap.Any("res", res), zap.Error(err))
-			sm.UpdateResults(err, res)
 		}
 
 		data, err := sm.Encode()

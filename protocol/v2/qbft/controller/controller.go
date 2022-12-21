@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	logging "github.com/ipfs/go-log"
 )
 
@@ -53,7 +52,7 @@ type Controller struct {
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
-	config              types.IConfig
+	config              qbft.IConfig
 	logger              *zap.Logger
 }
 
@@ -61,7 +60,7 @@ func NewController(
 	identifier []byte,
 	share *spectypes.Share,
 	domain spectypes.DomainType,
-	config types.IConfig,
+	config qbft.IConfig,
 ) *Controller {
 	return &Controller{
 		Identifier:          identifier,
@@ -71,7 +70,7 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger:              logger.With(zap.String("identifier", hex.EncodeToString(identifier))),
+		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
 	}
 }
 
@@ -139,7 +138,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		c.logger.Warn("failed to broadcast decided msg", zap.Error(err))
+		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
 	return msg, nil
 }
@@ -268,6 +267,6 @@ func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) 
 	return nil
 }
 
-func (c *Controller) GetConfig() types.IConfig {
+func (c *Controller) GetConfig() qbft.IConfig {
 	return c.config
 }

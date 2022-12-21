@@ -58,6 +58,12 @@ spec-test:
 	@echo "Running spec tests"
 	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -p 1 -v `go list ./... | grep spectest`
 
+#Test
+.PHONY: docker-spec-test
+docker-spec-test:
+	@echo "Running spec tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make spec-test
 
 #Build
 .PHONY: build
@@ -95,6 +101,12 @@ NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 docker-all:
 	@echo "nodes $(NODES)"
 	@docker-compose up --build $(NODES)
+
+NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+.PHONY: docker-local
+docker-local:
+	@echo "nodes $(NODES)"
+	@docker-compose -f docker-compose-local.yaml up --build $(NODES)
 
 DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug

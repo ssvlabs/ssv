@@ -187,7 +187,7 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
 	if n.msgRouter == nil {
-		n.logger.Warn("msg router is not configured")
+		n.logger.Debug("msg router is not configured")
 		return nil
 	}
 	if msg == nil {

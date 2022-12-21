@@ -46,6 +46,7 @@ type Options struct {
 	Context        context.Context
 	Logger         *zap.Logger
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	MinGenesisTime uint64 `yaml:"MinGenesisTime" env:"MinGenesisTime"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
 	DB             basedb.IDb

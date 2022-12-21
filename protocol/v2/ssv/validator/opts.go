@@ -7,12 +7,10 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	Logger      *zap.Logger
 	Network     specqbft.Network
 	Beacon      specssv.BeaconNode
 	Storage     *storage.QBFTStores
@@ -23,9 +21,7 @@ type Options struct {
 }
 
 func (o *Options) defaults() {
-	if o.Logger == nil {
-		o.Logger = zap.L()
-	}
+	// Nothing to set yet.
 }
 
 // State of the validator

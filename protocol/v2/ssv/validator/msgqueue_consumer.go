@@ -43,7 +43,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 	for ctx.Err() == nil {
 		err := v.ConsumeQueue(msgID, handler, time.Millisecond*50)
 		if err != nil {
-			v.logger.Warn("could not consume queue", zap.Error(err))
+			v.logger.Debug("failed consuming queue", zap.Error(err))
 		}
 	}
 }
@@ -99,10 +99,5 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	// ctrl := r.GetBaseRunner().QBFTController
-	// if ctrl == nil {
-	//	return specqbft.Height(0)
-	//}
-	// return state.LastHeight
 	return r.GetBaseRunner().QBFTController.Height
 }

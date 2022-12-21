@@ -80,7 +80,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 	logger.Info("successfully connected to beacon client")
 
-	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network))
+	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
 		ctx:            opt.Context,
 		logger:         logger,
