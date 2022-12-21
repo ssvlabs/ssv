@@ -34,17 +34,17 @@ import (
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
 	Name              string
-	Logger            *zap.Logger
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties            map[spectypes.OperatorID][]*spectypes.Duty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	ExpectedErrors    map[spectypes.OperatorID]error // TODO: slice of errors?
+	ExpectedErrors    map[spectypes.OperatorID][]error
 	OutputMessages    map[spectypes.OperatorID]*specqbft.SignedMessage
 }
 
 type scenarioContext struct {
-	ctx         context.Context
-	logger      *zap.Logger
+	ctx    context.Context
+	logger *zap.Logger
+	// TODO: use maps for stores, kms, dbs; map localNet to a map, store the mapped net
 	localNet    *p2pv1.LocalNet
 	stores      []*qbftstorage.QBFTStores
 	keyManagers []spectypes.KeyManager
@@ -167,6 +167,7 @@ func (it *IntegrationTest) Run() error {
 		go func(val *protocolvalidator.Validator) {
 			defer wg.Done()
 			if err := val.Start(); err != nil {
+				// TODO: data race, rewrite (consider using errgroup)
 				startErr = fmt.Errorf("could not start validator: %w", err)
 			}
 			<-time.After(time.Second * 3)
@@ -230,6 +231,8 @@ func (it *IntegrationTest) Run() error {
 
 		offset += len(it.ExpectedInstances[operatorID])
 	}
+
+	// TODO: check errors
 
 	return nil
 }
@@ -303,6 +306,7 @@ func (it *IntegrationTest) createValidators(
 	return validators, nil
 }
 
+// TODO: consider adding to spec
 var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.OperatorID) *spectypes.Share {
 	return &spectypes.Share{
 		OperatorID:      id,

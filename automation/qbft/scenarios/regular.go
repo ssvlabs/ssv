@@ -59,6 +59,25 @@ func Regular() *IntegrationTest {
 					State: &specqbft.State{
 						Share: testingShare(spectestingutils.Testing4SharesSet(), 1),
 					},
+					// DecidedMessage: &specqbft.SignedMessage{
+					// 	Signature: nil,
+					// 	Signers:   nil,  // TODO: check in first implementation before checking decided message
+					// 	Message:   &specqbft.Message{
+					// 		MsgType:    specqbft.CommitMsgType, // TODO: check in first implementation before checking decided message
+					// 		Height:     specqbft.FirstHeight, // TODO: check in first implementation before checking decided message
+					// 		Round:      specqbft.FirstRound, // TODO: check in first implementation before checking decided message
+					// 		Identifier: nil,
+					// 		Data:       nil,
+					// 	},
+					// },
+					// TODO: check decided messages
+					// DecidedMessage: spectestingutils.MultiSignQBFTMsg([]*bls.SecretKey{spectestingutils.Testing4SharesSet().Shares[1], spectestingutils.Testing4SharesSet().Shares[2]}, []spectypes.OperatorID{1, 2}, &specqbft.Message{
+					// 	MsgType:    specqbft.PrepareMsgType,
+					// 	Height:     specqbft.FirstHeight,
+					// 	Round:      specqbft.FirstRound,
+					// 	Identifier: []byte{1, 2, 3, 4},
+					// 	Data:       spectestingutils.PrepareDataBytes([]byte{1, 2, 3, 4}),
+					// }),
 				},
 			},
 			2: {
@@ -83,12 +102,7 @@ func Regular() *IntegrationTest {
 				},
 			},
 		},
-		ExpectedErrors: map[spectypes.OperatorID]error{
-			1: nil,
-			2: nil,
-			3: nil,
-			4: nil,
-		},
+		ExpectedErrors: nil, // TODO: if it's nil, don't check errors
 		OutputMessages: nil,
 	}
 }
