@@ -63,20 +63,20 @@ echo "populating events.yaml"
 for ((i=0;i<OP_SIZE;i++)); do
   ID=$(ii=$i yq e '.data.operators[env(ii)].id' "$KEY_SHARES_PATH")
   PK=$(ii=$i yq e '.data.operators[env(ii)].publicKey' "$KEY_SHARES_PATH")
-  yq e -i '.operators += [{"Log":"","Name":"OperatorRegistration"}]' temp.yaml
+  yq e -i '.operators += [{"Log":"","Name":"OperatorAdded"}]' temp.yaml
   ID=${ID} ii=$i yq e -i '.operators[env(ii)].Data.Id = env(ID)' temp.yaml
   PK=${PK} ii=$i yq e -i '.operators[env(ii)].Data.PublicKey = env(PK)' temp.yaml
   NAME="operator-$((i + 1))" ii=$i yq e -i '.operators[env(ii)].Data.Name = env(NAME)' temp.yaml
 done
 
-yq e -i '.validators += [{"Log":"","Name":"ValidatorRegistration"}]' temp.yaml
+yq e -i '.validators += [{"Log":"","Name":"ValidatorAdded"}]' temp.yaml
 PK=$(yq e '.data.publicKey' "$KEY_SHARES_PATH")
 OIDS=$(yq e '.payload.readable.operatorIds' "$KEY_SHARES_PATH")
 SPKS=$(yq e '.payload.readable.sharePublicKeys' "$KEY_SHARES_PATH")
 ESKS=$(yq e '.data.shares.encryptedKeys' "$KEY_SHARES_PATH")
 OIDS="[${OIDS}]" ii=$i yq e -i '.validators[0].Data.OperatorIds = env(OIDS)' temp.yaml
 PK=${PK} ii=$i yq e -i '.validators[0].Data.PublicKey = env(PK)' temp.yaml
-SPKS=${SPKS} ii=$i yq e -i '.validators[0].Data.SharesPublicKeys = env(SPKS)' temp.yaml
+SPKS=${SPKS} ii=$i yq e -i '.validators[0].Data.SharePublicKeys = env(SPKS)' temp.yaml
 ESKS=${ESKS} ii=$i yq e -i '.validators[0].Data.EncryptedKeys = env(ESKS)' temp.yaml
 rm ./config/events.yaml 2> /dev/null
 touch ./config/events.yaml

@@ -5,12 +5,15 @@ import (
 	"strings"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -18,24 +21,27 @@ import (
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) ([]zap.Field, error) {
 		switch e.Name {
-		case abiparser.OperatorRegistration:
-			ev := e.Data.(abiparser.OperatorRegistrationEvent)
-			return c.handleOperatorRegistrationEvent(logger, ev)
-		case abiparser.OperatorRemoval:
-			ev := e.Data.(abiparser.OperatorRemovalEvent)
-			return c.handleOperatorRemovalEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRegistration:
-			ev := e.Data.(abiparser.ValidatorRegistrationEvent)
-			return c.handleValidatorRegistrationEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRemoval:
-			ev := e.Data.(abiparser.ValidatorRemovalEvent)
-			return c.handleValidatorRemovalEvent(logger, ev, ongoingSync)
-		case abiparser.AccountLiquidation:
-			ev := e.Data.(abiparser.AccountLiquidationEvent)
-			return c.handleAccountLiquidationEvent(logger, ev, ongoingSync)
-		case abiparser.AccountEnable:
-			ev := e.Data.(abiparser.AccountEnableEvent)
-			return c.handleAccountEnableEvent(logger, ev, ongoingSync)
+		case abiparser.OperatorAdded:
+			ev := e.Data.(abiparser.OperatorAddedEvent)
+			return c.handleOperatorAddedEvent(logger, ev)
+		case abiparser.OperatorRemoved:
+			ev := e.Data.(abiparser.OperatorRemovedEvent)
+			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
+		case abiparser.ValidatorAdded:
+			ev := e.Data.(abiparser.ValidatorAddedEvent)
+			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
+		case abiparser.ValidatorRemoved:
+			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
+		case abiparser.PodLiquidated:
+			ev := e.Data.(abiparser.PodLiquidatedEvent)
+			return c.handlePodLiquidatedEvent(logger, ev, ongoingSync)
+		case abiparser.PodEnabled:
+			ev := e.Data.(abiparser.PodEnabledEvent)
+			return c.handlePodEnabledEvent(ev, ongoingSync)
+		case abiparser.FeeRecipientAddressAdded:
+			ev := e.Data.(abiparser.FeeRecipientAddressAddedEvent)
+			return c.handleFeeRecipientAddressAddedEvent(logger, ev, ongoingSync)
 		default:
 			logger.Debug("could not handle unknown event")
 		}
@@ -43,23 +49,21 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 	}
 }
 
-// handleOperatorRegistrationEvent parses the given event and saves operator data
-func (c *controller) handleOperatorRegistrationEvent(logger *zap.Logger, event abiparser.OperatorRegistrationEvent) ([]zap.Field, error) {
+// handleOperatorAddedEvent parses the given event and saves operator data
+func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparser.OperatorAddedEvent) ([]zap.Field, error) {
 	eventOperatorPubKey := string(event.PublicKey)
 	od := registrystorage.OperatorData{
 		PublicKey:    eventOperatorPubKey,
-		Name:         event.Name,
-		OwnerAddress: event.OwnerAddress,
-		Index:        uint64(event.Id),
+		OwnerAddress: event.Owner,
+		Index:        event.Id,
 	}
-	if err := c.storage.SaveOperatorData(logger, &od); err != nil {
+	if err := c.operatorsCollection.SaveOperatorData(logger, &od); err != nil {
 		return nil, errors.Wrap(err, "could not save operator data")
 	}
 
 	logFields := make([]zap.Field, 0)
 	if strings.EqualFold(eventOperatorPubKey, c.operatorPubKey) || c.validatorOptions.FullNode {
 		logFields = append(logFields,
-			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
 			zap.String("operatorPubKey", od.PublicKey),
 			zap.String("ownerAddress", od.OwnerAddress.String()),
@@ -69,13 +73,13 @@ func (c *controller) handleOperatorRegistrationEvent(logger *zap.Logger, event a
 	return logFields, nil
 }
 
-// handleOperatorRemovalEvent parses the given event and removing operator data
-func (c *controller) handleOperatorRemovalEvent(
+// handleOperatorRemovedEvent parses the given event and removing operator data
+func (c *controller) handleOperatorRemovedEvent(
 	logger *zap.Logger,
-	event abiparser.OperatorRemovalEvent,
+	event abiparser.OperatorRemovedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	od, found, err := c.storage.GetOperatorData(uint64(event.OperatorId))
+	od, found, err := c.operatorsCollection.GetOperatorData(event.Id)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get operator data")
 	}
@@ -85,19 +89,11 @@ func (c *controller) handleOperatorRemovalEvent(
 		}
 	}
 
-	// this check is deprecated, since the validation is happening on the contract side
-	//if od.OwnerAddress != event.OwnerAddress {
-	//	return nil, &abiparser.MalformedEventError{
-	//		Err: errors.New("could not match operator owner address with provided event owner address"),
-	//	}
-	//}
-
 	// TODO: check by operator ID, not operator public key
 	isOperatorEvent := strings.EqualFold(od.PublicKey, c.operatorPubKey)
 	logFields := make([]zap.Field, 0)
 	if isOperatorEvent || c.validatorOptions.FullNode {
 		logFields = append(logFields,
-			zap.String("operatorName", od.Name),
 			zap.Uint64("operatorId", od.Index),
 			zap.String("operatorPubKey", od.PublicKey),
 			zap.String("ownerAddress", od.OwnerAddress.String()),
@@ -109,7 +105,7 @@ func (c *controller) handleOperatorRemovalEvent(
 		return logFields, nil
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorID(spectypes.OperatorID(event.OperatorId)))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorID(spectypes.OperatorID(event.Id)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
@@ -125,7 +121,7 @@ func (c *controller) handleOperatorRemovalEvent(
 		}
 	}
 
-	err = c.storage.DeleteOperatorData(uint64(event.OperatorId))
+	err = c.operatorsCollection.DeleteOperatorData(event.Id)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not delete operator data")
 	}
@@ -133,13 +129,13 @@ func (c *controller) handleOperatorRemovalEvent(
 	return logFields, nil
 }
 
-// handleValidatorRegistrationEvent handles registry contract event for validator added
-func (c *controller) handleValidatorRegistrationEvent(
+// handleValidatorAddedEvent handles registry contract event for validator added
+func (c *controller) handleValidatorAddedEvent(
 	logger *zap.Logger,
-	validatorRegistrationEvent abiparser.ValidatorRegistrationEvent,
+	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	pubKey := hex.EncodeToString(validatorRegistrationEvent.PublicKey)
+	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
 	if ongoingSync {
 		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
 			logger.Debug("validator was loaded already")
@@ -147,12 +143,12 @@ func (c *controller) handleValidatorRegistrationEvent(
 		}
 	}
 
-	validatorShare, found, err := c.collection.GetValidatorShare(validatorRegistrationEvent.PublicKey)
+	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		validatorShare, _, err = c.onShareCreate(logger, validatorRegistrationEvent)
+		validatorShare, _, err = c.onShareCreate(logger, validatorAddedEvent)
 		if err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
@@ -164,7 +160,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 	if isOperatorShare {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
-			c.onShareStart(logger, validatorShare)
+			_, _ = c.onShareStart(logger, validatorShare)
 		}
 	}
 
@@ -172,21 +168,21 @@ func (c *controller) handleValidatorRegistrationEvent(
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress),
-			zap.Uint32s("operatorIds", validatorRegistrationEvent.OperatorIds),
+			zap.Uint64s("operatorIds", validatorAddedEvent.OperatorIds),
 		)
 	}
 
 	return logFields, nil
 }
 
-// handleValidatorRemovalEvent handles registry contract event for validator removed
-func (c *controller) handleValidatorRemovalEvent(
+// handleValidatorRemovedEvent handles registry contract event for validator removed
+func (c *controller) handleValidatorRemovedEvent(
 	logger *zap.Logger,
-	validatorRemovalEvent abiparser.ValidatorRemovalEvent,
+	validatorRemovedEvent abiparser.ValidatorRemovedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	// TODO: handle metrics
-	share, found, err := c.collection.GetValidatorShare(validatorRemovalEvent.PublicKey)
+	share, found, err := c.collection.GetValidatorShare(validatorRemovedEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
@@ -195,13 +191,6 @@ func (c *controller) handleValidatorRemovalEvent(
 			Err: errors.New("could not find validator share"),
 		}
 	}
-
-	// this check is deprecated, since the validation is happening on the contract side
-	//if validatorShare.OwnerAddress != validatorRemovalEvent.OwnerAddress.String() {
-	//	return nil, &abiparser.MalformedEventError{
-	//		Err: errors.New("could not match validator owner address with provided event owner address"),
-	//	}
-	//}
 
 	// remove decided messages
 	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
@@ -219,15 +208,14 @@ func (c *controller) handleValidatorRemovalEvent(
 
 	logFields := make([]zap.Field, 0)
 	isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
-	if isOperatorShare {
-		pubKey := hex.EncodeToString(validatorRemovalEvent.PublicKey)
-		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
-		if ongoingSync {
-			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
-				return nil, err
-			}
+	if isOperatorShare && ongoingSync {
+		if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
+			return nil, err
 		}
 	}
+
+	// TODO(oleg): delete recipient
+	// if there are no more validators under the removed validator owner address, remove recipient
 
 	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
@@ -239,93 +227,127 @@ func (c *controller) handleValidatorRemovalEvent(
 	return logFields, nil
 }
 
-// handleAccountLiquidationEvent handles registry contract event for account liquidated
-func (c *controller) handleAccountLiquidationEvent(
+// handlePodLiquidatedEvent handles registry contract event for pod liquidated
+func (c *controller) handlePodLiquidatedEvent(
 	logger *zap.Logger,
-	event abiparser.AccountLiquidationEvent,
+	event abiparser.PodLiquidatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	ownerAddress := event.OwnerAddress.String()
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(ownerAddress))
+	toLiquidate, liquidatedPubKeys, err := c.processPodEvent(event.OwnerAddress, event.OperatorIds, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get validator shares by owner address")
+		return nil, errors.Wrapf(err, "could not process pod event")
 	}
-	operatorSharePubKeys := make([]string, 0)
 
-	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.FullNode {
-			operatorSharePubKeys = append(operatorSharePubKeys, hex.EncodeToString(share.ValidatorPubKey))
-		}
-		if isOperatorShare {
-			share.Liquidated = true
-
-			// save validator data
-			if err := c.collection.SaveValidatorShare(logger, share); err != nil {
-				return nil, errors.Wrap(err, "could not save validator share")
-			}
-
-			if ongoingSync {
-				// we can't remove the share secret from key-manager
-				// due to the fact that after activating the validators (AccountEnable)
-				// we don't have the encrypted keys to decrypt the secret, but only the owner address
-				if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), false); err != nil {
-					return nil, err
-				}
+	if ongoingSync && len(toLiquidate) > 0 {
+		for _, share := range toLiquidate {
+			// we can't remove the share secret from key-manager
+			// due to the fact that after activating the validators (PodEnabled)
+			// we don't have the encrypted keys to decrypt the secret, but only the owner address
+			if err = c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), false); err != nil {
+				return nil, err
 			}
 		}
 	}
 
 	logFields := make([]zap.Field, 0)
-	if len(operatorSharePubKeys) > 0 {
+	if len(liquidatedPubKeys) > 0 {
 		logFields = append(logFields,
 			zap.String("ownerAddress", event.OwnerAddress.String()),
-			zap.Strings("liquidatedShares", operatorSharePubKeys),
+			zap.Strings("liquidatedShares", liquidatedPubKeys),
 		)
 	}
 
 	return logFields, nil
 }
 
-// handle AccountEnableEvent handles registry contract event for account enabled
-func (c *controller) handleAccountEnableEvent(
+// handle PodEnabledEvent handles registry contract event for pod enabled
+func (c *controller) handlePodEnabledEvent(
 	logger *zap.Logger,
-	event abiparser.AccountEnableEvent,
+	event abiparser.PodEnabledEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(event.OwnerAddress.String()))
+	toEnable, enabledPubKeys, err := c.processPodEvent(event.OwnerAddress, event.OperatorIds, false)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get validator shares by owner address")
+		return nil, errors.Wrapf(err, "could not process pod event")
 	}
-	operatorSharePubKeys := make([]string, 0)
 
-	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
-		if isOperatorShare || c.validatorOptions.FullNode {
-			operatorSharePubKeys = append(operatorSharePubKeys, hex.EncodeToString(share.ValidatorPubKey))
-		}
-		if share.BelongsToOperator(c.operatorPubKey) {
-			share.Liquidated = false
-
-			// save validator data
-			if err := c.collection.SaveValidatorShare(logger, share); err != nil {
-				return nil, errors.Wrap(err, "could not save validator share")
-			}
-			// TODO: update km with minimal slashing protection
-
-			if ongoingSync {
-				c.onShareStart(logger, share)
-			}
+	if ongoingSync && len(toEnable) > 0 {
+		for _, share := range toEnable {
+			_, _ = c.onShareStart(logger, share)
 		}
 	}
+
+	// TODO(oleg): update km with minimal slashing protection
 
 	logFields := make([]zap.Field, 0)
-	if len(operatorSharePubKeys) > 0 {
+	if len(enabledPubKeys) > 0 {
 		logFields = append(logFields,
 			zap.String("ownerAddress", event.OwnerAddress.String()),
-			zap.Strings("enabledShares", operatorSharePubKeys),
+			zap.Strings("enabledShares", enabledPubKeys),
 		)
 	}
 
 	return logFields, nil
+}
+
+// processPodEvent handles registry contract event for pod
+func (c *controller) processPodEvent(
+	owner common.Address,
+	operatorIds []uint64,
+	toLiquidate bool,
+) ([]*ssvtypes.SSVShare, []string, error) {
+	podID, err := ssvtypes.ComputePodIDHash(owner.Bytes(), operatorIds)
+	if err != nil {
+		return nil, nil, errors.Wrapf(err, "could not compute share pod id")
+	}
+
+	shares, err := c.collection.GetFilteredValidatorShares(ByPodID(podID))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not get validator shares by pod id")
+	}
+	toUpdate := make([]*ssvtypes.SSVShare, 0)
+	updatedPubKeys := make([]string, 0)
+
+	for _, share := range shares {
+		isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
+		if isOperatorShare || c.validatorOptions.FullNode {
+			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey))
+		}
+		if isOperatorShare {
+			share.Liquidated = toLiquidate
+			toUpdate = append(toUpdate, share)
+		}
+	}
+
+	if len(toUpdate) > 0 {
+		if err = c.collection.SaveValidatorShares(toUpdate); err != nil {
+			return nil, nil, errors.Wrapf(err, "could not save validator shares")
+		}
+	}
+
+	return toUpdate, updatedPubKeys, nil
+}
+
+func (c *controller) handleFeeRecipientAddressAddedEvent(
+	event abiparser.FeeRecipientAddressAddedEvent,
+	ongoingSync bool,
+) ([]zap.Field, error) {
+	r, err := c.recipientsCollection.SaveRecipientData(&registrystorage.RecipientData{
+		Owner: event.OwnerAddress,
+		Fee:   event.RecipientAddress,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "could not save recipient data")
+	}
+
+	if ongoingSync && r != nil {
+		_ = c.validatorsMap.ForEach(func(v *validator.Validator) error {
+			if v.Share.OwnerAddress == r.Owner.String() {
+				v.Share.FeeRecipient = r.Fee
+			}
+			return nil
+		})
+	}
+
+	return nil, nil
 }

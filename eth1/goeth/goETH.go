@@ -356,43 +356,50 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	abiParser := eth1.NewParser(logger, ec.abiVersion)
 
 	switch ev.Name {
-	case abiparser.OperatorRegistration:
-		parsed, err := abiParser.ParseOperatorRegistrationEvent(vLog, contractAbi)
+	case abiparser.OperatorAdded:
+		parsed, err := abiParser.ParseOperatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.OperatorRemoval:
-		parsed, err := abiParser.ParseOperatorRemovalEvent(vLog, contractAbi)
+	case abiparser.OperatorRemoved:
+		parsed, err := abiParser.ParseOperatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.ValidatorRegistration:
-		parsed, err := abiParser.ParseValidatorRegistrationEvent(vLog, contractAbi)
+	case abiparser.ValidatorAdded:
+		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.ValidatorRemoval:
-		parsed, err := abiParser.ParseValidatorRemovalEvent(vLog, contractAbi)
+	case abiparser.ValidatorRemoved:
+		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.AccountLiquidation:
-		parsed, err := abiParser.ParseAccountLiquidationEvent(vLog)
+	case abiparser.PodLiquidated:
+		parsed, err := abiParser.ParsePodLiquidatedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.AccountEnable:
-		parsed, err := abiParser.ParseAccountEnableEvent(vLog)
+	case abiparser.PodEnabled:
+		parsed, err := abiParser.ParsePodEnabledEvent(vLog, contractAbi)
+		reportSyncEvent(ev.Name, err)
+		if err != nil {
+			return ev.Name, err
+		}
+		ec.fireEvent(vLog, ev.Name, *parsed)
+	case abiparser.FeeRecipientAddressAdded:
+		parsed, err := abiParser.ParseFeeRecipientAddressAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err

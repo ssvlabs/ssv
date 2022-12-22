@@ -1,9 +1,9 @@
 package validator
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -20,6 +20,7 @@ type ICollection interface {
 	eth1.RegistryStore
 
 	SaveValidatorShare(logger *zap.Logger, share *types.SSVShare) error
+	SaveValidatorShares(shares []*types.SSVShare) error
 	GetValidatorShare(key []byte) (*types.SSVShare, bool, error)
 	GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
 	GetFilteredValidatorShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error)
@@ -92,6 +93,20 @@ func (s *Collection) getUnsafe(key []byte) (*types.SSVShare, bool, error) {
 	return value, found, err
 }
 
+func (s *Collection) SaveValidatorShares(logger *zap.Logger, shares []*types.SSVShare) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.SetMany(collectionPrefix(), len(shares), func(i int) (basedb.Obj, error) {
+		value, err := shares[i].Encode()
+		if err != nil {
+			logger.Error("failed to serialize share", zap.Error(err))
+			return basedb.Obj{}, err
+		}
+		return basedb.Obj{Key: shares[i].ValidatorPubKey, Value: value}, nil
+	})
+}
+
 // CleanRegistryData clears all registry data
 func (s *Collection) CleanRegistryData() error {
 	return s.cleanAllShares()
@@ -141,10 +156,10 @@ func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) b
 	}
 }
 
-// ByOwnerAddress filters by owner address.
-func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
+// ByPodID filters by pod id.
+func ByPodID(podID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return strings.EqualFold(share.OwnerAddress, ownerAddress)
+		return bytes.Equal(share.PodID, podID)
 	}
 }
 

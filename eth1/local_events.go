@@ -17,61 +17,60 @@ type eventData interface {
 	toEventData() (interface{}, error)
 }
 
-type operatorRegistrationEventYAML struct {
-	Id           uint32 `yaml:"Id"`
-	Name         string `yaml:"Name"`
-	OwnerAddress string `yaml:"OwnerAddress"`
-	PublicKey    string `yaml:"PublicKey"`
+type operatorAddedEventYAML struct {
+	Id        uint64 `yaml:"Id"`
+	Owner     string `yaml:"Owner"`
+	PublicKey string `yaml:"PublicKey"`
 }
 
-type operatorRemovalEventYAML struct {
-	OperatorId   uint32 `yaml:"Id"`
-	OwnerAddress string `yaml:"OwnerAddress"`
+type OperatorRemovedEventYAML struct {
+	OperatorId uint64 `yaml:"Id"`
 }
 
-type validatorRegistrationEventYAML struct {
-	PublicKey        string   `yaml:"PublicKey"`
-	OwnerAddress     string   `yaml:"OwnerAddress"`
-	OperatorIds      []uint32 `yaml:"OperatorIds"`
-	SharesPublicKeys []string `yaml:"SharesPublicKeys"`
-	EncryptedKeys    []string `yaml:"EncryptedKeys"`
+type validatorAddedEventYAML struct {
+	PublicKey       string   `yaml:"PublicKey"`
+	OwnerAddress    string   `yaml:"OwnerAddress"`
+	OperatorIds     []uint64 `yaml:"OperatorIds"`
+	SharePublicKeys []string `yaml:"SharePublicKeys"`
+	EncryptedKeys   []string `yaml:"EncryptedKeys"`
 }
 
-type validatorRemovalEventYAML struct {
-	OwnerAddress string `yaml:"OwnerAddress"`
-	PublicKey    string `yaml:"PublicKey"`
+type ValidatorRemovedEventYAML struct {
+	OwnerAddress string   `yaml:"OwnerAddress"`
+	OperatorIds  []uint64 `yaml:"OperatorIds"`
+	PublicKey    string   `yaml:"PublicKey"`
 }
 
-type accountLiquidationEventYAML struct {
-	OwnerAddress string `yaml:"OwnerAddress"`
+type PodLiquidatedEventYAML struct {
+	OwnerAddress string   `yaml:"OwnerAddress"`
+	OperatorIds  []uint64 `yaml:"OperatorIds"`
 }
 
-type accountEnableEventYAML struct {
-	OwnerAddress string `yaml:"OwnerAddress"`
+type PodEnabledEventYAML struct {
+	OwnerAddress string   `yaml:"OwnerAddress"`
+	OperatorIds  []uint64 `yaml:"OperatorIds"`
 }
 
-func (e *operatorRegistrationEventYAML) toEventData() (interface{}, error) {
-	return abiparser.OperatorRegistrationEvent{
-		Id:           e.Id,
-		Name:         e.Name,
-		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-		PublicKey:    []byte(e.PublicKey),
+func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.OperatorAddedEvent{
+		Id:        e.Id,
+		Owner:     common.HexToAddress(e.Owner),
+		PublicKey: []byte(e.PublicKey),
 	}, nil
 }
 
-func (e *operatorRemovalEventYAML) toEventData() (interface{}, error) {
-	return abiparser.OperatorRemovalEvent{
-		OperatorId:   e.OperatorId,
-		OwnerAddress: common.HexToAddress(e.OwnerAddress),
+func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.OperatorRemovedEvent{
+		Id: e.OperatorId,
 	}, nil
 }
 
-func (e *validatorRegistrationEventYAML) toEventData() (interface{}, error) {
+func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 	pubKey, err := hex.DecodeString(strings.TrimPrefix(e.PublicKey, "0x"))
 	if err != nil {
 		return nil, err
 	}
-	sharePubKeys, err := toByteArr(e.SharesPublicKeys, true)
+	sharePubKeys, err := toByteArr(e.SharePublicKeys, true)
 	if err != nil {
 		return nil, err
 	}
@@ -79,31 +78,34 @@ func (e *validatorRegistrationEventYAML) toEventData() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	return abiparser.ValidatorRegistrationEvent{
-		PublicKey:        pubKey,
-		OwnerAddress:     common.HexToAddress(e.OwnerAddress),
-		OperatorIds:      e.OperatorIds,
-		SharesPublicKeys: sharePubKeys,
-		EncryptedKeys:    encryptedKeys,
+	return abiparser.ValidatorAddedEvent{
+		PublicKey:       pubKey,
+		OwnerAddress:    common.HexToAddress(e.OwnerAddress),
+		OperatorIds:     e.OperatorIds,
+		SharePublicKeys: sharePubKeys,
+		EncryptedKeys:   encryptedKeys,
 	}, nil
 }
 
-func (e *validatorRemovalEventYAML) toEventData() (interface{}, error) {
-	return abiparser.ValidatorRemovalEvent{
+func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.ValidatorRemovedEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
+		OperatorIds:  e.OperatorIds,
 		PublicKey:    []byte(strings.TrimPrefix(e.PublicKey, "0x")),
 	}, nil
 }
 
-func (e *accountLiquidationEventYAML) toEventData() (interface{}, error) {
-	return abiparser.AccountLiquidationEvent{
+func (e *PodLiquidatedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.PodLiquidatedEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
+		OperatorIds:  e.OperatorIds,
 	}, nil
 }
 
-func (e *accountEnableEventYAML) toEventData() (interface{}, error) {
-	return abiparser.AccountEnableEvent{
+func (e *PodEnabledEventYAML) toEventData() (interface{}, error) {
+	return abiparser.PodEnabledEvent{
 		OwnerAddress: common.HexToAddress(e.OwnerAddress),
+		OperatorIds:  e.OperatorIds,
 	}, nil
 }
 
@@ -115,28 +117,28 @@ type eventDataUnmarshaler struct {
 func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 	var err error
 	switch u.name {
-	case "OperatorRegistration":
-		var v operatorRegistrationEventYAML
+	case "OperatorAdded":
+		var v operatorAddedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "OperatorRemoval":
-		var v operatorRemovalEventYAML
+	case "OperatorRemoved":
+		var v OperatorRemovedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "ValidatorRegistration":
-		var v validatorRegistrationEventYAML
+	case "ValidatorAdded":
+		var v validatorAddedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "ValidatorRemoval":
-		var v validatorRemovalEventYAML
+	case "ValidatorRemoved":
+		var v ValidatorRemovedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "AccountLiquidation":
-		var v accountLiquidationEventYAML
+	case "PodLiquidated":
+		var v PodLiquidatedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "AccountEnable":
-		var v accountEnableEventYAML
+	case "PodEnabled":
+		var v PodEnabledEventYAML
 		err = value.Decode(&v)
 		u.data = &v
 	default:

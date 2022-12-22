@@ -21,7 +21,6 @@ var (
 type OperatorData struct {
 	Index        uint64         `json:"index"`
 	PublicKey    string         `json:"publicKey"`
-	Name         string         `json:"name"`
 	OwnerAddress common.Address `json:"ownerAddress"`
 }
 
@@ -129,17 +128,9 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if operatorData.Index == 0 {
-		nextIndex, err := s.nextIndex()
-		if err != nil {
-			return errors.Wrap(err, "could not calculate next operator index")
-		}
-		operatorData.Index = uint64(nextIndex)
-	}
-
 	_, found, err := s.getOperatorData(operatorData.Index)
 	if err != nil {
-		return errors.Wrap(err, "could not get operator's data")
+		return errors.Wrap(err, "could not get operator data")
 	}
 	if found {
 		logger.Debug("operator already exist",
@@ -150,7 +141,7 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 
 	raw, err := json.Marshal(operatorData)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal operator information")
+		return errors.Wrap(err, "could not marshal operator data")
 	}
 	return s.db.Set(s.prefix, buildOperatorKey(operatorData.Index), raw)
 }
@@ -165,8 +156,4 @@ func (s *operatorsStorage) DeleteOperatorData(index uint64) error {
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(index uint64) []byte {
 	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(index, 10))}, []byte("/"))
-}
-
-func (s *operatorsStorage) nextIndex() (int64, error) {
-	return s.db.CountByCollection(append(s.prefix, operatorsPrefix...))
 }

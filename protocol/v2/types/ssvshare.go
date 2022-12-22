@@ -2,12 +2,18 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"sort"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/pkg/errors"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 // SSVShare is a combination of spectypes.Share and its Metadata.
@@ -68,10 +74,67 @@ func (s *SSVShare) SetOperators(pks [][]byte) {
 	copy(s.Operators, pks)
 }
 
+func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.RecipientsCollection) error {
+	ownerAddress := common.HexToAddress(s.OwnerAddress)
+	r, found, err := recipientsCollection.GetRecipientData(ownerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		// TODO: should we use owner address as a default?
+		s.FeeRecipient = ownerAddress
+		return nil
+	}
+
+	s.FeeRecipient = r.Fee
+	return nil
+}
+
+// SetPodID set the given share object with computed pod ID
+func (s *SSVShare) SetPodID() error {
+	oids := make([]uint64, 0)
+	for _, o := range s.Committee {
+		oids = append(oids, uint64(o.OperatorID))
+	}
+
+	hash, err := ComputePodIDHash(common.HexToAddress(s.OwnerAddress).Bytes(), oids)
+	if err != nil {
+		return errors.New("could not compute share pod id")
+	}
+
+	s.PodID = hash
+	return nil
+}
+
+// ComputePodIDHash will compute pod ID hash with given owner address and operator ids
+func ComputePodIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
+	// Create a new hash
+	hash := sha256.New()
+
+	// Write the binary representation of the owner address to the hash
+	hash.Write(ownerAddress)
+
+	// Sort the array in ascending order
+	sort.Slice(operatorIds, func(i, j int) bool {
+		return operatorIds[i] < operatorIds[j]
+	})
+
+	// Write the values to the hash
+	for _, id := range operatorIds {
+		if err := binary.Write(hash, binary.BigEndian, id); err != nil {
+			return nil, err
+		}
+	}
+
+	return hash.Sum(nil), nil
+}
+
 // Metadata represents metadata of SSVShare.
 type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   string
 	Operators      [][]byte // TODO: remove; get operator ID from the first event with operator public key
 	Liquidated     bool
+	PodID          []byte
+	FeeRecipient   common.Address
 }

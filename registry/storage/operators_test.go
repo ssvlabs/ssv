@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -27,7 +26,6 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 
 	operatorData := OperatorData{
 		PublicKey:    string(pk.Serialize()),
-		Name:         "my_operator",
 		OwnerAddress: common.Address{},
 		Index:        1,
 	}
@@ -52,13 +50,11 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		operatorDataFromDB, found, err := storage.GetOperatorData(operatorData.Index)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, "my_operator", operatorDataFromDB.Name)
 		require.Equal(t, operatorData.Index, operatorDataFromDB.Index)
 		require.True(t, strings.EqualFold(operatorData.PublicKey, operatorDataFromDB.PublicKey))
 		operatorDataFromDBCmp, found, err := storage.GetOperatorDataByPubKey(logger, operatorData.PublicKey)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, operatorDataFromDB.Name, operatorDataFromDBCmp.Name)
 		require.Equal(t, operatorDataFromDB.Index, operatorDataFromDBCmp.Index)
 		require.True(t, strings.EqualFold(operatorDataFromDB.PublicKey, operatorDataFromDBCmp.PublicKey))
 	})
@@ -66,7 +62,6 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	t.Run("create existing operator", func(t *testing.T) {
 		od := OperatorData{
 			PublicKey:    "010101010101",
-			Name:         "my_operator1",
 			OwnerAddress: common.Address{},
 			Index:        1,
 		}
@@ -74,33 +69,28 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		require.NoError(t, err)
 		odDup := OperatorData{
 			PublicKey:    "010101010101",
-			Name:         "my_operator2",
 			OwnerAddress: common.Address{},
 			Index:        1,
 		}
 		err = storage.SaveOperatorData(logger, &odDup)
 		require.NoError(t, err)
-		odFromDb, found, err := storage.GetOperatorData(od.Index)
+		_, found, err := storage.GetOperatorData(od.Index)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.False(t, strings.EqualFold(odDup.Name, odFromDb.Name))
 	})
 
 	t.Run("create and get multiple operators", func(t *testing.T) {
 		ods := []OperatorData{
 			{
 				PublicKey:    "01010101",
-				Name:         "my_operator1",
 				OwnerAddress: common.Address{},
 				Index:        10,
 			}, {
 				PublicKey:    "02020202",
-				Name:         "my_operator2",
 				OwnerAddress: common.Address{},
 				Index:        11,
 			}, {
 				PublicKey:    "03030303",
-				Name:         "my_operator3",
 				OwnerAddress: common.Address{},
 				Index:        12,
 			},
@@ -114,7 +104,6 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 			operatorDataFromDB, found, err := storage.GetOperatorData(od.Index)
 			require.NoError(t, err)
 			require.True(t, found)
-			require.Equal(t, od.Name, operatorDataFromDB.Name)
 			require.Equal(t, od.Index, operatorDataFromDB.Index)
 			require.Equal(t, od.PublicKey, operatorDataFromDB.PublicKey)
 		}
@@ -133,7 +122,6 @@ func TestStorage_ListOperators(t *testing.T) {
 		require.NoError(t, err)
 		operator := OperatorData{
 			PublicKey: string(pk),
-			Name:      fmt.Sprintf("operator-%d", i+1),
 			Index:     uint64(i),
 		}
 		err = storage.SaveOperatorData(logger, &operator)
@@ -144,9 +132,6 @@ func TestStorage_ListOperators(t *testing.T) {
 		operators, err := storage.ListOperators(logger, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, n, len(operators))
-		for _, operator := range operators {
-			require.True(t, strings.HasPrefix(operator.Name, "operator-"))
-		}
 	})
 
 	t.Run("successfully list operators in range", func(t *testing.T) {

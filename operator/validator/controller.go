@@ -20,6 +20,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -68,7 +69,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
-	RegistryStorage            registrystorage.OperatorsCollection
+	RegistryStorage            nodestorage.Storage
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
@@ -99,12 +100,14 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context        context.Context
-	collection     ICollection
-	storage        registrystorage.OperatorsCollection
-	ibftStorageMap *storage.QBFTStores
-	beacon         beaconprotocol.Beacon
-	keyManager     spectypes.KeyManager
+	context              context.Context
+	collection           ICollection
+	operatorsCollection  registrystorage.OperatorsCollection
+	recipientsCollection registrystorage.RecipientsCollection
+	ibftStorageMap       *storage.QBFTStores
+
+	beacon               beaconprotocol.Beacon
+	keyManager           spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorPubKey             string
@@ -177,7 +180,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	ctrl := controller{
 		collection:                 collection,
-		storage:                    options.RegistryStorage,
+		operatorsCollection:        options.RegistryStorage,
+		recipientsCollection:       options.RegistryStorage,
 		ibftStorageMap:             storageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,
@@ -377,7 +381,7 @@ func (c *controller) getValidators(logger *zap.Logger) ([]*types.SSVShare, error
 	return c.collection.GetFilteredValidatorShares(logger, NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
 }
 
-// setupValidators setup and starts validators from the given shares
+// setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShare) {
 	logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
@@ -385,21 +389,14 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
-		// Fetch metadata, if needed.
-		pk := hex.EncodeToString(validatorShare.ValidatorPubKey)
-		logger := logger.With(zap.String("pubkey", pk))
-		if !validatorShare.HasBeaconMetadata() { // fetching index and status in case not exist
-			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
-			logger.Warn("could not start validator as metadata not found")
-			continue
-		}
-
-		// Start a committee validator.
-		v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), validatorShare)
-		isStarted, err := c.startValidator(logger, v)
+		isStarted, err := c.onShareStart(validatorShare)
 		if err != nil {
-			logger.Warn("could not start validator", zap.Error(err))
+			logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)), zap.Error(err))
 			errs = append(errs, err)
+		}
+		if !isStarted && err == nil {
+			// Fetch metadata, if needed.
+			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
 		}
 		if isStarted {
 			started++
@@ -546,10 +543,10 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 }
 
 // onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.ValidatorRegistrationEvent) (*types.SSVShare, bool, error) {
+func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.ValidatorAddedEvent) (*types.SSVShare, bool, error) {
 	share, shareSecret, err := ShareFromValidatorEvent(
 		validatorEvent,
-		c.storage,
+		c.operatorsCollection,
 		c.shareEncryptionKeyProvider,
 		c.operatorPubKey,
 	)
@@ -566,6 +563,11 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 		}
 
 		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
+
+		// TODO(oleg): should we care about non-committee podIds?
+		if err = share.SetPodID(); err != nil {
+			return nil, false, errors.Wrap(err, "could not set share pod id")
+		}
 
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
@@ -608,12 +610,15 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) {
-	v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
-	_, err := c.startValidator(logger, v)
-	if err != nil {
-		logger.Warn("could not start validator", zap.Error(err))
+func (c *controller) onShareStart(logger *zap.logger, share *types.SSVShare) (bool, error) {
+	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
+		logger.Warn("could not start validator as metadata not found", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)))
+		return false, nil
 	}
+
+	// Start a committee validator.
+	v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
+	return c.startValidator(logger, v)
 }
 
 // startValidator will start the given validator if applicable

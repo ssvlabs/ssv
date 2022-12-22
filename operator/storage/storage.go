@@ -13,6 +13,7 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -25,6 +26,7 @@ type Storage interface {
 	eth1.SyncOffsetStorage
 	registry.RegistryStore
 	registrystorage.OperatorsCollection
+	registrystorage.RecipientsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(logger *zap.Logger, generateIfNone bool, operatorKeyBase64 string) error
@@ -33,14 +35,16 @@ type Storage interface {
 type storage struct {
 	db basedb.IDb
 
-	operatorStore registrystorage.OperatorsCollection
+	operatorStore  registrystorage.OperatorsCollection
+	recipientStore registrystorage.RecipientsCollection
 }
 
 // NewNodeStorage creates a new instance of Storage
 func NewNodeStorage(db basedb.IDb) Storage {
 	return &storage{
-		db:            db,
-		operatorStore: registrystorage.NewOperatorsStorage(db, storagePrefix),
+		db:             db,
+		operatorStore:  registrystorage.NewOperatorsStorage(db, storagePrefix),
+		recipientStore: registrystorage.NewRecipientsStorage(db, storagePrefix),
 	}
 }
 
@@ -68,6 +72,22 @@ func (s *storage) GetOperatorsPrefix() []byte {
 	return s.operatorStore.GetOperatorsPrefix()
 }
 
+func (s *storage) GetRecipientData(owner common.Address) (*registrystorage.RecipientData, bool, error) {
+	return s.recipientStore.GetRecipientData(owner)
+}
+
+func (s *storage) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
+	return s.recipientStore.SaveRecipientData(recipientData)
+}
+
+func (s *storage) DeleteRecipientData(owner common.Address) error {
+	return s.recipientStore.DeleteRecipientData(owner)
+}
+
+func (s *storage) GetRecipientsPrefix() []byte {
+	return s.recipientStore.GetRecipientsPrefix()
+}
+
 func (s *storage) CleanRegistryData() error {
 	err := s.cleanSyncOffset()
 	if err != nil {
@@ -77,6 +97,11 @@ func (s *storage) CleanRegistryData() error {
 	err = s.cleanOperators()
 	if err != nil {
 		return errors.Wrap(err, "could not clean operators")
+	}
+
+	err = s.cleanRecipients()
+	if err != nil {
+		return errors.Wrap(err, "could not clean recipients")
 	}
 	return nil
 }
@@ -93,6 +118,11 @@ func (s *storage) cleanSyncOffset() error {
 func (s *storage) cleanOperators() error {
 	operatorsPrefix := s.GetOperatorsPrefix()
 	return s.db.RemoveAllByCollection(append(storagePrefix, operatorsPrefix...))
+}
+
+func (s *storage) cleanRecipients() error {
+	recipientsPrefix := s.GetRecipientsPrefix()
+	return s.db.RemoveAllByCollection(append(storagePrefix, recipientsPrefix...))
 }
 
 // GetSyncOffset returns the offset

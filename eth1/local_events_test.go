@@ -35,7 +35,7 @@ func TestLocalEventsUnmarshalYAML(t *testing.T) {
 	t.Run("Fail to unmarshal event with empty data", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
 `)
 		var parsedData []*Event
@@ -45,14 +45,13 @@ func TestLocalEventsUnmarshalYAML(t *testing.T) {
 	})
 }
 
-func TestUnmarshalYAMLOperatorRegistrationEvent(t *testing.T) {
-	t.Run("Successfully unmarshal OperatorRegistration event", func(t *testing.T) {
+func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
+	t.Run("Successfully unmarshal OperatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
-    Id: 1 
-    Name: Operator-1
+    Id: 1
     OwnerAddress: 0x97a6C1f3aaB5427B901fb135ED492749191C0f1F
     PublicKey: LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K
 `)
@@ -60,20 +59,19 @@ func TestUnmarshalYAMLOperatorRegistrationEvent(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal(input, &parsedData))
 		require.NotNil(t, parsedData)
 		require.Equal(t, 1, len(parsedData))
-		require.Equal(t, "OperatorRegistration", parsedData[0].Name)
+		require.Equal(t, "OperatorAdded", parsedData[0].Name)
 		require.NotNil(t, parsedData[0].Data)
-		eventData, ok := parsedData[0].Data.(abiparser.OperatorRegistrationEvent)
+		eventData, ok := parsedData[0].Data.(abiparser.OperatorAddedEvent)
 		require.True(t, ok)
 		require.Equal(t, uint32(1), eventData.Id)
-		require.Equal(t, "Operator-1", eventData.Name)
-		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.OwnerAddress.String())
+		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.Owner.String())
 		require.Equal(t, []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"), eventData.PublicKey)
 	})
 
-	t.Run("Fail to unmarshal OperatorRegistration event with non number operator Id", func(t *testing.T) {
+	t.Run("Fail to unmarshal OperatorAdded event with non number operator Id", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: id
 `)
@@ -84,16 +82,16 @@ func TestUnmarshalYAMLOperatorRegistrationEvent(t *testing.T) {
 	})
 }
 
-func TestUnmarshalYAMLValidatorRegistrationEvent(t *testing.T) {
-	t.Run("Successfully unmarshal ValidatorRegistration event", func(t *testing.T) {
+func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
+	t.Run("Successfully unmarshal ValidatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
     OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: [1, 2, 3, 4]
-    SharesPublicKeys:
+    SharePublicKeys:
       - 0x8f6c6caf14da98dc5b45482613d709be3620c5094ddc6958002263058cc2fe4bdb7d9801d205d0eca13601b2c5491854
       - 0x92453e6b59c0c443c87289ef6aa0c00b6e6c8da68a78004c7493fc3a0d7b5360ed493c273c6e24ecba4e059e198d9ea7
       - 0xb54f165b8da223b4e16d85e44f0d84d6dda9b0a809d609c2ae9bf31cb4814f7f8f56ed91d6e19e5369bec6f2ebce234f
@@ -108,10 +106,10 @@ func TestUnmarshalYAMLValidatorRegistrationEvent(t *testing.T) {
 		require.NoError(t, yaml.Unmarshal(input, &parsedData))
 	})
 
-	t.Run("Fail to unmarshal ValidatorRegistration event with non numbers operator-ids ", func(t *testing.T) {
+	t.Run("Fail to unmarshal ValidatorAdded event with non numbers operator-ids ", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
     OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
@@ -123,10 +121,10 @@ func TestUnmarshalYAMLValidatorRegistrationEvent(t *testing.T) {
 		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `one` into uint32\n  line 7: cannot unmarshal !!str `two` into uint32\n  line 7: cannot unmarshal !!str `three` into uint32\n  line 7: cannot unmarshal !!str `four` into uint32")
 	})
 
-	t.Run("Fail to unmarshal ValidatorRegistration event with non array operator-ids", func(t *testing.T) {
+	t.Run("Fail to unmarshal ValidatorAdded event with non array operator-ids", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
     OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
@@ -138,15 +136,15 @@ func TestUnmarshalYAMLValidatorRegistrationEvent(t *testing.T) {
 		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `1, 2, 3, 4` into []uint32")
 	})
 
-	t.Run("Fail to unmarshal ValidatorRegistration event with non hex encoded share public keys", func(t *testing.T) {
+	t.Run("Fail to unmarshal ValidatorAdded event with non hex encoded share public keys", func(t *testing.T) {
 		input := []byte(`
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
     OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: [1, 2, 3, 4]
-    SharesPublicKeys:
+    SharePublicKeys:
       - sss
 `)
 		var parsedData []*Event

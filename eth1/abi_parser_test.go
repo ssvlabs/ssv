@@ -15,8 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseOperatorRegistrationEvent(t *testing.T) {
-	var rawOperatorRegistration = `{
+func TestParseOperatorAddedEvent(t *testing.T) {
+	var rawOperatorAdded = `{
   "address": "0x2EAD684aa2E10E31370830F00E0812bE6205F5f9",
   "topics": [
 	"0x26a77904793977b23eb8b2d412c486276510e0dc1966a4a2936d4bea0ff86e9d",
@@ -29,24 +29,23 @@ func TestParseOperatorRegistrationEvent(t *testing.T) {
 }`
 
 	t.Run("v2 operator added", func(t *testing.T) {
-		LogOperatorRegistration, contractAbi := unmarshalLog(t, rawOperatorRegistration, V2)
+		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V2)
 		abiParser := NewParser(logex.TestLogger(t), V2)
-		parsed, err := abiParser.ParseOperatorRegistrationEvent(*LogOperatorRegistration, contractAbi)
+		parsed, err := abiParser.ParseOperatorAddedEvent(*LogOperatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.False(t, errors.As(err, &malformedEventErr))
 		require.NotNil(t, contractAbi)
 		require.NotNil(t, parsed)
-		require.Equal(t, "GNS-1", parsed.Name)
 		require.Equal(t, "LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBN2pXcExremd2TXdvRzhNdEVyUjIKRGhUMk11dElmYUd0VmxMeDVWK2g4amwrdnlxT1YvcmxKREVlQy9HMzVpV0M0WEU3RnFKUVc1QmpvQWZ1TXhQegpRQzZ6MEE1b1I3enRuWHU2c0V3TkhJSFh3REFITHlTdVdQM3BGYlo0Qnc5b1FZTUJmbVNsL3hXR0syVnN3aVhkCkNFcUZKRmdNUFk3NlJQY0o2R2dkTWcrWVRRWVVFamlRTjFpdmJKZjRWaUpCRTcrbVNteFZNNTAzVmlyQWZndkIKenBndTNzdHZIdHpRV1Z2eHJ0NTR0Rm9DMHRmWE1RRXNSU0VtTVRoVkhocVorZTJCOC9kTWQ2R1FodnE5ZXR1RQphQkxoSlpFUXlpMklpUU02Ulg2a01vZGdGUmcvemttTFZXQ0VITzEzaFV5Rkoxang1L0M5bEIyU2VENW9jd1h4CmJRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
 			string(parsed.PublicKey))
-		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", parsed.OwnerAddress.Hex())
+		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", parsed.Owner.Hex())
 		require.Equal(t, uint32(1), parsed.Id)
 	})
 }
 
-func TestParseValidatorRegistrationEvent(t *testing.T) {
-	var rawValidatorRegistration = `{
+func TestParseValidatorAddedEvent(t *testing.T) {
+	var rawValidatorAdded = `{
   "address": "0x2EAD684aa2E10E31370830F00E0812bE6205F5f9",
   "topics": [
 	"0x888b4bb563730efc1c420fb22b503c3551134948a3a3dce4ffab6380e9ce5025",
@@ -58,9 +57,9 @@ func TestParseValidatorRegistrationEvent(t *testing.T) {
 }`
 
 	t.Run("v2 validator added", func(t *testing.T) {
-		vLogValidatorRegistration, contractAbi := unmarshalLog(t, rawValidatorRegistration, V2)
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V2)
 		abiParser := NewParser(logex.TestLogger(t), V2)
-		parsed, err := abiParser.ParseValidatorRegistrationEvent(*vLogValidatorRegistration, contractAbi)
+		parsed, err := abiParser.ParseValidatorAddedEvent(*vLogValidatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
@@ -73,18 +72,18 @@ func TestParseValidatorRegistrationEvent(t *testing.T) {
 			require.Equal(t, operators[i], string(pk))
 		}
 		shares := []string{"abcdcbb92038af19dc83f9a3f9889ddcd52fc2d943a51e523a4a0a30e9caf6463ce665d77361310ddbb2229cca72b48f", "a3f0ba91a5c9fbf87d4bfb8dae0cc2e44588bbc5e9e9159722d5d6f21f644454a71707c33690b0119816e48cf53850e4", "a5b761866a5dd4abf444fdafe4be1adba00c64317083296c7ab5b524dbf2e0711a81c457cecd3717207632fc2fbda38d", "b4661cb225d4d3987c7cc3c48ae67863140f10ac964207812dbf713830a63091ae11ded575879ff4470c158fbb84e38d"}
-		for i, pk := range parsed.SharesPublicKeys {
+		for i, pk := range parsed.SharePublicKeys {
 			require.Equal(t, shares[i], hex.EncodeToString(pk))
 		}
 	})
 }
 
-func unmarshalLog(t *testing.T, rawOperatorRegistration string, abiVersion Version) (*types.Log, abi.ABI) {
-	var vLogOperatorRegistration types.Log
-	err := json.Unmarshal([]byte(rawOperatorRegistration), &vLogOperatorRegistration)
+func unmarshalLog(t *testing.T, rawOperatorAdded string, abiVersion Version) (*types.Log, abi.ABI) {
+	var vLogOperatorAdded types.Log
+	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
 	contractAbi, err := abi.JSON(strings.NewReader(ContractABI(abiVersion)))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
-	return &vLogOperatorRegistration, contractAbi
+	return &vLogOperatorAdded, contractAbi
 }

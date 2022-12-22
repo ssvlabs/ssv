@@ -22,16 +22,16 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	logger := logex.TestLogger(t)
 
 	tests := []struct {
-		name                  string
-		version               eth1.Version
-		operatorRegistration  string
-		validatorRegistration string
+		name           string
+		version        eth1.Version
+		operatorAdded  string
+		validatorAdded string
 	}{
 		{
-			name:                  "v2 abi contract",
-			version:               eth1.V2,
-			operatorRegistration:  rawOperatorRegistration,
-			validatorRegistration: rawValidatorRegistration,
+			name:           "v2 abi contract",
+			version:        eth1.V2,
+			operatorAdded:  rawOperatorAdded,
+			validatorAdded: rawValidatorAdded,
 		},
 	}
 
@@ -42,11 +42,11 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(test.version)))
 			require.NoError(t, err)
 			require.NotNil(t, contractAbi)
-			var vLogOperatorRegistration types.Log
-			err = json.Unmarshal([]byte(test.operatorRegistration), &vLogOperatorRegistration)
+			var vLogOperatorAdded types.Log
+			err = json.Unmarshal([]byte(test.operatorAdded), &vLogOperatorAdded)
 			require.NoError(t, err)
-			var vLogValidatorRegistration types.Log
-			err = json.Unmarshal([]byte(test.validatorRegistration), &vLogValidatorRegistration)
+			var vLogValidatorAdded types.Log
+			err = json.Unmarshal([]byte(test.validatorAdded), &vLogValidatorAdded)
 			require.NoError(t, err)
 
 			cn := make(chan *eth1.Event)
@@ -56,13 +56,13 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			go func() {
 				defer sub.Unsubscribe()
 				for event := range cn {
-					if ethEvent, ok := event.Data.(abiparser.OperatorRegistrationEvent); ok {
+					if ethEvent, ok := event.Data.(abiparser.OperatorAddedEvent); ok {
 						require.NotNil(t, ethEvent)
 						require.NotNil(t, ethEvent.PublicKey)
 						eventsWg.Done()
 						continue
 					}
-					if ethEvent, ok := event.Data.(abiparser.ValidatorRegistrationEvent); ok {
+					if ethEvent, ok := event.Data.(abiparser.ValidatorAddedEvent); ok {
 						require.NotNil(t, ethEvent)
 						require.NotNil(t, ethEvent.PublicKey)
 						eventsWg.Done()
@@ -73,12 +73,12 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			}()
 
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(logger, vLogOperatorRegistration, contractAbi)
+			_, err = ec.handleEvent(logger, vLogOperatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			time.Sleep(10 * time.Millisecond)
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(logger, vLogValidatorRegistration, contractAbi)
+			_, err = ec.handleEvent(logger, vLogValidatorAdded, contractAbi)
 			require.NoError(t, err)
 
 			eventsWg.Wait()
@@ -96,7 +96,7 @@ func newEth1Client(abiVersion eth1.Version) *eth1Client {
 	return &ec
 }
 
-var rawOperatorRegistration = `{
+var rawOperatorAdded = `{
   "address": "0x2EAD684aa2E10E31370830F00E0812bE6205F5f9",
   "topics": [
 	"0x26a77904793977b23eb8b2d412c486276510e0dc1966a4a2936d4bea0ff86e9d",
@@ -108,7 +108,7 @@ var rawOperatorRegistration = `{
   "transactionHash": "0x79478d46847aca9aa93f351c4b9c2126739a746b916da6445c0e64ab227fd016"
 }`
 
-var rawValidatorRegistration = `{
+var rawValidatorAdded = `{
   "address": "0x2EAD684aa2E10E31370830F00E0812bE6205F5f9",
   "topics": [
 	"0x888b4bb563730efc1c420fb22b503c3551134948a3a3dce4ffab6380e9ce5025",
