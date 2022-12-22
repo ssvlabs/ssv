@@ -24,14 +24,14 @@ func (si *StoredInstance) Decode(data []byte) error {
 
 // InstanceStore manages instance data.
 type InstanceStore interface {
-	// SaveHighestInstance saves the StoredInstance for the highest instance.
-	SaveHighestInstance(instance *StoredInstance) error
 	// GetHighestInstance returns the StoredInstance for the highest instance.
 	GetHighestInstance(identifier []byte) (*StoredInstance, error)
 	// GetInstancesInRange returns historical StoredInstance's in the given range.
 	GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*StoredInstance, error)
 	// SaveInstance saves historical StoredInstance.
 	SaveInstance(instance *StoredInstance) error
+	// GetInstance returns historical StoredInstance for the given identifier and height.
+	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
 	// CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
 	CleanAllInstances(msgID []byte) error
 }

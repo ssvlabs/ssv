@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v2/sync/history"
 	uc "github.com/bloxapp/ssv/utils/commons"
 )
 
@@ -68,6 +69,10 @@ type Config struct {
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
 	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
 	PubsubValidateThrottle    int           `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
+
+	// HistorySyncer is used by SyncDecidedByRange to fetch history from peers.
+	// If nil, SyncDecidedByRange is a no-op.
+	HistorySyncer history.Syncer
 
 	GetValidatorStats network.GetValidatorStats
 }

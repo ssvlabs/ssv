@@ -45,13 +45,13 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 				decidedCnt++
 
 				data, _ := decided.Message.GetCommitData()
-				require.EqualValues(t, runData.DecidedVal, data.Data)
+				require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, data.Data)
 			}
 		}
 
-		require.EqualValues(t, runData.DecidedCnt, decidedCnt)
+		require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt)
 
-		if runData.BroadcastedDecided != nil {
+		if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 			// test broadcasted
 			broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 			require.Greater(t, len(broadcastedMsgs), 0)
@@ -66,12 +66,12 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 				r1, err := msg1.GetRoot()
 				require.NoError(t, err)
 
-				r2, err := runData.BroadcastedDecided.GetRoot()
+				r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 				require.NoError(t, err)
 
 				if bytes.Equal(r1, r2) &&
-					reflect.DeepEqual(runData.BroadcastedDecided.Signers, msg1.Signers) &&
-					reflect.DeepEqual(runData.BroadcastedDecided.Signature, msg1.Signature) {
+					reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signers, msg1.Signers) &&
+					reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signature, msg1.Signature) {
 					require.False(t, found)
 					found = true
 				}

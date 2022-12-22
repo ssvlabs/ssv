@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/pkg/errors"
@@ -73,7 +74,8 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	opts.Logger.Debug("CreatingNode", zap.Bool("full_node", opts.ValidatorOptions.FullNode))
+	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion, opts.ValidatorOptions.FullNode)
 
 	node := &operatorNode{
 		context:        opts.Context,

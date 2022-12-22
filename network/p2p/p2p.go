@@ -3,6 +3,10 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -12,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	"github.com/bloxapp/ssv/protocol/v2/sync/history"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
 	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
@@ -21,9 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // network states
@@ -70,6 +72,8 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdisc.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+
+	historySyncer history.Syncer
 }
 
 // New creates a new p2p network
@@ -80,7 +84,7 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
-	return &p2pNetwork{
+	n := &p2pNetwork{
 		parentCtx:            pctx,
 		ctx:                  ctx,
 		cancel:               cancel,
@@ -88,10 +92,12 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 		fork:                 forksfactory.NewFork(cfg.ForkVersion),
 		cfg:                  cfg,
 		msgRouter:            cfg.Router,
+		historySyncer:        cfg.HistorySyncer,
 		state:                stateClosed,
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 	}
+	return n
 }
 
 // Host implements HostProvider

@@ -129,12 +129,13 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
+	options.Logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode))
 	storageMap := storage.NewStores()
-	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommittee, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion, options.FullNode))
+	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion, options.FullNode))
+	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion, options.FullNode))
+	storageMap.Add(spectypes.BNRoleSyncCommittee, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion, options.FullNode))
+	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion, options.FullNode))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}

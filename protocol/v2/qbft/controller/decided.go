@@ -12,11 +12,6 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	// decided msgs for past (already decided) instances will not decide again, just return
-	if msg.Message.Height < c.Height {
-		return nil, nil
-	}
-
 	if err := validateDecided(
 		c.config,
 		msg,
@@ -33,39 +28,61 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	// did previously decide?
 	inst := c.InstanceForHeight(msg.Message.Height)
+	if inst == nil {
+		// Get instance from storage.
+		// TODO: should we move this inside InstanceForHeight even though it's only done here?
+		storedInst, err := c.GetConfig().GetStorage().GetInstance(c.Identifier, msg.Message.Height)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get instance from storage")
+		}
+		inst = instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+		inst.State = storedInst.State
+	}
 	prevDecided := inst != nil && inst.State.Decided
 
-	// Mark current instance decided
-	if inst := c.InstanceForHeight(c.Height); inst != nil && !inst.State.Decided {
-		inst.State.Decided = true
-		if c.Height == msg.Message.Height {
-			inst.State.Round = msg.Message.Round
-			inst.State.DecidedValue = data.Data
-		}
-	}
-
 	isFutureDecided := msg.Message.Height > c.Height
-	if isFutureDecided {
-		// add an instance for the decided msg
+
+	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
+		i.State.CommitContainer.AddMsg(msg)
 		c.StoredInstances.addNewInstance(i)
+	} else if decided, _ := inst.IsDecided(); !decided {
+		inst.State.Decided = true
+		inst.State.Round = msg.Message.Round
+		inst.State.DecidedValue = data.Data
+		inst.State.CommitContainer.AddMsg(msg)
+	} else { // decide previously, add if has more signers
+		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
+		if len(msg.Signers) > len(signers) {
+			//TODO: we dont broadcast late decided anymore, so we should check if we can remove this
+			inst.State.CommitContainer.AddMsg(msg)
+			// TODO: update storage
+		}
+	}
+
+	if isFutureDecided {
+		// Save future instance, if it wasn't decided already (so it hasn't been saved yet.)
+		if !prevDecided {
+			if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
+				if err = c.SaveInstance(futureInstance, msg); err != nil {
+					c.logger.Debug("failed to save instance",
+						zap.Uint64("height", uint64(msg.Message.Height)),
+						zap.Error(err))
+				} else {
+					c.logger.Debug("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
+				}
+			}
+		}
+
+		// sync gap
+		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height
 	}
-
 	if !prevDecided {
-		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
-			if err = c.SaveHighestInstance(futureInstance, msg); err != nil {
-				c.logger.Debug("failed to save instance",
-					zap.Uint64("height", uint64(msg.Message.Height)),
-					zap.Error(err))
-			} else {
-				c.logger.Debug("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
-			}
-		}
 		return msg, nil
 	}
 	return nil, nil

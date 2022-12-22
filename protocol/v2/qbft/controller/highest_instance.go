@@ -41,10 +41,10 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	return i, nil
 }
 
-func (c *Controller) SaveHighestInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,
 	}
-	return c.config.GetStorage().SaveHighestInstance(storedInstance)
+	return c.config.GetStorage().SaveInstance(storedInstance)
 }

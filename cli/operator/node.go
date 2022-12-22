@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	logging "github.com/ipfs/go-log"
 	"log"
 	"net/http"
 	"time"
+
+	logging "github.com/ipfs/go-log"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -33,6 +34,7 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/sync/history"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -170,6 +172,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
+		if cfg.SSVOptions.ValidatorOptions.FullNode {
+			cfg.P2pNetworkConfig.HistorySyncer = history.NewSyncer()
+		}
 
 		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
 

@@ -1,9 +1,11 @@
 package p2pv1
 
 import (
+	"context"
 	"encoding/hex"
 	"math/rand"
 
+	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
@@ -44,6 +46,36 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	}()
 
 	return nil
+}
+
+func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, to, from qbft.Height) {
+	if n.historySyncer == nil {
+		return
+	}
+
+	go func() {
+		logger := n.logger.With(
+			zap.String("identifier", mid.String()),
+			zap.Uint64("from", uint64(from)),
+			zap.Uint64("to", uint64(to)))
+
+		err := n.historySyncer.SyncRange(context.Background(), n, mid, from, to, func(sm *specqbft.SignedMessage) error {
+			raw, err := sm.Encode()
+			if err != nil {
+				logger.Warn("could not encode signed message in SyncDecidedByRange")
+				return nil
+			}
+			n.msgRouter.Route(spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   mid,
+				Data:    raw,
+			})
+			return nil
+		})
+		if err != nil {
+			logger.Debug("decided by range: sync failed", zap.Error(err))
+		}
+	}()
 }
 
 // LastDecided fetches last decided from a random set of peers

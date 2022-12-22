@@ -1,12 +1,13 @@
 package storage
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/types"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 func init() {
@@ -16,7 +17,7 @@ func init() {
 func TestQBFTStores(t *testing.T) {
 	qbftMap := NewStores()
 
-	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion)
+	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion, false)
 	require.NoError(t, err)
 	qbftMap.Add(types.BNRoleAttester, store)
 	qbftMap.Add(types.BNRoleProposer, store)
