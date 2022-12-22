@@ -173,6 +173,7 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
 	if err != nil {
+		r.logger.Info("NIV SYNC: got root ERROR", zap.Int("slot", int(duty.Slot)), zap.Error(err))
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
 
