@@ -12,7 +12,7 @@ import (
 func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, error) {
 	if provider, isProvider := gc.client.(eth2client.BeaconBlockRootProvider); isProvider {
 		// Wait a 1/3 into the slot.
-		go gc.waitOneThirdOrValidBlock(uint64(slot))
+		gc.waitOneThirdOrValidBlock(uint64(slot))
 		root, err := provider.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 		if err != nil {
 			return phase0.Root{}, err
