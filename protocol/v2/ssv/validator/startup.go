@@ -44,9 +44,12 @@ func (v *Validator) Start() error {
 func (v *Validator) Stop() error {
 	v.cancel()
 	// clear the msg q
-	v.Q.Clean(func(index msgqueue.Index) bool {
-		return true
-	})
+	for _, q := range v.Q {
+		q.Clean(func(index msgqueue.Index) bool {
+			return true
+		})
+	}
+
 	return nil
 }
 

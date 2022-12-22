@@ -69,14 +69,13 @@ func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedParti
 }
 
 func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
-	r.logger.Info("NIV SYNC: go consensus msg", zap.Int("signer", int(signedMsg.Signers[0])))
+	r.logger.Info("NIV SYNC: go consensus msg", zap.Int("type", int(signedMsg.Message.MsgType)), zap.Any("signers", signedMsg.Signers), zap.Int("h", int(signedMsg.Message.Height)), zap.Int("round", int(signedMsg.Message.Round)))
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		r.logger.Info("NIV SYNC: go consensus msg err", zap.Int("signer", int(signedMsg.Signers[0])), zap.Error(err))
 		return errors.Wrap(err, "failed processing consensus message")
 	}
 
-	r.logger.Info("NIV SYNC: go valid consensus msg", zap.Int("signer", int(signedMsg.Signers[0])))
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		return nil
@@ -113,6 +112,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	r.logger.Info("NIV SYNC: broadcast post consensus")
 	return nil
 }
 
