@@ -2,6 +2,7 @@ package queue
 
 import (
 	"container/list"
+	"encoding/hex"
 	"sync"
 
 	"github.com/bloxapp/ssv-spec/types"
@@ -66,6 +67,7 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	defer q.mu.Unlock()
 
 	q.messages.PushBack(msg)
+	metricMsgQRatio.WithLabelValues(hex.EncodeToString(msg.MsgID.GetPubKey())).Inc()
 }
 
 // Pop removes & returns the highest priority message which matches the given filter.
@@ -77,6 +79,9 @@ func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
 		defer q.mu.Unlock()
 
 		q.messages.Remove(highestElement)
+		if highest != nil {
+			metricMsgQRatio.WithLabelValues(hex.EncodeToString(highest.MsgID.GetPubKey())).Dec()
+		}
 	}
 	return highest
 }
