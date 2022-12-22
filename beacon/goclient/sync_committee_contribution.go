@@ -36,6 +36,9 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 	if !isProvider {
 		return nil, errors.New("client does not support BeaconBlockRootProvider")
 	}
+
+	gc.waitOneThirdOrValidBlock(uint64(slot))
+
 	blockRoot, err := provider.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
 		return nil, err
