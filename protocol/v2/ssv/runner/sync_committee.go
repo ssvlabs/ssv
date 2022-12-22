@@ -55,7 +55,6 @@ func NewSyncCommitteeRunner(
 }
 
 func (r *SyncCommitteeRunner) StartNewDuty(duty *spectypes.Duty) error {
-	r.logger.Info("NIV SYNC: start sync committee", zap.Int("slot", int(duty.Slot)))
 	return r.BaseRunner.baseStartNewDuty(r, duty)
 }
 
@@ -69,10 +68,8 @@ func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedParti
 }
 
 func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
-	r.logger.Info("NIV SYNC: go consensus msg", zap.Int("type", int(signedMsg.Message.MsgType)), zap.Any("signers", signedMsg.Signers), zap.Int("h", int(signedMsg.Message.Height)), zap.Int("round", int(signedMsg.Message.Round)))
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
-		r.logger.Info("NIV SYNC: go consensus msg err", zap.Int("signer", int(signedMsg.Signers[0])), zap.Error(err))
 		return errors.Wrap(err, "failed processing consensus message")
 	}
 
@@ -80,8 +77,6 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	if !decided {
 		return nil
 	}
-
-	r.logger.Info("NIV SYNC: consensus decided")
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
@@ -112,23 +107,18 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	r.logger.Info("NIV SYNC: broadcast post consensus")
 	return nil
 }
 
 func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
-	r.logger.Info("NIV SYNC: go post consensus msg", zap.Int("signer", int(signedMsg.Signer)))
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
-		r.logger.Info("NIV SYNC: go post consensus msg ERROR", zap.Int("signer", int(signedMsg.Signer)), zap.Error(err))
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
 	if !quorum {
 		return nil
 	}
-
-	r.logger.Info("NIV SYNC: post consensus quorum")
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -144,12 +134,10 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 			ValidatorIndex:  r.GetState().DecidedValue.Duty.ValidatorIndex,
 			Signature:       specSig,
 		}
-		r.logger.Info("NIV SYNC: submitting sync msg...")
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
-			r.logger.Info("NIV SYNC: submitting sync msg ERROR", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
-		r.logger.Info("NIV SYNC: successfully submitted sync msg!!!")
+		r.logger.Info("successfully submitted sync msg!!!")
 	}
 	r.GetState().Finished = true
 
@@ -173,7 +161,6 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
 	if err != nil {
-		r.logger.Info("NIV SYNC: got root ERROR", zap.Int("slot", int(duty.Slot)), zap.Error(err))
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
 
