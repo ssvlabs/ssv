@@ -37,6 +37,9 @@ func (gc *goClient) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig 
 	if err != nil {
 		return nil, err
 	}
+	if data == nil {
+		return nil, errors.New("attestation data is nil")
+	}
 
 	// Get aggregate attestation data.
 	root, err := data.HashTreeRoot()
