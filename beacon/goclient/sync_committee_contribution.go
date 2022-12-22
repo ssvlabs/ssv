@@ -27,7 +27,7 @@ func (gc *goClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 
 // SyncCommitteeSubnetID returns sync committee subnet ID from subcommittee index
 func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, error) {
-	return uint64(index) / (types.SyncCommitteeSize / types.SyncCommitteeSubnetCount), nil
+	return uint64(index) / (SyncCommitteeSize / SyncCommitteeSubnetCount), nil
 }
 
 // GetSyncCommitteeContribution returns
@@ -40,6 +40,11 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 	if err != nil {
 		return nil, err
 	}
+	if blockRoot == nil {
+		return nil, errors.New("block root is nil")
+	}
+
+	gc.waitToSlotTwoThirds(uint64(slot))
 
 	if provider, isProvider := gc.client.(eth2client.SyncCommitteeContributionProvider); isProvider {
 		contribution, err := provider.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
