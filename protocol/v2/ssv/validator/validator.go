@@ -98,16 +98,16 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if signedMsg == nil {
 			return nil
 		}
-		var ctrl_h uint64
-		if c := dutyRunner.GetBaseRunner().QBFTController; c != nil {
-			ctrl_h = uint64(c.Height)
-		}
-		v.logger.Debug("got valid consensus message",
-			zap.Int64("type", int64(signedMsg.Message.MsgType)),
-			zap.Int64("msg_height", int64(signedMsg.Message.Height)),
-			zap.Int64("msg_round", int64(signedMsg.Message.Round)),
-			zap.Any("ctrl_h", ctrl_h),
-		)
+		//var ctrl_h uint64
+		//if c := dutyRunner.GetBaseRunner().QBFTController; c != nil {
+		//	ctrl_h = uint64(c.Height)
+		//}
+		//v.logger.Debug("got valid consensus message",
+		//	zap.Int64("type", int64(signedMsg.Message.MsgType)),
+		//	zap.Int64("msg_height", int64(signedMsg.Message.Height)),
+		//	zap.Int64("msg_round", int64(signedMsg.Message.Round)),
+		//	zap.Any("ctrl_h", ctrl_h),
+		//)
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg := &specssv.SignedPartialSignatureMessage{}
@@ -117,27 +117,30 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if signedMsg == nil {
 			return nil
 		}
-		var ctrl_h uint64
-		if c := dutyRunner.GetBaseRunner().QBFTController; c != nil {
-			ctrl_h = uint64(c.Height)
-		}
-		v.logger.Debug("got valid post consensus message",
-			zap.Int64("type", int64(signedMsg.Message.Type)),
-			zap.Any("ctrl_h", ctrl_h),
-		)
+		//var ctrl_h uint64
+		//if c := dutyRunner.GetBaseRunner().QBFTController; c != nil {
+		//	ctrl_h = uint64(c.Height)
+		//}
+		//v.logger.Debug("got valid post consensus message",
+		//	zap.Int64("type", int64(signedMsg.Message.Type)),
+		//	zap.Any("ctrl_h", ctrl_h),
+		//)
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			var runningInstanceHeight, controllerHeight uint64
-			if dutyRunner.GetBaseRunner().State != nil && dutyRunner.GetBaseRunner().State.RunningInstance != nil {
-				runningInstanceHeight = uint64(dutyRunner.GetBaseRunner().State.RunningInstance.State.Height)
-			}
-			if dutyRunner.GetBaseRunner().QBFTController != nil {
-				controllerHeight = uint64(dutyRunner.GetBaseRunner().QBFTController.Height)
-			}
-			v.logger.Info("process post consensus", zap.String("identifier", hex.EncodeToString(v.Share.ValidatorPubKey)),
-				zap.Bool("dutyRunnerStateNotNil", dutyRunner.GetBaseRunner().State != nil),
-				zap.Bool("dutyRunnerStateRunningInstanceNotNil", dutyRunner.GetBaseRunner().State.RunningInstance != nil),
-				zap.Uint64("runningInstanceHeight", runningInstanceHeight),
-				zap.Uint64("controllerHeight", controllerHeight))
+			//var runningInstanceHeight, controllerHeight uint64
+			//var hasRunningInstance bool
+			//currentState := dutyRunner.GetBaseRunner().State
+			//if currentState != nil && currentState.RunningInstance != nil {
+			//	runningInstanceHeight = uint64(currentState.RunningInstance.State.Height)
+			//	hasRunningInstance = true
+			//}
+			//if dutyRunner.GetBaseRunner().QBFTController != nil {
+			//	controllerHeight = uint64(dutyRunner.GetBaseRunner().QBFTController.Height)
+			//}
+			//v.logger.Debug("process post consensus", zap.String("identifier", hex.EncodeToString(v.Share.ValidatorPubKey)),
+			//	zap.Bool("dutyRunnerStateNotNil", currentState != nil),
+			//	zap.Bool("hasRunningInstance", hasRunningInstance),
+			//	zap.Uint64("runningInstanceHeight", runningInstanceHeight),
+			//	zap.Uint64("controllerHeight", controllerHeight))
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)

@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv-spec/ssv"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -18,14 +19,14 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	v.logger.Debug("got message, pushing to queue",
-		zap.Int("queue_len", v.Q.Len()),
-		zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-		zap.String("msgID", msg.MsgID.String()),
-	)
+	//v.logger.Debug("got message, pushing to queue",
+	//	zap.Int("queue_len", v.Q.Len()),
+	//	zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+	//	zap.String("msgID", msg.MsgID.String()),
+	//)
 	decodedMsg, err := queue.DecodeSSVMessage(msg)
 	if err != nil {
-		v.logger.Error("failed to decode message",
+		v.logger.Warn("failed to decode message",
 			zap.Error(err),
 			zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
 			zap.String("msgID", msg.MsgID.String()),
@@ -52,7 +53,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 // it checks for current state
 func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler, interval time.Duration) error {
 	logger := v.logger.With(zap.String("identifier", msgID.String()))
-	logger.Warn("queue consumer is running")
+	logger.Debug("queue consumer is running")
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -60,7 +61,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	for {
 		select {
 		case <-v.ctx.Done():
-			logger.Warn("queue consumer is closed")
+			logger.Debug("queue consumer is closed")
 			return nil
 		case <-ticker.C:
 			if v.Q.Len() == 0 {
@@ -81,12 +82,23 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			// Pop the highest priority message and handle it.
 			msg := v.Q.Pop(queue.FilterRole(msgID.GetRoleType()))
 			if msg == nil {
-				logger.Error("could not pop message from queue")
+				logger.Debug("could not pop message from queue")
 				continue
 			}
 			err := handler(msg.SSVMessage)
 			if err != nil {
-				logger.Error("could not handle message", zap.Error(err))
+				if msg.SSVMessage.MsgType != spectypes.SSVConsensusMsgType {
+					psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+					logger.Warn("could not handle message (partial signature)", zap.String("error", err.Error()),
+						zap.Int64("signer", int64(psm.Signer)))
+				} else {
+					sm := msg.Body.(*specqbft.SignedMessage)
+					logger.Warn("could not handle message (consensus)", zap.String("error", err.Error()),
+						zap.Int64("msg_height", int64(sm.Message.Height)),
+						zap.Int64("msg_round", int64(sm.Message.Round)),
+						zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+						zap.Any("signers", sm.Signers))
+				}
 				continue
 			}
 		}
