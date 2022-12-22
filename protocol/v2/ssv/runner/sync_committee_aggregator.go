@@ -220,6 +220,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *specssv.
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
+			r.logger.Debug("submitted successfully sync committee aggregator!!!")
 			break
 		}
 	}
