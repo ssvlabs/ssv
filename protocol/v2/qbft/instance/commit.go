@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -126,10 +128,25 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, value []byte) (*sp
 		Identifier: state.ID,
 		Data:       dataByts,
 	}
+
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
+
+	// j, err := json.Marshal(msg)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// root, err := msg.GetRoot()
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// fmt.Printf("[sign commit] signed with %v\n", hex.EncodeToString(state.Share.SharePubKey))
+	// fmt.Printf("[sign commit] signature %v\n", hex.EncodeToString(sig))
+	// fmt.Printf("[sign commit] message %+v\n", string(j))
+	// fmt.Printf("[sign commit] message root %+v\n", hex.EncodeToString(root))
 
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
@@ -162,6 +179,30 @@ func BaseCommitValidation(
 
 	// verify signature
 	if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		// operatorSignatures := make([]string, 0)
+		// for _, operator := range operators {
+		// 	for _, signer := range signedCommit.Signers {
+		// 		if operator.OperatorID == signer {
+		// 			operatorSignatures = append(operatorSignatures, hex.EncodeToString(operator.PubKey))
+		// 		}
+		// 	}
+		// }
+		// j, err := json.Marshal(signedProposal)
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		_, err := signedCommit.GetRoot()
+		// root, err := signedCommit.GetRoot()
+		if err != nil {
+			panic(err)
+		}
+
+		// fmt.Printf("[verify commit] signature %v could not be verified\n", hex.EncodeToString(signedCommit.Signature))
+		// fmt.Printf("[verify commit] operators %v pks %v\n", signedCommit.Signers, operatorSignatures)
+		// fmt.Printf("[verify commit] message %+v\n", string(j))
+		// fmt.Printf("[verify commit] message root %+v\n", hex.EncodeToString(root))
+
 		return errors.Wrap(err, "commit msg signature invalid")
 	}
 

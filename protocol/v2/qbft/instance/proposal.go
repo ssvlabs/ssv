@@ -2,11 +2,15 @@ package instance
 
 import (
 	"bytes"
+	"encoding/hex"
+	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
@@ -68,6 +72,29 @@ func isValidProposal(
 		return errors.New("proposal msg allows 1 signer")
 	}
 	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		operatorSignatures := make([]string, 0)
+		for _, operator := range operators {
+			for _, signer := range signedProposal.Signers {
+				if operator.OperatorID == signer {
+					operatorSignatures = append(operatorSignatures, hex.EncodeToString(operator.PubKey))
+				}
+			}
+		}
+		// j, err := json.Marshal(signedProposal)
+		// if err != nil {
+		// 	panic(err)
+		// }
+
+		root, rootErr := signedProposal.GetRoot()
+		if rootErr != nil {
+			panic(err)
+		}
+
+		fmt.Printf("[verify proposal] signature %v could not be verified\n", hex.EncodeToString(signedProposal.Signature))
+		fmt.Printf("[verify proposal] operators %v pks %v\n", signedProposal.Signers, operatorSignatures)
+		// fmt.Printf("[verify proposal] message %+v\n", string(j))
+		fmt.Printf("[verify proposal] message root %+v\n", hex.EncodeToString(root))
+
 		return errors.Wrap(err, "proposal msg signature invalid")
 	}
 	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
@@ -232,6 +259,20 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, value []byte, ro
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
+
+	// j, err := json.Marshal(msg)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	root, rootErr := msg.GetRoot()
+	if rootErr != nil {
+		panic(err)
+	}
+	//
+	fmt.Printf("[sign proposal] signed with %v\n", hex.EncodeToString(state.Share.SharePubKey))
+	fmt.Printf("[sign proposal] signature %v\n", hex.EncodeToString(sig))
+	// fmt.Printf("[sign] message %+v\n", string(j))
+	fmt.Printf("[sign proposal] message root %+v\n", hex.EncodeToString(root))
 
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
