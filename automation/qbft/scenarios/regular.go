@@ -15,38 +15,12 @@ func Regular() *IntegrationTest {
 		spectypes.BNRoleAttester,
 	}
 
+	// TODO: use multiple roles
+	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectypes.BNRoleAttester)
+
 	return &IntegrationTest{
-		Name: "regular",
-		InitialInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
-			1: {
-				{
-					State: &specqbft.State{
-						Share: testingShare(spectestingutils.Testing4SharesSet(), 1),
-					},
-				},
-			},
-			2: {
-				{
-					State: &specqbft.State{
-						Share: testingShare(spectestingutils.Testing4SharesSet(), 2),
-					},
-				},
-			},
-			3: {
-				{
-					State: &specqbft.State{
-						Share: testingShare(spectestingutils.Testing4SharesSet(), 3),
-					},
-				},
-			},
-			4: {
-				{
-					State: &specqbft.State{
-						Share: testingShare(spectestingutils.Testing4SharesSet(), 4),
-					},
-				},
-			},
-		},
+		Name:             "regular",
+		InitialInstances: nil,
 		Duties: map[spectypes.OperatorID][]*spectypes.Duty{
 			1: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 0, roles...),
 			2: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, roles...),
@@ -58,6 +32,7 @@ func Regular() *IntegrationTest {
 				{
 					State: &specqbft.State{
 						Share: testingShare(spectestingutils.Testing4SharesSet(), 1),
+						ID:    identifier[:],
 					},
 					// DecidedMessage: &specqbft.SignedMessage{
 					// 	Signature: nil,
@@ -84,6 +59,7 @@ func Regular() *IntegrationTest {
 				{
 					State: &specqbft.State{
 						Share: testingShare(spectestingutils.Testing4SharesSet(), 2),
+						ID:    identifier[:],
 					},
 				},
 			},
@@ -91,6 +67,7 @@ func Regular() *IntegrationTest {
 				{
 					State: &specqbft.State{
 						Share: testingShare(spectestingutils.Testing4SharesSet(), 3),
+						ID:    identifier[:],
 					},
 				},
 			},
@@ -98,6 +75,7 @@ func Regular() *IntegrationTest {
 				{
 					State: &specqbft.State{
 						Share: testingShare(spectestingutils.Testing4SharesSet(), 4),
+						ID:    identifier[:],
 					},
 				},
 			},
