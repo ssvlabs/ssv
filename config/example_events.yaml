@@ -1,39 +1,35 @@
 ## validator registration happy flow example
 - Log: <log>
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: <operator-id>
-    Name: <operator-name>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: <operator-id>
-    Name: <operator-name>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: <operator-id>
-    Name: <operator-name>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: <operator-id>
-    Name: <operator-name>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: <validator-public-key>
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
-    SharesPublicKeys:
+    SharePublicKeys:
       - <share-public-key [hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
       - <share-public-key>
       - <share-public-key>
@@ -47,24 +43,22 @@
 
 ## all possible events
 - Log: <log>
-  Name: OperatorRegistration
+  Name: OperatorAdded
   Data:
     Id: <operator-id>
-    Name: <operator-name>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log:
-  Name: OperatorRemoval
+  Name: OperatorRemoved
   Data:
     OperatorId: <operator-id>
-    OwnerAddress: <owner-address>
 - Log:
-  Name: ValidatorRegistration
+  Name: ValidatorAdded
   Data:
     PublicKey: <validator-public-key>
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
-    SharesPublicKeys:
+    SharePublicKeys:
       - <share-public-key [hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
       - <share-public-key>
       - <share-public-key>
@@ -75,15 +69,23 @@
       - <encrypted-key [b64 encoded]>
       - <encrypted-key [b64 encoded]>
 - Log:
-  Name: ValidatorRemoval
+  Name: ValidatorRemoved
   Data:
     OwnerAddress: <owner-address>
+    OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
     PublicKey: <validator-public-key>
 - Log:
-  Name: AccountLiquidation
+  Name: PodLiquidated
   Data:
     OwnerAddress: <owner-address>
+    OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
 - Log:
-  Name: AccountEnable
+  Name: PodEnabled
   Data:
     OwnerAddress: <owner-address>
+    OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
+- Log:
+  Name: FeeRecipientAddressAdded
+  Data:
+    OwnerAddress: <owner-address>
+    RecipientAddress: <recipient-address>

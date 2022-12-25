@@ -206,7 +206,6 @@ func (c *controller) handleValidatorRemovedEvent(
 		return nil, errors.Wrap(err, "could not remove validator share")
 	}
 
-	logFields := make([]zap.Field, 0)
 	isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
 	if isOperatorShare && ongoingSync {
 		if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
@@ -214,9 +213,18 @@ func (c *controller) handleValidatorRemovedEvent(
 		}
 	}
 
-	// TODO(oleg): delete recipient
-	// if there are no more validators under the removed validator owner address, remove recipient
+	// remove recipient if there are no more validators under the removed validator owner address
+	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(share.OwnerAddress))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get validator shares by owner address")
+	}
+	if len(shares) == 0 {
+		if err := c.recipientsCollection.DeleteRecipientData(ValidatorRemovedEvent.OwnerAddress); err != nil {
+			return nil, errors.Wrap(err, "could not delete recipient")
+		}
+	}
 
+	logFields := make([]zap.Field, 0)
 	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", hex.EncodeToString(share.ValidatorPubKey)),
@@ -233,7 +241,7 @@ func (c *controller) handlePodLiquidatedEvent(
 	event abiparser.PodLiquidatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	toLiquidate, liquidatedPubKeys, err := c.processPodEvent(event.OwnerAddress, event.OperatorIds, false)
+	toLiquidate, liquidatedPubKeys, err := c.processPodEvent(event.OwnerAddress, event.OperatorIds, true)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not process pod event")
 	}

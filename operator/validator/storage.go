@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -160,6 +161,13 @@ func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) b
 func ByPodID(podID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return bytes.Equal(share.PodID, podID)
+	}
+}
+
+// ByOwnerAddress filters by owner address.
+func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
+	return func(share *types.SSVShare) bool {
+		return strings.EqualFold(share.OwnerAddress, ownerAddress)
 	}
 }
 

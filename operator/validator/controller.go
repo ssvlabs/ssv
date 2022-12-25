@@ -206,6 +206,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeLocks: make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
+	// TODO(oleg) chk if needed
 	if err := ctrl.initShares(logger, options); err != nil {
 		logger.Panic("could not initialize shares", zap.Error(err))
 	}

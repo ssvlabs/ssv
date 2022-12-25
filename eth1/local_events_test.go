@@ -52,7 +52,7 @@ func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
   Name: OperatorAdded
   Data:
     Id: 1
-    OwnerAddress: 0x97a6C1f3aaB5427B901fb135ED492749191C0f1F
+    Owner: 0x97a6C1f3aaB5427B901fb135ED492749191C0f1F
     PublicKey: LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K
 `)
 		var parsedData []*Event
@@ -63,7 +63,7 @@ func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
 		require.NotNil(t, parsedData[0].Data)
 		eventData, ok := parsedData[0].Data.(abiparser.OperatorAddedEvent)
 		require.True(t, ok)
-		require.Equal(t, uint32(1), eventData.Id)
+		require.Equal(t, uint64(1), eventData.Id)
 		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.Owner.String())
 		require.Equal(t, []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"), eventData.PublicKey)
 	})
@@ -78,7 +78,7 @@ func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
 		var parsedData []*Event
 		err := yaml.Unmarshal(input, &parsedData)
 		require.Error(t, err)
-		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 5: cannot unmarshal !!str `id` into uint32")
+		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 5: cannot unmarshal !!str `id` into uint64")
 	})
 }
 
@@ -118,7 +118,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
 		var parsedData []*Event
 		err := yaml.Unmarshal(input, &parsedData)
 		require.Error(t, err)
-		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `one` into uint32\n  line 7: cannot unmarshal !!str `two` into uint32\n  line 7: cannot unmarshal !!str `three` into uint32\n  line 7: cannot unmarshal !!str `four` into uint32")
+		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `one` into uint64\n  line 7: cannot unmarshal !!str `two` into uint64\n  line 7: cannot unmarshal !!str `three` into uint64\n  line 7: cannot unmarshal !!str `four` into uint64")
 	})
 
 	t.Run("Fail to unmarshal ValidatorAdded event with non array operator-ids", func(t *testing.T) {
@@ -133,7 +133,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
 		var parsedData []*Event
 		err := yaml.Unmarshal(input, &parsedData)
 		require.Error(t, err)
-		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `1, 2, 3, 4` into []uint32")
+		require.EqualError(t, err, "yaml: unmarshal errors:\n  line 7: cannot unmarshal !!str `1, 2, 3, 4` into []uint64")
 	})
 
 	t.Run("Fail to unmarshal ValidatorAdded event with non hex encoded share public keys", func(t *testing.T) {

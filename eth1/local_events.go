@@ -51,6 +51,11 @@ type PodEnabledEventYAML struct {
 	OperatorIds  []uint64 `yaml:"OperatorIds"`
 }
 
+type FeeRecipientAddressAddedEventYAML struct {
+	OwnerAddress     string `yaml:"OwnerAddress"`
+	RecipientAddress string `yaml:"RecipientAddress"`
+}
+
 func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorAddedEvent{
 		Id:        e.Id,
@@ -109,6 +114,13 @@ func (e *PodEnabledEventYAML) toEventData() (interface{}, error) {
 	}, nil
 }
 
+func (e *FeeRecipientAddressAddedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.FeeRecipientAddressAddedEvent{
+		OwnerAddress:     common.HexToAddress(e.OwnerAddress),
+		RecipientAddress: common.HexToAddress(e.RecipientAddress),
+	}, nil
+}
+
 type eventDataUnmarshaler struct {
 	name string
 	data eventData
@@ -139,6 +151,10 @@ func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 		u.data = &v
 	case "PodEnabled":
 		var v PodEnabledEventYAML
+		err = value.Decode(&v)
+		u.data = &v
+	case "FeeRecipientAddressAdded":
+		var v FeeRecipientAddressAddedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
 	default:

@@ -66,7 +66,6 @@ for ((i=0;i<OP_SIZE;i++)); do
   yq e -i '.operators += [{"Log":"","Name":"OperatorAdded"}]' temp.yaml
   ID=${ID} ii=$i yq e -i '.operators[env(ii)].Data.Id = env(ID)' temp.yaml
   PK=${PK} ii=$i yq e -i '.operators[env(ii)].Data.PublicKey = env(PK)' temp.yaml
-  NAME="operator-$((i + 1))" ii=$i yq e -i '.operators[env(ii)].Data.Name = env(NAME)' temp.yaml
 done
 
 yq e -i '.validators += [{"Log":"","Name":"ValidatorAdded"}]' temp.yaml

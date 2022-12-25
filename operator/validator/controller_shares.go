@@ -5,7 +5,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO: Duplicate
+// TODO(oleg): Duplicate
 // func (n *operatorNode) init(opts Options) error {
 //	if opts.ValidatorOptions.CleanRegistryData {
 //		if err := n.storage.CleanRegistryData(); err != nil {

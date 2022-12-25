@@ -72,7 +72,8 @@ func (s *recipientsStorage) getRecipientData(owner common.Address) (*RecipientDa
 	return &recipientData, found, err
 }
 
-// SaveRecipientData saves recipient data
+// SaveRecipientData saves recipient data and return it.
+// if the recipient already exists and the fee didn't change return nil
 func (s *recipientsStorage) SaveRecipientData(recipientData *RecipientData) (*RecipientData, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -81,8 +82,8 @@ func (s *recipientsStorage) SaveRecipientData(recipientData *RecipientData) (*Re
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get recipient data")
 	}
+	// same fee recipient
 	if found && r.Fee == recipientData.Fee {
-		// same fee recipient
 		return nil, nil
 	}
 
