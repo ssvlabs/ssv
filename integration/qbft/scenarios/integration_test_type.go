@@ -71,7 +71,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 			Logger: zap.L(),
 		})
 		if err != nil {
-			logger.Panic("could not setup storage", zap.Error(err))
+			return nil, err
 		}
 
 		dbs[operatorID] = db
