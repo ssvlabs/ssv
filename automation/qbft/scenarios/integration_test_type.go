@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,6 +12,7 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
@@ -154,23 +154,21 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
-	var wg sync.WaitGroup
-	var startErr error
+	var eg errgroup.Group
 	for _, val := range validators {
-		wg.Add(1)
-		go func(val *protocolvalidator.Validator) {
-			defer wg.Done()
-			if err := val.Start(); err != nil {
-				// TODO: data race, rewrite (consider using errgroup)
-				startErr = fmt.Errorf("could not start validator: %w", err)
+		v := val
+		eg.Go(func() error {
+			if err := v.Start(); err != nil {
+				return fmt.Errorf("could not start validator: %w", err)
 			}
 			<-time.After(time.Second * 3)
-		}(val)
-	}
-	wg.Wait()
+			return nil
+		})
 
-	if startErr != nil {
-		return startErr
+	}
+
+	if err := eg.Wait(); err != nil {
+		return err
 	}
 
 	for _, val := range validators {
