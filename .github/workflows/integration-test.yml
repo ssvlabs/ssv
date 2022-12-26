@@ -5,12 +5,11 @@ on:
     branches:
       - 'main'
       - 'stage'
-#      - 'spec-align-qbft'
   pull_request:
     branches:
       - 'main'
       - 'stage'
-#      - 'spec-align-qbft'
+      - 'spec-align-qbft'
 
   workflow_dispatch:
 
