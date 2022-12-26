@@ -60,6 +60,8 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
 	logger.Info("creating resources")
 
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
+
 	totalNodes := len(it.ExpectedInstances)
 
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
@@ -181,8 +183,8 @@ func (it *IntegrationTest) Run() error {
 	}
 
 	for _, val := range validators {
-		for _, duties := range it.Duties[val.Share.OperatorID] {
-			if err := val.StartDuty(duties); err != nil {
+		for _, duty := range it.Duties[val.Share.OperatorID] {
+			if err := val.StartDuty(duty); err != nil {
 				return err
 			}
 		}
@@ -246,7 +248,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 		return operatorIDs[i] < operatorIDs[j]
 	})
 
-	for operatorIndex, operatorID := range operatorIDs {
+	for _, operatorID := range operatorIDs {
 		err := sCtx.keyManagers[operatorID].AddShare(spectestingutils.Testing4SharesSet().Shares[operatorID])
 		if err != nil {
 			return nil, err
@@ -259,7 +261,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 				Share: *testingShare(spectestingutils.Testing4SharesSet(), operatorID), // TODO: should we get rid of testingShare?
 				Metadata: types.Metadata{
 					BeaconMetadata: &protocolbeacon.ValidatorMetadata{
-						Index: spec.ValidatorIndex(operatorIndex),
+						Index: spec.ValidatorIndex(1),
 					},
 					OwnerAddress: "0x0",
 					Operators:    operators,

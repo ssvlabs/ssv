@@ -22,10 +22,10 @@ func Regular() *IntegrationTest {
 		Name:             "regular",
 		InitialInstances: nil,
 		Duties: map[spectypes.OperatorID][]*spectypes.Duty{
-			1: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 0, roles...),
+			1: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, roles...),
 			2: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, roles...),
-			3: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 2, roles...),
-			4: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 3, roles...),
+			3: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, roles...),
+			4: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, roles...),
 		},
 		ExpectedInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
 			1: {
