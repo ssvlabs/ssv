@@ -2,7 +2,6 @@ package instance
 
 import (
 	"bytes"
-	"encoding/hex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -71,15 +70,6 @@ func isValidProposal(
 		return errors.New("proposal msg allows 1 signer")
 	}
 	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		operatorSignatures := make([]string, 0)
-		for _, operator := range operators {
-			for _, signer := range signedProposal.Signers {
-				if operator.OperatorID == signer {
-					operatorSignatures = append(operatorSignatures, hex.EncodeToString(operator.PubKey))
-				}
-			}
-		}
-
 		return errors.Wrap(err, "proposal msg signature invalid")
 	}
 	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
