@@ -3,6 +3,7 @@ package async
 import (
 	"context"
 	"github.com/stretchr/testify/require"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ func TestInterval(t *testing.T) {
 	<-time.After(time.Millisecond * 25)
 	require.Greater(t, atomic.LoadInt32(&i), int32(1))
 	cancel()
+	runtime.Gosched() // let the goroutine within Interval() to finish
 	val := atomic.LoadInt32(&i)
 	<-time.After(time.Millisecond * 25)
 	require.Equal(t, val, atomic.LoadInt32(&i))
