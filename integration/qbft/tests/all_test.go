@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/automation/qbft/scenarios"
+	"github.com/bloxapp/ssv/integration/qbft/scenarios"
 )
 
 func Test_Automation_QBFTScenarios(t *testing.T) {
