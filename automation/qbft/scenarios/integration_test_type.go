@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
@@ -311,4 +313,52 @@ func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...s
 	}
 
 	return duties
+}
+
+// pass states by value to modify them
+func matchedStates(actual specqbft.State, expected specqbft.State) bool {
+	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
+	if expected.Decided {
+		for round, messages := range expected.CommitContainer.Msgs {
+			signers, _ := actual.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
+			if !actual.Share.HasQuorum(len(signers)) {
+				return false
+			}
+		}
+
+		actual.CommitContainer = nil
+		expected.CommitContainer = nil
+	}
+
+	for _, messages := range actual.PrepareContainer.Msgs {
+		sort.Slice(messages, func(i, j int) bool {
+			return messages[i].Signers[0] < messages[j].Signers[0]
+		})
+	}
+
+	actualRoot, err := actual.GetRoot()
+	if err != nil {
+		return false
+	}
+
+	expectedRoot, err := expected.GetRoot()
+	if err != nil {
+		return false
+	}
+
+	return bytes.Equal(actualRoot, expectedRoot)
+}
+
+type msgRouter struct {
+	validator *protocolvalidator.Validator
+}
+
+func (m *msgRouter) Route(message spectypes.SSVMessage) {
+	m.validator.HandleMessage(&message)
+}
+
+func newMsgRouter(v *protocolvalidator.Validator) *msgRouter {
+	return &msgRouter{
+		validator: v,
+	}
 }
