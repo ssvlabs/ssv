@@ -3,7 +3,6 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -80,20 +79,6 @@ func isValidProposal(
 				}
 			}
 		}
-		// j, err := json.Marshal(signedProposal)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		root, rootErr := signedProposal.GetRoot()
-		if rootErr != nil {
-			panic(err)
-		}
-
-		fmt.Printf("[verify proposal] signature %v could not be verified\n", hex.EncodeToString(signedProposal.Signature))
-		fmt.Printf("[verify proposal] operators %v pks %v\n", signedProposal.Signers, operatorSignatures)
-		// fmt.Printf("[verify proposal] message %+v\n", string(j))
-		fmt.Printf("[verify proposal] message root %+v\n", hex.EncodeToString(root))
 
 		return errors.Wrap(err, "proposal msg signature invalid")
 	}
@@ -259,20 +244,6 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, value []byte, ro
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
-
-	// j, err := json.Marshal(msg)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	root, rootErr := msg.GetRoot()
-	if rootErr != nil {
-		panic(err)
-	}
-	//
-	fmt.Printf("[sign proposal] signed with %v\n", hex.EncodeToString(state.Share.SharePubKey))
-	fmt.Printf("[sign proposal] signature %v\n", hex.EncodeToString(sig))
-	// fmt.Printf("[sign] message %+v\n", string(j))
-	fmt.Printf("[sign proposal] message root %+v\n", hex.EncodeToString(root))
 
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,

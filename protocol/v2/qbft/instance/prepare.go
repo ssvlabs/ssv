@@ -145,30 +145,6 @@ func validSignedPrepareForHeightRoundAndValue(
 	}
 
 	if err := signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		// operatorSignatures := make([]string, 0)
-		// for _, operator := range operators {
-		// 	for _, signer := range signedPrepare.Signers {
-		// 		if operator.OperatorID == signer {
-		// 			operatorSignatures = append(operatorSignatures, hex.EncodeToString(operator.PubKey))
-		// 		}
-		// 	}
-		// }
-		// j, err := json.Marshal(signedProposal)
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		// _, err := signedPrepare.GetRoot()
-		// root, err := signedPrepare.GetRoot()
-		// if err != nil {
-		// 	panic(err)
-		// }
-
-		// fmt.Printf("[verify prepare] signature %v could not be verified\n", hex.EncodeToString(signedPrepare.Signature))
-		// fmt.Printf("[verify prepare] operators %v pks %v\n", signedPrepare.Signers, operatorSignatures)
-		// fmt.Printf("[verify prepare] message %+v\n", string(j))
-		// fmt.Printf("[verify prepare] message root %+v\n", hex.EncodeToString(root))
-
 		return errors.Wrap(err, "prepare msg signature invalid")
 	}
 
@@ -206,22 +182,6 @@ func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
-
-	// j, err := json.Marshal(msg)
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	// _, err = msg.GetRoot()
-	// root, err := msg.GetRoot()
-	if err != nil {
-		panic(err)
-	}
-
-	// fmt.Printf("[sign prepare] signed with %v\n", hex.EncodeToString(state.Share.SharePubKey))
-	// fmt.Printf("[sign prepare] signature %v\n", hex.EncodeToString(sig))
-	// fmt.Printf("[sign prepare] message %+v\n", string(j))
-	// fmt.Printf("[sign prepare] message root %+v\n", hex.EncodeToString(root))
 
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
