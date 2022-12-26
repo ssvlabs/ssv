@@ -12,7 +12,7 @@ import (
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
 var (
-	quickTimeoutThreshold = specqbft.Round(12)
+	quickTimeoutThreshold = specqbft.Round(8)
 	quickTimeout          = 2 * time.Second
 	slowTimeout           = 2 * time.Minute
 )
