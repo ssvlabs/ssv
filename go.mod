@@ -202,4 +202,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 //TODO need to be delted
-replace github.com/bloxapp/ssv-spec => github.com/nivBlox/ssv-spec v0.0.0-20221226155548-6f8550d48e0b
+replace github.com/bloxapp/ssv-spec => github.com/nivBlox/ssv-spec v0.0.0-20221226165009-6e001408c8e4

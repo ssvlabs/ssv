@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/config/params"
 	"github.com/prysmaticlabs/prysm/crypto/hash"
@@ -14,14 +13,14 @@ import (
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
-func (gc *goClient) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig []byte) (*phase0.AggregateAndProof, error) {
+func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, validatorIndex phase0.ValidatorIndex, slotSig []byte) (*phase0.AggregateAndProof, error) {
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(uint64(duty.Slot))
+	gc.waitToSlotTwoThirds(uint64(slot))
 
 	// Check if the validator is an aggregator
-	ok, err := isAggregator(duty.CommitteeLength, slotSig)
+	ok, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not get aggregator status")
 	}
@@ -33,7 +32,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig 
 	if !isProvider {
 		return nil, errors.New("client does not support AttestationDataProvider")
 	}
-	data, err := dataProvider.AttestationData(gc.ctx, duty.Slot, duty.CommitteeIndex)
+	data, err := dataProvider.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +49,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig 
 	if !isProvider {
 		return nil, errors.New("client does not support AggregateAttestationProvider")
 	}
-	aggregateData, err := aggregateAttestationProvider.AggregateAttestation(gc.ctx, duty.Slot, root)
+	aggregateData, err := aggregateAttestationProvider.AggregateAttestation(gc.ctx, slot, root)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get aggregate attestation")
 	}
@@ -63,7 +62,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig 
 	copy(selectionProof[:], slotSig)
 
 	return &phase0.AggregateAndProof{
-		AggregatorIndex: duty.ValidatorIndex,
+		AggregatorIndex: validatorIndex,
 		Aggregate:       aggregateData,
 		SelectionProof:  selectionProof,
 	}, nil
