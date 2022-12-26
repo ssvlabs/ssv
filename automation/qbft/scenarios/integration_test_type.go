@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -36,6 +35,7 @@ import (
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
 	Name              string
+	OperatorIDs       []spectypes.OperatorID
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties            map[spectypes.OperatorID][]*spectypes.Duty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
@@ -62,10 +62,8 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
 
-	totalNodes := len(it.ExpectedInstances)
-
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
-	for operatorID := range it.ExpectedInstances {
+	for _, operatorID := range it.OperatorIDs {
 		db, err := storage.GetStorageFactory(basedb.Options{
 			Type:   "badger-memory",
 			Path:   "",
@@ -80,31 +78,22 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	forkVersion := protocolforks.GenesisForkVersion
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, totalNodes, totalNodes/2, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)/2, false)
 	if err != nil {
 		return nil, err
 	}
 
-	operatorIDs := make([]spectypes.OperatorID, 0)
-	for operatorID := range it.ExpectedInstances {
-		operatorIDs = append(operatorIDs, operatorID)
-	}
-
-	sort.Slice(operatorIDs, func(i, j int) bool {
-		return operatorIDs[i] < operatorIDs[j]
-	})
-
 	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
 	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
 
-	for i, operatorID := range operatorIDs {
+	for i, operatorID := range it.OperatorIDs {
 		nodes[operatorID] = ln.Nodes[i]
 		nodeKeys[operatorID] = ln.NodeKeys[i]
 	}
 
 	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
 	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
-	for operatorID := range it.ExpectedInstances {
+	for _, operatorID := range it.OperatorIDs {
 		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", forkVersion)
 
 		storageMap := qbftstorage.NewStores()
@@ -152,14 +141,16 @@ func (it *IntegrationTest) Run() error {
 		return fmt.Errorf("could not create share: %w", err)
 	}
 
-	for operatorID, instances := range it.ExpectedInstances {
+	for _, operatorID := range it.OperatorIDs {
+		sCtx.nodes[operatorID].UseMessageRouter(newMsgRouter(validators[operatorID]))
+	}
+
+	for operatorID, instances := range it.InitialInstances {
 		for _, instance := range instances {
 			mid := spectypes.MessageIDFromBytes(instance.State.ID)
-			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveInstance(instance); err != nil {
+			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveHighestInstance(instance); err != nil {
 				return err
 			}
-
-			sCtx.nodes[operatorID].UseMessageRouter(newMsgRouter(validators[operatorID]))
 		}
 	}
 
@@ -190,35 +181,39 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
-	<-time.After(2 * time.Second) // TODO: remove
+	<-time.After(2 * time.Second)
 
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
 		for _, expectedInstance := range expectedInstances {
 			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-			// TODO: check that we don't have more instances than we should have
-			expectedHeight := expectedInstance.State.Height
-			instancesInStore, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-				GetInstancesInRange(expectedInstance.State.ID, expectedHeight, expectedHeight)
+			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
+				GetHighestInstance(expectedInstance.State.ID)
 			if err != nil {
 				return err
 			}
 
-			if len(instancesInStore) == 0 {
-				return fmt.Errorf("no instance found")
-			}
-
-			storeRoot, err := instancesInStore[0].State.GetRoot()
+			// TODO: consider checking signers as well
+			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
 			if err != nil {
 				return err
 			}
 
-			expectedRoot, err := expectedInstance.State.GetRoot()
+			expectedDecidedRoot, err := expectedInstance.DecidedMessage.GetRoot()
 			if err != nil {
 				return err
 			}
 
-			if !bytes.Equal(storeRoot, expectedRoot) {
-				return fmt.Errorf("roots are not equal")
+			if !bytes.Equal(decidedRoot, expectedDecidedRoot) {
+				return fmt.Errorf("decided message roots are not equal")
+			}
+
+			if storedInstance.State == nil && expectedInstance.State == nil {
+				return nil
+			}
+
+			si, ei := storedInstance.State, expectedInstance.State
+			if si == nil && ei != nil || si != nil && ei == nil || !matchedStates(*si, *ei) {
+				return fmt.Errorf("states don't match")
 			}
 		}
 	}
@@ -239,16 +234,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 		operators = append(operators, []byte(pub))
 	}
 
-	operatorIDs := make([]spectypes.OperatorID, 0)
-	for operatorID := range it.ExpectedInstances {
-		operatorIDs = append(operatorIDs, operatorID)
-	}
-
-	sort.Slice(operatorIDs, func(i, j int) bool {
-		return operatorIDs[i] < operatorIDs[j]
-	})
-
-	for _, operatorID := range operatorIDs {
+	for _, operatorID := range it.OperatorIDs {
 		err := sCtx.keyManagers[operatorID].AddShare(spectestingutils.Testing4SharesSet().Shares[operatorID])
 		if err != nil {
 			return nil, err
@@ -294,7 +280,7 @@ var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.Opera
 	}
 }
 
-// TODO: consider returning map
+// TODO: consider returning map[spectypes.OperatorID][]*spectypes.Duty
 func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...spectypes.BeaconRole) []*spectypes.Duty {
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
@@ -328,18 +314,4 @@ func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...s
 	}
 
 	return duties
-}
-
-type msgRouter struct {
-	validator *protocolvalidator.Validator
-}
-
-func (m *msgRouter) Route(message spectypes.SSVMessage) {
-	m.validator.HandleMessage(&message)
-}
-
-func newMsgRouter(v *protocolvalidator.Validator) *msgRouter {
-	return &msgRouter{
-		validator: v,
-	}
 }
