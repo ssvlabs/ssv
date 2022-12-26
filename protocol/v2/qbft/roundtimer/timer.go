@@ -11,13 +11,19 @@ import (
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
+var (
+	quickTimeoutThreshold = specqbft.Round(12)
+	quickTimeout          = 2 * time.Second
+	slowTimeout           = 2 * time.Minute
+)
+
 // RoundTimeout returns the number of seconds until next timeout for a give round.
 // if the round is smaller than 3 -> 2s; otherwise -> 2m
 func RoundTimeout(r specqbft.Round) time.Duration {
-	if r <= specqbft.Round(3) {
-		return 2 * time.Second
+	if r <= quickTimeoutThreshold {
+		return quickTimeout
 	}
-	return 2 * time.Minute
+	return slowTimeout
 }
 
 // RoundTimer helps to manage current instance rounds.
