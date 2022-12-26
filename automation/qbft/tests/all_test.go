@@ -3,17 +3,17 @@ package tests
 import (
 	"testing"
 
-	logging "github.com/ipfs/go-log"
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/automation/qbft/scenarios"
 )
 
 func Test_Automation_QBFTScenarios(t *testing.T) {
-	_ = logging.SetLogLevelRegex("ssv/.*", "debug")
+	// _ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging
 
 	scenariosToRun := []*scenarios.IntegrationTest{
-		scenarios.Regular(),
+		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
 	}
 
 	for _, scenario := range scenariosToRun {

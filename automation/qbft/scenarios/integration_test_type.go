@@ -3,11 +3,11 @@ package scenarios
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
@@ -39,8 +39,7 @@ type IntegrationTest struct {
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties            map[spectypes.OperatorID][]*spectypes.Duty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	ExpectedErrors    map[spectypes.OperatorID][]error
-	OutputMessages    map[spectypes.OperatorID]*specqbft.SignedMessage
+	StartDutyErrors   map[spectypes.OperatorID]error
 }
 
 type scenarioContext struct {
@@ -164,18 +163,23 @@ func (it *IntegrationTest) Run() error {
 			<-time.After(time.Second * 3)
 			return nil
 		})
-
 	}
 
 	if err := eg.Wait(); err != nil {
 		return err
 	}
 
+	actualErrMap := map[spectypes.OperatorID]error{}
 	for _, val := range validators {
 		for _, duty := range it.Duties[val.Share.OperatorID] {
-			if err := val.StartDuty(duty); err != nil {
-				return err
-			}
+			startDutyErr := val.StartDuty(duty)
+			actualErrMap[val.Share.OperatorID] = startDutyErr
+		}
+	}
+
+	for operatorID, expectedErr := range it.StartDutyErrors {
+		if !errors.Is(actualErrMap[operatorID], expectedErr) {
+			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErrMap[operatorID])
 		}
 	}
 
@@ -190,15 +194,14 @@ func (it *IntegrationTest) Run() error {
 				return err
 			}
 
-			// TODO: consider checking signers as well
 			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
 			if err != nil {
-				return err
+				return fmt.Errorf("stored instance decided message root: %w", err)
 			}
 
 			expectedDecidedRoot, err := expectedInstance.DecidedMessage.GetRoot()
 			if err != nil {
-				return err
+				return fmt.Errorf("ex[ected instance decided message root: %w", err)
 			}
 
 			if !bytes.Equal(decidedRoot, expectedDecidedRoot) {
@@ -215,8 +218,6 @@ func (it *IntegrationTest) Run() error {
 			}
 		}
 	}
-
-	// TODO: check errors
 
 	return nil
 }
@@ -242,7 +243,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 			Storage: sCtx.stores[operatorID],
 			Network: sCtx.nodes[operatorID],
 			SSVShare: &types.SSVShare{
-				Share: *testingShare(spectestingutils.Testing4SharesSet(), operatorID), // TODO: should we get rid of testingShare?
+				Share: *testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				Metadata: types.Metadata{
 					BeaconMetadata: &protocolbeacon.ValidatorMetadata{
 						Index: spec.ValidatorIndex(1),
@@ -265,7 +266,6 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 	return validators, nil
 }
 
-// TODO: consider adding to spec
 var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.OperatorID) *spectypes.Share {
 	return &spectypes.Share{
 		OperatorID:      id,
@@ -278,7 +278,6 @@ var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.Opera
 	}
 }
 
-// TODO: consider returning map[spectypes.OperatorID][]*spectypes.Duty
 func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...spectypes.BeaconRole) []*spectypes.Duty {
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)

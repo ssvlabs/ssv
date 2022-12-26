@@ -9,16 +9,18 @@ import (
 
 // pass states by value to modify them
 func matchedStates(actual specqbft.State, expected specqbft.State) bool {
-	for round, messages := range expected.CommitContainer.Msgs {
-		signers, _ := actual.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
-		if !actual.Share.HasQuorum(len(signers)) {
-			return false
+	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
+	if expected.Decided {
+		for round, messages := range expected.CommitContainer.Msgs {
+			signers, _ := actual.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
+			if !actual.Share.HasQuorum(len(signers)) {
+				return false
+			}
 		}
-	}
 
-	// already checked above
-	actual.CommitContainer = nil
-	expected.CommitContainer = nil
+		actual.CommitContainer = nil
+		expected.CommitContainer = nil
+	}
 
 	for _, messages := range actual.PrepareContainer.Msgs {
 		sort.Slice(messages, func(i, j int) bool {
