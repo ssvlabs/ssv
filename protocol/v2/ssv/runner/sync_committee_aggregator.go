@@ -122,7 +122,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 			return errors.Wrap(err, "can't start new duty runner instance for duty")
 		}
 	} else {
-		r.BaseRunner.State.Finished = true
+		r.BaseRunner.State.Finished.Store(true)
 	}
 
 	return nil
@@ -226,7 +226,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *specssv.
 			break
 		}
 	}
-	r.GetState().Finished = true
+	r.GetState().Finished.Store(true)
 	return nil
 }
 

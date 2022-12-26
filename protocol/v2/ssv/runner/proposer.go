@@ -171,7 +171,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
 	}
-	r.GetState().Finished = true
+	r.GetState().Finished.Store(true)
 
 	return nil
 }

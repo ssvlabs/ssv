@@ -2,6 +2,7 @@ package runner
 
 import (
 	"encoding/hex"
+
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
 
@@ -228,7 +229,7 @@ func (b *BaseRunner) hasRunningDuty() bool {
 	if b.State == nil {
 		return false
 	}
-	return !b.State.Finished
+	return !b.State.Finished.Load()
 }
 
 func getPostConsensusSigners(state *State, root []byte) []spectypes.OperatorID {

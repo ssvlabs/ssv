@@ -7,6 +7,7 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/atomic"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
@@ -20,7 +21,7 @@ type State struct {
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *spectypes.Duty
 	// flags
-	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	Finished atomic.Bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
 func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
@@ -29,7 +30,6 @@ func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
-		Finished:     false,
 	}
 }
 

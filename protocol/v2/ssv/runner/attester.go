@@ -155,7 +155,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
-	r.GetState().Finished = true
+	r.GetState().Finished.Store(true)
 
 	return nil
 }

@@ -172,7 +172,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 	}
-	r.GetState().Finished = true
+	r.GetState().Finished.Store(true)
 
 	return nil
 }
