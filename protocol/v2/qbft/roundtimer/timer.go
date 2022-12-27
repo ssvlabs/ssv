@@ -9,6 +9,8 @@ import (
 	"go.uber.org/zap"
 )
 
+type OnTimeout func()
+
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
 var (
@@ -34,8 +36,8 @@ type RoundTimer struct {
 	cancelCtx context.CancelFunc
 	// timer is the underlying time.Timer
 	timer *time.Timer
-	// result holds the result of the timer
-	done func()
+	// done is a function to trigger upon timeout
+	done *atomic.Value
 	// round is the current round of the timer
 	round int64
 
@@ -43,21 +45,25 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
+func New(pctx context.Context, logger *zap.Logger, done OnTimeout) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
+	var doneVal atomic.Value
+	if done != nil {
+		doneVal.Store(done)
+	}
 	return &RoundTimer{
 		ctx:          ctx,
 		cancelCtx:    cancelCtx,
 		logger:       logger,
 		timer:        nil,
-		done:         done,
+		done:         &doneVal,
 		roundTimeout: RoundTimeout,
 	}
 }
 
 // OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done func()) {
-	t.done = done
+func (t *RoundTimer) OnTimeout(done OnTimeout) {
+	t.done.Store(done)
 }
 
 // Round returns a round.
@@ -89,14 +95,19 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
-	done := t.done
 	select {
 	case <-ctx.Done():
 	case <-timeout:
 		if t.Round() == round {
-			if done != nil {
-				done()
+			doneVal := t.done.Load()
+			if doneVal == nil {
+				return
 			}
+			doneFn, ok := doneVal.(OnTimeout)
+			if !ok {
+				return
+			}
+			doneFn()
 		}
 	}
 }
