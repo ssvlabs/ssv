@@ -46,7 +46,7 @@ full-test:
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
 
 .PHONY: integration-test
-full-test:
+integration-test:
 	@echo "Running integration tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./integration/...
 
