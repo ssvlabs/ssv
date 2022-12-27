@@ -25,7 +25,7 @@ type RoundTimer struct {
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
-	done func()
+	done atomic.Value // func()
 	// round is the current round of the timer
 	round int64
 
@@ -35,19 +35,22 @@ type RoundTimer struct {
 // New creates a new instance of RoundTimer.
 func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
-	return &RoundTimer{
+	rt := &RoundTimer{
 		ctx:          ctx,
 		cancelCtx:    cancelCtx,
 		logger:       logger,
 		timer:        nil,
-		done:         done,
 		roundTimeout: RoundTimeout,
 	}
+
+	rt.done.Store(done)
+
+	return rt
 }
 
 // OnTimeout sets a function called on timeout.
 func (t *RoundTimer) OnTimeout(done func()) {
-	t.done = done
+	t.done.Store(done)
 }
 
 // Round returns a round.
@@ -79,7 +82,7 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
-	done := t.done
+	done := t.done.Load().(func())
 	select {
 	case <-ctx.Done():
 	case <-timeout:
