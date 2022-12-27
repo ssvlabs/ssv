@@ -551,7 +551,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
-// SetupRunners sets up runners.
+// SetupRunners initializes duty runners for the given validator
 func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
