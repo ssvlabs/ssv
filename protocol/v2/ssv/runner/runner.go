@@ -98,9 +98,11 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
-	runningInstance := b.State.GetRunningInstance()
-	if b.hasRunningDuty() && b.State != nil && runningInstance != nil {
-		prevDecided, _ = runningInstance.IsDecided()
+	if b.hasRunningDuty() && b.State != nil {
+		runningInstance := b.State.GetRunningInstance()
+		if runningInstance != nil {
+			prevDecided, _ = runningInstance.IsDecided()
+		}
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
