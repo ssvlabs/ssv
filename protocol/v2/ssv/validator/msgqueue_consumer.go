@@ -51,11 +51,11 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			time.Sleep(interval)
 			continue
 		}
-		//// avoid process messages on fork
+		// // avoid process messages on fork
 		// if atomic.LoadUint32(&v.State) == Forking {
 		//	time.Sleep(interval)
 		//	continue
-		//}
+		// }
 		lastHeight := v.GetLastHeight(msgID)
 		identifier := msgID.String()
 
@@ -132,13 +132,13 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 // processByState if an instance is running -> get the state and get the relevant messages
 func (v *Validator) processByState(handler MessageHandler, msgID spectypes.MessageID, identifier string, height specqbft.Height) bool {
 	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if !runner.HasRunningDuty() || runner.GetBaseRunner().State.RunningInstance == nil {
+	if !runner.HasRunningDuty() || runner.GetBaseRunner().State.GetRunningInstance() == nil {
 		return false
 	}
 	// currentInstance := v.GetCurrentInstance()
 	// if currentInstance == nil {
 	//	return false
-	//}
+	// }
 
 	// currentState := currentInstance.GetState()
 	msg := v.getNextMsgForState(identifier, height)

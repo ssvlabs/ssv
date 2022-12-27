@@ -2,12 +2,13 @@ package runner
 
 import (
 	"bytes"
+	"sort"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"sort"
 )
 
 func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
@@ -32,10 +33,11 @@ func (b *BaseRunner) validatePostConsensusMsg(runner Runner, signedMsg *specssv.
 		return errors.New("no running duty")
 	}
 
-	if b.State.RunningInstance == nil {
+	runningInstance := b.State.GetRunningInstance()
+	if runningInstance == nil {
 		return errors.New("no running consensus instance")
 	}
-	if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
+	if decided, _ := runningInstance.IsDecided(); !decided {
 		return errors.New("consensus instance not decided")
 	}
 

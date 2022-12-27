@@ -16,7 +16,7 @@ import (
 type State struct {
 	PreConsensusContainer  *specssv.PartialSigContainer
 	PostConsensusContainer *specssv.PartialSigContainer
-	RunningInstance        *instance.Instance
+	RunningInstance        atomic.Value // *instance.Instance
 	DecidedValue           *spectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *spectypes.Duty
@@ -31,6 +31,16 @@ func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 
 		StartingDuty: duty,
 	}
+}
+
+// GetRunningInstance returns a running instance.
+func (pcs *State) GetRunningInstance() *instance.Instance {
+	i := pcs.RunningInstance.Load()
+	if i == nil {
+		return nil
+	}
+
+	return i.(*instance.Instance)
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs

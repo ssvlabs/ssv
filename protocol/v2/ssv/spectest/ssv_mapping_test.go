@@ -3,14 +3,15 @@ package spectest
 import (
 	"encoding/json"
 	"fmt"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"io"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
@@ -203,8 +204,9 @@ func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testin
 	ret := baseRunnerForRole(base.BeaconRoleType, base, ks)
 	ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)
 	if ret.GetBaseRunner().State != nil {
-		if ret.GetBaseRunner().State.RunningInstance != nil {
-			ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
+		runningInstance := ret.GetBaseRunner().State.GetRunningInstance()
+		if runningInstance != nil {
+			ret.GetBaseRunner().State.RunningInstance.Store(fixInstanceForRun(t, runningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share))
 		}
 	}
 	return ret
