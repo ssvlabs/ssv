@@ -3,7 +3,6 @@ package validator
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -55,7 +54,7 @@ func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparse
 	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
 		c.operatorData.ID != spectypes.OperatorID(event.Id) {
 		return nil, &abiparser.MalformedEventError{
-			Err: errors.New(fmt.Sprintf("operator registered with the same operator public key")),
+			Err: errors.New("operator registered with the same operator public key"),
 		}
 	}
 
