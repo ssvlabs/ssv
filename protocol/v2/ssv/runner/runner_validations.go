@@ -33,10 +33,11 @@ func (b *BaseRunner) validatePostConsensusMsg(runner Runner, signedMsg *specssv.
 		return errors.New("no running duty")
 	}
 
-	if b.State.GetRunningInstance() == nil {
+	runningInstance := b.State.GetRunningInstance()
+	if runningInstance == nil {
 		return errors.New("no running consensus instance")
 	}
-	if decided, _ := b.State.GetRunningInstance().IsDecided(); !decided {
+	if decided, _ := runningInstance.IsDecided(); !decided {
 		return errors.New("consensus instance not decided")
 	}
 

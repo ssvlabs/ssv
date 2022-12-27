@@ -21,15 +21,18 @@ func (b *BaseRunner) onTimeout(h specqbft.Height) func() {
 		if !b.hasRunningDuty() && b.QBFTController.Height == h {
 			return
 		}
-		instance := b.State.GetRunningInstance()
-		if instance == nil {
+
+		runningInstance := b.State.GetRunningInstance()
+		if runningInstance == nil {
 			return
 		}
-		decided, _ := instance.IsDecided()
+
+		decided, _ := runningInstance.IsDecided()
 		if decided {
 			return
 		}
-		err := instance.UponRoundTimeout()
+
+		err := runningInstance.UponRoundTimeout()
 		if err != nil {
 			// TODO: handle?
 			b.logger.Warn("failed to handle timeout", zap.Error(err))

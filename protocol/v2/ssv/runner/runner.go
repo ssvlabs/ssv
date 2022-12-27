@@ -75,9 +75,9 @@ func (b *BaseRunner) canStartNewDuty() error {
 	}
 
 	// check if instance running first as we can't start new duty if it does
-	if b.State.GetRunningInstance() != nil {
+	if runningInstance := b.State.GetRunningInstance(); runningInstance != nil {
 		// check consensus decided
-		if decided, _ := b.State.GetRunningInstance().IsDecided(); !decided {
+		if decided, _ := runningInstance.IsDecided(); !decided {
 			return errors.New("consensus on duty is running")
 		}
 	}
@@ -97,8 +97,11 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
 func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
-	if b.hasRunningDuty() && b.State != nil && b.State.GetRunningInstance() != nil {
-		prevDecided, _ = b.State.GetRunningInstance().IsDecided()
+	if b.hasRunningDuty() && b.State != nil {
+		runningInstance := b.State.GetRunningInstance()
+		if runningInstance != nil {
+			prevDecided, _ = runningInstance.IsDecided()
+		}
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
@@ -182,7 +185,8 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
-	decidedRunningInstance := decided && b.State.GetRunningInstance() != nil && decidedMsg.Message.Height == b.State.GetRunningInstance().GetHeight()
+	runningInstance := b.State.GetRunningInstance()
+	decidedRunningInstance := decided && runningInstance != nil && decidedMsg.Message.Height == runningInstance.GetHeight()
 
 	if !decided {
 		return false, nil
