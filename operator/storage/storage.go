@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"math/big"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -29,7 +30,7 @@ type Storage interface {
 	registrystorage.RecipientsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(logger *zap.Logger, generateIfNone bool, operatorKeyBase64 string) error
+	SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
 }
 
 type storage struct {
@@ -48,20 +49,20 @@ func NewNodeStorage(db basedb.IDb) Storage {
 	}
 }
 
-func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
+func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
 	return s.operatorStore.GetOperatorDataByPubKey(logger, operatorPubKey)
 }
 
-func (s *storage) GetOperatorData(index uint64) (*registrystorage.OperatorData, bool, error) {
-	return s.operatorStore.GetOperatorData(index)
+func (s *storage) GetOperatorData(id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorData(id)
 }
 
 func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) error {
 	return s.operatorStore.SaveOperatorData(logger, operatorData)
 }
 
-func (s *storage) DeleteOperatorData(index uint64) error {
-	return s.operatorStore.DeleteOperatorData(index)
+func (s *storage) DeleteOperatorData(id spectypes.OperatorID) error {
+	return s.operatorStore.DeleteOperatorData(id)
 }
 
 func (s *storage) ListOperators(logger *zap.Logger, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
@@ -156,31 +157,31 @@ func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(logger *zap.Logger, generateIfNone bool, operatorKeyBase64 string) error {
+func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
-		return errors.Wrap(err, "Failed to decode base64")
+		return nil, errors.Wrap(err, "Failed to decode base64")
 	}
 	var operatorKey = string(operatorKeyByte)
 
 	if err := s.validateKey(generateIfNone, operatorKey); err != nil {
-		return err
+		return nil, err
 	}
 
 	sk, found, err := s.GetPrivateKey()
 	if err != nil {
-		return errors.Wrap(err, "failed to get operator private key")
+		return nil, errors.Wrap(err, "failed to get operator private key")
 	}
 	if !found {
-		return errors.New("failed to find operator private key")
+		return nil, errors.New("failed to find operator private key")
 	}
 	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	if err != nil {
-		return errors.Wrap(err, "failed to extract operator public key")
+		return nil, errors.Wrap(err, "failed to extract operator public key")
 	}
 	//TODO change the log to generated/loaded private key to indicate better on the action
 	logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
-	return nil
+	return []byte(operatorPublicKey), nil
 }
 
 // validateKey validate provided and exist key. save if needed.

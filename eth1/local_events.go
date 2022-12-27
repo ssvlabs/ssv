@@ -24,7 +24,7 @@ type operatorAddedEventYAML struct {
 }
 
 type OperatorRemovedEventYAML struct {
-	OperatorId uint64 `yaml:"Id"`
+	Id uint64 `yaml:"Id"`
 }
 
 type validatorAddedEventYAML struct {
@@ -66,7 +66,7 @@ func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
 
 func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorRemovedEvent{
-		Id: e.OperatorId,
+		Id: e.Id,
 	}, nil
 }
 

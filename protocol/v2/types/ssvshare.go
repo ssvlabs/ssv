@@ -44,13 +44,8 @@ func (s *SSVShare) Decode(data []byte) error {
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
-func (s *SSVShare) BelongsToOperator(operatorPubKey string) bool {
-	for _, pk := range s.Operators {
-		if string(pk) == operatorPubKey {
-			return true
-		}
-	}
-	return false
+func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
+	return s.OperatorID == operatorID
 }
 
 // BelongsToOperatorID checks whether the share belongs to operator ID.
@@ -68,21 +63,14 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.BeaconMetadata != nil
 }
 
-// SetOperators sets operators public keys.
-func (s *SSVShare) SetOperators(pks [][]byte) {
-	s.Operators = make([][]byte, len(pks))
-	copy(s.Operators, pks)
-}
-
 func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.RecipientsCollection) error {
-	ownerAddress := common.HexToAddress(s.OwnerAddress)
-	r, found, err := recipientsCollection.GetRecipientData(ownerAddress)
+	r, found, err := recipientsCollection.GetRecipientData(s.OwnerAddress)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
 	if !found {
-		// TODO: should we use owner address as a default?
-		s.FeeRecipient = ownerAddress
+		// use owner address as a default for the fee recipient
+		s.FeeRecipient = s.OwnerAddress
 		return nil
 	}
 
@@ -97,7 +85,7 @@ func (s *SSVShare) SetPodID() error {
 		oids = append(oids, uint64(o.OperatorID))
 	}
 
-	hash, err := ComputePodIDHash(common.HexToAddress(s.OwnerAddress).Bytes(), oids)
+	hash, err := ComputePodIDHash(s.OwnerAddress.Bytes(), oids)
 	if err != nil {
 		return errors.New("could not compute share pod id")
 	}
@@ -132,8 +120,7 @@ func ComputePodIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error)
 // Metadata represents metadata of SSVShare.
 type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
-	OwnerAddress   string
-	Operators      [][]byte // TODO: remove; get operator ID from the first event with operator public key
+	OwnerAddress   common.Address
 	Liquidated     bool
 	PodID          []byte
 	FeeRecipient   common.Address

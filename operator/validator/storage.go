@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -136,10 +136,10 @@ func (s *Collection) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShar
 	return res, err
 }
 
-// NotLiquidatedAndByOperatorPubKey filters not liquidated and by operator public key.
-func NotLiquidatedAndByOperatorPubKey(operatorPubKey string) func(share *types.SSVShare) bool {
+// ByOperatorID filters by operator ID.
+func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return !share.Liquidated && share.BelongsToOperator(operatorPubKey)
+		return share.BelongsToOperatorID(operatorID)
 	}
 }
 
@@ -150,10 +150,10 @@ func NotLiquidated() func(share *types.SSVShare) bool {
 	}
 }
 
-// ByOperatorID filters by operator ID.
-func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
+// ByOperatorIDAndNotLiquidated filters not liquidated and by operator ID.
+func ByOperatorIDAndNotLiquidated(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return share.BelongsToOperatorID(operatorID)
+		return share.BelongsToOperator(operatorID) && !share.Liquidated
 	}
 }
 
@@ -165,9 +165,9 @@ func ByPodID(podID []byte) func(share *types.SSVShare) bool {
 }
 
 // ByOwnerAddress filters by owner address.
-func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
+func ByOwnerAddress(ownerAddress common.Address) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return strings.EqualFold(share.OwnerAddress, ownerAddress)
+		return bytes.Equal(share.OwnerAddress.Bytes(), ownerAddress.Bytes())
 	}
 }
 

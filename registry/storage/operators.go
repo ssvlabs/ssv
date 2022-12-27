@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"strconv"
-	"strings"
 	"sync"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 var (
@@ -19,9 +20,9 @@ var (
 
 // OperatorData the public data of an operator
 type OperatorData struct {
-	Index        uint64         `json:"index"`
-	PublicKey    string         `json:"publicKey"`
-	OwnerAddress common.Address `json:"ownerAddress"`
+	ID           spectypes.OperatorID `json:"id"`
+	PublicKey    []byte               `json:"publicKey"`
+	OwnerAddress common.Address       `json:"ownerAddress"`
 }
 
 // GetOperatorData is a function that returns the operator data
@@ -29,10 +30,10 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // OperatorsCollection is the interface for managing operators data
 type OperatorsCollection interface {
-	GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error)
-	GetOperatorData(index uint64) (*OperatorData, bool, error)
+	GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*OperatorData, bool, error)
+	GetOperatorData(id spectypes.OperatorID) (*OperatorData, bool, error)
 	SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error
-	DeleteOperatorData(index uint64) error
+	DeleteOperatorData(id spectypes.OperatorID) error
 	ListOperators(logger *zap.Logger, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 }
@@ -66,36 +67,36 @@ func (s *operatorsStorage) ListOperators(logger *zap.Logger, from, to uint64) ([
 }
 
 // GetOperatorData returns data of the given operator by index
-func (s *operatorsStorage) GetOperatorData(index uint64) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorData(id spectypes.OperatorID) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getOperatorData(index)
+	return s.getOperatorData(id)
 }
 
 // GetOperatorDataByPubKey returns data of the given operator by public key
-func (s *operatorsStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	return s.getOperatorDataByPubKey(logger, operatorPubKey)
 }
 
-func (s *operatorsStorage) getOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error) {
+func (s *operatorsStorage) getOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*OperatorData, bool, error) {
 	operatorsData, err := s.listOperators(logger, 0, 0)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "could not get all operators")
 	}
 	for _, op := range operatorsData {
-		if strings.EqualFold(op.PublicKey, operatorPubKey) {
+		if bytes.Equal(op.PublicKey, operatorPubKey) {
 			return &op, true, nil
 		}
 	}
 	return nil, false, nil
 }
 
-func (s *operatorsStorage) getOperatorData(index uint64) (*OperatorData, bool, error) {
-	obj, found, err := s.db.Get(s.prefix, buildOperatorKey(index))
+func (s *operatorsStorage) getOperatorData(id spectypes.OperatorID) (*OperatorData, bool, error) {
+	obj, found, err := s.db.Get(s.prefix, buildOperatorKey(id))
 	if err != nil {
 		return nil, found, err
 	}
@@ -114,7 +115,7 @@ func (s *operatorsStorage) listOperators(logger *zap.Logger, from, to uint64) ([
 		if err := json.Unmarshal(obj.Value, &od); err != nil {
 			return err
 		}
-		if (od.Index >= from && od.Index <= to) || (to == 0) {
+		if (uint64(od.ID) >= from && uint64(od.ID) <= to) || (to == 0) {
 			operators = append(operators, od)
 		}
 		return nil
@@ -128,14 +129,14 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	_, found, err := s.getOperatorData(operatorData.Index)
+	_, found, err := s.getOperatorData(operatorData.ID)
 	if err != nil {
 		return errors.Wrap(err, "could not get operator data")
 	}
 	if found {
 		logger.Debug("operator already exist",
-			zap.String("pubKey", operatorData.PublicKey),
-			zap.Uint64("index", operatorData.Index))
+			zap.String("pubKey", string(operatorData.PublicKey)),
+			zap.Uint64("index", uint64(operatorData.ID)))
 		return nil
 	}
 
@@ -143,17 +144,17 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator data")
 	}
-	return s.db.Set(s.prefix, buildOperatorKey(operatorData.Index), raw)
+	return s.db.Set(s.prefix, buildOperatorKey(operatorData.ID), raw)
 }
 
-func (s *operatorsStorage) DeleteOperatorData(index uint64) error {
+func (s *operatorsStorage) DeleteOperatorData(id spectypes.OperatorID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	return s.db.Delete(s.prefix, buildOperatorKey(index))
+	return s.db.Delete(s.prefix, buildOperatorKey(id))
 }
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
-func buildOperatorKey(index uint64) []byte {
-	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(index, 10))}, []byte("/"))
+func buildOperatorKey(id spectypes.OperatorID) []byte {
+	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(uint64(id), 10))}, []byte("/"))
 }

@@ -51,7 +51,7 @@
 - Log:
   Name: OperatorRemoved
   Data:
-    OperatorId: <operator-id>
+    Id: <operator-id>
 - Log:
   Name: ValidatorAdded
   Data:

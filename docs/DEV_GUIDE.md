@@ -134,7 +134,7 @@ $ make build
    The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
 3. Populate the `OperatorPrivateKey` in the created share[1..4].yaml with operator private keys generated in section 1 
 4. Generate share keys using 4 operator public keys generated in section 1 using [ssv-keys](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route)
-5. Create `events.yaml` file with the corresponding configuration [use validator registration happy flow example], based on the [template file](../config/example_events.yaml)
+5. Create `events.yaml` file with the corresponding configuration [use validator registration happy flow example], based on the [template file](../config/events.example.yaml)
    1. fill the operator registration events with the data generated in section 4
    2. fill the validator registration event with the data generated in section 4
 6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)

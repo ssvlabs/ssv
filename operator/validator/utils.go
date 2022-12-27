@@ -39,38 +39,32 @@ func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool,
 // ShareFromValidatorEvent takes the contract event data and creates the corresponding validator share.
 // share could return nil in case operator key is not present/ different
 func ShareFromValidatorEvent(
-	ValidatorAddedEvent abiparser.ValidatorAddedEvent,
-	operatorsCollection registrystorage.OperatorsCollection,
+	validatorAddedEvent abiparser.ValidatorAddedEvent,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
-	operatorPubKey string,
+	operatorData *registrystorage.OperatorData,
 ) (*types.SSVShare, *bls.SecretKey, error) {
 	validatorShare := types.SSVShare{}
 
-	// extract operator public keys from storage and fill the event
-	if err := SetOperatorPublicKeys(operatorsCollection, &ValidatorAddedEvent); err != nil {
-		return nil, nil, errors.Wrap(err, "could not set operator public keys")
-	}
-
 	publicKey := &bls.PublicKey{}
-	if err := publicKey.Deserialize(ValidatorAddedEvent.PublicKey); err != nil {
+	if err := publicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize share public key"),
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
-	validatorShare.OwnerAddress = ValidatorAddedEvent.OwnerAddress.String()
+	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
-	for i := range ValidatorAddedEvent.OperatorPublicKeys {
-		nodeID := spectypes.OperatorID(ValidatorAddedEvent.OperatorIds[i])
+	for i := range validatorAddedEvent.OperatorIds {
+		operatorID := spectypes.OperatorID(validatorAddedEvent.OperatorIds[i])
 		committee = append(committee, &spectypes.Operator{
-			OperatorID: nodeID,
-			PubKey:     ValidatorAddedEvent.SharePublicKeys[i],
+			OperatorID: operatorID,
+			PubKey:     validatorAddedEvent.SharePublicKeys[i],
 		})
-		if strings.EqualFold(string(ValidatorAddedEvent.OperatorPublicKeys[i]), operatorPubKey) {
-			validatorShare.OperatorID = nodeID
-			validatorShare.SharePubKey = ValidatorAddedEvent.SharePublicKeys[i]
+		if operatorID == operatorData.ID {
+			validatorShare.OperatorID = operatorID
+			validatorShare.SharePubKey = validatorAddedEvent.SharePublicKeys[i]
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
@@ -81,7 +75,7 @@ func ShareFromValidatorEvent(
 			}
 
 			shareSecret = &bls.SecretKey{}
-			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(ValidatorAddedEvent.EncryptedKeys[i]))
+			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorAddedEvent.EncryptedKeys[i]))
 			if err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to decrypt share private key"),
@@ -101,31 +95,9 @@ func ShareFromValidatorEvent(
 	validatorShare.PartialQuorum = 2 * f
 	validatorShare.DomainType = types.GetDefaultDomain()
 	validatorShare.Committee = committee
-	validatorShare.SetOperators(ValidatorAddedEvent.OperatorPublicKeys)
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
-}
-
-// SetOperatorPublicKeys extracts the operator public keys from the storage and fill the event
-func SetOperatorPublicKeys(
-	operatorsCollection registrystorage.OperatorsCollection,
-	ValidatorAddedEvent *abiparser.ValidatorAddedEvent,
-) error {
-	ValidatorAddedEvent.OperatorPublicKeys = make([][]byte, len(ValidatorAddedEvent.OperatorIds))
-	for i, operatorID := range ValidatorAddedEvent.OperatorIds {
-		od, found, err := operatorsCollection.GetOperatorData(operatorID)
-		if err != nil {
-			return errors.Wrap(err, "could not get operator's data")
-		}
-		if !found {
-			return &abiparser.MalformedEventError{
-				Err: errors.New("could not find operator data by index"),
-			}
-		}
-		ValidatorAddedEvent.OperatorPublicKeys[i] = []byte(od.PublicKey)
-	}
-	return nil
 }
 
 func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {

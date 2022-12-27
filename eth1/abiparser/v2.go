@@ -45,13 +45,12 @@ type OperatorRemovedEvent struct {
 
 // ValidatorAddedEvent struct represents event received by the smart contract
 type ValidatorAddedEvent struct {
-	PublicKey          []byte
-	OwnerAddress       common.Address
-	OperatorPublicKeys [][]byte
-	OperatorIds        []uint64
-	SharePublicKeys    [][]byte
-	EncryptedKeys      [][]byte
-	Pod                Pod
+	PublicKey       []byte
+	OwnerAddress    common.Address
+	OperatorIds     []uint64
+	SharePublicKeys [][]byte
+	EncryptedKeys   [][]byte
+	Pod             Pod
 }
 
 // ValidatorRemovedEvent struct represents event received by the smart contract

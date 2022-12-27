@@ -39,16 +39,13 @@ func TestSSVShareMetadata_BelongsToOperatorID(t *testing.T) {
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
-		Metadata: Metadata{
-			Operators: [][]byte{
-				{1, 1, 1, 1},
-				{2, 2, 2, 2},
-			},
+		Share: spectypes.Share{
+			OperatorID: 1,
 		},
 	}
 
-	require.True(t, metadata.BelongsToOperator(string([]byte{1, 1, 1, 1})))
-	require.False(t, metadata.BelongsToOperator(string([]byte{1, 2, 3, 4})))
+	require.True(t, metadata.BelongsToOperator(1))
+	require.False(t, metadata.BelongsToOperator(2))
 }
 
 func TestSSVShare_HasBeaconMetadata(t *testing.T) {
@@ -88,16 +85,4 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
 		})
 	}
-}
-
-func TestSSVShare_SetOperators(t *testing.T) {
-	metadata := &SSVShare{}
-	require.Nil(t, metadata.Operators)
-
-	operators := [][]byte{
-		{1, 1, 1, 1},
-		{2, 2, 2, 2},
-	}
-	metadata.SetOperators(operators)
-	require.EqualValues(t, operators, metadata.Operators)
 }
