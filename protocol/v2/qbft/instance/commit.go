@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -126,6 +128,7 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, value []byte) (*sp
 		Identifier: state.ID,
 		Data:       dataByts,
 	}
+
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")

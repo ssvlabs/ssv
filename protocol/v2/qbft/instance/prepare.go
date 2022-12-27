@@ -2,11 +2,13 @@ package instance
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 func (i *Instance) uponPrepare(
@@ -105,7 +107,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 //		}
 //	}
 //	return aggregatedPrepareMsg
-//}
+// }
 
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
