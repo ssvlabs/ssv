@@ -9,7 +9,7 @@ on:
     branches:
       - 'main'
       - 'stage'
-      - 'spec-align-qbft'
+#      - 'spec-align-qbft'
 
   workflow_dispatch:
 
