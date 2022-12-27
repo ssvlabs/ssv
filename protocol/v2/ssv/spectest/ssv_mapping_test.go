@@ -204,9 +204,8 @@ func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testin
 	ret := baseRunnerForRole(base.BeaconRoleType, base, ks)
 	ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)
 	if ret.GetBaseRunner().State != nil {
-		runningInstance := ret.GetBaseRunner().State.GetRunningInstance()
-		if runningInstance != nil {
-			ret.GetBaseRunner().State.RunningInstance.Store(fixInstanceForRun(t, runningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share))
+		if ret.GetBaseRunner().State.GetRunningInstance() != nil {
+			ret.GetBaseRunner().State.SetRunningInstance(fixInstanceForRun(t, ret.GetBaseRunner().State.GetRunningInstance(), ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share))
 		}
 	}
 	return ret

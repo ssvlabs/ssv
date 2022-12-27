@@ -3,11 +3,13 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"sync/atomic"
+	"unsafe"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"go.uber.org/atomic"
+	uberatomic "go.uber.org/atomic" // TODO: remove after migration to Go 1.19
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
@@ -16,12 +18,12 @@ import (
 type State struct {
 	PreConsensusContainer  *specssv.PartialSigContainer
 	PostConsensusContainer *specssv.PartialSigContainer
-	RunningInstance        atomic.Value // *instance.Instance
+	RunningInstance        *instance.Instance // TODO: use atomic.Pointer from sync/atomic after migration to Go 1.19
 	DecidedValue           *spectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty *spectypes.Duty
 	// flags
-	Finished atomic.Bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
+	Finished uberatomic.Bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum, TODO: use Bool from sync/atomic after migration to Go 1.19
 }
 
 func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
@@ -33,14 +35,16 @@ func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 	}
 }
 
-// GetRunningInstance returns a running instance.
+// GetRunningInstance gets RunningInstance atomically.
+// TODO: remove after migration to Go 1.19
 func (pcs *State) GetRunningInstance() *instance.Instance {
-	i := pcs.RunningInstance.Load()
-	if i == nil {
-		return nil
-	}
+	return (*instance.Instance)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pcs.RunningInstance))))
+}
 
-	return i.(*instance.Instance)
+// SetRunningInstance sets RunningInstance atomically.
+// TODO: remove after migration to Go 1.19
+func (pcs *State) SetRunningInstance(v *instance.Instance) {
+	atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&pcs.RunningInstance)), unsafe.Pointer(v))
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
