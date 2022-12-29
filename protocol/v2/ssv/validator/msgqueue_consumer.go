@@ -79,7 +79,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		if processed := v.processByState(q, handler, msgID, identifier, lastHeight); processed {
 			continue
 		}
-		if processed := v.processLateCommit(q, handler, identifier, lastHeight); processed {
+		if processed := v.processLateCommit(q, handler, identifier, lastHeight); processed { // nolint:staticcheck
 			continue
 		}
 

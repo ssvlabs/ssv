@@ -353,18 +353,18 @@ func (mr *MockBeaconMockRecorder) IsSyncCommitteeAggregator(proof interface{}) *
 }
 
 // SubmitAggregateSelectionProof mocks base method.
-func (m *MockBeacon) SubmitAggregateSelectionProof(duty *types.Duty, slotSig []byte) (*phase0.AggregateAndProof, error) {
+func (m *MockBeacon) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (*phase0.AggregateAndProof, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitAggregateSelectionProof", duty, slotSig)
+	ret := m.ctrl.Call(m, "SubmitAggregateSelectionProof", slot, committeeIndex, committeeLength, index, slotSig)
 	ret0, _ := ret[0].(*phase0.AggregateAndProof)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SubmitAggregateSelectionProof indicates an expected call of SubmitAggregateSelectionProof.
-func (mr *MockBeaconMockRecorder) SubmitAggregateSelectionProof(duty, slotSig interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) SubmitAggregateSelectionProof(slot, committeeIndex, committeeLength, index, slotSig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitAggregateSelectionProof", reflect.TypeOf((*MockBeacon)(nil).SubmitAggregateSelectionProof), duty, slotSig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitAggregateSelectionProof", reflect.TypeOf((*MockBeacon)(nil).SubmitAggregateSelectionProof), slot, committeeIndex, committeeLength, index, slotSig)
 }
 
 // SubmitAttestation mocks base method.

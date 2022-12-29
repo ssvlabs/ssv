@@ -7,7 +7,6 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +16,7 @@ func (gc *goClient) IsSyncCommitteeAggregator(proof []byte) (bool, error) {
 	hash := sha256.Sum256(proof)
 
 	// Keep the signature if it's an aggregator.
-	modulo := types.SyncCommitteeSize / types.SyncCommitteeSubnetCount / types.TargetAggregatorsPerSyncSubcommittee
+	modulo := SyncCommitteeSize / SyncCommitteeSubnetCount / TargetAggregatorsPerSyncSubcommittee
 	if modulo == uint64(0) {
 		// Modulo must be at least 1.
 		modulo = 1

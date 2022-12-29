@@ -85,7 +85,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 	// TODO check if is aggregator(?)
 
 	// get block data
-	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty, fullSig)
+	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
@@ -204,7 +204,7 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 		Type:     specssv.SelectionProofPartialSig,
 		Messages: []*specssv.PartialSignatureMessage{msg},
 	}
-	
+
 	// sign msg
 	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
 	if err != nil {

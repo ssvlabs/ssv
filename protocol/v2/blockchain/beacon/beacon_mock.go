@@ -44,7 +44,7 @@ func (b beaconMock) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error 
 	panic("implement me")
 }
 
-func (b beaconMock) SubmitAggregateSelectionProof(duty *spectypes.Duty, slotSig []byte) (*phase0.AggregateAndProof, error) {
+func (b beaconMock) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (*phase0.AggregateAndProof, error) {
 	//TODO implement me
 	panic("implement me")
 }

@@ -11,29 +11,16 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
+// uponPrepare process prepare message
+// Assumes prepare message is valid!
 func (i *Instance) uponPrepare(
 	signedPrepare *specqbft.SignedMessage,
 	prepareMsgContainer,
 	commitMsgContainer *specqbft.MsgContainer) error {
-	if i.State.ProposalAcceptedForCurrentRound == nil {
-		return errors.New("no proposal accepted for prepare")
-	}
-
 	acceptedProposalData, err := i.State.ProposalAcceptedForCurrentRound.Message.GetProposalData()
 	if err != nil {
 		return errors.Wrap(err, "could not get accepted proposal data")
 	}
-	if err := validSignedPrepareForHeightRoundAndValue(
-		i.config,
-		signedPrepare,
-		i.State.Height,
-		i.State.Round,
-		acceptedProposalData.Data,
-		i.State.Share.Committee,
-	); err != nil {
-		return errors.Wrap(err, "invalid prepare msg")
-	}
-
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
@@ -121,10 +108,10 @@ func validSignedPrepareForHeightRoundAndValue(
 		return errors.New("prepare msg type is wrong")
 	}
 	if signedPrepare.Message.Height != height {
-		return errors.New("msg Height wrong")
+		return errors.New("wrong msg height")
 	}
 	if signedPrepare.Message.Round != round {
-		return errors.New("msg round wrong")
+		return errors.New("wrong msg round")
 	}
 
 	prepareData, err := signedPrepare.Message.GetPrepareData()
@@ -136,15 +123,15 @@ func validSignedPrepareForHeightRoundAndValue(
 	}
 
 	if !bytes.Equal(prepareData.Data, value) {
-		return errors.New("prepare data != proposed data")
+		return errors.New("proposed data mistmatch")
 	}
 
 	if len(signedPrepare.GetSigners()) != 1 {
-		return errors.New("prepare msg allows 1 signer")
+		return errors.New("msg allows 1 signer")
 	}
 
 	if err := signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "prepare msg signature invalid")
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil
