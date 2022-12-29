@@ -104,6 +104,10 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
+	if i.State.Round > msg.Message.Round {
+		return false, nil, nil, errors.New("past round")
+	}
+
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
