@@ -2,9 +2,10 @@ package runner
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"go.uber.org/zap"
 )
 
 func (b *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height specqbft.Height) {

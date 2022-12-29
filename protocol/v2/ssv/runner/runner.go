@@ -2,16 +2,15 @@ package runner
 
 import (
 	"encoding/hex"
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
-
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -61,6 +60,7 @@ type BaseRunner struct {
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
+		b.logger.Warn("cannot start new duty", zap.Error(err))
 		return err
 	}
 	b.State = NewRunnerState(b.Share.Quorum, duty)
