@@ -2,13 +2,21 @@ package testing
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"golang.org/x/mod/modfile"
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -151,4 +159,68 @@ func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
 	ret, err := json.Marshal(input)
 	require.NoError(t, err)
 	return ret
+}
+
+func GetSpecTestJSON(path string, module string) ([]byte, error) {
+	fileName := "tests.json"
+	filePath := path + "/" + fileName
+	jsonTests, err := os.ReadFile(filePath)
+	if err != nil {
+		rootPath := path
+		for {
+			if _, err := os.Stat(filepath.Join(rootPath, "go.mod")); err == nil {
+				break
+			}
+			rootPath = filepath.Dir(rootPath)
+		}
+		buf, err := os.ReadFile(fmt.Sprintf("%s/go.mod", rootPath))
+		if err != nil {
+			return nil, errors.New("could not read go.mod")
+		}
+		goModFile, err := modfile.Parse("go.mod", buf, nil)
+		if err != nil {
+			return nil, errors.New("could not parse go.mod")
+		}
+		var req *modfile.Require
+		for _, r := range goModFile.Require {
+			if strings.EqualFold("github.com/bloxapp/ssv-spec", r.Mod.Path) {
+				req = r
+				break
+			}
+		}
+		if req == nil {
+			return nil, errors.New("could not find ssv-spec module")
+		}
+		var version string
+		splitModVersion := strings.Split(req.Mod.Version, "-")
+		if len(splitModVersion) > 1 {
+			version = splitModVersion[len(splitModVersion)-1]
+		} else {
+			version = splitModVersion[0]
+		}
+
+		url := fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module)
+		resp, err := http.Get(url)
+		if err != nil {
+			return nil, errors.New("could not get tests.json")
+		}
+
+		defer func() {
+			err := resp.Body.Close()
+			if err != nil {
+				return
+			}
+		}()
+
+		jsonTests, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		err = os.WriteFile(filePath, jsonTests, 0644)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return jsonTests, nil
 }
