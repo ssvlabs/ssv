@@ -128,10 +128,6 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		if r.GetState().DecidedValue == nil {
-			return errors.New("no decided value")
-		}
-
 		msg := &altair.SyncCommitteeMessage{
 			Slot:            r.GetState().DecidedValue.Duty.Slot,
 			BeaconBlockRoot: r.GetState().DecidedValue.SyncCommitteeBlockRoot,
