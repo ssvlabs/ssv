@@ -164,7 +164,7 @@ func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
 	fileName := "tests.json"
 	filePath := path + "/" + fileName
-	jsonTests, err := os.ReadFile(filePath)
+	jsonTests, err := os.ReadFile(filepath.Clean(filePath))
 	if err != nil {
 		rootPath := path
 		for {
@@ -199,8 +199,7 @@ func GetSpecTestJSON(path string, module string) ([]byte, error) {
 			version = splitModVersion[0]
 		}
 
-		url := fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module)
-		resp, err := http.Get(url)
+		resp, err := http.Get(fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module))
 		if err != nil {
 			return nil, errors.New("could not get tests.json")
 		}
@@ -217,7 +216,7 @@ func GetSpecTestJSON(path string, module string) ([]byte, error) {
 			return nil, err
 		}
 
-		err = os.WriteFile(filePath, jsonTests, 0644)
+		err = os.WriteFile(filePath, jsonTests, 0600)
 		if err != nil {
 			return nil, err
 		}
