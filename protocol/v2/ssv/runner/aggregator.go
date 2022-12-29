@@ -89,9 +89,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-	if res == nil {
-		return errors.New("selection proof is nil")
-	}
+
 	input := &spectypes.ConsensusData{
 		Duty:              duty,
 		AggregateAndProof: res,

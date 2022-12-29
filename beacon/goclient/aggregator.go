@@ -55,7 +55,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 	if aggregateData == nil {
 		//a.logger.Warn("Got nil aggregate attestation", zap.Uint64("slot", uint64(data.Slot)))
-		return nil, nil
+		return nil, errors.New("aggregation data is nil")
 	}
 
 	var selectionProof phase0.BLSSignature
