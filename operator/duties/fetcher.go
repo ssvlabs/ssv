@@ -245,25 +245,25 @@ func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2ap
 }
 
 type serializedDuty struct {
-	PubKey                  string
-	Type                    string
-	Slot                    uint64
-	ValidatorIndex          uint64
-	CommitteeIndex          uint64
-	CommitteeLength         uint64
-	CommitteesAtSlot        uint64
-	ValidatorCommitteeIndex uint64
+	PubKey string
+	Type   string
+	Slot   uint64
+	//ValidatorIndex          uint64
+	//CommitteeIndex          uint64
+	//CommitteeLength         uint64
+	//CommitteesAtSlot        uint64
+	//ValidatorCommitteeIndex uint64
 }
 
 func toSerialized(d *spectypes.Duty) serializedDuty {
 	return serializedDuty{
-		PubKey:                  hex.EncodeToString(d.PubKey[:]),
-		Type:                    d.Type.String(),
-		Slot:                    uint64(d.Slot),
-		ValidatorIndex:          uint64(d.ValidatorIndex),
-		CommitteeIndex:          uint64(d.CommitteeIndex),
-		CommitteeLength:         d.CommitteeLength,
-		CommitteesAtSlot:        d.CommitteesAtSlot,
-		ValidatorCommitteeIndex: d.ValidatorCommitteeIndex,
+		PubKey: hex.EncodeToString(d.PubKey[:]),
+		Type:   d.Type.String(),
+		Slot:   uint64(d.Slot),
+		//ValidatorIndex:          uint64(d.ValidatorIndex),
+		//CommitteeIndex:          uint64(d.CommitteeIndex),
+		//CommitteeLength:         d.CommitteeLength,
+		//CommitteesAtSlot:        d.CommitteesAtSlot,
+		//ValidatorCommitteeIndex: d.ValidatorCommitteeIndex,
 	}
 }
