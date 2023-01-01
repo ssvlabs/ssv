@@ -195,6 +195,9 @@ func (it *IntegrationTest) Run() error {
 			if err != nil {
 				return err
 			}
+			if storedInstance == nil {
+				return fmt.Errorf("stored instance is nil")
+			}
 
 			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
 			if err != nil {
