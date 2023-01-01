@@ -164,62 +164,59 @@ func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
 	fileName := "tests.json"
 	filePath := path + "/" + fileName
-	jsonTests, err := os.ReadFile(filepath.Clean(filePath))
+	rootPath := path
+	for {
+		if _, err := os.Stat(filepath.Join(rootPath, "go.mod")); err == nil {
+			break
+		}
+		rootPath = filepath.Dir(rootPath)
+	}
+	buf, err := os.ReadFile(fmt.Sprintf("%s/go.mod", rootPath))
 	if err != nil {
-		rootPath := path
-		for {
-			if _, err := os.Stat(filepath.Join(rootPath, "go.mod")); err == nil {
-				break
-			}
-			rootPath = filepath.Dir(rootPath)
+		return nil, errors.New("could not read go.mod")
+	}
+	goModFile, err := modfile.Parse("go.mod", buf, nil)
+	if err != nil {
+		return nil, errors.New("could not parse go.mod")
+	}
+	var req *modfile.Require
+	for _, r := range goModFile.Require {
+		if strings.EqualFold("github.com/bloxapp/ssv-spec", r.Mod.Path) {
+			req = r
+			break
 		}
-		buf, err := os.ReadFile(fmt.Sprintf("%s/go.mod", rootPath))
-		if err != nil {
-			return nil, errors.New("could not read go.mod")
-		}
-		goModFile, err := modfile.Parse("go.mod", buf, nil)
-		if err != nil {
-			return nil, errors.New("could not parse go.mod")
-		}
-		var req *modfile.Require
-		for _, r := range goModFile.Require {
-			if strings.EqualFold("github.com/bloxapp/ssv-spec", r.Mod.Path) {
-				req = r
-				break
-			}
-		}
-		if req == nil {
-			return nil, errors.New("could not find ssv-spec module")
-		}
-		var version string
-		splitModVersion := strings.Split(req.Mod.Version, "-")
-		if len(splitModVersion) > 1 {
-			version = splitModVersion[len(splitModVersion)-1]
-		} else {
-			version = splitModVersion[0]
-		}
+	}
+	if req == nil {
+		return nil, errors.New("could not find ssv-spec module")
+	}
+	var version string
+	splitModVersion := strings.Split(req.Mod.Version, "-")
+	if len(splitModVersion) > 1 {
+		version = splitModVersion[len(splitModVersion)-1]
+	} else {
+		version = splitModVersion[0]
+	}
 
-		resp, err := http.Get(fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module))
-		if err != nil {
-			return nil, errors.New("could not get tests.json")
-		}
+	resp, err := http.Get(fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module))
+	if err != nil {
+		return nil, errors.New("could not get tests.json")
+	}
 
-		defer func() {
-			err := resp.Body.Close()
-			if err != nil {
-				return
-			}
-		}()
-
-		jsonTests, err = io.ReadAll(resp.Body)
+	defer func() {
+		err := resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return
 		}
+	}()
 
-		err = os.WriteFile(filePath, jsonTests, 0600)
-		if err != nil {
-			return nil, err
-		}
+	jsonTests, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = os.WriteFile(filePath, jsonTests, 0600)
+	if err != nil {
+		return nil, err
 	}
 	return jsonTests, nil
 }
