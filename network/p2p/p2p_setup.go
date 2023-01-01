@@ -1,6 +1,12 @@
 package p2pv1
 
 import (
+	"math/rand"
+	"net"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -19,11 +25,6 @@ import (
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"math/rand"
-	"net"
-	"strings"
-	"sync/atomic"
-	"time"
 
 	logging "github.com/ipfs/go-log"
 )
@@ -166,6 +167,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
+	n.logger.Debug("TestTest self metadata", zap.String("node_Version", self.Metadata.NodeVersion))
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}

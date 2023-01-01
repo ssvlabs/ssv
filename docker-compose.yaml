@@ -7,7 +7,7 @@ x-base:
     dockerfile: Dockerfile
   image: ssvnode:latest
   command: make BUILD_PATH=/go/bin/ssvnode start-node
-#  network_mode: host
+  #  network_mode: host
   networks:
     - blox-docker
   restart: always
@@ -16,12 +16,12 @@ x-base:
 
 x-base-dev:
   &default-dev
-  << : *default-base
+  <<: *default-base
   image: ssvnode-debug:latest
   build:
     context: .
     dockerfile: dev.Dockerfile
-  command:  air
+  command: air
   environment:
     RUN_CMD: start-node
   security_opt:
@@ -38,6 +38,10 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share1.yaml
+    ports:
+      - 16001:16000
+    volumes:
+      - ./data/ssv-node-1/data:/data
 
   ssv-node-2:
     <<: *default-base
@@ -45,6 +49,10 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share2.yaml
+    ports:
+      - 16002:16000
+    volumes:
+      - ./data/ssv-node-2/data:/data
 
   ssv-node-3:
     <<: *default-base
@@ -52,6 +60,10 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share3.yaml
+    ports:
+      - 16003:16000
+    volumes:
+      - ./data/ssv-node-3/data:/data
 
   ssv-node-4:
     <<: *default-base
@@ -59,21 +71,26 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share4.yaml
+    ports:
+      - 16004:16000
+    volumes:
+      - ./data/ssv-node-4/data:/data
 
   exporter-node:
     <<: *default-base
     container_name: exporter-node
-    command: make start-exporter
     environment:
       CONFIG_PATH: ./config/config.exporter.yaml
+    ports:
+      - 16005:16000
 
-# dev services:
+  # dev services:
 
   ssv-node-1-dev:
-    << : *default-dev
+    <<: *default-dev
     container_name: ssv-node-1-dev
-#    ports:
-#      - "40005:40005"
+    #    ports:
+    #      - "40005:40005"
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -84,10 +101,10 @@ services:
       - blox-docker
 
   ssv-node-2-dev:
-    << : *default-dev
+    <<: *default-dev
     container_name: ssv-node-2-dev
-#    ports:
-#      - 40006:40006
+    #    ports:
+    #      - 40006:40006
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -96,10 +113,10 @@ services:
       SHARE_CONFIG: ./config/share2.yaml
 
   ssv-node-3-dev:
-    << : *default-dev
+    <<: *default-dev
     container_name: ssv-node-3-dev
-#    ports:
-#      - 40007:40007
+    #    ports:
+    #      - 40007:40007
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -108,10 +125,10 @@ services:
       SHARE_CONFIG: ./config/share3.yaml
 
   ssv-node-4-dev:
-    << : *default-dev
+    <<: *default-dev
     container_name: ssv-node-4-dev
-#    ports:
-#      - 40008:40008
+    #    ports:
+    #      - 40008:40008
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -120,17 +137,17 @@ services:
       SHARE_CONFIG: ./config/share4.yaml
 
   exporter-node-dev:
-    << : *default-dev
+    <<: *default-dev
     container_name: exporter-node-dev
-#    ports:
-#      - 40009:40009
+    #    ports:
+    #      - 40009:40009
     environment:
       RUN_CMD: start-exporter
       BUILD_PATH: /bin/tmp/ssv
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
-# monitoring services
+  # monitoring services
 
   prometheus:
     container_name: prometheus

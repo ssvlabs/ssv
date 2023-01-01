@@ -2,13 +2,14 @@ package topics
 
 import (
 	"context"
+	"io"
+	"time"
+
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"io"
-	"time"
 )
 
 var (
@@ -109,8 +110,11 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	name = ctrl.fork.GetTopicFullName(name)
 	topic := ctrl.container.Get(name)
 	if topic == nil {
+		ctrl.logger.Debug("TestTest topicsCtrl.Peers", zap.String("name", name), zap.Any("topic", topic))
 		return nil, nil
 	}
+	peers := topic.ListPeers()
+	ctrl.logger.Debug("TestTest topicsCtrl.Peers", zap.String("name", name), zap.Any("topic", topic), zap.Any("peers", peers))
 	return topic.ListPeers(), nil
 }
 
@@ -128,8 +132,8 @@ func (ctrl *topicsCtrl) Topics() []string {
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = ctrl.fork.GetTopicFullName(name)
 	ctrl.subFilter.(Whitelist).Register(name)
-	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
 	sub, err := ctrl.container.Subscribe(name)
+	defer ctrl.logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
 	if err != nil {
 		return err
 	}

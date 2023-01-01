@@ -1,8 +1,9 @@
 package msgqueue
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sort"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
@@ -31,14 +32,12 @@ func (by By) Sort(msgs []*MsgContainer) {
 // Add adds a new container
 func (by By) Add(msgs []*MsgContainer, msg *MsgContainer) []*MsgContainer {
 	i := sort.Search(len(msgs), func(i int) bool { return by(msgs[i].msg, msg.msg) })
-	var newMsgs []*MsgContainer
-	if i > 0 {
-		newMsgs = append(msgs[:i], msg)
-		newMsgs = append(newMsgs, msgs[i:]...)
-		return newMsgs
+	if i == len(msgs)-1 {
+		// If the message should be inserted at the end of the slice, just append it.
+		return append(msgs, msg)
 	}
-	newMsgs = append(append(newMsgs, msg), msgs...)
-	return newMsgs
+	// Insert the message at the correct position and return the modified slice.
+	return append(msgs[:i], append([]*MsgContainer{msg}, msgs[i:]...)...)
 }
 
 // ByRound implements By for round based priority

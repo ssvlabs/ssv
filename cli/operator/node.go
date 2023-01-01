@@ -34,7 +34,6 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/sync/history"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -172,9 +171,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
-		if cfg.SSVOptions.ValidatorOptions.FullNode {
-			cfg.P2pNetworkConfig.HistorySyncer = history.NewSyncer()
-		}
+		cfg.P2pNetworkConfig.SyncHistory = cfg.SSVOptions.ValidatorOptions.FullNode
 
 		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
 

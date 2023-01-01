@@ -140,7 +140,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
-	return msg, nil
+	return decidedMsg, nil
 }
 
 func (c *Controller) baseMsgValidation(msg *specqbft.SignedMessage) error {

@@ -104,7 +104,7 @@ var TestingControllerStruct = &specqbft.Controller{
 	Identifier: []byte{1, 2, 3, 4},
 	Height:     specqbft.Height(1),
 	Share:      testingShare,
-	StoredInstances: [specqbft.HistoricalInstanceCapacity]*specqbft.Instance{
+	StoredInstances: []*specqbft.Instance{
 		TestingInstanceStruct,
 	},
 }

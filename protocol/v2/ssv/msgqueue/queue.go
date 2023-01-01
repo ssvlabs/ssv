@@ -110,6 +110,19 @@ func (q *queue) Add(msg *spectypes.SSVMessage) {
 	mc := &MsgContainer{
 		msg: msg,
 	}
+
+	var sm specqbft.SignedMessage
+	var err error
+	if err = sm.Decode(msg.GetData()); err != nil {
+		q.logger.Debug("TestTest Queue failed to decode message", zap.Error(err))
+	} else {
+		if sm.Message == nil {
+			q.logger.Debug("TestTest Queue received nil message", zap.Reflect("message", sm))
+		} else {
+			defer q.logger.Debug("TestTest Queue received message", zap.Uint64("height", uint64(sm.Message.Height)))
+		}
+	}
+
 	for _, idx := range indices {
 		if idx == (Index{}) {
 			continue

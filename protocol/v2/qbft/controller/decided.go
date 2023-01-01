@@ -35,8 +35,10 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get instance from storage")
 		}
-		inst = instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
-		inst.State = storedInst.State
+		if storedInst != nil {
+			inst = instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+			inst.State = storedInst.State
+		}
 	}
 	prevDecided := inst != nil && inst.State.Decided
 
@@ -63,7 +65,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		}
 	}
 
-	if isFutureDecided {
+	if msg.Message.Height != c.Height {
 		// Save future instance, if it wasn't decided already (so it hasn't been saved yet.)
 		if !prevDecided {
 			if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
@@ -76,8 +78,10 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 				}
 			}
 		}
-
+	}
+	if isFutureDecided {
 		// sync gap
+		c.logger.Debug("SyncingGap", zap.Uint64("height", uint64(msg.Message.Height)), zap.Bool("network", c.GetConfig().GetNetwork() != nil))
 		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height

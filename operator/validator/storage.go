@@ -130,6 +130,13 @@ func NotLiquidatedAndByOperatorPubKey(operatorPubKey string) func(share *types.S
 	}
 }
 
+// NotLiquidated filters not liquidated and by operator public key.
+func NotLiquidated() func(share *types.SSVShare) bool {
+	return func(share *types.SSVShare) bool {
+		return !share.Liquidated
+	}
+}
+
 // ByOperatorID filters by operator ID.
 func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {

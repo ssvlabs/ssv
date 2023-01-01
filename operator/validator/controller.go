@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -31,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -64,7 +65,8 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.Beacon
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Flag that indicates whether the node saves decided history or just the latest messages"`
+	FullNode                   bool `yaml:"FullNode" env:"FULL_NODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
+	FullNodeNonCommittee       bool `yaml:"FullNodeNonCommittee" env:"FULL_NODE_NON_COMMITTEE" env-default:"false" env-description:"Save decided history for non committee validators as well"`
 	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -156,7 +158,9 @@ func NewController(options ControllerOptions) Controller {
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
-		DutyRunners: nil, // set per validator
+		DutyRunners:          nil, // set per validator
+		FullNode:             options.FullNode,
+		FullNodeNonCommittee: options.FullNodeNonCommittee,
 	}
 
 	ctrl := controller{
@@ -193,14 +197,24 @@ func NewController(options ControllerOptions) Controller {
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
 func (c *controller) setupNetworkHandlers() error {
-	c.network.RegisterHandlers(p2pprotocol.WithHandler(
-		p2pprotocol.LastDecidedProtocol,
-		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
-		p2pprotocol.DecidedHistoryProtocol,
-		// TODO: extract maxBatch to config
-		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
-	))
+	syncHandlers := []*p2pprotocol.SyncHandler{
+		p2pprotocol.WithHandler(
+			p2pprotocol.LastDecidedProtocol,
+			handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
+		),
+	}
+	if c.validatorOptions.FullNode {
+		syncHandlers = append(
+			syncHandlers,
+			p2pprotocol.WithHandler(
+				p2pprotocol.DecidedHistoryProtocol,
+				// TODO: extract maxBatch to config
+				handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
+			),
+		)
+	}
+	c.logger.Debug("Setting up network handlers", zap.Int("count", len(syncHandlers)), zap.Bool("full_node", c.validatorOptions.FullNode))
+	c.network.RegisterHandlers(syncHandlers...)
 	return nil
 }
 
@@ -305,7 +319,7 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	shares, err := c.collection.GetFilteredValidatorShares(NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
+	shares, err := c.getValidators()
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -316,6 +330,13 @@ func (c *controller) StartValidators() {
 	c.setupValidators(shares)
 }
 
+func (c *controller) getValidators() ([]*types.SSVShare, error) {
+	if c.validatorOptions.FullNodeNonCommittee {
+		return c.collection.GetFilteredValidatorShares(NotLiquidated())
+	}
+	return c.collection.GetFilteredValidatorShares(NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
+}
+
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*types.SSVShare) {
@@ -324,6 +345,32 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
+		if c.validatorOptions.FullNodeNonCommittee {
+			opts := *c.validatorOptions
+			opts.SSVShare = validatorShare
+
+			allRoles := []spectypes.BeaconRole{
+				spectypes.BNRoleAttester,
+				spectypes.BNRoleAggregator,
+				spectypes.BNRoleProposer,
+				spectypes.BNRoleSyncCommittee,
+				spectypes.BNRoleSyncCommitteeContribution,
+			}
+			for _, role := range allRoles {
+				role := role
+				c.logger.Debug("starting non committee validator", zap.String("role", role.String()), zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)))
+				// go func() {
+				// 	time.Sleep(30 * time.Second)
+				// 	err := c.network.Subscribe(validatorShare.ValidatorPubKey)
+				// 	if err != nil {
+				// 		c.logger.Error("TestTest failed to subscribe to network", zap.Error(err))
+				// 	}
+				// 	c.network.SyncDecidedByRange(spectypes.NewMsgID(validatorShare.ValidatorPubKey, role), 0, 175)
+				// }()
+			}
+			continue
+		}
+
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 		pk := hex.EncodeToString(v.Share.ValidatorPubKey)
 		logger := c.logger.With(zap.String("pubkey", pk))

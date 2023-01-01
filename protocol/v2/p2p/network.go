@@ -67,6 +67,9 @@ func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.
 		if err != nil {
 			continue
 		}
+		if sm == nil || sm.Status != message.StatusSuccess {
+			continue
+		}
 		for _, m := range sm.Data {
 			iterator(m)
 		}

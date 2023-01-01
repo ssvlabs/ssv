@@ -17,6 +17,25 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		var sm specqbft.SignedMessage
+		var err error
+		if err = sm.Decode(msg.GetData()); err != nil {
+			v.logger.Debug("TestTest failed to decode message", zap.Error(err))
+		} else {
+			if sm.Message == nil {
+				v.logger.Debug("TestTest received nil message", zap.Reflect("message", sm))
+			} else {
+				runner := v.DutyRunners.DutyRunnerForMsgID(spectypes.MessageIDFromBytes(sm.Message.Identifier))
+				lenBefore := v.Q.Len()
+				defer v.logger.Debug("TestTest received message", zap.Uint64("height", uint64(sm.Message.Height)),
+					zap.Uint64("last_height", uint64(v.GetLastHeight(spectypes.MessageIDFromBytes(sm.Message.Identifier)))),
+					zap.Bool("has_running_instance", runner != nil && runner.HasRunningDuty()),
+					zap.Int("len_before", lenBefore),
+					zap.Int("len_after", v.Q.Len()))
+			}
+		}
+	}
 	v.Q.Add(msg)
 }
 
@@ -73,10 +92,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		v.Q.Clean(func(index msgqueue.Index) bool {
-			// remove all msg's that are 2 heights old, besides height 0
-			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
-		})
+		// v.Q.Clean(func(index msgqueue.Index) bool {
+		// 	// remove all msg's that are 2 heights old, besides height 0
+		// 	return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
+		// })
 	}
 
 	logger.Warn("queue consumer is closed")
@@ -122,6 +141,15 @@ func (v *Validator) processNoRunningInstance(handler MessageHandler, msgID spect
 		return false // no msg found
 	}
 
+	if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
+		var sm specqbft.SignedMessage
+		if err := sm.Decode(msgs[0].Data); err != nil {
+			v.logger.Debug("TestTest processNoRunningInstance error", zap.Error(err))
+		} else {
+			v.logger.Debug("TestTest processNoRunningInstance", zap.Int32("height", int32(sm.Message.Height)))
+		}
+	}
+
 	err := handler(msgs[0])
 	if err != nil {
 		logger.Debug("could not handle message", zap.String("error", err.Error()))
@@ -146,6 +174,15 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 		return false // no msg found
 	}
 
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		var sm specqbft.SignedMessage
+		if err := sm.Decode(msg.Data); err != nil {
+			v.logger.Debug("TestTest processByState error", zap.Error(err))
+		} else {
+			v.logger.Debug("TestTest processByState", zap.Int32("height", int32(sm.Message.Height)))
+		}
+	}
+
 	err := handler(msg)
 	if err != nil {
 		v.logger.Debug("could not handle msg", zap.Error(err))
@@ -167,6 +204,15 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	})
 
 	if len(msgs) > 0 {
+		if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
+			var sm specqbft.SignedMessage
+			if err := sm.Decode(msgs[0].Data); err != nil {
+				v.logger.Debug("TestTest processHigherHeight error", zap.Error(err))
+			} else {
+				v.logger.Debug("TestTest processHigherHeight", zap.Int32("height", int32(sm.Message.Height)))
+			}
+		}
+
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Debug("could not handle msg", zap.Error(err))
@@ -197,6 +243,15 @@ func (v *Validator) processLateCommit(handler MessageHandler, identifier string,
 	msgs := v.Q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
+		if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
+			var sm specqbft.SignedMessage
+			if err := sm.Decode(msgs[0].Data); err != nil {
+				v.logger.Debug("TestTest processLateCommit error", zap.Error(err))
+			} else {
+				v.logger.Debug("TestTest processLateCommit", zap.Int32("height", int32(sm.Message.Height)))
+			}
+		}
+
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Debug("could not handle msg", zap.Error(err))

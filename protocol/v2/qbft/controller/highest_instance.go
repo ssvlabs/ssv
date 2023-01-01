@@ -4,6 +4,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
 )
@@ -46,5 +47,7 @@ func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMess
 		State:          i.State,
 		DecidedMessage: msg,
 	}
+	c.logger.Debug("TestTest saving decided instance",
+		zap.Uint64("height", uint64(msg.Message.Height)), zap.Any("signers", msg.Signers), zap.Int("type", int(msg.Message.MsgType)), zap.Stack("stack"))
 	return c.config.GetStorage().SaveInstance(storedInstance)
 }

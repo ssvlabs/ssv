@@ -3,7 +3,10 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
+	"strings"
+	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -16,6 +19,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
@@ -48,23 +52,26 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return nil
 }
 
-func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, to, from qbft.Height) {
-	if n.historySyncer == nil {
+func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.Height) {
+	if !n.cfg.SyncHistory {
 		return
 	}
 
 	go func() {
 		logger := n.logger.With(
+			zap.String("what", "SyncDecidedByRange"),
 			zap.String("identifier", mid.String()),
 			zap.Uint64("from", uint64(from)),
 			zap.Uint64("to", uint64(to)))
+		logger.Debug("syncing decided by range")
 
-		err := n.historySyncer.SyncRange(context.Background(), n, mid, from, to, func(sm *specqbft.SignedMessage) error {
+		err := n.getDecidedByRange(context.Background(), logger, mid, from, to, func(sm *specqbft.SignedMessage) error {
 			raw, err := sm.Encode()
 			if err != nil {
-				logger.Warn("could not encode signed message in SyncDecidedByRange")
+				logger.Warn("could not encode signed message")
 				return nil
 			}
+			logger.Debug("TestTest synced message", zap.Uint64("height", uint64(sm.Message.Height)), zap.Any("message", sm))
 			n.msgRouter.Route(spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
 				MsgID:   mid,
@@ -73,9 +80,71 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, to, from qbft.H
 			return nil
 		})
 		if err != nil {
-			logger.Debug("decided by range: sync failed", zap.Error(err))
+			logger.Debug("sync failed", zap.Error(err))
 		}
 	}()
+}
+
+func (n *p2pNetwork) getDecidedByRange(ctx context.Context, logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, handler func(*specqbft.SignedMessage) error) error {
+	const getHistoryRetries = 2
+
+	var (
+		visited = make(map[specqbft.Height]struct{})
+		msgs    []p2pprotocol.SyncResult
+	)
+
+	tail := from
+	var err error
+	for tail < to {
+		err := tasks.RetryWithContext(ctx, func() error {
+			start := time.Now()
+			msgs, tail, err = n.GetHistory(mid, tail, to)
+			if err != nil {
+				return err
+			}
+			handled := 0
+			p2pprotocol.SyncResults(msgs).ForEachSignedMessage(func(m *specqbft.SignedMessage) {
+				if ctx.Err() != nil {
+					return
+				}
+				if _, ok := visited[m.Message.Height]; ok {
+					return
+				}
+				if err := handler(m); err != nil {
+					logger.Warn("could not handle signed message")
+				}
+				handled++
+				visited[m.Message.Height] = struct{}{}
+			})
+			logger.Debug("received and processed history batch",
+				zap.Int64("tail", int64(tail)),
+				zap.Duration("duration", time.Since(start)),
+				zap.Int("results_count", len(msgs)),
+				zap.String("TestTest_results", func() string {
+					var s []string
+					for _, m := range msgs {
+						var sm *specqbft.SignedMessage
+						if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
+							sm = &specqbft.SignedMessage{}
+							if err := sm.Decode(m.Msg.Data); err != nil {
+								s = append(s, fmt.Sprintf("(%v)", err))
+								continue
+							}
+							s = append(s, fmt.Sprintf("(type=%d height=%d round=%d)", m.Msg.MsgType, sm.Message.Height, sm.Message.Round))
+						}
+						s = append(s, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
+					}
+					return strings.Join(s, ", ")
+				}()),
+				zap.Int("handled", handled))
+			return nil
+		}, getHistoryRetries)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // LastDecided fetches last decided from a random set of peers
@@ -120,8 +189,12 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
+		n.logger.Debug("TestTest peers getSubsetOfPeers", zap.String("mid", mid.String()),
+			zap.Int("peer_count", peerCount), zap.Any("random", random), zap.Any("protocolID", protocolID),
+			zap.Any("all_peers", n.host.Network().Peerstore().Peers()))
 		peers = random
 	}
+	n.logger.Debug("TestTest peers determined", zap.Any("peers", peers), zap.Any("protocolID", protocolID))
 	maxBatchRes := specqbft.Height(n.cfg.MaxBatchResponse)
 
 	var results []p2pprotocol.SyncResult
@@ -157,6 +230,7 @@ func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
 	}
 
 	for pid, phandlers := range m {
+		n.logger.Debug("TestTest registering handlers", zap.String("protocol", string(pid)), zap.Int("count", len(phandlers)))
 		n.registerHandlers(pid, phandlers...)
 	}
 }
@@ -164,6 +238,7 @@ func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
 func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2pprotocol.RequestHandler) {
 	handler := p2pprotocol.CombineRequestHandlers(handlers...)
 	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
+		n.logger.Debug("TestTest received stream", zap.String("protocol", string(pid)))
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
 		if err != nil {
@@ -185,6 +260,7 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 			n.logger.Warn("could not encode msg", zap.Error(err))
 			return
 		}
+		n.logger.Debug("TestTest sending response", zap.String("protocol", string(pid)))
 		if err := respond(resultBytes); err != nil {
 			n.logger.Warn("could not respond to stream", zap.Error(err))
 			return
@@ -197,8 +273,10 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
+	n.logger.Debug("TestTest getSubsetOfPeers", zap.Any("topics", topics), zap.Any("vpk", vpk))
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
+		n.logger.Debug("TestTest getSubsetOfPeers peers", zap.Any("topic", topic), zap.Any("peers", ps), zap.Error(err))
 		if err != nil {
 			continue
 		}
@@ -240,27 +318,28 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 	if err != nil {
 		return nil, err
 	}
-	plogger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	logger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
 	msgID := n.fork.MsgID()
-	distinct := make(map[string]bool)
+	distinct := make(map[string]struct{})
 	for _, pid := range peers {
-		logger := plogger.With(zap.String("peer", pid.String()))
+		logger := logger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
 			logger.Debug("could not make stream request", zap.Error(err))
 			continue
 		}
 		mid := msgID(raw)
-		if distinct[mid] {
-			// logger.Debug("duplicated sync msg", zap.String("mid", mid))
+		if _, ok := distinct[mid]; ok {
+			logger.Debug("TestTest duplicated sync msg", zap.String("mid", mid))
 			continue
 		}
-		distinct[mid] = true
+		distinct[mid] = struct{}{}
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))
 			continue
 		}
+		logger.Debug("TestTest got sync msg", zap.String("mid", mid), zap.Any("res", res))
 		results = append(results, p2pprotocol.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),
