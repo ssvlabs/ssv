@@ -18,7 +18,8 @@ var (
 )
 
 // RoundTimeout returns the number of seconds until next timeout for a give round.
-// if the round is smaller than 3 -> 2s; otherwise -> 2m
+// if the round is smaller than 8 -> 2s; otherwise -> 2m
+// see SIP https://github.com/bloxapp/SIPs/pull/22
 func RoundTimeout(r specqbft.Round) time.Duration {
 	if r <= quickTimeoutThreshold {
 		return quickTimeout
