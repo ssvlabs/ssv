@@ -65,8 +65,8 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.Beacon
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
-	FullNode                   bool `yaml:"FullNode" env:"FULL_NODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
-	FullNodeNonCommittee       bool `yaml:"FullNodeNonCommittee" env:"FULL_NODE_NON_COMMITTEE" env-default:"false" env-description:"Save decided history for non committee validators as well"`
+	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
+	FullNodeNonCommittee       bool `yaml:"FullNodeNonCommittee" env:"FULLNODE_NON_COMMITTEE" env-default:"false" env-description:"Save decided history for non committee validators as well"`
 	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -122,6 +122,11 @@ type controller struct {
 	forkVersion   forksprotocol.ForkVersion
 	messageRouter *messageRouter
 	messageWorker *worker.Worker
+
+	// nonCommitteeLocks is a map of locks for non committee validators, used to ensure
+	// messages with identical public key and role are processed one at a time.
+	nonCommitteeLocks map[spectypes.MessageID]*sync.Mutex
+	nonCommitteeMutex sync.Mutex
 }
 
 // NewController creates a new validator controller instance
@@ -186,6 +191,8 @@ func NewController(options ControllerOptions) Controller {
 
 		messageRouter: newMessageRouter(options.Logger, msgID),
 		messageWorker: worker.NewWorker(workerCfg),
+
+		nonCommitteeLocks: make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	if err := ctrl.initShares(options); err != nil {
@@ -293,8 +300,24 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 	opts := *c.validatorOptions
 	opts.SSVShare = share
 
+	// Lock this message ID.
+	lock := func() *sync.Mutex {
+		c.nonCommitteeMutex.Lock()
+		defer c.nonCommitteeMutex.Unlock()
+		if _, ok := c.nonCommitteeLocks[msg.GetID()]; !ok {
+			c.nonCommitteeLocks[msg.GetID()] = &sync.Mutex{}
+		}
+		return c.nonCommitteeLocks[msg.GetID()]
+	}()
+
+	lock.Lock()
+	defer lock.Unlock()
+
+	// Create a disposable NonCommitteeValidator to process the message.
+	// TODO: consider caching highest instance heights for each validator instead of creating a new validator & loading from storage each time.
 	v := validator.NewNonCommitteeValidator(msg.GetID(), opts)
 	v.ProcessMessage(msg)
+
 	return nil
 }
 
@@ -359,14 +382,19 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			for _, role := range allRoles {
 				role := role
 				c.logger.Debug("starting non committee validator", zap.String("role", role.String()), zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)))
-				// go func() {
-				// 	time.Sleep(30 * time.Second)
-				// 	err := c.network.Subscribe(validatorShare.ValidatorPubKey)
-				// 	if err != nil {
-				// 		c.logger.Error("TestTest failed to subscribe to network", zap.Error(err))
-				// 	}
-				// 	c.network.SyncDecidedByRange(spectypes.NewMsgID(validatorShare.ValidatorPubKey, role), 0, 175)
-				// }()
+				go func() {
+					time.Sleep(30 * time.Second)
+					err := c.network.Subscribe(validatorShare.ValidatorPubKey)
+					if err != nil {
+						c.logger.Error("TestTest failed to subscribe to network", zap.Error(err))
+					}
+					messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
+					err = c.network.SyncHighestDecided(messageID)
+					if err != nil {
+						c.logger.Error("TestTest failed to sync highest decided", zap.Error(err))
+					}
+					// c.network.SyncDecidedByRange(spectypes.NewMsgID(validatorShare.ValidatorPubKey, role), 0, 000)
+				}()
 			}
 			continue
 		}

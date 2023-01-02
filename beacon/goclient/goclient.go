@@ -28,6 +28,10 @@ import (
 
 const (
 	healthCheckTimeout = 10 * time.Second
+
+	// validatorsBatchSize is the number of validators to request in a single batch.
+	// Prysm's current known limit is around 30,000 validators per batch.
+	validatorsBatchSize = 16000
 )
 
 type beaconNodeStatus int32
@@ -142,8 +146,9 @@ func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.Validato
 
 // GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
 func (gc *goClient) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
+	// validatorsBatchSize
 	if provider, isProvider := gc.client.(eth2client.ValidatorsProvider); isProvider {
-		validatorsMap, err := provider.ValidatorsByPubKey(gc.ctx, "head", validatorPubKeys) // TODO maybe need to get the chainId (head) as var
+		validatorsMap, err := provider.ValidatorsByPubKey(gc.ctx, "head", validatorPubKeys) // TODO: maybe need to get the stateID (head) as var
 		if err != nil {
 			return nil, err
 		}

@@ -22,6 +22,10 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
+// extremeLowPeerCount is the maximum number of peers considered as too low
+// when trying to get a subset of peers for a specific subnet.
+const extremelyLowPeerCount = 32
+
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	go func() {
 		logger := n.logger.With(zap.String("identifier", mid.String()))
@@ -292,8 +296,21 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
-		n.logger.Debug("could not find peers", zap.Any("topics", topics))
-		return nil, nil
+		// Pubsub's topic/peers association is unreliable when there are few peers.
+		// So if we have few peers, we should just filter all of them (regardless of topic.)
+		allPeers := n.host.Network().Peers()
+		if len(allPeers) <= extremelyLowPeerCount {
+			for _, peer := range allPeers {
+				if filter(peer) {
+					peers = append(peers, peer)
+				}
+			}
+		}
+
+		if len(peers) == 0 {
+			n.logger.Debug("could not find peers", zap.Any("topics", topics))
+			return nil, nil
+		}
 	}
 	if peerCount > len(peers) {
 		peerCount = len(peers)

@@ -109,6 +109,15 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
+	// Save as highest instance if it's higher than the current highest instance.
+	highest, err := i.GetHighestInstance(instance.State.ID)
+	if err != nil {
+		return errors.Wrap(err, "could not get highest instance")
+	}
+	if highest != nil && highest.State.Height >= instance.State.Height {
+		return nil
+	}
+
 	err = i.save(value, highestInstanceKey, instance.State.ID)
 	return errors.Wrap(err, "could not save instance")
 }
