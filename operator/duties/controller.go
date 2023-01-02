@@ -198,6 +198,7 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
+		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(zap.Uint64("current slot", currentSlot)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).

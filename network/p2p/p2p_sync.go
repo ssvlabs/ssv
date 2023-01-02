@@ -48,7 +48,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 func (n *p2pNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, from specqbft.Height) {
 	//TODO implement me
-	panic("implement me")
+	//panic("implement me")
 }
 
 // LastDecided fetches last decided from a random set of peers
