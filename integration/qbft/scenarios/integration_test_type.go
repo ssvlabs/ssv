@@ -195,6 +195,9 @@ func (it *IntegrationTest) Run() error {
 			if err != nil {
 				return err
 			}
+			if storedInstance == nil {
+				return fmt.Errorf("stored instance is nil")
+			}
 
 			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
 			if err != nil {
@@ -260,8 +263,9 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 		}
 
 		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
+
+		options.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		val := protocolvalidator.NewValidator(sCtx.ctx, options)
-		val.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		validators[operatorID] = val
 	}
 

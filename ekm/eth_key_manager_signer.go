@@ -32,12 +32,12 @@ type ethKeyManagerSigner struct {
 	walletLock   *sync.RWMutex
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
-	signingUtils beacon.SigningUtil
+	signingUtils beacon.Beacon
 	domain       spectypes.DomainType
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.Beacon, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -79,7 +79,7 @@ func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network beaco
 }
 
 func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	domain, err := km.signingUtils.GetDomain(data)
+	domain, err := km.signingUtils.DomainData(spec.Epoch(data.Slot/32), spectypes.DomainAttester) // TODO need to calculate epoch in a common func
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get domain for signing")
 	}
@@ -87,7 +87,7 @@ func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty 
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
-	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
+	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain[:], pk)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}

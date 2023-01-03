@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -67,7 +66,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
 	}
-
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -83,10 +81,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 
 	duty := r.GetState().StartingDuty
 
-	// TODO waitToSlotTwoThirds
-
 	// get block data
-	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, fullSig)
+	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
@@ -171,6 +167,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
+		r.logger.Debug("successful submitted aggregate")
 	}
 	r.GetState().Finished = true
 
@@ -204,7 +201,7 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 
 	// sign msg
-	signature, err := r.GetSigner().SignRoot(msg, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
+	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
 	if err != nil {
 		return errors.Wrap(err, "could not sign PartialSignatureMessage for selection proof")
 	}

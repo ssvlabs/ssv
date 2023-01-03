@@ -26,7 +26,7 @@ func validatorSet() []utils.KeyValue {
 	mapSet.Set("*types.SSVShare", "*types.Share")
 
 	mapSet.Set("Storage *storage.QBFTStores\n", "")
-	mapSet.Set("Q       msgqueue.MsgQueue\n", "")
+	mapSet.Set("Queues       msgqueue.MsgQueue\n", "")
 	mapSet.Set("state uint32\n", "")
 
 	// not aligned to spec due to use of options and queue
@@ -38,7 +38,7 @@ func validatorSet() []utils.KeyValue {
 	mapSet.Set("Storage:     options.Storage,\n", "")
 	mapSet.Set("options.SSVShare", "share")
 	mapSet.Set("options.Signer", "signer")
-	mapSet.Set("Q:           q,\n", "")
+	mapSet.Set("Queues:           q,\n", "")
 	mapSet.Set("state:       uint32(NotStarted),\n", "")
 	mapSet.Set("return v\n", "")
 
