@@ -47,7 +47,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.TimerMsgMsgIndexer())
 	for _, dutyRunner := range options.DutyRunners {
 		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 		queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
@@ -66,7 +66,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Queues:      queues,
 		state:       uint32(NotStarted),
 	}
-
 	return v
 }
 
@@ -76,7 +75,16 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
-	return dutyRunner.StartNewDuty(duty)
+	err := dutyRunner.StartNewDuty(duty)
+
+	// init timer
+	if err == nil {
+		newInstance := dutyRunner.GetBaseRunner().State.RunningInstance
+		if newInstance != nil {
+			v.registerTimeoutHandler(newInstance, dutyRunner.GetBaseRunner().QBFTController.Height)
+		}
+	}
+	return err
 }
 
 // ProcessMessage processes Network Message of all types
@@ -107,6 +115,12 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
+	case types.SSVTimerMsgType:
+		signedMsg := &specqbft.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get consensus Message from network Message")
+		}
+		return dutyRunner.GetBaseRunner().QBFTController.OnTimeout(signedMsg) // TODo can push as consensus msg and check if timer
 	default:
 		return errors.New("unknown msg")
 	}

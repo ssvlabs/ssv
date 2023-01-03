@@ -209,8 +209,8 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
-	// registers a timeout handler
-	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
+	// registers a timeout handler TODO need to delete
+	//b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }

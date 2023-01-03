@@ -224,6 +224,8 @@ func (v *Validator) processLateCommit(q msgqueue.MsgQueue, handler MessageHandle
 func (v *Validator) getNextMsgForState(q msgqueue.MsgQueue, identifier string, height specqbft.Height) *spectypes.SSVMessage {
 	iterator := msgqueue.NewIndexIterator()
 
+	iterator.AddIndex(msgqueue.TimerMsgIndex(identifier, height))
+
 	idxs := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, false,
 		specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType)
 	for _, idx := range idxs {
