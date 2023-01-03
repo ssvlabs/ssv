@@ -4,21 +4,22 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/network"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -56,21 +57,21 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg1))
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg3))
+		require.NoError(t, ln.Nodes[2].Broadcast(msg3))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg1))
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg2))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg2))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg1))
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg3))
+		require.NoError(t, ln.Nodes[2].Broadcast(msg1))
+		require.NoError(t, ln.Nodes[1].Broadcast(msg3))
 	}()
 
 	wg.Wait()
@@ -134,7 +135,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastChangeRound(mid, specqbft.Height(0))
+	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(res), 5)
 	require.Less(t, len(res), 7)
@@ -143,14 +144,14 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
 	node.RegisterHandlers(&protcolp2p.SyncHandler{
-		Protocol: protcolp2p.LastChangeRoundProtocol,
+		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
 				Signature: []byte("xxx"),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
 				Message: &specqbft.Message{
-					MsgType:    specqbft.RoundChangeMsgType,
+					MsgType:    specqbft.CommitMsgType,
 					Height:     height,
 					Round:      round,
 					Identifier: mid[:],
@@ -171,7 +172,7 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 }
 
 func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
+	// logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
 	logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
 		return logger.With(zap.String("who", who))
@@ -188,7 +189,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 
 	routers := make([]*dummyRouter, n)
 	// for now, skip routers for v0
-	//if forkVersion != forksprotocol.GenesisForkVersion {
+	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])
@@ -264,7 +265,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
+		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}, nil

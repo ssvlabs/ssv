@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"encoding/hex"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -107,8 +108,14 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return dc.executor.ExecuteDuty(duty)
 	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
+
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
+	// so we need to copy the pubkey val to avoid pointer
+	var pk phase0.BLSPubKey
+	copy(pk[:], duty.PubKey[:])
+
 	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+	if err := pubKey.Deserialize(pk[:]); err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
@@ -120,7 +127,9 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 				return
 			}
 			logger.Info("starting duty processing")
-			v.StartDuty(duty)
+			if err := v.StartDuty(duty); err != nil {
+				logger.Warn("could not start duty", zap.Error(err))
+			}
 		}()
 	} else {
 		logger.Warn("could not find validator")
@@ -180,8 +189,8 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) {
-		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, " +
-			"assuming diff caused by a time drift - ignoring and executing duty")
+		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, "+
+			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.Type.String()))
 		return true
 	}
 	return false
@@ -191,6 +200,7 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
+		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(zap.Uint64("current slot", currentSlot)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).

@@ -32,3 +32,5 @@ OperatorPrivateKey:
 bootnode:
   ExternalIP:
   PrivateKey:
+
+LocalEventsPath: # path to local events. used for running the node with custom local events

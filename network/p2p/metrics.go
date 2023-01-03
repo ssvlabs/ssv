@@ -111,10 +111,10 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 }
 
 //
-//func reportLastMsg(pid string) {
+// func reportLastMsg(pid string) {
 //	MetricsPeerLastMsg.WithLabelValues(pid).Set(float64(timestamp()))
 //}
 //
-//func timestamp() int64 {
+// func timestamp() int64 {
 //	return time.Now().UnixNano() / int64(time.Millisecond)
 //}

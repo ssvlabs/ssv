@@ -7,15 +7,12 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	fssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-ssz"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 
-	beacon2 "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -27,46 +24,11 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-type signingUtils struct {
-}
-
-func (s *signingUtils) GetDomain(data *spec.AttestationData) ([]byte, error) {
-	return make([]byte, 32), nil
-}
-
-func (s *signingUtils) ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error) {
-	if object == nil {
-		return [32]byte{}, errors.New("cannot compute signing root of nil")
-	}
-	return s.signingData(func() ([32]byte, error) {
-		if v, ok := object.(fssz.HashRoot); ok {
-			return v.HashTreeRoot()
-		}
-		return ssz.HashTreeRoot(object)
-	}, domain)
-}
-
-func (s *signingUtils) signingData(rootFunc func() ([32]byte, error), domain []byte) ([32]byte, error) {
-	objRoot, err := rootFunc()
-	if err != nil {
-		return [32]byte{}, err
-	}
-	root := spec.Root{}
-	copy(root[:], objRoot[:])
-	_domain := spec.Domain{}
-	copy(_domain[:], domain)
-	container := &spec.SigningData{
-		ObjectRoot: root,
-		Domain:     _domain,
-	}
-	return container.HashTreeRoot()
-}
-
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork), types.GetDefaultDomain())
-	km.(*ethKeyManagerSigner).signingUtils = &signingUtils{}
+	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
+	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewBeaconMock()
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -113,13 +75,13 @@ func TestSignAttestation(t *testing.T) {
 	}
 
 	t.Run("sign once", func(t *testing.T) {
-		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
+		_, sig, err := km.(*ethKeyManagerSigner).SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		attestationData.BeaconBlockRoot = [32]byte{2, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2}
-		_, sig, err := km.SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
+		_, sig, err := km.(*ethKeyManagerSigner).SignAttestation(attestationData, duty, sk1.GetPublicKey().Serialize())
 		require.EqualError(t, err, "could not sign attestation: slashable attestation (HighestAttestationVote), not signing")
 		require.Nil(t, sig)
 	})
@@ -159,9 +121,9 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 
 	t.Run("pk 2", func(t *testing.T) {
@@ -191,8 +153,8 @@ func TestSignRoot(t *testing.T) {
 		}
 
 		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		//res, err := signed.VerifySig(pk)
+		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
-		//require.True(t, res)
+		// require.True(t, res)
 	})
 }

@@ -107,8 +107,10 @@ spec:
               name: config-secrets
               key: abi_version
               optional: true
+        - name: DEBUG_SERVICES
+          value: "ssv/*."
         - name: LOG_LEVEL
-          value: "info"
+          value: "debug"
         - name: DB_REPORTING
           value: "false"
         - name: PUBSUB_TRACE
@@ -133,6 +135,8 @@ spec:
           value: "15301"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: NETWORK_ID
+          value: "shifu-stage"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v3-1

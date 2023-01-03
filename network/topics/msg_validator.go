@@ -2,10 +2,12 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
+
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 // MsgValidatorFunc represents a message validator
@@ -26,7 +28,7 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
 			// can't decode message
-			//logger.Debug("invalid: can't decode message", zap.Error(err))
+			// logger.Debug("invalid: can't decode message", zap.Error(err))
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
@@ -37,27 +39,22 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		pmsg.ValidatorData = *msg
 		return pubsub.ValidationAccept
 		// check decided topic
-		//currentTopic := pmsg.GetTopic()
-		//currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
-		//if msg.MsgType == spectypes.SSVDecidedMsgType {
-		//	if decidedTopic := fork.DecidedTopic(); decidedTopic == currentTopicBaseName {
-		//		return pubsub.ValidationAccept
-		//	}
-		//}
-		//topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
-		//for _, tp := range topics {
+		// currentTopic := pmsg.GetTopic()
+		// currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
+		// topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())
+		// for _, tp := range topics {
 		//	if tp == currentTopicBaseName {
 		//		reportValidationResult(validationResultValid)
 		//		return pubsub.ValidationAccept
 		//	}
 		//}
-		//reportValidationResult(validationResultTopic)
-		//return pubsub.ValidationReject
+		// reportValidationResult(validationResultTopic)
+		// return pubsub.ValidationReject
 	}
 }
 
 //// CombineMsgValidators executes multiple validators
-//func CombineMsgValidators(validators ...MsgValidatorFunc) MsgValidatorFunc {
+// func CombineMsgValidators(validators ...MsgValidatorFunc) MsgValidatorFunc {
 //	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 //		res := pubsub.ValidationAccept
 //		for _, v := range validators {

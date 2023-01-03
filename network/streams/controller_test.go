@@ -18,7 +18,7 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	//logger := zaptest.NewLogger(t)
+	// logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	ctrl0 := NewStreamController(context.Background(), logger.With(zap.String("who", "node-0")),
 		hosts[0], genesis.New(), time.Second)

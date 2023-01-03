@@ -122,7 +122,7 @@ func (n *p2pNetwork) Close() error {
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		//return errors.New("could not setup network: in ready state")
+		// return errors.New("could not setup network: in ready state")
 		return nil
 	}
 

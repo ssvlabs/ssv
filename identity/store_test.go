@@ -2,15 +2,17 @@ package p2p
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/network/commons"
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
+	"testing"
+
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"testing"
+
+	"github.com/bloxapp/ssv/network/commons"
+	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func init() {
@@ -51,6 +53,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			options := basedb.Options{
 				Type:   "badger-memory",

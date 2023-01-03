@@ -1,14 +1,14 @@
 package p2pv1
 
 import (
-	"github.com/bloxapp/ssv/network/commons"
+	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
-	commons2 "github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	connmgr "github.com/libp2p/go-libp2p-connmgr"
 	"github.com/libp2p/go-libp2p-core/crypto"
@@ -108,11 +108,11 @@ func (n *p2pNetwork) SetupHost() error {
 	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
 	opts = append(opts, libp2p.ConnectionManager(connManager))
 	// TODO: enable and extract resource manager params as config
-	//rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
-	//if err != nil {
+	// rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
+	// if err != nil {
 	//	return errors.Wrap(err, "could not create resource manager")
 	//}
-	//opts = append(opts, libp2p.ResourceManager(rmgr))
+	// opts = append(opts, libp2p.ResourceManager(rmgr))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
@@ -155,7 +155,7 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	libPrivKey, err := commons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	libPrivKey, err := p2pcommons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
-		NodeVersion: commons2.GetNodeVersion(),
+		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
@@ -210,7 +210,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 }
 
 func (n *p2pNetwork) setupDiscovery() error {
-	ipAddr, err := commons.IPAddr()
+	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
 	}

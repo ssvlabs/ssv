@@ -14,8 +14,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/bloxapp/ssv/operator/duties/mocks"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestDutyController_ListenToTicker(t *testing.T) {
@@ -38,7 +39,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	}).AnyTimes()
 
 	dutyCtrl := &dutyController{
-		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork),
+		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
 		executor: mockExecutor,
 		fetcher:  mockFetcher,
 	}
@@ -64,7 +65,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 }
 
 func TestDutyController_ShouldExecute(t *testing.T) {
-	ctrl := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
+	ctrl := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
 	require.True(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
@@ -73,21 +74,21 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
 	ts := d.ethNetwork.GetSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestDutyController_GetCurrentSlot(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
 	require.Greater(t, slot, types.Slot(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {
-	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork)}
+	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
 	slot := d.getEpochFirstSlot(20203)
 	require.EqualValues(t, 646496, slot)

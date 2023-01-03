@@ -1,12 +1,10 @@
-name: full-test
+name: All tests
 
 on:
   push:
-    branches: 
-      - '**' 
-  pull_request:
-    branches: 
-      - '**'        
+    branches:
+      - 'main'
+#      - 'stage'
 
   workflow_dispatch:
 
@@ -20,5 +18,5 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Run make test
+      - name: Full-test
         run: make full-test

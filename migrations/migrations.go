@@ -9,7 +9,7 @@ import (
 
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/eth1"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -26,6 +26,9 @@ var (
 		migrationCleanValidatorRegistryData,
 		migrationCleanSyncOffset,
 		migrationCleanOperatorRemovalCorruptions,
+		migrationCleanShares,
+		migrationRemoveChangeRoundSync,
+		migrationAddGraffiti,
 	}
 )
 
@@ -54,7 +57,7 @@ type Options struct {
 	DbPath string
 }
 
-func (o *Options) getRegistryStores() []eth1.RegistryStore {
+func (o Options) getRegistryStores() []eth1.RegistryStore {
 	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage()}
 }
 
@@ -64,6 +67,7 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 		Logger: o.Logger,
 	})
 }
+
 func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db, o.Logger)
 }

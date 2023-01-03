@@ -159,7 +159,7 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 		}
 		metricFoundNodes.Inc()
 		handler(e)
-	}, defaultDiscoveryInterval) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
@@ -301,7 +301,7 @@ func (dvs *DiscV5Service) publishENR() {
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		//dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
+		// dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 

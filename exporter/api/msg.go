@@ -5,7 +5,6 @@ import (
 	"github.com/pkg/errors"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v1/message"
 )
 
 // Message represents an exporter message
@@ -28,7 +27,8 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 			Data: []string{},
 		}
 	}
-	identifier := message.ToMessageID(msgs[0].Message.Identifier)
+
+	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
 	pkv := identifier.GetPubKey()
 	role := identifier.GetRoleType()
 	return Message{

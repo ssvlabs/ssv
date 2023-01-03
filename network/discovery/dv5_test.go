@@ -1,7 +1,7 @@
 package discovery
 
 // TODO (:niv) disabled due to merging to main. need to fix
-//func TestNewService(t *testing.T) {
+// func TestNewService(t *testing.T) {
 //	ctx, cancel := context.WithCancel(context.Background())
 //	defer cancel()
 //	n := 4
@@ -79,7 +79,7 @@ package discovery
 //	wg.Wait()
 //}
 //
-//func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
+// func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
 //	bnSk, err := commons.GenNetworkKey()
 //	if err != nil {
 //		return nil, err
@@ -97,21 +97,21 @@ package discovery
 //	})
 //}
 //
-//type mockConnIndex struct {
+// type mockConnIndex struct {
 //}
 //
-//func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
+// func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 //	return libp2pnetwork.NotConnected
 //}
 //
-//func (c *mockConnIndex) CanConnect(id peer.ID) bool {
+// func (c *mockConnIndex) CanConnect(id peer.ID) bool {
 //	return true
 //}
 //
-//func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
+// func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
 //	return false
 //}
 //
-//func (c *mockConnIndex) IsBad(id peer.ID) bool {
+// func (c *mockConnIndex) IsBad(id peer.ID) bool {
 //	return false
 //}

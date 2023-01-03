@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	ssz "github.com/ferranbt/fastssz"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
@@ -19,8 +22,8 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -29,12 +32,12 @@ type ethKeyManagerSigner struct {
 	walletLock   *sync.RWMutex
 	signer       signer.ValidatorSigner
 	storage      *signerStorage
-	signingUtils beacon.SigningUtil
+	signingUtils beacon.Beacon
 	domain       spectypes.DomainType
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.SigningUtil, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.Beacon, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
 	signerStore := newSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -76,15 +79,15 @@ func newBeaconSigner(wallet core.Wallet, store core.SlashingStore, network beaco
 }
 
 func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty *spectypes.Duty, pk []byte) (*spec.Attestation, []byte, error) {
-	domain, err := km.signingUtils.GetDomain(data)
+	domain, err := km.signingUtils.DomainData(spec.Epoch(data.Slot/32), spectypes.DomainAttester) // TODO need to calculate epoch in a common func
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get domain for signing")
 	}
-	root, err := km.signingUtils.ComputeSigningRoot(data, domain[:])
+	root, err := km.signingUtils.ComputeSigningRoot(data, domain)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
-	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain, pk)
+	sig, err := km.signer.SignBeaconAttestation(specAttDataToPrysmAttData(data), domain[:], pk)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not sign attestation")
 	}
@@ -100,15 +103,45 @@ func (km *ethKeyManagerSigner) SignAttestation(data *spec.AttestationData, duty 
 	}, root[:], nil
 }
 
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte) (spectypes.Signature, []byte, error) {
+	km.walletLock.RLock()
+	defer km.walletLock.RUnlock()
+
+	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not get signing account")
+	}
+	if account == nil {
+		return nil, nil, errors.New("pk not found")
+	}
+
+	r, err := spectypes.ComputeETHSigningRoot(obj, domain)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not compute signing root")
+	}
+
+	// sig := k.SignByte(r[:])
+	sig, err := account.ValidationKeySign(r[:])
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "could not sign message")
+	}
+	blsSig := spec.BLSSignature{}
+	// copy(blsSig[:], sig.Serialize())
+	copy(blsSig[:], sig)
+
+	// return sig.Serialize(), r[:], nil
+	return sig, r[:], nil
+}
+
 func (km *ethKeyManagerSigner) IsAttestationSlashable(data *spec.AttestationData) error {
-	panic("implement me")
+	return nil
 }
 
 func (km *ethKeyManagerSigner) SignRandaoReveal(epoch spec.Epoch, pk []byte) (spectypes.Signature, []byte, error) {
 	panic("implement me")
 }
 
-func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(block *altair.BeaconBlock) error {
+func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(block *bellatrix.BeaconBlock) error {
 	panic("implement me")
 }
 
@@ -136,7 +169,7 @@ func (km *ethKeyManagerSigner) SignContribution(contribution *altair.Contributio
 	panic("implement me")
 }
 
-func (km *ethKeyManagerSigner) Decrypt(pk *rsa.PublicKey, cipher []byte) ([]byte, error) {
+func (km *ethKeyManagerSigner) Decrypt(pk *rsa.PrivateKey, cipher []byte) ([]byte, error) {
 	panic("implement me")
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
-	"sync"
 	"time"
 )
 
@@ -47,10 +46,9 @@ type topicsCtrl struct {
 	msgHandler          PubsubMessageHandler
 	subFilter           SubFilter
 
-	containers map[string]*topicContainer
-	topicsLock *sync.RWMutex
-
 	fork forks.Fork
+
+	container *topicsContainer
 }
 
 // NewTopicsController creates an instance of Controller
@@ -65,37 +63,55 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 		msgValidatorFactory: msgValidatorFactory,
 		msgHandler:          msgHandler,
 
-		topicsLock: &sync.RWMutex{},
-		containers: make(map[string]*topicContainer),
-
 		subFilter: subFilter,
 
 		fork: fork,
 	}
 
+	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic())
+
 	return ctrl
+}
+
+func (ctrl *topicsCtrl) onNewTopic() onTopicJoined {
+	return func(ps *pubsub.PubSub, topic *pubsub.Topic) {
+		// initial setup for the topic, should happen only once
+		name := topic.String()
+		if err := ctrl.setupTopicValidator(topic.String()); err != nil {
+			// TODO: close topic?
+			// return err
+			ctrl.logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
+		}
+		if ctrl.scoreParamsFactory != nil {
+			if p := ctrl.scoreParamsFactory(name); p != nil {
+				ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
+				if err := topic.SetScoreParams(p); err != nil {
+					// ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
+					ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
+				}
+			}
+		}
+	}
 }
 
 // Close implements io.Closer
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
 	for _, tp := range topics {
-		if err := ctrl.Unsubscribe(ctrl.fork.GetTopicBaseName(tp), true); err != nil {
-			ctrl.logger.Warn("could not unsubscribe topic", zap.String("topic", tp), zap.Error(err))
-		}
+		_ = ctrl.Unsubscribe(ctrl.fork.GetTopicBaseName(tp), true)
+		_ = ctrl.container.Leave(tp)
 	}
 	return nil
 }
 
 // Peers returns the peers subscribed to the given topic
-func (ctrl *topicsCtrl) Peers(topicName string) ([]peer.ID, error) {
-	topicName = ctrl.fork.GetTopicFullName(topicName)
-	cont := ctrl.getTopicContainer(topicName)
-	if cont == nil || cont.topic == nil {
-		return nil, ErrTopicNotReady
+func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
+	name = ctrl.fork.GetTopicFullName(name)
+	topic := ctrl.container.Get(name)
+	if topic == nil {
+		return nil, nil
 	}
-	peers := cont.topic.ListPeers()
-	return peers, nil
+	return topic.ListPeers(), nil
 }
 
 // Topics lists all the available topics
@@ -113,18 +129,23 @@ func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = ctrl.fork.GetTopicFullName(name)
 	ctrl.subFilter.(Whitelist).Register(name)
 	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
-	tc, err := ctrl.joinTopic(name)
-	if err == nil && tc != nil {
-		tc.incSubCount()
+	sub, err := ctrl.container.Subscribe(name)
+	if err != nil {
+		return err
 	}
-	return err
+	if sub == nil { // already subscribed
+		return nil
+	}
+	go ctrl.start(name, sub)
+
+	return nil
 }
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	topicFullName := ctrl.fork.GetTopicFullName(name)
+	name = ctrl.fork.GetTopicFullName(name)
 
-	tc, err := ctrl.joinTopic(topicFullName)
+	topic, err := ctrl.container.Join(name)
 	if err != nil {
 		return err
 	}
@@ -132,43 +153,23 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 	defer done()
 
-	err = tc.Publish(ctx, data)
+	err = topic.Publish(ctx, data)
 	if err == nil {
 		metricPubsubOutbound.WithLabelValues(name).Inc()
 	}
+
 	return err
 }
 
 // Unsubscribe unsubscribes from the given topic, only if there are no other subscribers of the given topic
 // if hard is true, we will unsubscribe the topic even if there are more subscribers.
 func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
-	ctrl.topicsLock.Lock()
-	defer ctrl.topicsLock.Unlock()
+	ctrl.container.Unsubscribe(name)
 
-	name = ctrl.fork.GetTopicFullName(name)
-
-	tc := ctrl.getTopicContainerUnsafe(name)
-	if tc == nil {
-		return nil
-	}
-	if subCount := tc.decSubCount(); subCount > 0 {
-		ctrl.logger.Debug("there are still active subscriptions for this topic",
-			zap.String("topic", name), zap.Int32("subCount", subCount))
-		if !hard {
-			ctrl.setTopicContainerUnsafe(name, tc)
-			return nil
-		}
-	}
-	ctrl.logger.Debug("unsubscribing topic", zap.String("topic", name))
-	delete(ctrl.containers, name)
-
-	if err := tc.Close(); err != nil {
-		return err
-	}
 	if ctrl.msgValidatorFactory != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
 		if err != nil {
-			ctrl.logger.Warn("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
+			ctrl.logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
 		}
 	}
 	ctrl.subFilter.(Whitelist).Deregister(name)
@@ -176,77 +177,24 @@ func (ctrl *topicsCtrl) Unsubscribe(name string, hard bool) error {
 	return nil
 }
 
-func (ctrl *topicsCtrl) getTopicContainer(name string) *topicContainer {
-	ctrl.topicsLock.RLock()
-	defer ctrl.topicsLock.RUnlock()
-
-	return ctrl.getTopicContainerUnsafe(name)
-}
-
-func (ctrl *topicsCtrl) getTopicContainerUnsafe(name string) *topicContainer {
-	tc, ok := ctrl.containers[name]
-	if !ok {
-		return nil
-	}
-	return tc
-}
-
-func (ctrl *topicsCtrl) setTopicContainerUnsafe(name string, tc *topicContainer) {
-	ctrl.containers[name] = tc
-}
-
-// joinTopic joins and subscribes the given topic
-func (ctrl *topicsCtrl) joinTopic(name string) (*topicContainer, error) {
-	ctrl.topicsLock.Lock()
-	// get or create the container
-	tc := ctrl.getTopicContainerUnsafe(name)
-	if tc == nil {
-		tc = newTopicContainer()
-		ctrl.setTopicContainerUnsafe(name, tc)
-		// initial setup for the topic, should happen only once
-		//ctrl.subFilter.Register(name)
-		if err := ctrl.setupTopicValidator(name); err != nil {
-			// TODO: close topic?
-			//return err
-			ctrl.logger.Warn("could not setup topic", zap.String("topic", name), zap.Error(err))
-		}
-	}
-	// lock topic and release main lock
-	ctrl.topicsLock.Unlock()
-	tc.locker.Lock()
-	defer tc.locker.Unlock()
-
-	if tc.topic != nil { // already joined topic
-		return tc, nil
-	}
-
-	err := ctrl.joinTopicUnsafe(tc, name)
-	if err != nil {
-		return nil, err
-	}
-
-	go ctrl.start(name, tc)
-
-	return tc, nil
-}
-
 // start will listen to *pubsub.Subscription,
 // if some error happened we try to leave and rejoin the topic
 // the loop stops once a topic is unsubscribed and therefore not listed
-func (ctrl *topicsCtrl) start(name string, tc *topicContainer) {
-	for {
-		err := ctrl.listen(tc.sub)
-		// rejoin in case failed for some reason
-		if err != nil && ctrl.ctx.Err() == nil {
-			ctrl.logger.Warn("could not listen to topic", zap.String("topic", name), zap.Error(err))
-			time.Sleep(time.Second)
-			err = ctrl.rejoinTopic(name)
-			if err == nil {
-				continue
-			}
-			ctrl.logger.Warn("could not rejoin topic", zap.String("topic", name), zap.Error(err))
+func (ctrl *topicsCtrl) start(name string, sub *pubsub.Subscription) {
+	for ctrl.ctx.Err() == nil {
+		err := ctrl.listen(sub)
+		if err == nil {
+			return
 		}
-		return
+		// rejoin in case failed
+		ctrl.logger.Debug("could not listen to topic", zap.String("topic", name), zap.Error(err))
+		ctrl.container.Unsubscribe(name)
+		_ = ctrl.container.Leave(name)
+		sub, err = ctrl.container.Subscribe(name)
+		if err == nil {
+			continue
+		}
+		ctrl.logger.Debug("could not rejoin topic", zap.String("topic", name), zap.Error(err))
 	}
 }
 
@@ -296,52 +244,5 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 			return errors.Wrap(err, "could not register topic validator")
 		}
 	}
-	return nil
-}
-
-func (ctrl *topicsCtrl) rejoinTopic(name string) error {
-	tc := ctrl.getTopicContainer(name)
-	if tc.topic != nil {
-		tc.locker.Lock()
-		defer tc.locker.Unlock()
-		tc.sub.Cancel()
-		if err := tc.topic.Close(); err != nil {
-			ctrl.logger.Warn("could not close topic", zap.String("topic", name), zap.Error(err))
-		}
-		if err := ctrl.joinTopicUnsafe(tc, name); err != nil {
-			ctrl.logger.Warn("could not join topic", zap.String("topic", name), zap.Error(err))
-			return err
-		}
-	}
-	return nil
-}
-
-func (ctrl *topicsCtrl) joinTopicUnsafe(tc *topicContainer, name string) error {
-	ctrl.logger.Debug("joining topic", zap.String("topic", name))
-	topic, err := ctrl.ps.Join(name)
-	if err != nil {
-		return err
-	}
-	tc.topic = topic
-	if ctrl.scoreParamsFactory != nil {
-		if p := ctrl.scoreParamsFactory(name); p != nil {
-			ctrl.logger.Debug("using scoring params for topic", zap.String("topic", name), zap.Any("params", p))
-			if err := topic.SetScoreParams(p); err != nil {
-				//ctrl.logger.Warn("could not set topic score params", zap.String("topic", name), zap.Error(err))
-				return errors.Wrapf(err, "could not set topic score params for topic %s", name)
-			}
-		}
-	}
-
-	sub, err := topic.Subscribe()
-	if err != nil {
-		ctrl.logger.Warn("could not subscribe to topic", zap.String("topic", name), zap.Error(err))
-		if errClose := tc.Close(); errClose != nil {
-			ctrl.logger.Warn("could not close topic", zap.String("topic", name), zap.Error(errClose))
-		}
-		return err
-	}
-	tc.sub = sub
-
 	return nil
 }

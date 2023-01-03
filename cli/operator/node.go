@@ -2,8 +2,9 @@ package operator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v1/types"
+	logging "github.com/ipfs/go-log"
 	"log"
 	"net/http"
 	"time"
@@ -21,7 +22,6 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
@@ -32,7 +32,8 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -57,6 +58,8 @@ type config struct {
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+
+	LocalEventsPath string `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 }
 
 var cfg config
@@ -88,6 +91,9 @@ var StartNodeCmd = &cobra.Command{
 		if errLogLevel != nil {
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 		}
+		if len(cfg.DebugServices) > 0 {
+			_ = logging.SetLogLevelRegex(cfg.DebugServices, "debug")
+		}
 
 		cfg.DBOptions.Logger = Logger
 		cfg.DBOptions.Ctx = cmd.Context()
@@ -115,7 +121,7 @@ var StartNodeCmd = &cobra.Command{
 		Logger.Info("using ssv network", zap.String("domain", string(types.GetDefaultDomain())),
 			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
 
-		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network))
+		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
@@ -215,7 +221,7 @@ var StartNodeCmd = &cobra.Command{
 			ws := api.NewWsServer(cmd.Context(), Logger, nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
-			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
+			//cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(Logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
@@ -231,9 +237,21 @@ var StartNodeCmd = &cobra.Command{
 		metrics.WaitUntilHealthy(Logger, cfg.SSVOptions.Eth1Client, "eth1 node")
 		metrics.WaitUntilHealthy(Logger, beaconClient, "beacon node")
 
-		if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
-			Logger.Fatal("failed to start eth1", zap.Error(err))
+		// load & parse local events yaml if exists, otherwise sync from contract
+		if len(cfg.LocalEventsPath) > 0 {
+			if err := validator.LoadLocalEvents(
+				Logger,
+				validatorCtrl.Eth1EventHandler(false),
+				cfg.LocalEventsPath,
+			); err != nil {
+				Logger.Fatal("failed to load local events", zap.Error(err))
+			}
+		} else {
+			if err := operatorNode.StartEth1(eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+				Logger.Fatal("failed to start eth1", zap.Error(err))
+			}
 		}
+
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
@@ -272,13 +290,15 @@ func getNodeSubnets(logger *zap.Logger, db basedb.IDb, ssvForkVersion forksproto
 		Logger: logger,
 	})
 	subnetsMap := make(map[int]bool)
-	shares, err := sharesStorage.GetOperatorValidatorShares(operatorPubKey, true)
+	shares, err := sharesStorage.GetFilteredValidatorShares(func(share *types.SSVShare) bool {
+		return !share.Liquidated && share.BelongsToOperator(operatorPubKey)
+	})
 	if err != nil {
 		logger.Warn("could not read validators to bootstrap subnets")
 		return nil
 	}
 	for _, share := range shares {
-		subnet := f.ValidatorSubnet(share.PublicKey.SerializeToHexStr())
+		subnet := f.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey))
 		if subnet < 0 {
 			continue
 		}

@@ -44,7 +44,7 @@ func TestTopicManager(t *testing.T) {
 
 func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
-	//nPeers := len(peers)
+	// nPeers := len(peers)
 
 	validatorTopic := func(pkhex string) string {
 		pk, err := hex.DecodeString(pkhex)
@@ -112,7 +112,7 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 					require.NoError(t, ctxReadMessages.Err())
 					c := p.getCount(f.GetTopicFullName(validatorTopic(pk)))
 					require.GreaterOrEqual(t, c, minMsgCount)
-					//require.LessOrEqual(t, c, maxMsgCount)
+					// require.LessOrEqual(t, c, maxMsgCount)
 				}
 			}(pks[i])
 		}
@@ -207,7 +207,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	require.NoError(t, err)
 
 	var p *P
-	//logger := zaptest.NewLogger(t)
+	// logger := zaptest.NewLogger(t)
 	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
@@ -284,7 +284,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 }
 
 //
-//func createShares(n int) []*bls.SecretKey {
+// func createShares(n int) []*bls.SecretKey {
 //	threshold.Init()
 //
 //	var res []*bls.SecretKey
