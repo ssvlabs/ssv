@@ -109,6 +109,8 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
 
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
+	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 

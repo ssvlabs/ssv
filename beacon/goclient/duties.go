@@ -102,8 +102,8 @@ func (gc *goClient) fetchSyncCommitteeDuties(epoch phase0.Epoch, validatorIndice
 			}
 		}
 
-		startSlot := epoch * 32
-		endSlot := startSlot + 31
+		startSlot := uint64(epoch) * gc.network.SlotsPerEpoch()
+		endSlot := startSlot + (gc.network.SlotsPerEpoch() - 1)
 		// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
 		for slot := startSlot; slot <= endSlot; slot++ {
 			for _, syncCommitteeDuty := range syncCommitteeDuties {

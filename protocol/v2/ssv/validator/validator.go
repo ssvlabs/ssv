@@ -34,7 +34,7 @@ type Validator struct {
 	Signer      spectypes.KeyManager
 
 	Storage *storage.QBFTStores
-	Q       map[spectypes.BeaconRole]msgqueue.MsgQueue
+	Queues  map[spectypes.BeaconRole]msgqueue.MsgQueue
 
 	state uint32
 }
@@ -63,7 +63,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
-		Q:           queues,
+		Queues:      queues,
 		state:       uint32(NotStarted),
 	}
 

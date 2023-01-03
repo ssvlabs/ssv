@@ -3,12 +3,14 @@ package goclient
 import (
 	"encoding/binary"
 	eth2client "github.com/attestantio/go-eth2-client"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/config/params"
 	"github.com/prysmaticlabs/prysm/crypto/hash"
 	"github.com/prysmaticlabs/prysm/time"
 	"github.com/prysmaticlabs/prysm/time/slots"
+	"go.uber.org/zap"
 	time2 "time"
 )
 
@@ -19,13 +21,25 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
 	gc.waitToSlotTwoThirds(uint64(slot))
 
-	// Check if the validator is an aggregator
-	ok, err := isAggregator(committeeLength, slotSig)
+	// differ from spec because we need to subscribe to subnet
+	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not get aggregator status")
 	}
-	if !ok {
+	if !isAggregator {
 		return nil, errors.New("Validator is not an aggregator")
+	}
+
+	if err := gc.SubscribeToCommitteeSubnet([]*v1.BeaconCommitteeSubscription{
+		{
+			ValidatorIndex:   validatorIndex,
+			Slot:             slot,
+			CommitteeIndex:   committeeIndex,
+			CommitteesAtSlot: 0,
+			IsAggregator:     true,
+		},
+	}); err != nil {
+		gc.logger.Warn("failed to subscribe to committee subnet", zap.Error(err))
 	}
 
 	dataProvider, isProvider := gc.client.(eth2client.AttestationDataProvider)
@@ -54,7 +68,6 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.Wrap(err, "failed to get aggregate attestation")
 	}
 	if aggregateData == nil {
-		//a.logger.Warn("Got nil aggregate attestation", zap.Uint64("slot", uint64(data.Slot)))
 		return nil, errors.New("aggregation data is nil")
 	}
 

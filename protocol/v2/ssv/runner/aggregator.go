@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -81,8 +80,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 	}
 
 	duty := r.GetState().StartingDuty
-
-	// TODO check if is aggregator(?)
 
 	// get block data
 	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)

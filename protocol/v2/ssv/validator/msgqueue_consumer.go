@@ -19,10 +19,10 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	if q, ok := v.Q[msg.MsgID.GetRoleType()]; ok {
+	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		q.Add(msg)
 	} else {
-		// TODO handle missing queue?
+		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
 }
 
@@ -45,7 +45,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	q, ok := v.Q[msgID.GetRoleType()]
+	q, ok := v.Queues[msgID.GetRoleType()]
 	if !ok {
 		return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 	}
@@ -84,7 +84,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		/*v.Q.Clean(func(index msgqueue.Index) bool {
+		/*v.Queues.Clean(func(index msgqueue.Index) bool {
 			if index.ID != identifier {
 				return false
 			}
