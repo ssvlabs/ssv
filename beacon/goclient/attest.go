@@ -1,6 +1,8 @@
 package goclient
 
 import (
+	"time"
+
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	types2 "github.com/bloxapp/ssv-spec/types"
@@ -14,10 +16,15 @@ import (
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	if provider, isProvider := gc.client.(eth2client.AttestationDataProvider); isProvider {
 		gc.waitOneThirdOrValidBlock(uint64(slot))
+
+		startTime := time.Now()
 		attestationData, err := provider.AttestationData(gc.ctx, slot, committeeIndex)
 		if err != nil {
 			return nil, err
 		}
+		metricsAttestationDataRequest.WithLabelValues().
+			Observe(time.Since(startTime).Seconds())
+
 		return attestationData, nil
 	}
 	return nil, errors.New("client does not support AttestationDataProvider")

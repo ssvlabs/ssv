@@ -125,11 +125,6 @@ start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
 
-.PHONY: start-exporter
-start-exporter:
-	@echo "Running exporter on address: ${HOST_ADDRESS}"
-	${BUILD_PATH} start-exporter ${NODE_COMMAND}
-
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor
 docker-monitor:
