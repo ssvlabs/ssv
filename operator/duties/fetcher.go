@@ -229,7 +229,7 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		Slot:             duty.Slot,
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
-		IsAggregator:     false, // for aggregate, we submit subscribe after pre-consensus
+		IsAggregator:     duty.Type == spectypes.BNRoleAggregator,
 	}
 }
 
