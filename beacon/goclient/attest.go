@@ -1,29 +1,27 @@
 package goclient
 
 import (
-	"time"
-
 	eth2client "github.com/attestantio/go-eth2-client"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	types2 "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
-	"github.com/prysmaticlabs/prysm/time"
+	prysmtypes "github.com/prysmaticlabs/eth2-types"
+	prysmtime "github.com/prysmaticlabs/prysm/time"
 	"github.com/prysmaticlabs/prysm/time/slots"
-	time2 "time"
+	"time"
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	if provider, isProvider := gc.client.(eth2client.AttestationDataProvider); isProvider {
 		gc.waitOneThirdOrValidBlock(uint64(slot))
 
-		startTime := time.Now()
+		startTime := prysmtime.Now()
 		attestationData, err := provider.AttestationData(gc.ctx, slot, committeeIndex)
 		if err != nil {
 			return nil, err
 		}
 		metricsAttestationDataRequest.WithLabelValues().
-			Observe(time.Since(startTime).Seconds())
+			Observe(prysmtime.Since(startTime).Seconds())
 
 		return attestationData, nil
 	}
@@ -49,8 +47,8 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 
 // getSigningRoot returns signing root
 func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(types.Slot(data.Slot))
-	domain, err := gc.DomainData(spec.Epoch(epoch), types2.DomainAttester)
+	epoch := gc.network.EstimatedEpochAtSlot(prysmtypes.Slot(data.Slot))
+	domain, err := gc.DomainData(spec.Epoch(epoch), spectypes.DomainAttester)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -66,12 +64,12 @@ func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
 	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := time.Until(finalTime)
+	wait := prysmtime.Until(finalTime)
 	if wait <= 0 {
 		return
 	}
 
-	t := time2.NewTimer(wait)
+	t := time.NewTimer(wait)
 	defer t.Stop()
 	for range t.C {
 		return
