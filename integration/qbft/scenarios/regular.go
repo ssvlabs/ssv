@@ -1,6 +1,8 @@
 package scenarios
 
 import (
+	"bytes"
+	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -46,6 +48,93 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 			},
 			4: {
 				storedInstanceForOperatorID(4, identifier, consensusData),
+			},
+		},
+		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
+			1: {
+				func(instance *protocolstorage.StoredInstance) error {
+
+					//encodedConsensusData, err := consensusData.Encode()
+					//if err != nil {
+					//	return fmt.Errorf("error during encoding consensus data: %w", err)
+					//}
+					//
+					//encodedProposalData, err := (&specqbft.ProposalData{
+					//	Data:                     encodedConsensusData,
+					//	RoundChangeJustification: nil,
+					//	PrepareJustification:     nil,
+					//}).Encode()
+					//if err != nil {
+					//	return fmt.Errorf("error during encoding proposal data: %w", err)
+					//}
+					//
+					//encodedProposalData = encodedProposalData //TODO: remove
+					//
+					//if instance.State.ProposalAcceptedForCurrentRound != spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+					//	MsgType:    specqbft.ProposalMsgType,
+					//	Height:     specqbft.FirstHeight,
+					//	Round:      specqbft.FirstRound,
+					//	Identifier: identifier[:],
+					//	Data:       encodedProposalData,
+					//}) {
+					//	return fmt.Errorf("proposal accepted for current round is wrong")
+					//}
+					//
+					//if !instance.State.Decided {
+					//	return fmt.Errorf("decided is wrong")
+					//}
+					//
+					//if len(instance.State.CommitContainer.Msgs) <= 3 {
+					//	return fmt.Errorf("not enough commit messages")
+					//}
+					//
+					//expectedCommitMessagesForRound := func(round specqbft.Round) []*specqbft.SignedMessage {
+					//	if round == specqbft.FirstRound {
+					//		return []*specqbft.SignedMessage{
+					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+					//				MsgType:    specqbft.CommitMsgType,
+					//				Height:     specqbft.FirstHeight,
+					//				Round:      specqbft.FirstRound,
+					//				Identifier: identifier[:],
+					//				Data:       commitData,
+					//			}),
+					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
+					//				MsgType:    specqbft.CommitMsgType,
+					//				Height:     specqbft.FirstHeight,
+					//				Round:      specqbft.FirstRound,
+					//				Identifier: identifier[:],
+					//				Data:       commitData,
+					//			}),
+					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+					//				MsgType:    specqbft.CommitMsgType,
+					//				Height:     specqbft.FirstHeight,
+					//				Round:      specqbft.FirstRound,
+					//				Identifier: identifier[:],
+					//				Data:       commitData,
+					//			}),
+					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
+					//				MsgType:    specqbft.CommitMsgType,
+					//				Height:     specqbft.FirstHeight,
+					//				Round:      specqbft.FirstRound,
+					//				Identifier: identifier[:],
+					//				Data:       commitData,
+					//			}),
+					//		}
+					//	}
+					//
+					//	return nil
+					//}
+					//
+					//expectedCommitMessagesForRound = expectedCommitMessagesForRound //TODO: remove
+					//
+					//for round, messages := range instance.State.CommitContainer.Msgs {
+					//	//ectedCommitMessagesForRound(round){}
+					//	round = round
+					//	messages = messages
+					//}
+
+					return nil
+				},
 			},
 		},
 		StartDutyErrors: map[spectypes.OperatorID]error{
@@ -168,4 +257,149 @@ func storedInstanceForOperatorID(operatorID spectypes.OperatorID, identifier spe
 			},
 		},
 	}
+}
+
+func deepValidateStorageInstance(expected, actual *protocolstorage.StoredInstance) error {
+	if actual.State == nil {
+		return fmt.Errorf("expected state = non-nil, actual = nil")
+	}
+
+	if expected.State.Share.OperatorID != actual.State.Share.OperatorID {
+		return fmt.Errorf("expected share operator id = %d, actual = %d", expected.State.Share.OperatorID, actual.State.Share.OperatorID)
+	}
+
+	if !bytes.Equal(expected.State.Share.ValidatorPubKey, actual.State.Share.ValidatorPubKey) {
+		return fmt.Errorf("expected share validator pub key %s, actual = %s", expected.State.Share.ValidatorPubKey, actual.State.Share.ValidatorPubKey)
+	}
+
+	if !bytes.Equal(expected.State.Share.SharePubKey, actual.State.Share.SharePubKey) {
+		return fmt.Errorf("expected share share pub key %s, actual = %s", expected.State.Share.SharePubKey, actual.State.Share.SharePubKey)
+	}
+
+	for i := range expected.State.Share.Committee {
+		if expected.State.Share.Committee[i].OperatorID != actual.State.Share.Committee[i].OperatorID &&
+			!bytes.Equal(expected.State.Share.Committee[i].PubKey, actual.State.Share.Committee[i].PubKey) {
+			return fmt.Errorf("expected share comittee = %+v, actual = %+v", expected.State.Share.Committee, actual.State.Share.Committee)
+		}
+	}
+
+	if expected.State.Share.Quorum != actual.State.Share.Quorum {
+		return fmt.Errorf("expected share quorum = %d, actual = %d", expected.State.Share.Quorum, actual.State.Share.Quorum)
+	}
+
+	if expected.State.Share.PartialQuorum != actual.State.Share.PartialQuorum {
+		return fmt.Errorf("expected share partial quorum = %d, actual = %d", expected.State.Share.PartialQuorum, actual.State.Share.PartialQuorum)
+	}
+
+	if !bytes.Equal(expected.State.Share.DomainType, actual.State.Share.DomainType) {
+		return fmt.Errorf("expected share domain type = %d, actual = %d", expected.State.Share.DomainType, actual.State.Share.DomainType)
+	}
+
+	if !bytes.Equal(expected.State.Share.Graffiti, actual.State.Share.Graffiti) {
+		return fmt.Errorf("expected share graffiti id = %d, actual = %d", expected.State.Share.Graffiti, actual.State.Share.Graffiti)
+	}
+
+	if !bytes.Equal(expected.State.ID, actual.State.ID) {
+		return fmt.Errorf("expected id = %s, actual = %s", expected.State.ID, actual.State.ID)
+	}
+
+	if expected.State.Round != actual.State.Round {
+		return fmt.Errorf("expected round = %d, actual = %d", expected.State.Round, actual.State.Round)
+	}
+
+	if expected.State.Height != actual.State.Height {
+		return fmt.Errorf("expected height = %d, actual = %d", expected.State.Height, actual.State.Height)
+	}
+
+	if expected.State.LastPreparedRound != actual.State.LastPreparedRound {
+		return fmt.Errorf("expected last prepared round = %d, actual = %d", expected.State.LastPreparedRound, actual.State.LastPreparedRound)
+	}
+
+	if !bytes.Equal(expected.State.LastPreparedValue, actual.State.LastPreparedValue) {
+		return fmt.Errorf("expected last prepared value = %s, actual = %s", expected.State.LastPreparedValue, actual.State.LastPreparedValue)
+	}
+
+	if err := deepValidateSignedMessage(expected.State.ProposalAcceptedForCurrentRound, actual.State.ProposalAcceptedForCurrentRound); err != nil {
+		return err
+	}
+
+	if expected.State.Decided != actual.State.Decided {
+		return fmt.Errorf("expected decided = %v, actual = %v", expected.State.Decided, actual.State.Decided)
+	}
+
+	if !bytes.Equal(expected.State.DecidedValue, actual.State.DecidedValue) {
+		return fmt.Errorf("expected decided value = %s, actual = %s", expected.State.DecidedValue, actual.State.DecidedValue)
+	}
+
+	for range expected.State.ProposeContainer.Msgs[expected.State.Round] {
+		for i := range expected.State.ProposeContainer.Msgs[expected.State.Round] {
+			if err := deepValidateSignedMessage(expected.State.ProposeContainer.Msgs[expected.State.Round][i], actual.State.ProposeContainer.Msgs[actual.State.Round][i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	for range expected.State.PrepareContainer.Msgs[expected.State.Round] {
+		for i := range expected.State.PrepareContainer.Msgs[expected.State.Round] {
+			if err := deepValidateSignedMessage(expected.State.PrepareContainer.Msgs[expected.State.Round][i], actual.State.PrepareContainer.Msgs[actual.State.Round][i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	for range expected.State.CommitContainer.Msgs[expected.State.Round] {
+		for i := range expected.State.CommitContainer.Msgs[expected.State.Round] {
+			if err := deepValidateSignedMessage(expected.State.CommitContainer.Msgs[expected.State.Round][i], actual.State.CommitContainer.Msgs[actual.State.Round][i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	for range expected.State.RoundChangeContainer.Msgs[expected.State.Round] {
+		for i := range expected.State.RoundChangeContainer.Msgs[expected.State.Round] {
+			if err := deepValidateSignedMessage(expected.State.RoundChangeContainer.Msgs[expected.State.Round][i], actual.State.RoundChangeContainer.Msgs[actual.State.Round][i]); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := deepValidateSignedMessage(expected.DecidedMessage, actual.DecidedMessage); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func deepValidateSignedMessage(expected, actual *specqbft.SignedMessage) error {
+	if !bytes.Equal(expected.Signature, actual.Signature) {
+		return fmt.Errorf("expected signed message signature = %s, actual = %s", expected.Signature, actual.Signature)
+	}
+
+	for i := range expected.Signers {
+		if expected.Signers[i] != actual.Signers[i] {
+			return fmt.Errorf("expected signed message signer N%d operator id = %d, actual = %d", i, expected.Signers[i], actual.Signers[i])
+		}
+	}
+
+	if expected.Message.MsgType != actual.Message.MsgType {
+		return fmt.Errorf("expected signed message type = %d, actual = %d", expected.Message.MsgType, actual.Message.MsgType)
+	}
+
+	if expected.Message.Height != actual.Message.Height {
+		return fmt.Errorf("expected signed message height = %d, actual = %d", expected.Message.Height, actual.Message.Height)
+	}
+
+	if expected.Message.Round != actual.Message.Round {
+		return fmt.Errorf("expected signed message round = %d, actual = %d", expected.Message.Round, actual.Message.Round)
+	}
+
+	if !bytes.Equal(expected.Message.Identifier, actual.Message.Identifier) {
+		return fmt.Errorf("expected signed message identifier = %s, actual = %s", expected.Message.Identifier, actual.Message.Identifier)
+	}
+
+	if !bytes.Equal(expected.Message.Data, actual.Message.Data) {
+		return fmt.Errorf("expected signed message data = %s, actual = %s", expected.Message.Data, actual.Message.Data)
+	}
+
+	return nil
 }

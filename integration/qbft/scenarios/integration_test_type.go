@@ -36,12 +36,13 @@ import (
 
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
-	Name              string
-	OperatorIDs       []spectypes.OperatorID
-	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	Duties            map[spectypes.OperatorID][]*spectypes.Duty
-	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	StartDutyErrors   map[spectypes.OperatorID]error
+	Name               string
+	OperatorIDs        []spectypes.OperatorID
+	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	Duties             map[spectypes.OperatorID][]*spectypes.Duty
+	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
+	ExpectedInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	StartDutyErrors    map[spectypes.OperatorID]error
 }
 
 type scenarioContext struct {
