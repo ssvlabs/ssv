@@ -3,6 +3,7 @@ package scenarios
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -41,13 +42,13 @@ type IntegrationTest struct {
 	OperatorIDs       []spectypes.OperatorID
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties            map[spectypes.OperatorID][]ScheduledDuty
-	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
 	StartDutyErrors   map[spectypes.OperatorID]error
 }
 
 type ScheduledDuty struct {
 	Duty  *spectypes.Duty
-	Delay time.Duration // consider using time.Time
+	Delay time.Duration
 }
 
 type scenarioContext struct {
@@ -85,7 +86,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	forkVersion := protocolforks.GenesisForkVersion
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)/2, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)-1, false)
 	if err != nil {
 		return nil, err
 	}
@@ -203,6 +204,32 @@ func (it *IntegrationTest) Run() error {
 
 	<-time.After(32 * time.Second) // TODO: fix
 
+	instanceMap := map[spectypes.OperatorID][]*protocolstorage.StoredInstance{}
+	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
+		for _, expectedInstance := range expectedInstances {
+			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
+			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
+				GetHighestInstance(expectedInstance.State.ID)
+			if err != nil {
+				return err
+			}
+
+			instanceMap[expectedOperatorID] = append(instanceMap[expectedOperatorID], storedInstance)
+		}
+	}
+
+	jsonInstances, err := json.Marshal(instanceMap)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("\nactual instances:\n%v\n\n", string(jsonInstances))
+
+	jsonExpectedInstances, err := json.Marshal(it.ExpectedInstances)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("\nexpected instances:\n%v\n\n", string(jsonExpectedInstances))
+
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
 		for i, expectedInstance := range expectedInstances {
 			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
@@ -254,9 +281,11 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 			},
 			Beacon: beaconNode{spectestingutils.NewTestingBeaconNode()},
 			Signer: sCtx.keyManagers[operatorID],
+			Logger: sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID))),
 		}
 
 		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
+
 		val := protocolvalidator.NewValidator(sCtx.ctx, options)
 		val.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		validators[operatorID] = val
@@ -412,10 +441,25 @@ func assertState(actual *specqbft.State, expected *specqbft.State) error {
 
 	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
 	if expected.Decided {
+		if want, got := len(expectedCopy.CommitContainer.Msgs), len(actualCopy.CommitContainer.Msgs); want != got {
+			return fmt.Errorf("wrong commit message count, want %d, got %d", want, got)
+		}
+
 		for round, messages := range expectedCopy.CommitContainer.Msgs {
-			signers, _ := actualCopy.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
-			if !actualCopy.Share.HasQuorum(len(signers)) {
-				// return fmt.Errorf("no quorum")
+			for i, message := range messages {
+				expectedRoot, err := message.GetRoot()
+				if err != nil {
+					return fmt.Errorf("get expected commit message root: %w", err)
+				}
+
+				actualRoot, err := actualCopy.CommitContainer.Msgs[round][i].GetRoot()
+				if err != nil {
+					return fmt.Errorf("get actual commit message root: %w", err)
+				}
+
+				if !bytes.Equal(expectedRoot, actualRoot) {
+					return fmt.Errorf("expected and actual commit roots differ")
+				}
 			}
 		}
 
@@ -429,12 +473,12 @@ func assertState(actual *specqbft.State, expected *specqbft.State) error {
 		})
 	}
 
-	actualRoot, err := actual.GetRoot()
+	actualRoot, err := actualCopy.GetRoot()
 	if err != nil {
 		return fmt.Errorf("actual root: %w", err)
 	}
 
-	expectedRoot, err := expected.GetRoot()
+	expectedRoot, err := expectedCopy.GetRoot()
 	if err != nil {
 		return fmt.Errorf("expected root: %w", err)
 	}
@@ -451,6 +495,14 @@ type msgRouter struct {
 }
 
 func (m *msgRouter) Route(message spectypes.SSVMessage) {
+	if message.MsgType == spectypes.SSVConsensusMsgType {
+		sm := &specqbft.SignedMessage{}
+		if err := sm.Decode(message.Data); err != nil {
+			zap.L().Debug("router got malformed consensus message")
+		} else {
+			zap.L().Debug("router got consensus message", zap.Any("message", sm))
+		}
+	}
 	m.validator.HandleMessage(&message)
 }
 

@@ -4,6 +4,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -18,6 +20,7 @@ type Options struct {
 	Signer      spectypes.KeyManager
 	DutyRunners runner.DutyRunners
 	FullNode    bool
+	Logger      *zap.Logger
 }
 
 func (o *Options) defaults() {

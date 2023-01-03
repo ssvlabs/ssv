@@ -2,13 +2,15 @@ package topics
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/forks"
+	"io"
+	"time"
+
 	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"io"
-	"time"
+
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 var (
@@ -196,6 +198,8 @@ func (ctrl *topicsCtrl) start(name string, sub *pubsub.Subscription) {
 		}
 		ctrl.logger.Debug("could not rejoin topic", zap.String("topic", name), zap.Error(err))
 	}
+
+	zap.L().Debug("topicsCtrl ctx err", zap.Error(ctrl.ctx.Err()))
 }
 
 // listen handles incoming messages from the topic
@@ -207,7 +211,9 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
+		zap.L().Debug("got p2p message", zap.Any("message", msg))
 		if err != nil {
+			zap.L().Debug("got p2p message error", zap.Error(err))
 			if ctx.Err() != nil {
 				logger.Debug("stop listening to topic: context is done")
 				return nil
@@ -227,6 +233,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}
+	zap.L().Debug("topics ctx err", zap.Error(ctx.Err()))
 	return nil
 }
 

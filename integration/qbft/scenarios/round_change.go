@@ -30,6 +30,7 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 		24000 * time.Millisecond,
 	}
 	consensusDataList, proposalDataList, prepareDataList, commitDataList, roundChangeDataList, err := messageDataForSlots(role, pk, slots...)
+	_ = roundChangeDataList // TODO: fix
 	if err != nil {
 		panic(err)
 	}
@@ -40,6 +41,7 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 		InitialInstances: nil,
 		Duties:           createDutyMap(role, pk, slots, delays),
 		// TODO: just check state for 3rd duty
+		// TODO: consider using a validation function func(map[spectypes.OperatorID][]*protocolstorage.StoredInstance) bool
 		ExpectedInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
 			1: {
 				&protocolstorage.StoredInstance{
@@ -47,119 +49,18 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 						Share:             testingShare(spectestingutils.Testing4SharesSet(), 1),
 						ID:                identifier[:],
 						Round:             specqbft.FirstRound,
-						Height:            2,
+						Height:            0,
 						LastPreparedRound: specqbft.FirstRound,
-						LastPreparedValue: consensusDataList[3],
+						LastPreparedValue: consensusDataList[0],
 						ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 							MsgType:    specqbft.ProposalMsgType,
 							Height:     specqbft.FirstHeight,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       proposalDataList[3],
+							Data:       proposalDataList[0],
 						}),
 						Decided:      true,
-						DecidedValue: consensusDataList[3],
-						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-							specqbft.FirstRound: {
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-									MsgType:    specqbft.ProposalMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       proposalDataList[3],
-								}),
-							},
-						}},
-						PrepareContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-							specqbft.FirstRound: {
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareDataList[3],
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareDataList[3],
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareDataList[3],
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareDataList[3],
-								}),
-							},
-						}},
-						// NOTE: need to keep round keys and commit message, there's a special check for CommitContainer
-						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-							specqbft.FirstRound: {
-								&specqbft.SignedMessage{
-									Message: &specqbft.Message{
-										MsgType:    specqbft.CommitMsgType,
-										Height:     2,
-										Round:      specqbft.FirstRound,
-										Identifier: identifier[:],
-										Data:       commitDataList[3],
-									},
-								},
-							},
-						}},
-						RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-							// 2: {
-							// 	spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-							// 		MsgType:    specqbft.RoundChangeMsgType,
-							// 		Height:     specqbft.FirstHeight,
-							// 		Round:      2,
-							// 		Identifier: identifier[:],
-							// 		Data:       roundChangeDataList[3],
-							// 	}),
-							// },
-							// 3: {
-							// 	spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-							// 		MsgType:    specqbft.RoundChangeMsgType,
-							// 		Height:     specqbft.FirstHeight,
-							// 		Round:      3,
-							// 		Identifier: identifier[:],
-							// 		Data:       roundChangeDataList[3],
-							// 	}),
-							// },
-						}},
-					},
-					DecidedMessage: &specqbft.SignedMessage{
-						Message: &specqbft.Message{
-							MsgType:    specqbft.CommitMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       spectestingutils.PrepareDataBytes(consensusDataList[3]),
-						},
-					},
-				},
-			},
-			2: {
-				&protocolstorage.StoredInstance{
-					State: &specqbft.State{
-						Share:                           testingShare(spectestingutils.Testing4SharesSet(), 2),
-						ID:                              identifier[:],
-						Round:                           specqbft.FirstRound,
-						Height:                          specqbft.FirstHeight,
-						LastPreparedRound:               0,
-						LastPreparedValue:               nil,
-						ProposalAcceptedForCurrentRound: nil,
-						Decided:                         true,
-						DecidedValue:                    consensusDataList[0],
+						DecidedValue: consensusDataList[0],
 						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
@@ -187,38 +88,159 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 									Identifier: identifier[:],
 									Data:       prepareDataList[0],
 								}),
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
 							},
 						}},
-						// NOTE: need to keep round keys and commit message data, there's a special check for CommitContainer
 						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								&specqbft.SignedMessage{
 									Message: &specqbft.Message{
-										Data: commitDataList[0],
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
 									},
 								},
 							},
 						}},
-						RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-							2: {
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-									MsgType:    specqbft.RoundChangeMsgType,
+						RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
+					},
+					DecidedMessage: &specqbft.SignedMessage{
+						Message: &specqbft.Message{
+							MsgType:    specqbft.CommitMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       spectestingutils.PrepareDataBytes(consensusDataList[0]),
+						},
+					},
+				},
+			},
+			2: {
+				&protocolstorage.StoredInstance{
+					State: &specqbft.State{
+						Share:             testingShare(spectestingutils.Testing4SharesSet(), 2),
+						ID:                identifier[:],
+						Round:             specqbft.FirstRound,
+						Height:            specqbft.FirstHeight,
+						LastPreparedRound: 1,
+						LastPreparedValue: consensusDataList[0],
+						ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+							MsgType:    specqbft.ProposalMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       proposalDataList[0],
+						}),
+						Decided:      true,
+						DecidedValue: consensusDataList[0],
+						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+							specqbft.FirstRound: {
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+									MsgType:    specqbft.ProposalMsgType,
 									Height:     specqbft.FirstHeight,
-									Round:      2,
+									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       roundChangeDataList[0],
-								}),
-							},
-							3: {
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-									MsgType:    specqbft.RoundChangeMsgType,
-									Height:     specqbft.FirstHeight,
-									Round:      3,
-									Identifier: identifier[:],
-									Data:       roundChangeDataList[0],
+									Data:       proposalDataList[0],
 								}),
 							},
 						}},
+						PrepareContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+							specqbft.FirstRound: {
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
+								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
+									MsgType:    specqbft.PrepareMsgType,
+									Height:     specqbft.FirstHeight,
+									Round:      specqbft.FirstRound,
+									Identifier: identifier[:],
+									Data:       prepareDataList[0],
+								}),
+							},
+						}},
+						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+							specqbft.FirstRound: {
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+							},
+						}},
+						RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 					},
 					DecidedMessage: &specqbft.SignedMessage{
 						Message: &specqbft.Message{
@@ -292,12 +314,33 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 								}),
 							},
 						}},
-						// NOTE: need to keep round keys and commit message data, there's a special check for CommitContainer
 						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								&specqbft.SignedMessage{
 									Message: &specqbft.Message{
-										Data: commitDataList[0],
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
 									},
 								},
 							},
@@ -376,12 +419,33 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 								}),
 							},
 						}},
-						// NOTE: need to keep round keys and commit message data, there's a special check for CommitContainer
 						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								&specqbft.SignedMessage{
 									Message: &specqbft.Message{
-										Data: commitDataList[0],
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     specqbft.FirstHeight,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitDataList[0],
 									},
 								},
 							},

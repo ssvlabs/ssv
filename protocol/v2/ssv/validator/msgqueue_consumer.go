@@ -17,6 +17,15 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
+	if msg.MsgType == spectypes.SSVConsensusMsgType {
+		sm := &specqbft.SignedMessage{}
+		if err := sm.Decode(msg.Data); err != nil {
+			v.logger.Debug("got malformed consensus message")
+		} else {
+			v.logger.Debug("got message, adding to queue", zap.Any("message", sm))
+		}
+	}
+
 	v.Q.Add(msg)
 }
 
@@ -51,11 +60,11 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			time.Sleep(interval)
 			continue
 		}
-		//// avoid process messages on fork
+		// // avoid process messages on fork
 		// if atomic.LoadUint32(&v.State) == Forking {
 		//	time.Sleep(interval)
 		//	continue
-		//}
+		// }
 		lastHeight := v.GetLastHeight(msgID)
 		identifier := msgID.String()
 
@@ -138,7 +147,7 @@ func (v *Validator) processByState(handler MessageHandler, msgID spectypes.Messa
 	// currentInstance := v.GetCurrentInstance()
 	// if currentInstance == nil {
 	//	return false
-	//}
+	// }
 
 	// currentState := currentInstance.GetState()
 	msg := v.getNextMsgForState(identifier, height)
@@ -169,7 +178,7 @@ func (v *Validator) processHigherHeight(handler MessageHandler, identifier strin
 	if len(msgs) > 0 {
 		err := handler(msgs[0])
 		if err != nil {
-			v.logger.Debug("could not handle msg", zap.Error(err))
+			v.logger.Debug("could not handle msg", zap.Error(err)) // TODO: add log which node
 		}
 		return true
 	}

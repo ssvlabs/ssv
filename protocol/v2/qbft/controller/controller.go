@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	logging "github.com/ipfs/go-log"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	logging "github.com/ipfs/go-log"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
@@ -70,7 +72,9 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
+		logger: logger.
+			With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())).
+			With(zap.String("w", fmt.Sprintf("node-%d", share.OperatorID))),
 	}
 }
 
@@ -93,6 +97,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 
 // ProcessMsg processes a new msg, returns decided message or error
 func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("controller processes message", zap.Any("message", msg))
 	if err := c.baseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}

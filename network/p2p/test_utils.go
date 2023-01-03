@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -15,8 +18,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
 
 	"go.uber.org/zap"
 )
@@ -168,7 +169,7 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
-		PubSubTrace:       false,
+		PubSubTrace:       true,
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
 		Logger:            logger,
