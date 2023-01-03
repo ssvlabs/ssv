@@ -10,7 +10,7 @@ import (
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
 )
 
-func Test_Automation_QBFTScenarios(t *testing.T) {
+func Test_Integration_QBFTScenarios(t *testing.T) {
 	_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging
 
 	scenariosToRun := []*scenarios.IntegrationTest{
