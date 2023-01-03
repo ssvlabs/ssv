@@ -17,6 +17,9 @@ func (i *Instance) uponPrepare(
 	signedPrepare *specqbft.SignedMessage,
 	prepareMsgContainer,
 	commitMsgContainer *specqbft.MsgContainer) error {
+	if i.State.ProposalAcceptedForCurrentRound == nil {
+		return errors.New("could not get accepted proposal data")
+	}
 	acceptedProposalData, err := i.State.ProposalAcceptedForCurrentRound.Message.GetProposalData()
 	if err != nil {
 		return errors.Wrap(err, "could not get accepted proposal data")
