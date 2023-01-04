@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
@@ -77,7 +76,6 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 				i.logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
-				time.Sleep(100 * time.Millisecond)
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
 					i.logger.Warn("failed to broadcast proposal", zap.Error(err))

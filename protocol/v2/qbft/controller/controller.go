@@ -97,7 +97,6 @@ func (c *Controller) StartNewInstance(value []byte) error {
 
 // ProcessMsg processes a new msg, returns decided message or error
 func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	c.logger.Debug("controller processes message", zap.Any("message", msg))
 	if err := c.baseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}

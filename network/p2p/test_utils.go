@@ -169,7 +169,7 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
-		PubSubTrace:       true,
+		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
 		Logger:            logger,

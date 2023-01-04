@@ -211,9 +211,7 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
 		msg, err := sub.Next(ctx)
-		zap.L().Debug("got p2p message", zap.Any("message", msg))
 		if err != nil {
-			zap.L().Debug("got p2p message error", zap.Error(err))
 			if ctx.Err() != nil {
 				logger.Debug("stop listening to topic: context is done")
 				return nil

@@ -17,15 +17,6 @@ type MessageHandler func(msg *spectypes.SSVMessage) error
 
 // HandleMessage handles a spectypes.SSVMessage.
 func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := &specqbft.SignedMessage{}
-		if err := sm.Decode(msg.Data); err != nil {
-			v.logger.Debug("got malformed consensus message")
-		} else {
-			v.logger.Debug("got message, adding to queue", zap.Any("message", sm))
-		}
-	}
-
 	v.Q.Add(msg)
 }
 

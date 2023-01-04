@@ -505,14 +505,6 @@ type msgRouter struct {
 }
 
 func (m *msgRouter) Route(message spectypes.SSVMessage) {
-	if message.MsgType == spectypes.SSVConsensusMsgType {
-		sm := &specqbft.SignedMessage{}
-		if err := sm.Decode(message.Data); err != nil {
-			zap.L().Debug("router got malformed consensus message")
-		} else {
-			zap.L().Debug("router got consensus message", zap.Any("message", sm))
-		}
-	}
 	m.validator.HandleMessage(&message)
 }
 
