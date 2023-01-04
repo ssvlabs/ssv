@@ -52,88 +52,31 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 		},
 		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
 			1: {
-				func(instance *protocolstorage.StoredInstance) error {
+				func(actual *protocolstorage.StoredInstance) error {
+					expected := storedInstanceForOperatorID(1, identifier, consensusData)
 
-					//encodedConsensusData, err := consensusData.Encode()
-					//if err != nil {
-					//	return fmt.Errorf("error during encoding consensus data: %w", err)
-					//}
-					//
-					//encodedProposalData, err := (&specqbft.ProposalData{
-					//	Data:                     encodedConsensusData,
-					//	RoundChangeJustification: nil,
-					//	PrepareJustification:     nil,
-					//}).Encode()
-					//if err != nil {
-					//	return fmt.Errorf("error during encoding proposal data: %w", err)
-					//}
-					//
-					//encodedProposalData = encodedProposalData //TODO: remove
-					//
-					//if instance.State.ProposalAcceptedForCurrentRound != spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-					//	MsgType:    specqbft.ProposalMsgType,
-					//	Height:     specqbft.FirstHeight,
-					//	Round:      specqbft.FirstRound,
-					//	Identifier: identifier[:],
-					//	Data:       encodedProposalData,
-					//}) {
-					//	return fmt.Errorf("proposal accepted for current round is wrong")
-					//}
-					//
-					//if !instance.State.Decided {
-					//	return fmt.Errorf("decided is wrong")
-					//}
-					//
-					//if len(instance.State.CommitContainer.Msgs) <= 3 {
-					//	return fmt.Errorf("not enough commit messages")
-					//}
-					//
-					//expectedCommitMessagesForRound := func(round specqbft.Round) []*specqbft.SignedMessage {
-					//	if round == specqbft.FirstRound {
-					//		return []*specqbft.SignedMessage{
-					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-					//				MsgType:    specqbft.CommitMsgType,
-					//				Height:     specqbft.FirstHeight,
-					//				Round:      specqbft.FirstRound,
-					//				Identifier: identifier[:],
-					//				Data:       commitData,
-					//			}),
-					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-					//				MsgType:    specqbft.CommitMsgType,
-					//				Height:     specqbft.FirstHeight,
-					//				Round:      specqbft.FirstRound,
-					//				Identifier: identifier[:],
-					//				Data:       commitData,
-					//			}),
-					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
-					//				MsgType:    specqbft.CommitMsgType,
-					//				Height:     specqbft.FirstHeight,
-					//				Round:      specqbft.FirstRound,
-					//				Identifier: identifier[:],
-					//				Data:       commitData,
-					//			}),
-					//			spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
-					//				MsgType:    specqbft.CommitMsgType,
-					//				Height:     specqbft.FirstHeight,
-					//				Round:      specqbft.FirstRound,
-					//				Identifier: identifier[:],
-					//				Data:       commitData,
-					//			}),
-					//		}
-					//	}
-					//
-					//	return nil
-					//}
-					//
-					//expectedCommitMessagesForRound = expectedCommitMessagesForRound //TODO: remove
-					//
-					//for round, messages := range instance.State.CommitContainer.Msgs {
-					//	//ectedCommitMessagesForRound(round){}
-					//	round = round
-					//	messages = messages
-					//}
+					return deepValidateStorageInstance(expected, actual)
+				},
+			},
+			2: {
+				func(actual *protocolstorage.StoredInstance) error {
+					expected := storedInstanceForOperatorID(2, identifier, consensusData)
 
-					return nil
+					return deepValidateStorageInstance(expected, actual)
+				},
+			},
+			3: {
+				func(actual *protocolstorage.StoredInstance) error {
+					expected := storedInstanceForOperatorID(3, identifier, consensusData)
+
+					return deepValidateStorageInstance(expected, actual)
+				},
+			},
+			4: {
+				func(actual *protocolstorage.StoredInstance) error {
+					expected := storedInstanceForOperatorID(4, identifier, consensusData)
+
+					return deepValidateStorageInstance(expected, actual)
 				},
 			},
 		},
