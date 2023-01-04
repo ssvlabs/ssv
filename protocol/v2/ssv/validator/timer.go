@@ -20,6 +20,11 @@ func (v *Validator) registerTimeoutHandler(instance *instance.Instance, height s
 
 func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {
+		dr := v.DutyRunners[identifier.GetRoleType()]
+		if !dr.HasRunningDuty() {
+			return
+		}
+
 		msg, err := v.createTimerMessage(identifier, height)
 		if err != nil {
 			v.logger.Warn("failed to create timer msg", zap.Error(err))
