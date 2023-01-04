@@ -52,10 +52,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
 
 		require.EqualValues(t, 1, i.Instances()[0].State.Height)
-		require.Nil(t, i.Instances()[1])
-		require.Nil(t, i.Instances()[2])
-		require.Nil(t, i.Instances()[3])
-		require.Nil(t, i.Instances()[4])
+		require.Len(t, i.Instances(), 1)
 	})
 
 	t.Run("add to semi full", func(t *testing.T) {
@@ -70,7 +67,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 		require.EqualValues(t, 1, i.Instances()[1].State.Height)
 		require.EqualValues(t, 2, i.Instances()[2].State.Height)
 		require.EqualValues(t, 3, i.Instances()[3].State.Height)
-		require.Nil(t, i.Instances()[4])
+		require.Len(t, i.Instances(), 4)
 	})
 }
 
@@ -80,7 +77,11 @@ func TestController_Marshaling(t *testing.T) {
 	byts, err := c.Encode()
 	require.NoError(t, err)
 
-	decoded := &Controller{}
+	decoded := &Controller{
+		// Since StoredInstances is an interface, it wouldn't be decoded properly.
+		// Therefore, we set it to NewInstanceContainer which implements json.Unmarshaler
+		StoredInstances: NewInstanceContainer(DefaultInstanceContainerCapacity),
+	}
 	require.NoError(t, decoded.Decode(byts))
 
 	bytsDecoded, err := decoded.Encode()

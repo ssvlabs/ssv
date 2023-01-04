@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -34,11 +36,12 @@ type instanceContainer struct {
 // capacity represents the upper bound of instanceContainer a processmsg can process messages for as messages are not
 // guaranteed to arrive in a timely fashion, we physically limit how far back the processmsg will process messages for.
 func NewInstanceContainer(capacity int, instances ...*instance.Instance) InstanceContainer {
-	insts := make([]*instance.Instance, capacity)
-	copy(insts, instances)
+	if instances == nil {
+		instances = make([]*instance.Instance, 0)
+	}
 
 	return &instanceContainer{
-		instances: insts,
+		instances: instances,
 	}
 }
 
@@ -62,10 +65,31 @@ func (c instanceContainer) FindInstance(height specqbft.Height) *instance.Instan
 }
 
 func (c *instanceContainer) AddNewInstance(instance *instance.Instance) {
-	for idx := DefaultInstanceContainerCapacity - 1; idx > 0; idx-- {
-		c.instances[idx] = c.instances[idx-1]
+	indexToInsert := len(c.instances)
+	for index, existingInstance := range c.instances {
+		if existingInstance.GetHeight() < instance.GetHeight() {
+			indexToInsert = index
+			break
+		}
 	}
-	c.instances[0] = instance
+	c.instances = insertAtIndex(c.instances, indexToInsert, instance)
+}
+
+func insertAtIndex(arr []*instance.Instance, index int, value *instance.Instance) []*instance.Instance {
+	if len(arr) == index { // nil or empty slice or after last element
+		return append(arr, value)
+	}
+	arr = append(arr[:index+1], arr[index:]...) // index < len(a)
+	arr[index] = value
+	return arr
+}
+
+func (c *instanceContainer) MarshalJSON() ([]byte, error) {
+	return json.Marshal(c.instances)
+}
+
+func (c *instanceContainer) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &c.instances)
 }
 
 type storageInstanceContainer struct {

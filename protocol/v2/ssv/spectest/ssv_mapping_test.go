@@ -22,6 +22,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
@@ -197,7 +198,10 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 }
 
 func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
-	base := &runner.BaseRunner{}
+	base := runner.NewBaseRunner(zap.NewNop())
+	base.QBFTController = &controller.Controller{
+		StoredInstances: controller.NewInstanceContainer(controller.DefaultInstanceContainerCapacity),
+	}
 	byts, _ := json.Marshal(baseRunner)
 	require.NoError(t, json.Unmarshal(byts, &base))
 

@@ -59,6 +59,12 @@ type BaseRunner struct {
 	logger         *zap.Logger
 }
 
+func NewBaseRunner(logger *zap.Logger) *BaseRunner {
+	return &BaseRunner{
+		logger: logger,
+	}
+}
+
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
