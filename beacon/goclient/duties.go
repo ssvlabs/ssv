@@ -20,16 +20,15 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 		spectypes.BNRoleProposer:      gc.fetchProposerDuties,
 		spectypes.BNRoleSyncCommittee: gc.fetchSyncCommitteeDuties,
 	}
-	var duties []*spectypes.Duty
+	duties := make([]*spectypes.Duty, 0)
 	var lock sync.Mutex
 	var wg sync.WaitGroup
 
 	start := time.Now()
 	for role, fetcher := range fetchers {
+		wg.Add(1)
 		go func(role spectypes.BeaconRole, fetchFunc FetchFunc) {
-			wg.Add(1)
 			defer wg.Done()
-
 			if fetchedDuties, err := fetchFunc(epoch, validatorIndices); err == nil {
 				lock.Lock()
 				duties = append(duties, fetchedDuties...)
@@ -41,7 +40,7 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	}
 	wg.Wait()
 
-	gc.logger.Debug("fetched duties", zap.Duration("duration", time.Since(start)))
+	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration", time.Since(start).Seconds()))
 	return duties, nil
 }
 
