@@ -53,9 +53,125 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
 			1: {
 				func(actual *protocolstorage.StoredInstance) error {
-					expected := storedInstanceForOperatorID(1, identifier, consensusData)
+					consensusData, err := consensusData.Encode()
+					if err != nil {
+						panic(err)
+					}
 
-					return deepValidateStorageInstance(expected, actual)
+					if actual.State == nil {
+						return fmt.Errorf("expected state = non-nil, actual = nil")
+					}
+
+					if actual.State.Share.OperatorID != 1 {
+						return fmt.Errorf("expected share operator id = %d, actual = %d", 1, actual.State.Share.OperatorID)
+					}
+
+					if !bytes.Equal(actual.State.Share.ValidatorPubKey, spectestingutils.Testing4SharesSet().ValidatorPK.Serialize()) {
+						return fmt.Errorf("expected share validator pub key %s, actual = %s", spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), actual.State.Share.ValidatorPubKey)
+					}
+
+					if !bytes.Equal(actual.State.Share.SharePubKey, spectestingutils.Testing4SharesSet().Shares[1].GetPublicKey().Serialize()) {
+						return fmt.Errorf("expected share share pub key %s, actual = %s", spectestingutils.Testing4SharesSet().Shares[1].GetPublicKey().Serialize(), actual.State.Share.SharePubKey)
+					}
+
+					for i := range spectestingutils.Testing4SharesSet().Committee() {
+						if actual.State.Share.Committee[i].OperatorID != spectestingutils.Testing4SharesSet().Committee()[i].OperatorID &&
+							!bytes.Equal(actual.State.Share.Committee[i].PubKey, spectestingutils.Testing4SharesSet().Committee()[i].PubKey) {
+							return fmt.Errorf("expected share comittee = %+v, actual = %+v", spectestingutils.Testing4SharesSet().Committee(), actual.State.Share.Committee)
+						}
+					}
+
+					if actual.State.Share.Quorum != spectestingutils.Testing4SharesSet().Threshold {
+						return fmt.Errorf("expected share quorum = %d, actual = %d", spectestingutils.Testing4SharesSet().Threshold, actual.State.Share.Quorum)
+					}
+
+					if actual.State.Share.PartialQuorum != spectestingutils.Testing4SharesSet().PartialThreshold {
+						return fmt.Errorf("expected share partial quorum = %d, actual = %d", spectestingutils.Testing4SharesSet().PartialThreshold, actual.State.Share.PartialQuorum)
+					}
+
+					if !bytes.Equal(actual.State.Share.DomainType, spectypes.PrimusTestnet) {
+						return fmt.Errorf("expected share domain type = %s, actual = %s", spectypes.PrimusTestnet, actual.State.Share.DomainType)
+					}
+
+					if !bytes.Equal(actual.State.Share.Graffiti, []byte{}) {
+						return fmt.Errorf("expected share graffiti = %s, actual = %s", []byte{}, actual.State.Share.Graffiti)
+					}
+
+					if !bytes.Equal(actual.State.ID, identifier[:]) {
+						return fmt.Errorf("expected id = %s, actual = %s", identifier[:], actual.State.ID)
+					}
+
+					if actual.State.Round != specqbft.FirstRound {
+						return fmt.Errorf("expected round = %d, actual = %d", specqbft.FirstRound, actual.State.Round)
+					}
+
+					if actual.State.Height != specqbft.FirstHeight {
+						return fmt.Errorf("expected height = %d, actual = %d", specqbft.FirstHeight, actual.State.Height)
+					}
+
+					if actual.State.LastPreparedRound != specqbft.FirstRound {
+						return fmt.Errorf("expected last prepared round = %d, actual = %d", specqbft.FirstRound, actual.State.LastPreparedRound)
+					}
+
+					if !bytes.Equal(actual.State.LastPreparedValue, consensusData) {
+						return fmt.Errorf("expected last prepared value = %s, actual = %s", consensusData, actual.State.LastPreparedValue)
+					}
+
+					proposalData, err := (&specqbft.ProposalData{
+						Data:                     consensusData,
+						RoundChangeJustification: nil,
+						PrepareJustification:     nil,
+					}).Encode()
+					if err != nil {
+						return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
+					}
+
+					expectedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+						MsgType:    specqbft.ProposalMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       proposalData,
+					})
+					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Signature, expectedMsg.Signature) {
+						return fmt.Errorf("expected signed message signature = %s, actual = %s", expectedMsg.Signature, actual.State.ProposalAcceptedForCurrentRound.Signature)
+					}
+
+					for i := range expectedMsg.Signers {
+						if actual.State.ProposalAcceptedForCurrentRound.Signers[i] != expectedMsg.Signers[i] {
+							return fmt.Errorf("expected signed message signer N%d operator id = %d, actual = %d", i, expectedMsg.Signers[i], actual.State.ProposalAcceptedForCurrentRound.Signers[i])
+						}
+					}
+
+					if actual.State.ProposalAcceptedForCurrentRound.Message.MsgType != expectedMsg.Message.MsgType {
+						return fmt.Errorf("expected signed message type = %d, actual = %d", expectedMsg.Message.MsgType, actual.State.ProposalAcceptedForCurrentRound.Message.MsgType)
+					}
+
+					if actual.State.ProposalAcceptedForCurrentRound.Message.Height != expectedMsg.Message.Height {
+						return fmt.Errorf("expected signed message height = %d, actual = %d", expectedMsg.Message.Height, actual.State.ProposalAcceptedForCurrentRound.Message.Height)
+					}
+
+					if actual.State.ProposalAcceptedForCurrentRound.Message.Round != expectedMsg.Message.Round {
+						return fmt.Errorf("expected signed message round = %d, actual = %d", expectedMsg.Message.Round, actual.State.ProposalAcceptedForCurrentRound.Message.Round)
+					}
+
+					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Message.Identifier, expectedMsg.Message.Identifier) {
+						return fmt.Errorf("expected signed message identifier = %s, actual = %s", expectedMsg.Message.Identifier, actual.State.ProposalAcceptedForCurrentRound.Message.Identifier)
+					}
+
+					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Message.Data, expectedMsg.Message.Data) {
+						return fmt.Errorf("expected signed message data = %s, actual = %s", expectedMsg.Message.Data, actual.State.ProposalAcceptedForCurrentRound.Message.Data)
+					}
+
+					if actual.State.Decided != true {
+						return fmt.Errorf("expected decided = %v, actual = %v", true, actual.State.Decided)
+					}
+
+					if !bytes.Equal(actual.State.DecidedValue, consensusData) {
+						return fmt.Errorf("expected decided value = %s, actual = %s", consensusData, actual.State.DecidedValue)
+					}
+
+					return nil
 				},
 			},
 			2: {
