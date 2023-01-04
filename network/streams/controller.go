@@ -86,7 +86,7 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
 	// logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
-		//TODO: remove line below after TODO inside the if-statement is resolved
+		// TODO: remove line below after TODO inside the if-statement is resolved
 		// nolint: staticcheck
 		if err := s.Close(); err != nil {
 			// TODO (amir): investigate
