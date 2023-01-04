@@ -1,8 +1,9 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"testing"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
@@ -11,11 +12,11 @@ import (
 )
 
 func TestInstances_FindInstance(t *testing.T) {
-	i := InstanceContainer{
+	i := NewInstanceContainer(DefaultInstanceContainerCapacity,
 		&instance.Instance{State: &specqbft.State{Height: 1}},
 		&instance.Instance{State: &specqbft.State{Height: 2}},
 		&instance.Instance{State: &specqbft.State{Height: 3}},
-	}
+	)
 
 	t.Run("find 1", func(t *testing.T) {
 		require.NotNil(t, i.FindInstance(1))
@@ -28,48 +29,48 @@ func TestInstances_FindInstance(t *testing.T) {
 	})
 }
 
-func TestInstances_addNewInstance(t *testing.T) {
+func TestInstances_AddNewInstance(t *testing.T) {
 	t.Run("add to full", func(t *testing.T) {
-		i := InstanceContainer{
+		i := NewInstanceContainer(DefaultInstanceContainerCapacity,
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
 			&instance.Instance{State: &specqbft.State{Height: 4}},
 			&instance.Instance{State: &specqbft.State{Height: 5}},
-		}
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
+		)
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
 
-		require.EqualValues(t, 6, i[0].State.Height)
-		require.EqualValues(t, 1, i[1].State.Height)
-		require.EqualValues(t, 2, i[2].State.Height)
-		require.EqualValues(t, 3, i[3].State.Height)
-		require.EqualValues(t, 4, i[4].State.Height)
+		require.EqualValues(t, 6, i.Instances()[0].State.Height)
+		require.EqualValues(t, 1, i.Instances()[1].State.Height)
+		require.EqualValues(t, 2, i.Instances()[2].State.Height)
+		require.EqualValues(t, 3, i.Instances()[3].State.Height)
+		require.EqualValues(t, 4, i.Instances()[4].State.Height)
 	})
 
 	t.Run("add to empty", func(t *testing.T) {
-		i := InstanceContainer{}
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
+		i := NewInstanceContainer(DefaultInstanceContainerCapacity)
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
 
-		require.EqualValues(t, 1, i[0].State.Height)
-		require.Nil(t, i[1])
-		require.Nil(t, i[2])
-		require.Nil(t, i[3])
-		require.Nil(t, i[4])
+		require.EqualValues(t, 1, i.Instances()[0].State.Height)
+		require.Nil(t, i.Instances()[1])
+		require.Nil(t, i.Instances()[2])
+		require.Nil(t, i.Instances()[3])
+		require.Nil(t, i.Instances()[4])
 	})
 
 	t.Run("add to semi full", func(t *testing.T) {
-		i := InstanceContainer{
+		i := NewInstanceContainer(DefaultInstanceContainerCapacity,
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
-		}
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
+		)
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
 
-		require.EqualValues(t, 4, i[0].State.Height)
-		require.EqualValues(t, 1, i[1].State.Height)
-		require.EqualValues(t, 2, i[2].State.Height)
-		require.EqualValues(t, 3, i[3].State.Height)
-		require.Nil(t, i[4])
+		require.EqualValues(t, 4, i.Instances()[0].State.Height)
+		require.EqualValues(t, 1, i.Instances()[1].State.Height)
+		require.EqualValues(t, 2, i.Instances()[2].State.Height)
+		require.EqualValues(t, 3, i.Instances()[3].State.Height)
+		require.Nil(t, i.Instances()[4])
 	})
 }
 

@@ -3,14 +3,15 @@ package spectest
 import (
 	"encoding/json"
 	"fmt"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"io"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
@@ -248,16 +249,17 @@ func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.C
 		contr.Share,
 		testingutils.TestingConfig(ks).Domain,
 		config,
+		false,
 	)
 	newContr.Height = contr.Height
 	newContr.Domain = contr.Domain
 	newContr.StoredInstances = contr.StoredInstances
 
-	for i, inst := range newContr.StoredInstances {
+	for i, inst := range newContr.StoredInstances.Instances() {
 		if inst == nil {
 			continue
 		}
-		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, runner.GetBaseRunner().Share)
+		newContr.StoredInstances.Instances()[i] = fixInstanceForRun(t, inst, newContr, runner.GetBaseRunner().Share)
 	}
 	return newContr
 }

@@ -17,31 +17,6 @@ import (
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
 
-// HistoricalInstanceCapacity represents the upper bound of InstanceContainer a processmsg can process messages for as messages are not
-// guaranteed to arrive in a timely fashion, we physically limit how far back the processmsg will process messages for
-const HistoricalInstanceCapacity int = 5
-
-type InstanceContainer [HistoricalInstanceCapacity]*instance.Instance
-
-func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
-	for _, inst := range i {
-		if inst != nil {
-			if inst.GetHeight() == height {
-				return inst
-			}
-		}
-	}
-	return nil
-}
-
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
-func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
-	for idx := HistoricalInstanceCapacity - 1; idx > 0; idx-- {
-		i[idx] = i[idx-1]
-	}
-	i[0] = instance
-}
-
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
 	Identifier []byte
@@ -61,17 +36,22 @@ func NewController(
 	share *spectypes.Share,
 	domain spectypes.DomainType,
 	config qbft.IConfig,
+	fullNode bool,
 ) *Controller {
-	return &Controller{
+	c := &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
 		Domain:              domain,
 		Share:               share,
-		StoredInstances:     InstanceContainer{},
+		StoredInstances:     NewInstanceContainer(DefaultInstanceContainerCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
 	}
+	if fullNode {
+		c.StoredInstances = NewStorageInstanceContainer(c.StoredInstances, c.logger, config, share, identifier)
+	}
+	return c
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
@@ -168,7 +148,7 @@ func (c *Controller) GetIdentifier() []byte {
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
-	c.StoredInstances.addNewInstance(i)
+	c.StoredInstances.AddNewInstance(i)
 	return i
 }
 
@@ -202,13 +182,13 @@ func (c *Controller) GetRoot() ([]byte, error) {
 	}{
 		Identifier:             c.Identifier,
 		Height:                 c.Height,
-		InstanceRoots:          make([][]byte, len(c.StoredInstances)),
+		InstanceRoots:          make([][]byte, len(c.StoredInstances.Instances())),
 		HigherReceivedMessages: c.FutureMsgsContainer,
 		Domain:                 c.Domain,
 		Share:                  c.Share,
 	}
 
-	for i, inst := range c.StoredInstances {
+	for i, inst := range c.StoredInstances.Instances() {
 		if inst != nil {
 			r, err := inst.GetRoot()
 			if err != nil {
@@ -239,7 +219,7 @@ func (c *Controller) Decode(data []byte) error {
 	}
 
 	config := c.GetConfig()
-	for _, i := range c.StoredInstances {
+	for _, i := range c.StoredInstances.Instances() {
 		if i != nil {
 			// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
 			i.SetConfig(config)

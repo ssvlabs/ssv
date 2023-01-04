@@ -28,20 +28,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	// did previously decide?
 	inst := c.InstanceForHeight(msg.Message.Height)
-	if inst == nil {
-		// Get instance from storage.
-		// TODO: should we move this inside InstanceForHeight even though it's only done here?
-		storedInst, err := c.GetConfig().GetStorage().GetInstance(c.Identifier, msg.Message.Height)
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get instance from storage")
-		}
-		if storedInst != nil {
-			inst = instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
-			inst.State = storedInst.State
-		}
-	}
 	prevDecided := inst != nil && inst.State.Decided
-
 	isFutureDecided := msg.Message.Height > c.Height
 
 	if inst == nil {
@@ -50,7 +37,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
 		i.State.CommitContainer.AddMsg(msg)
-		c.StoredInstances.addNewInstance(i)
+		c.StoredInstances.AddNewInstance(i)
 	} else if decided, _ := inst.IsDecided(); !decided {
 		inst.State.Decided = true
 		inst.State.Round = msg.Message.Round
@@ -74,7 +61,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 						zap.Uint64("height", uint64(msg.Message.Height)),
 						zap.Error(err))
 				} else {
-					c.logger.Debug("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
+					c.logger.Debug("saved instance upon decided", zap.Uint64("msg_height", uint64(msg.Message.Height)), zap.Uint64("ctrl_height", uint64(c.Height)))
 				}
 			}
 		}

@@ -3,9 +3,10 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"reflect"
 	"testing"
+
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
@@ -21,6 +22,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,
+		false,
 	)
 
 	var lastErr error

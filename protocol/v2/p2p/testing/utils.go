@@ -5,9 +5,10 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"sync"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
