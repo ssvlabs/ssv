@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"sync"
+	"time"
 )
 
 func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
@@ -23,6 +24,7 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	var lock sync.Mutex
 	var wg sync.WaitGroup
 
+	start := time.Now()
 	for role, fetcher := range fetchers {
 		go func(role spectypes.BeaconRole, fetchFunc FetchFunc) {
 			wg.Add(1)
@@ -39,6 +41,7 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	}
 	wg.Wait()
 
+	gc.logger.Debug("fetched duties", zap.Duration("duration", time.Since(start)))
 	return duties, nil
 }
 
