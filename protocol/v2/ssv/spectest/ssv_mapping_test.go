@@ -41,7 +41,7 @@ func TestSSVMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/7e96c8b781915faaa12d29eba94e702445bd5945/ssv/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/e046520a1db89490713915131f1cbbc5ef2478b3/ssv/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
