@@ -69,10 +69,14 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
+	r.logger.Debug("NIV: receive valid pre-consensus", zap.Int("signer", int(signedMsg.Signer)))
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
 	}
+
+	r.logger.Debug("NIV: pre-consensus quorum achieved")
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -95,6 +99,8 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		BlockData: blk,
 	}
 
+	r.logger.Debug("NIV: pre-consensus got block, start deciding")
+
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -103,6 +109,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 }
 
 func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
+	r.logger.Debug("NIV: receive valid consensus", zap.Any("signers", signedMsg.Signers))
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -112,6 +119,8 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if !decided {
 		return nil
 	}
+
+	r.logger.Debug("NIV: receive consensus decided")
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.BlockData, decidedValue.Duty.Slot, spectypes.DomainProposer)
@@ -146,6 +155,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 }
 
 func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+	r.logger.Debug("NIV: receive valid post-consensus", zap.Any("signer", signedMsg.Signer))
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -154,6 +164,8 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	if !quorum {
 		return nil
 	}
+
+	r.logger.Debug("NIV: post-consensus quorum")
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -167,6 +179,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			Message:   r.GetState().DecidedValue.BlockData,
 			Signature: specSig,
 		}
+		r.logger.Debug("NIV: submitting beacon block")
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
@@ -194,6 +207,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
+	r.logger.Debug("NIV: executeDuty")
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
 
@@ -230,6 +244,7 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
+	r.logger.Debug("NIV: broadcasting pre-consensus")
 	return nil
 }
 
