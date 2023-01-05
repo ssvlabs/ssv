@@ -204,8 +204,14 @@ func (it *IntegrationTest) Run() error {
 			if expectedErr != nil {
 				return fmt.Errorf("expected an error")
 			}
-		} else if !errors.Is(actualErr.(error), expectedErr) {
-			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+		} else {
+			aerr, ok := actualErr.(error)
+			if !ok && expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+			if !errors.Is(aerr, expectedErr) {
+				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+			}
 		}
 	}
 
@@ -228,13 +234,13 @@ func (it *IntegrationTest) Run() error {
 
 	jsonInstances, err := json.Marshal(instanceMap)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	fmt.Printf("\nactual instances:\n%v\n\n", string(jsonInstances))
 
 	jsonExpectedInstances, err := json.Marshal(it.ExpectedInstances)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	fmt.Printf("\nexpected instances:\n%v\n\n", string(jsonExpectedInstances))
 
