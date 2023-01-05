@@ -36,7 +36,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 
 	// 3 validators should start immediately, 4th should have delay between 1st and 2nd duty; 4th can have delay delays[1] / 2
 	return &IntegrationTest{
-		Name:        "regular",
+		Name:        "f+1 decided",
 		OperatorIDs: []spectypes.OperatorID{1, 2, 3, 4},
 		ValidatorDelays: map[spectypes.OperatorID]time.Duration{
 			1: delays[0],
