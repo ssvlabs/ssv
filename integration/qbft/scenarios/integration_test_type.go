@@ -1,15 +1,12 @@
 package scenarios
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
@@ -41,8 +38,8 @@ type IntegrationTest struct {
 	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties             map[spectypes.OperatorID][]*spectypes.Duty
 	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
-	ExpectedInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	StartDutyErrors    map[spectypes.OperatorID]error
+	Identifier         spectypes.MessageID
 }
 
 type scenarioContext struct {
@@ -188,11 +185,11 @@ func (it *IntegrationTest) Run() error {
 
 	<-time.After(2 * time.Second)
 
-	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-		for _, expectedInstance := range expectedInstances {
-			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-				GetHighestInstance(expectedInstance.State.ID)
+	for operatorID, instanceValidators := range it.InstanceValidators {
+		for i, instanceValidator := range instanceValidators {
+			mid := spectypes.MessageIDFromBytes(it.Identifier[:])
+			storedInstance, err := sCtx.stores[operatorID].Get(mid.GetRoleType()).
+				GetHighestInstance(it.Identifier[:])
 			if err != nil {
 				return err
 			}
@@ -200,27 +197,8 @@ func (it *IntegrationTest) Run() error {
 				return fmt.Errorf("stored instance is nil")
 			}
 
-			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("stored instance decided message root: %w", err)
-			}
-
-			expectedDecidedRoot, err := expectedInstance.DecidedMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("ex[ected instance decided message root: %w", err)
-			}
-
-			if !bytes.Equal(decidedRoot, expectedDecidedRoot) {
-				return fmt.Errorf("decided message roots are not equal")
-			}
-
-			if storedInstance.State == nil && expectedInstance.State == nil {
-				return nil
-			}
-
-			si, ei := storedInstance.State, expectedInstance.State
-			if si == nil && ei != nil || si != nil && ei == nil || !matchedStates(*si, *ei) {
-				return fmt.Errorf("states don't match")
+			if err := instanceValidator(storedInstance); err != nil {
+				return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
 			}
 		}
 	}
@@ -318,40 +296,6 @@ func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...s
 	}
 
 	return duties
-}
-
-// pass states by value to modify them
-func matchedStates(actual specqbft.State, expected specqbft.State) bool {
-	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
-	if expected.Decided {
-		for round, messages := range expected.CommitContainer.Msgs {
-			signers, _ := actual.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
-			if !actual.Share.HasQuorum(len(signers)) {
-				return false
-			}
-		}
-
-		actual.CommitContainer = nil
-		expected.CommitContainer = nil
-	}
-
-	for _, messages := range actual.PrepareContainer.Msgs {
-		sort.Slice(messages, func(i, j int) bool {
-			return messages[i].Signers[0] < messages[j].Signers[0]
-		})
-	}
-
-	actualRoot, err := actual.GetRoot()
-	if err != nil {
-		return false
-	}
-
-	expectedRoot, err := expected.GetRoot()
-	if err != nil {
-		return false
-	}
-
-	return bytes.Equal(actualRoot, expectedRoot)
 }
 
 type msgRouter struct {
