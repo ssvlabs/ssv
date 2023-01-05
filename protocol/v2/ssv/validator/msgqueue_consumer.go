@@ -77,7 +77,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		if processed := v.processHigherHeight(q, handler, identifier, lastHeight, higherCache); processed {
 			continue
 		}
-		if processed := v.processNoRunningInstance(q, handler, msgID, identifier, lastHeight); processed {
+		if processed := v.processNonConsensus(q, handler, identifier, lastHeight); processed {
 			continue
 		}
 		if processed := v.processByState(q, handler, msgID, identifier, lastHeight); processed {
@@ -127,13 +127,8 @@ func (v *Validator) processExecuteDuty(q msgqueue.MsgQueue, handler MessageHandl
 	return true // msg processed
 }
 
-// processNoRunningInstance pop msg's only if no current instance running
-func (v *Validator) processNoRunningInstance(q msgqueue.MsgQueue, handler MessageHandler, msgID spectypes.MessageID, identifier string, lastHeight specqbft.Height) bool {
-	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
-		return false // only pop when already decided
-	}
-
+// processNonConsensus pop pre/post consensus & decided
+func (v *Validator) processNonConsensus(q msgqueue.MsgQueue, handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	logger := v.logger.With(
 		// zap.String("sig state", c.SignatureState.getState().toString()),
 		zap.Int32("height", int32(lastHeight)))
