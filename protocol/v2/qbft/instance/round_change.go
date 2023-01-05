@@ -8,16 +8,14 @@ import (
 	"go.uber.org/zap"
 )
 
+// uponRoundChange process round change messages.
+// Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
 	instanceStartValue []byte,
 	signedRoundChange *specqbft.SignedMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
 	valCheck specqbft.ProposedValueCheckF,
 ) error {
-	if err := validRoundChange(i.State, i.config, signedRoundChange, i.State.Height, signedRoundChange.Message.Round); err != nil {
-		return errors.Wrap(err, "round change msg invalid")
-	}
-
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
 	if err != nil {
 		return errors.Wrap(err, "could not add round change msg to container")
@@ -221,17 +219,17 @@ func validRoundChange(state *specqbft.State, config qbft.IConfig, signedMsg *spe
 		return errors.New("round change msg type is wrong")
 	}
 	if signedMsg.Message.Height != height {
-		return errors.New("round change Height is wrong")
+		return errors.New("wrong msg height")
 	}
 	if signedMsg.Message.Round != round {
-		return errors.New("msg round wrong")
+		return errors.New("wrong msg round")
 	}
 	if len(signedMsg.GetSigners()) != 1 {
-		return errors.New("round change msg allows 1 signer")
+		return errors.New("msg allows 1 signer")
 	}
 
 	if err := signedMsg.Signature.VerifyByOperators(signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-		return errors.Wrap(err, "round change msg signature invalid")
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	rcData, err := signedMsg.Message.GetRoundChangeData()

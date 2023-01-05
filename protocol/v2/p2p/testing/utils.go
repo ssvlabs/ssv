@@ -287,6 +287,11 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return nil
 }
 
+func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, from specqbft.Height) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
 	spk := hex.EncodeToString(mid.GetPubKey())
 	topic := spk

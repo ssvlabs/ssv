@@ -84,7 +84,7 @@ services:
     ports:
       - 16005:16000
 
-  # dev services:
+# dev services:
 
   ssv-node-1-dev:
     <<: *default-dev
@@ -147,7 +147,7 @@ services:
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
-  # monitoring services
+# monitoring services
 
   prometheus:
     container_name: prometheus

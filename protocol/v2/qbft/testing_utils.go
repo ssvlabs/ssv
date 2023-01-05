@@ -15,7 +15,7 @@ var TestingMessage = &specqbft.Message{
 	Data:       []byte{1, 2, 3, 4},
 }
 
-var testingSignedMsg = func() *specqbft.SignedMessage {
+var TestingSignedMsg = func() *specqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
 
@@ -65,35 +65,35 @@ var TestingInstanceStruct = &specqbft.Instance{
 		Height:                          1,
 		LastPreparedRound:               1,
 		LastPreparedValue:               []byte{1, 2, 3, 4},
-		ProposalAcceptedForCurrentRound: testingSignedMsg,
+		ProposalAcceptedForCurrentRound: TestingSignedMsg,
 		Decided:                         false,
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
 		ProposeContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 				1: {
-					testingSignedMsg,
+					TestingSignedMsg,
 				},
 			},
 		},
 		PrepareContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 				1: {
-					testingSignedMsg,
+					TestingSignedMsg,
 				},
 			},
 		},
 		CommitContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 				1: {
-					testingSignedMsg,
+					TestingSignedMsg,
 				},
 			},
 		},
 		RoundChangeContainer: &specqbft.MsgContainer{
 			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 				1: {
-					testingSignedMsg,
+					TestingSignedMsg,
 				},
 			},
 		},
@@ -101,10 +101,8 @@ var TestingInstanceStruct = &specqbft.Instance{
 }
 
 var TestingControllerStruct = &specqbft.Controller{
-	Identifier: []byte{1, 2, 3, 4},
-	Height:     specqbft.Height(1),
-	Share:      testingShare,
-	StoredInstances: []*specqbft.Instance{
-		TestingInstanceStruct,
-	},
+	Identifier:      []byte{1, 2, 3, 4},
+	Height:          specqbft.Height(1),
+	Share:           testingShare,
+	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
 }

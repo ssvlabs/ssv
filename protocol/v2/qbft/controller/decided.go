@@ -26,7 +26,6 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		return nil, errors.Wrap(err, "could not get decided data")
 	}
 
-	// did previously decide?
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.Message.Height > c.Height

@@ -11,9 +11,20 @@ import (
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
 
-// RoundTimeout returns the number of seconds until next timeout for a give round
-func RoundTimeout(specqbft.Round) time.Duration {
-	return 2 * time.Second
+var (
+	quickTimeoutThreshold = specqbft.Round(8)
+	quickTimeout          = 2 * time.Second
+	slowTimeout           = 2 * time.Minute
+)
+
+// RoundTimeout returns the number of seconds until next timeout for a give round.
+// if the round is smaller than 8 -> 2s; otherwise -> 2m
+// see SIP https://github.com/bloxapp/SIPs/pull/22
+func RoundTimeout(r specqbft.Round) time.Duration {
+	if r <= quickTimeoutThreshold {
+		return quickTimeout
+	}
+	return slowTimeout
 }
 
 // RoundTimer helps to manage current instance rounds.

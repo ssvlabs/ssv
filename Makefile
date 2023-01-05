@@ -40,19 +40,21 @@ lint:
 		exit 1; \
 	fi
 
-#Test
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
 
-#Test
+.PHONY: integration-test
+integration-test:
+	@echo "Running integration tests"
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD}  -p 1 -v ./integration/...
+
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|automation\|ssv/scripts/"`
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
 
-#Test
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
@@ -122,11 +124,6 @@ stop:
 start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
-
-.PHONY: start-exporter
-start-exporter:
-	@echo "Running exporter on address: ${HOST_ADDRESS}"
-	${BUILD_PATH} start-exporter ${NODE_COMMAND}
 
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor
