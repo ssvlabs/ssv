@@ -14,10 +14,10 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
-	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -67,7 +67,7 @@ type p2pNetwork struct {
 	activeValidatorsLock *sync.Mutex
 	activeValidators     map[string]int32
 
-	backoffConnector *libp2pdisc.BackoffConnector
+	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
 }

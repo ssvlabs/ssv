@@ -10,8 +10,8 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
-	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -116,8 +116,8 @@ func (n *p2pNetwork) SetupHost() error {
 	n.host = host
 	n.libConnManager = host.ConnManager()
 
-	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
-	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
+	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return errors.Wrap(err, "could not create backoff connector")
 	}
