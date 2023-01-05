@@ -66,15 +66,16 @@ func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
 	// default handler
 	md.svc.RegisterNotifee(&discoveryNotifee{
 		handler: func(e PeerEvent) {
-			md.peersLock.Lock()
-			defer md.peersLock.Unlock()
+			//md.peersLock.Lock()
+			//defer md.peersLock.Unlock()
 
-			id := e.AddrInfo.ID.String()
-			if _, exist := md.peers[id]; !exist {
-				md.logger.Debug("found new peer", zap.Any("addrInfo", e.AddrInfo))
-				md.peers[id] = e
-				go handler(e)
-			}
+			//id := e.AddrInfo.ID.String()
+			//if _, exist := md.peers[id]; !exist {
+			//	md.logger.Debug("found new peer", zap.Any("addrInfo", e.AddrInfo))
+			//	md.peers[id] = e
+			//	go handler(e)
+			//}
+			handler(e)
 		},
 	})
 	return md.routingTbl.Bootstrap(md.ctx)
