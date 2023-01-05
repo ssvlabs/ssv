@@ -84,7 +84,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	db, l, done := newDBAndLoggerForTest()
 	defer done()
-	_, ibftStorage := newStorageForTest(db, l)
+	_, ibftStorage := newStorageForTest(db, l, true)
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := GenerateNodes(4)
@@ -176,9 +176,9 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorageprotocol.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger, history bool) (storage.Storage, qbftstorageprotocol.QBFTStore) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion, false)
+	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion, history)
 	return sExporter, sIbft
 }
 
