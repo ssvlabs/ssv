@@ -1,15 +1,19 @@
 package controller
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 )
 
 // OnTimeout is trigger upon timeout for the given height
-func (c *Controller) OnTimeout(msg *specqbft.SignedMessage) error {
+func (c *Controller) OnTimeout(msg types.EventMsg) error {
 	// TODO add validation
 
-	instance := c.StoredInstances.FindInstance(msg.Message.Height)
+	timeoutData, err := msg.GetTimeoutData()
+	if err != nil {
+		return errors.Wrap(err, "failed to get timeout data")
+	}
+	instance := c.StoredInstances.FindInstance(timeoutData.Height)
 	if instance == nil {
 		return errors.New("instance is nil")
 	}

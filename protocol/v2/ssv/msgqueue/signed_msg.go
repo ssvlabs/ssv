@@ -62,6 +62,7 @@ func SignedMsgIndex(msgType spectypes.MsgType, mid string, h specqbft.Height, d 
 			H:    h,
 			Cmt:  mt,
 			D:    d,
+			Et:   -1,
 		})
 		// res = append(res, fmt.Sprintf("/%s/id/%s/height/%d/qbft_msg_type/%s", msgType.String(), mid, h, Mt.String()))
 	}
@@ -96,6 +97,7 @@ func DecidedMsgIndex(mid string) Index {
 		Cmt:  specqbft.CommitMsgType,
 		H:    specqbft.FirstHeight,
 		D:    true,
+		Et:   -1,
 	}
 	// return fmt.Sprintf("/%s/id/%s/qbft_msg_type/%s", message.SSVConsensusMsgType.String(), mid, message.CommitMsgType.String())
 }

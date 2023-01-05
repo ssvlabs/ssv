@@ -3,13 +3,16 @@ package duties
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
+	prysmtypes "github.com/prysmaticlabs/eth2-types"
 	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
 
@@ -119,18 +122,25 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		go func() {
-			// force the validator to be started (subscribed to validator's topic and synced)
-			// TODO: handle error (return error
-			if err := v.Start(); err != nil {
-				logger.Warn("could not start validator", zap.Error(err))
-				return
-			}
-			logger.Info("starting duty processing")
-			if err := v.StartDuty(duty); err != nil {
-				logger.Warn("could not start duty", zap.Error(err))
-			}
-		}()
+		executeDutyData := types.ExecuteDutyData{Duty: duty}
+		edd, err := json.Marshal(executeDutyData)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal execute duty data")
+		}
+		msg := types.EventMsg{
+			Type: types.ExecuteDuty,
+			Data: edd,
+		}
+		data, err := msg.Encode()
+		if err != nil {
+			return errors.Wrap(err, "failed to encode event msg")
+		}
+		ssvMsg := &spectypes.SSVMessage{
+			MsgType: message.SSVEventMsgType,
+			MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
+			Data:    data,
+		}
+		v.Queues[duty.Type].Add(ssvMsg)
 	} else {
 		logger.Warn("could not find validator")
 	}
@@ -138,7 +148,7 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 }
 
 // listenToTicker loop over the given slot channel
-func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
+func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
 	for currentSlot := range slots {
 		// notify current slot to channel
 		go dc.notifyCurrentSlot(currentSlot)
@@ -155,7 +165,7 @@ func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
 	}
 }
 
-func (dc *dutyController) notifyCurrentSlot(slot types.Slot) {
+func (dc *dutyController) notifyCurrentSlot(slot prysmtypes.Slot) {
 	if dc.currentSlotC != nil {
 		dc.currentSlotC <- uint64(slot)
 	}

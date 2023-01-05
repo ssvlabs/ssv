@@ -2,6 +2,7 @@ package msgqueue
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"math"
 	"strconv"
 	"sync"
@@ -81,12 +82,15 @@ type Index struct {
 	Mt spectypes.MsgType
 	// ID is the identifier
 	ID string
-	// H (optional) is the height, -1 is treated as nil
+	// H (optional) is the height
 	H specqbft.Height
 	// Cmt (optional) is the consensus msg type, -1 is treated as nil
 	Cmt specqbft.MessageType
 	// D is decided
 	D bool
+
+	// Et (optional) is the event msg types. -1 is treated as nil
+	Et types.EventType
 }
 
 func (i *Index) String() string {
@@ -323,5 +327,6 @@ func TestMsgIndex(mt spectypes.MsgType, mid spectypes.MessageID) Index {
 		H:    math.MaxInt64,
 		Cmt:  -1,
 		D:    false,
+		Et:   -1,
 	}
 }

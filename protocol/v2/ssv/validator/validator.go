@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -47,7 +49,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.TimerMsgMsgIndexer())
+	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
 	for _, dutyRunner := range options.DutyRunners {
 		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 		queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
@@ -115,12 +117,24 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
-	case types.SSVTimerMsgType:
-		signedMsg := &specqbft.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+	case message.SSVEventMsgType:
+		eventMsg := types.EventMsg{}
+		if err := eventMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get event Message from network Message")
 		}
-		return dutyRunner.GetBaseRunner().QBFTController.OnTimeout(signedMsg) // TODo can push as consensus msg and check if timer
+		// TODO add to spec in order to process in duty runner
+		switch eventMsg.Type {
+		case types.Timeout:
+			return dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
+		case types.ExecuteDuty:
+			err := v.OnExecuteDuty(eventMsg)
+			if err != nil {
+				logger.Warn("failed to execute duty", zap.Error(err)) // need to return error?
+			}
+			return err
+		default:
+			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.ToString()))
+		}
 	default:
 		return errors.New("unknown msg")
 	}
