@@ -170,32 +170,96 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 						return fmt.Errorf("poposal message %+v wasn't found at actual.State.ProposeContainer.Msgs[specqbft.FirstRound]", expectedMsg)
 					}
 
-					for i := 1; i <= 4; i++ {
-						expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), &specqbft.Message{
-							MsgType:    specqbft.PrepareMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       prepareData,
-						})
-						if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-							return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
-						}
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+						MsgType:    specqbft.PrepareMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       prepareData,
+					})
+					if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+						return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
+						MsgType:    specqbft.PrepareMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       prepareData,
+					})
+					if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+						return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+						MsgType:    specqbft.PrepareMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       prepareData,
+					})
+					if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+						return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
+						MsgType:    specqbft.PrepareMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       prepareData,
+					})
+					if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+						return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
 					}
 
 					foundedMsgsCounter := 0 //at the end of test it must be at least 3
-					for i := 1; i <= 4; i++ {
-						expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), &specqbft.Message{
-							MsgType:    specqbft.CommitMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       commitData,
-						})
-						if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-							foundedMsgsCounter++
-						}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+						MsgType:    specqbft.CommitMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       commitData,
+					})
+					if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+						foundedMsgsCounter++
 					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
+						MsgType:    specqbft.CommitMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       commitData,
+					})
+					if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+						foundedMsgsCounter++
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+						MsgType:    specqbft.CommitMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       commitData,
+					})
+					if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+						foundedMsgsCounter++
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
+						MsgType:    specqbft.CommitMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       commitData,
+					})
+					if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+						foundedMsgsCounter++
+					}
+
 					if foundedMsgsCounter < 3 {
 						return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least 3, actual = %d", foundedMsgsCounter)
 					}
