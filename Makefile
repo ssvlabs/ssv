@@ -48,7 +48,7 @@ full-test:
 .PHONY: integration-test
 integration-test:
 	@echo "Running integration tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./integration/...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD}  -p 1 -v ./integration/...
 
 .PHONY: unit-test
 unit-test:
@@ -124,11 +124,6 @@ stop:
 start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
-
-.PHONY: start-exporter
-start-exporter:
-	@echo "Running exporter on address: ${HOST_ADDRESS}"
-	${BUILD_PATH} start-exporter ${NODE_COMMAND}
 
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor

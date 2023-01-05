@@ -1,7 +1,7 @@
 package streams
 
 import (
-	core "github.com/libp2p/go-libp2p-core"
+	"github.com/libp2p/go-libp2p/core"
 	"github.com/pkg/errors"
 	"io"
 	"io/ioutil"

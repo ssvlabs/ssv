@@ -19,7 +19,7 @@ p2p:
 #  TcpPort:
 #  UdpPort:
   # mdns for local network setup
-#  DiscoveryType: mdns
+#  Discovery: mdns
 
 ssv:
   GenesisEpoch:

@@ -85,7 +85,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 	duty := r.GetState().StartingDuty
 
 	// get block data
-	blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+	blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to get Beacon block")
 	}
@@ -170,6 +170,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
+		r.logger.Debug("successfully proposed block!!!")
 	}
 	r.GetState().Finished = true
 
@@ -195,6 +196,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
+
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")

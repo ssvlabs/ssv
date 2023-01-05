@@ -3,9 +3,8 @@ name: Spec tests
 on:
   push:
     branches:
-      - 'stage'
       - 'main'
-      - 'spec-align-qbft'
+      - 'stage'
   pull_request:
     branches: 
       - '**'        

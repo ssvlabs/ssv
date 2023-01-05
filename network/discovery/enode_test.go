@@ -4,7 +4,7 @@ import (
 	crand "crypto/rand"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"

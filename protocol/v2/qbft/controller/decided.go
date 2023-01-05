@@ -12,11 +12,6 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	// decided msgs for past (already decided) instances will not decide again, just return
-	if msg.Message.Height < c.Height {
-		return nil, nil
-	}
-
 	if err := validateDecided(
 		c.config,
 		msg,
@@ -31,29 +26,38 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		return nil, errors.Wrap(err, "could not get decided data")
 	}
 
-	// did previously decide?
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
-
-	// Mark current instance decided
-	if inst := c.InstanceForHeight(c.Height); inst != nil && !inst.State.Decided {
-		inst.State.Decided = true
-		if c.Height == msg.Message.Height {
-			inst.State.Round = msg.Message.Round
-			inst.State.DecidedValue = data.Data
-		}
-	}
-
 	isFutureDecided := msg.Message.Height > c.Height
-	if isFutureDecided {
-		// add an instance for the decided msg
+
+	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
+		i.State.CommitContainer.AddMsg(msg)
 		c.StoredInstances.addNewInstance(i)
+	} else if decided, _ := inst.IsDecided(); !decided {
+		inst.State.Decided = true
+		inst.State.Round = msg.Message.Round
+		inst.State.DecidedValue = data.Data
+		inst.State.CommitContainer.AddMsg(msg)
+	} else { // decide previously, add if has more signers
+		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
+		if len(msg.Signers) > len(signers) {
+			inst.State.CommitContainer.AddMsg(msg)
+		}
+	}
+
+	if isFutureDecided {
+		// sync gap
+		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height
+	}
+
+	if !prevDecided {
+		return msg, nil
 	}
 
 	if !prevDecided {

@@ -3,6 +3,7 @@ package duties
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -29,21 +30,13 @@ type validatorsIndicesFetcher interface {
 	GetValidatorsIndices() []spec.ValidatorIndex
 }
 
-// beaconDutiesClient interface of the needed client for managing duties
-type beaconDutiesClient interface {
-	// GetDuties returns duties for the passed validators indices
-	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error)
-	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
-	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
-}
-
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
 	GetDuties(slot uint64) ([]spectypes.Duty, error)
 }
 
 // newDutyFetcher creates a new instance
-func newDutyFetcher(logger *zap.Logger, beaconClient beaconDutiesClient, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
+func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
 	df := dutyFetcher{
 		logger:         logger.With(zap.String("component", "operator/dutyFetcher")),
 		ethNetwork:     network,
@@ -58,7 +51,7 @@ func newDutyFetcher(logger *zap.Logger, beaconClient beaconDutiesClient, indices
 type dutyFetcher struct {
 	logger         *zap.Logger
 	ethNetwork     beacon.Network
-	beaconClient   beaconDutiesClient
+	beaconClient   beacon.Beacon
 	indicesFetcher validatorsIndicesFetcher
 
 	cache *cache.Cache
@@ -136,15 +129,27 @@ func (df *dutyFetcher) fetchDuties(slot uint64) ([]*spectypes.Duty, error) {
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
+		var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
 		// entries holds all the new duties to add
 		entries := map[spec.Slot]cacheEntry{}
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
-			subscriptions = append(subscriptions, toSubscription(duty))
+			if duty.Type == spectypes.BNRoleSyncCommittee {
+				syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, df.toSyncCommitteeSubscription(duty))
+			} else {
+				subscriptions = append(subscriptions, toSubscription(duty))
+			}
 		}
+
 		df.populateCache(entries)
+
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+		}
+		if len(syncCommitteeSubscriptions) > 0 {
+			if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
+				df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+			}
 		}
 	}
 	return nil
@@ -171,7 +176,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 			for _, newDuty := range e.Duties {
 				exist := false
 				for _, existDuty := range existingEntry.Duties {
-					if newDuty.ValidatorIndex == existDuty.ValidatorIndex {
+					if newDuty.ValidatorIndex == existDuty.ValidatorIndex && newDuty.Type == existDuty.Type {
 						exist = true
 						break // already exist, pass
 					}
@@ -224,30 +229,31 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		Slot:             duty.Slot,
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
-		IsAggregator:     false, // TODO need to handle agg case
+		IsAggregator:     duty.Type == spectypes.BNRoleAggregator, // TODO call subscribe after pre-consensus (aggregate & sync committee contribution)
+	}
+}
+
+func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2apiv1.SyncCommitteeSubscription {
+	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch() // TODO can do this calculation one time outside this func
+	period := uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod
+	endEpoch := (period + 1) * goclient.EpochsPerSyncCommitteePeriod
+	return &eth2apiv1.SyncCommitteeSubscription{
+		ValidatorIndex:       duty.ValidatorIndex,
+		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+		UntilEpoch:           spec.Epoch(endEpoch),
 	}
 }
 
 type serializedDuty struct {
-	PubKey                  string
-	Type                    string
-	Slot                    uint64
-	ValidatorIndex          uint64
-	CommitteeIndex          uint64
-	CommitteeLength         uint64
-	CommitteesAtSlot        uint64
-	ValidatorCommitteeIndex uint64
+	PubKey string
+	Type   string
+	Slot   uint64
 }
 
 func toSerialized(d *spectypes.Duty) serializedDuty {
 	return serializedDuty{
-		PubKey:                  hex.EncodeToString(d.PubKey[:]),
-		Type:                    d.Type.String(),
-		Slot:                    uint64(d.Slot),
-		ValidatorIndex:          uint64(d.ValidatorIndex),
-		CommitteeIndex:          uint64(d.CommitteeIndex),
-		CommitteeLength:         d.CommitteeLength,
-		CommitteesAtSlot:        d.CommitteesAtSlot,
-		ValidatorCommitteeIndex: d.ValidatorCommitteeIndex,
+		PubKey: hex.EncodeToString(d.PubKey[:]),
+		Type:   d.Type.String(),
+		Slot:   uint64(d.Slot),
 	}
 }

@@ -39,7 +39,7 @@ func validateFutureMsg(
 
 	// verify signature
 	if err := msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "commit msg signature invalid")
+		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

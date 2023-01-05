@@ -15,6 +15,8 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"go.uber.org/zap"
 )
@@ -153,8 +155,11 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 	forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode,
 	tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
+	discT := "discv5"
 	if bn != nil {
 		bns = bn.ENR
+	} else {
+		discT = "mdns"
 	}
 	ua := ""
 	return &Config{
@@ -166,12 +171,13 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		RequestTimeout:    10 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
-		PubSubTrace:       true,
+		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
 		Logger:            logger,
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
+		Discovery:         discT,
 	}
 }

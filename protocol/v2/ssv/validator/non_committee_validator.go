@@ -25,6 +25,7 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 	config := &qbft.Config{
 		Domain:  types.GetDefaultDomain(),
 		Storage: opts.Storage.Get(identifier.GetRoleType()),
+		Network: opts.Network,
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config)
 	if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {

@@ -665,7 +665,7 @@ In addition, the limit of peers per topic is also configurable.
 Connection Gating allows safeguarding against bad/pruned peers that tries to reconnect multiple times. 
 Inbound and outbound connections are intercepted and being checked before other components process the connection.
 
-See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) 
+See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go) 
 interface for more info.
 
 
