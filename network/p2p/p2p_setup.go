@@ -10,9 +10,8 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"github.com/libp2p/go-libp2p-core/crypto"
 	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
@@ -104,9 +103,6 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
 
-	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
-	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
-	opts = append(opts, libp2p.ConnectionManager(connManager))
 	// TODO: enable and extract resource manager params as config
 	// rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
 	// if err != nil {
@@ -118,7 +114,7 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
-	n.libConnManager = connManager
+	n.libConnManager = host.ConnManager()
 
 	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
 	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
@@ -215,7 +211,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 		return errors.Wrap(err, "could not get ip addr")
 	}
 	var discV5Opts *discovery.DiscV5Options
-	if len(n.cfg.Bootnodes) > 0 { // otherwise, we are in local scenario
+	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
 			IP:         ipAddr.String(),
 			BindIP:     net.IPv4zero.String(),
@@ -231,9 +227,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 		if len(n.subnets) > 0 {
 			discV5Opts.Subnets = n.subnets
 		}
-		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
+		n.logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
-		n.logger.Debug("no bootnodes were configured, using mdns discovery")
+		n.logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
 		Logger:      n.logger,

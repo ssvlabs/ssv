@@ -10,7 +10,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
@@ -36,7 +36,7 @@ type NodeProvider interface {
 type NodeFilter func(*enode.Node) bool
 
 // DiscV5Service wraps discover.UDPv5 with additional functionality
-// it implements go-libp2p-core/discovery.Discovery
+// it implements go-libp2p/core/discovery.Discovery
 // currently using ENR entry (subnets) to facilitate subnets discovery
 // TODO: should be changed once discv5 supports topics (v5.2)
 type DiscV5Service struct {

@@ -3,8 +3,8 @@ package topics
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"io"
