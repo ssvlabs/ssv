@@ -62,8 +62,9 @@ type scenarioContext struct {
 }
 
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
+	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
-		return logex.Build("simulation", zapcore.DebugLevel, nil).With(zap.String("who", s))
+		return l.With(zap.String("who", s))
 	}
 	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
 	logger.Info("creating resources")
@@ -179,11 +180,15 @@ func (it *IntegrationTest) Run() error {
 		return err
 	}
 
+	var lastDutyTime time.Duration
 	actualErrMap := sync.Map{}
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
 			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			if lastDutyTime < scheduledDuty.Delay {
+				lastDutyTime = scheduledDuty.Delay
+			}
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
 				startDutyErr := val.StartDuty(scheduledDuty.Duty)
@@ -191,6 +196,8 @@ func (it *IntegrationTest) Run() error {
 			})
 		}
 	}
+
+	<-time.After(lastDutyTime + (4 * time.Second))
 
 	for operatorID, expectedErr := range it.StartDutyErrors {
 		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
@@ -201,8 +208,6 @@ func (it *IntegrationTest) Run() error {
 			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
 		}
 	}
-
-	<-time.After(32 * time.Second) // TODO: fix
 
 	instanceMap := map[spectypes.OperatorID][]*protocolstorage.StoredInstance{}
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
