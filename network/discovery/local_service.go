@@ -3,22 +3,20 @@ package discovery
 import (
 	"context"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"sync"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"time"
 
-	"github.com/libp2p/go-libp2p-core/discovery"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/routing"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
-	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns_legacy"
+	"github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/routing"
+	mdnsDiscover "github.com/libp2p/go-libp2p/p2p/discovery/mdns"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 const (
-	// localDiscoveryInterval is how often we re-publish our mDNS records.
-	localDiscoveryInterval = time.Second / 2
 	// LocalDiscoveryServiceTag is used in our mDNS advertisements to discover other peers
 	LocalDiscoveryServiceTag = "ssv.discovery"
 )
@@ -31,19 +29,14 @@ type localDiscovery struct {
 	disc       discovery.Discovery
 	routingTbl routing.Routing
 
-	peersLock *sync.RWMutex
-	peers     map[string]PeerEvent
+	host host.Host
 }
 
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
+	logger = logger.With(zap.String("where", "mdns_discovery"))
 	logger.Debug("configuring mdns discovery")
-
-	svc, err := mdnsDiscover.NewMdnsService(ctx, host, localDiscoveryInterval, LocalDiscoveryServiceTag)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not create new mDNS service")
-	}
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {
@@ -53,30 +46,39 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) 
 	return &localDiscovery{
 		ctx:        ctx,
 		logger:     logger,
-		svc:        svc,
-		peers:      make(map[string]PeerEvent),
-		peersLock:  &sync.RWMutex{},
+		host:       host,
 		routingTbl: routingDHT,
 		disc:       disc,
+		svc: mdnsDiscover.NewMdnsService(host, LocalDiscoveryServiceTag, &discoveryNotifee{
+			handler: handle(host, func(e PeerEvent) {
+				err := host.Connect(ctx, e.AddrInfo)
+				if err != nil {
+					logger.Warn("could not connect to peer", zap.Any("addrInfo", e.AddrInfo), zap.Error(err))
+					return
+				}
+				logger.Debug("connected new peer", zap.Any("addrInfo", e.AddrInfo))
+			}),
+		}),
 	}, nil
+}
+
+func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
+	return func(e PeerEvent) {
+		ctns := host.Network().Connectedness(e.AddrInfo.ID)
+		switch ctns {
+		case libp2pnetwork.CannotConnect, libp2pnetwork.Connected:
+		default:
+			go handler(e)
+		}
+	}
 }
 
 // Bootstrap starts to listen to new nodes
 func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
-	// default handler
-	md.svc.RegisterNotifee(&discoveryNotifee{
-		handler: func(e PeerEvent) {
-			md.peersLock.Lock()
-			defer md.peersLock.Unlock()
-
-			id := e.AddrInfo.ID.String()
-			if _, exist := md.peers[id]; !exist {
-				md.logger.Debug("found new peer", zap.Any("addrInfo", e.AddrInfo))
-				md.peers[id] = e
-				go handler(e)
-			}
-		},
-	})
+	err := md.svc.Start()
+	if err != nil {
+		return errors.Wrap(err, "could not start mdns service")
+	}
 	return md.routingTbl.Bootstrap(md.ctx)
 }
 
@@ -124,9 +126,5 @@ func (md *localDiscovery) Close() error {
 	if err := md.svc.Close(); err != nil {
 		return err
 	}
-
-	md.peersLock.Lock()
-	md.peers = make(map[string]PeerEvent)
-	md.peersLock.Unlock()
 	return nil
 }

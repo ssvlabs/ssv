@@ -11,7 +11,7 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -172,7 +172,7 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 }
 
 func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	// logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
+	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
 	logger := zap.L()
 	loggerFactory := func(who string) *zap.Logger {
 		return logger.With(zap.String("who", who))

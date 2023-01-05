@@ -2,9 +2,9 @@ package topics
 
 import (
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"sync"
 )
