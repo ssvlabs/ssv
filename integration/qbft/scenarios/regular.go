@@ -126,6 +126,20 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 						return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
 					}
 
+					prepareData, err := (&specqbft.PrepareData{
+						Data: consensusData,
+					}).Encode()
+					if err != nil {
+						return fmt.Errorf("error during encoding specqbft.PrepareData: %w", err)
+					}
+
+					commitData, err := (&specqbft.CommitData{
+						Data: consensusData,
+					}).Encode()
+					if err != nil {
+						return fmt.Errorf("error during encoding specqbft.CommitData: %w", err)
+					}
+
 					expectedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 						MsgType:    specqbft.ProposalMsgType,
 						Height:     specqbft.FirstHeight,
@@ -133,34 +147,8 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 						Identifier: identifier[:],
 						Data:       proposalData,
 					})
-					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Signature, expectedMsg.Signature) {
-						return fmt.Errorf("expected signed message signature = %s, actual = %s", expectedMsg.Signature, actual.State.ProposalAcceptedForCurrentRound.Signature)
-					}
-
-					for i := range expectedMsg.Signers {
-						if actual.State.ProposalAcceptedForCurrentRound.Signers[i] != expectedMsg.Signers[i] {
-							return fmt.Errorf("expected signed message signer N%d operator id = %d, actual = %d", i, expectedMsg.Signers[i], actual.State.ProposalAcceptedForCurrentRound.Signers[i])
-						}
-					}
-
-					if actual.State.ProposalAcceptedForCurrentRound.Message.MsgType != expectedMsg.Message.MsgType {
-						return fmt.Errorf("expected signed message type = %d, actual = %d", expectedMsg.Message.MsgType, actual.State.ProposalAcceptedForCurrentRound.Message.MsgType)
-					}
-
-					if actual.State.ProposalAcceptedForCurrentRound.Message.Height != expectedMsg.Message.Height {
-						return fmt.Errorf("expected signed message height = %d, actual = %d", expectedMsg.Message.Height, actual.State.ProposalAcceptedForCurrentRound.Message.Height)
-					}
-
-					if actual.State.ProposalAcceptedForCurrentRound.Message.Round != expectedMsg.Message.Round {
-						return fmt.Errorf("expected signed message round = %d, actual = %d", expectedMsg.Message.Round, actual.State.ProposalAcceptedForCurrentRound.Message.Round)
-					}
-
-					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Message.Identifier, expectedMsg.Message.Identifier) {
-						return fmt.Errorf("expected signed message identifier = %s, actual = %s", expectedMsg.Message.Identifier, actual.State.ProposalAcceptedForCurrentRound.Message.Identifier)
-					}
-
-					if !bytes.Equal(actual.State.ProposalAcceptedForCurrentRound.Message.Data, expectedMsg.Message.Data) {
-						return fmt.Errorf("expected signed message data = %s, actual = %s", expectedMsg.Message.Data, actual.State.ProposalAcceptedForCurrentRound.Message.Data)
+					if err := deepValidateSignedMessage(expectedMsg, actual.State.ProposalAcceptedForCurrentRound); err != nil {
+						return fmt.Errorf("expected signed message = %+v, actual = %+v", expectedMsg, actual.State.ProposalAcceptedForCurrentRound)
 					}
 
 					if actual.State.Decided != true {
@@ -169,6 +157,47 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 
 					if !bytes.Equal(actual.State.DecidedValue, consensusData) {
 						return fmt.Errorf("expected decided value = %s, actual = %s", consensusData, actual.State.DecidedValue)
+					}
+
+					expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+						MsgType:    specqbft.ProposalMsgType,
+						Height:     specqbft.FirstHeight,
+						Round:      specqbft.FirstRound,
+						Identifier: identifier[:],
+						Data:       proposalData,
+					})
+					if !isMessageExistInRound(expectedMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) {
+						return fmt.Errorf("poposal message %+v wasn't found at actual.State.ProposeContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+					}
+
+					for i := 1; i <= 4; i++ {
+						expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), &specqbft.Message{
+							MsgType:    specqbft.PrepareMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       prepareData,
+						})
+						if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+							return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+						}
+					}
+
+					foundedMsgsCounter := 0 //at the end of test it must be at least 3
+					for i := 1; i <= 4; i++ {
+						expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), &specqbft.Message{
+							MsgType:    specqbft.CommitMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       commitData,
+						})
+						if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+							foundedMsgsCounter++
+						}
+					}
+					if foundedMsgsCounter < 3 {
+						return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least 3, actual = %d", foundedMsgsCounter)
 					}
 
 					return nil
@@ -318,7 +347,7 @@ func storedInstanceForOperatorID(operatorID spectypes.OperatorID, identifier spe
 	}
 }
 
-func deepValidateStorageInstance(expected, actual *protocolstorage.StoredInstance) error {
+func deepValidateStorageInstance(expected, actual *protocolstorage.StoredInstance) error { // consider removing
 	if actual.State == nil {
 		return fmt.Errorf("expected state = non-nil, actual = nil")
 	}
@@ -461,4 +490,13 @@ func deepValidateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	}
 
 	return nil
+}
+
+func isMessageExistInRound(message *specqbft.SignedMessage, round []*specqbft.SignedMessage) bool {
+	for i := range round {
+		if err := deepValidateSignedMessage(message, round[i]); err == nil {
+			return true
+		}
+	}
+	return false
 }
