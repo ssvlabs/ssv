@@ -66,9 +66,9 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	if err := stream.WriteWithTimeout(data, n.requestTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
-	if err := s.CloseWrite(); err != nil {
-		return nil, errors.Wrap(err, "could not close write stream")
-	}
+	//if err := s.CloseWrite(); err != nil {
+	//	return nil, errors.Wrap(err, "could not close write stream")
+	//}
 	res, err := stream.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read stream msg")
