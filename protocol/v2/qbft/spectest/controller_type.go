@@ -14,7 +14,6 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	"github.com/stretchr/testify/require"
 )
