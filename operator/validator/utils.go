@@ -48,7 +48,7 @@ func ShareFromValidatorEvent(
 	publicKey := &bls.PublicKey{}
 	if err := publicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
-			Err: errors.Wrap(err, "failed to deserialize share public key"),
+			Err: errors.Wrap(err, "failed to deserialize validator public key"),
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
