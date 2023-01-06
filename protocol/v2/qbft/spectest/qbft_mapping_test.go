@@ -2,6 +2,10 @@ package qbft
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"io"
 	"net/http"
 	"os"
@@ -29,7 +33,7 @@ func TestQBFTMapping(t *testing.T) {
 	filePath := path + "/" + fileName
 	jsonTests, err := os.ReadFile(filePath)
 	if err != nil {
-		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/7e96c8b781915faaa12d29eba94e702445bd5945/qbft/spectest/generate/tests.json")
+		resp, err := http.Get("https://raw.githubusercontent.com/bloxapp/ssv-spec/main/qbft/spectest/generate/tests.json")
 		require.NoError(t, err)
 
 		defer func() {
@@ -119,6 +123,27 @@ func TestQBFTMapping(t *testing.T) {
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunControllerSync(t, typedTest)
 			})
+		case reflect.TypeOf(&timeout.SpecTest{}).String():
+			byts, err := json.Marshal(test)
+			require.NoError(t, err)
+			typedTest := &SpecTest{}
+			require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+			// a little trick we do to instantiate all the internal instance params
+
+			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
+			preByts, _ := typedTest.Pre.Encode()
+			pre := instance.NewInstance(
+				testing2.TestingConfig(testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				typedTest.Pre.State.Share,
+				typedTest.Pre.State.ID,
+				typedTest.Pre.State.Height,
+			)
+			err = pre.Decode(preByts)
+			require.NoError(t, err)
+			typedTest.Pre = pre
+
+			RunTimeout(t, typedTest)
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		}

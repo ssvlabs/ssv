@@ -62,8 +62,9 @@ type scenarioContext struct {
 }
 
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
+	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
-		return logex.Build("simulation", zapcore.DebugLevel, nil).With(zap.String("who", s))
+		return l.With(zap.String("who", s))
 	}
 	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
 	logger.Info("creating resources")
@@ -179,11 +180,15 @@ func (it *IntegrationTest) Run() error {
 		return err
 	}
 
+	var lastDutyTime time.Duration
 	actualErrMap := sync.Map{}
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
 			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			if lastDutyTime < scheduledDuty.Delay {
+				lastDutyTime = scheduledDuty.Delay
+			}
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
 				startDutyErr := val.StartDuty(scheduledDuty.Duty)
@@ -192,17 +197,23 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
+	<-time.After(lastDutyTime + (4 * time.Second))
+
 	for operatorID, expectedErr := range it.StartDutyErrors {
 		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
 			if expectedErr != nil {
 				return fmt.Errorf("expected an error")
 			}
-		} else if !errors.Is(actualErr.(error), expectedErr) {
-			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+		} else {
+			aerr, ok := actualErr.(error)
+			if !ok && expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+			if !errors.Is(aerr, expectedErr) {
+				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+			}
 		}
 	}
-
-	<-time.After(32 * time.Second) // TODO: fix
 
 	instanceMap := map[spectypes.OperatorID][]*protocolstorage.StoredInstance{}
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
@@ -213,6 +224,9 @@ func (it *IntegrationTest) Run() error {
 			if err != nil {
 				return err
 			}
+			if storedInstance == nil {
+				return fmt.Errorf("stored instance is nil")
+			}
 
 			instanceMap[expectedOperatorID] = append(instanceMap[expectedOperatorID], storedInstance)
 		}
@@ -220,13 +234,13 @@ func (it *IntegrationTest) Run() error {
 
 	jsonInstances, err := json.Marshal(instanceMap)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	fmt.Printf("\nactual instances:\n%v\n\n", string(jsonInstances))
 
 	jsonExpectedInstances, err := json.Marshal(it.ExpectedInstances)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	fmt.Printf("\nexpected instances:\n%v\n\n", string(jsonExpectedInstances))
 
@@ -286,8 +300,8 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 
 		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
 
+		options.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		val := protocolvalidator.NewValidator(sCtx.ctx, options)
-		val.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		validators[operatorID] = val
 	}
 

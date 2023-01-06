@@ -28,6 +28,7 @@ var (
 		migrationCleanOperatorRemovalCorruptions,
 		migrationCleanShares,
 		migrationRemoveChangeRoundSync,
+		migrationAddGraffiti,
 	}
 )
 

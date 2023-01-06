@@ -2,15 +2,15 @@ package runner
 
 import (
 	"encoding/hex"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	logging "github.com/ipfs/go-log"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -60,7 +60,6 @@ type BaseRunner struct {
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
-		b.logger.Warn("cannot start new duty", zap.Error(err))
 		return err
 	}
 	b.State = NewRunnerState(b.Share.Quorum, duty)
@@ -73,14 +72,7 @@ func (b *BaseRunner) canStartNewDuty() error {
 		return nil
 	}
 
-	// check if instance running first as we can't start new duty if it does
-	if b.State.RunningInstance != nil {
-		// check consensus decided
-		if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
-			return errors.New("consensus on duty is running")
-		}
-	}
-	return nil
+	return b.QBFTController.CanStartInstance()
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
@@ -181,7 +173,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
-	decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
+	decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
 
 	if !decided {
 		return false, nil

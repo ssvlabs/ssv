@@ -102,6 +102,7 @@ func ShareFromValidatorEvent(
 	validatorShare.DomainType = types.GetDefaultDomain()
 	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
+	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }

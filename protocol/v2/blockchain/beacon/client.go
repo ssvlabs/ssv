@@ -3,42 +3,51 @@ package beacon
 import (
 	"context"
 
-	api "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/storage/basedb"
+
+	"go.uber.org/zap"
 )
 
 // TODO: add missing tests
 
 //go:generate mockgen -package=beacon -destination=./mock_client.go -source=./client.go
 
-// Beacon represents the behavior of the beacon node connector
-type Beacon interface {
-	SigningUtil
-
+// beaconDuties interface serves all duty related calls
+type beaconDuties interface {
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error)
-
-	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
-	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error)
-
-	// GetAttestationData returns attestation data by the given slot and committee index
-	GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error)
-
-	// SubmitAttestation submit the attestation to the node
-	SubmitAttestation(attestation *spec.Attestation) error
-
-	// SubscribeToCommitteeSubnet subscribe committee to subnet (p2p topic)
-	SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitteeSubscription) error
 }
 
-// SigningUtil is an interface for beacon node signing specific methods
-type SigningUtil interface {
-	GetDomain(data *spec.AttestationData) ([]byte, error)
-	ComputeSigningRoot(object interface{}, domain []byte) ([32]byte, error)
+// beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
+type beaconSubscriber interface {
+	// SubscribeToCommitteeSubnet subscribe committee to subnet
+	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
+	// SubmitSyncCommitteeSubscriptions subscribe to sync committee subnet
+	SubmitSyncCommitteeSubscriptions(subscription []*eth2apiv1.SyncCommitteeSubscription) error
+}
+
+type beaconValidator interface {
+	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
+	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*eth2apiv1.Validator, error)
+}
+
+// TODO need to handle differently (by spec)
+type signer interface {
+	ComputeSigningRoot(object interface{}, domain phase0spec.Domain) ([32]byte, error)
+}
+
+// Beacon interface for all beacon duty calls
+type Beacon interface {
+	ssv.BeaconNode // spec beacon interface
+	beaconDuties
+	beaconSubscriber
+	beaconValidator
+	signer // TODO need to handle differently
 }
 
 // Options for controller struct creation

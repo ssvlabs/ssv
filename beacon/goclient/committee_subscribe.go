@@ -13,3 +13,11 @@ func (gc *goClient) SubscribeToCommitteeSubnet(subscription []*api.BeaconCommitt
 	}
 	return errors.New("client does not support BeaconCommitteeSubscriptionsSubmitter")
 }
+
+// SubmitSyncCommitteeSubscriptions is implementation for subscribing sync committee to subnet (p2p topic)
+func (gc *goClient) SubmitSyncCommitteeSubscriptions(subscription []*api.SyncCommitteeSubscription) error {
+	if provider, isProvider := gc.client.(eth2client.SyncCommitteeSubscriptionsSubmitter); isProvider {
+		return provider.SubmitSyncCommitteeSubscriptions(gc.ctx, subscription)
+	}
+	return errors.New("client does not support SyncCommitteeSubscriptionsSubmitter")
+}

@@ -41,7 +41,7 @@ func (by By) Add(msgs []*MsgContainer, msg *MsgContainer) []*MsgContainer {
 	return newMsgs
 }
 
-// ByRound implements By for round based priority
+// ByRound implements By for round based priority, in descending order
 func ByRound() By {
 	return func(a, b *spectypes.SSVMessage) bool {
 		aRound, ok := getRound(a)
@@ -52,7 +52,7 @@ func ByRound() By {
 		if !ok {
 			return true
 		}
-		return aRound > bRound
+		return aRound < bRound
 	}
 }
 
