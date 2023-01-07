@@ -222,6 +222,9 @@ func (it *IntegrationTest) Run() error {
 			if err != nil {
 				return err
 			}
+			if storedInstance == nil {
+				return fmt.Errorf("stored instance is nil")
+			}
 
 			if err := assertInstance(storedInstance, expectedInstance); err != nil {
 				return fmt.Errorf("assert instance (oid %v, idx %v): %w", expectedOperatorID, i, err)
