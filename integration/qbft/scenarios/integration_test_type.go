@@ -3,7 +3,6 @@ package scenarios
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -42,12 +41,12 @@ type IntegrationTest struct {
 	OperatorIDs       []spectypes.OperatorID
 	ValidatorDelays   map[spectypes.OperatorID]time.Duration
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	Duties            map[spectypes.OperatorID][]ScheduledDuty
+	Duties            map[spectypes.OperatorID][]scheduledDuty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
 	StartDutyErrors   map[spectypes.OperatorID]error
 }
 
-type ScheduledDuty struct {
+type scheduledDuty struct {
 	Duty  *spectypes.Duty
 	Delay time.Duration
 }
@@ -63,8 +62,9 @@ type scenarioContext struct {
 }
 
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
+	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
-		return logex.Build("simulation", zapcore.DebugLevel, nil).With(zap.String("who", s))
+		return l.With(zap.String("who", s))
 	}
 	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
 	logger.Info("creating resources")
@@ -87,7 +87,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	forkVersion := protocolforks.GenesisForkVersion
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)-1, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)/2, false)
 	if err != nil {
 		return nil, err
 	}
@@ -182,6 +182,7 @@ func (it *IntegrationTest) Run() error {
 		return err
 	}
 
+	var lastDutyTime time.Duration
 	biggestDutyDelay := time.Duration(0)
 
 	actualErrMap := sync.Map{}
@@ -192,7 +193,12 @@ func (it *IntegrationTest) Run() error {
 				biggestDutyDelay = scheduledDuty.Delay
 			}
 
+			if lastDutyTime < scheduledDuty.Delay {
+				lastDutyTime = scheduledDuty.Delay
+			}
+
 			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
 				startDutyErr := val.StartDuty(scheduledDuty.Duty)
@@ -201,44 +207,26 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
+	<-time.After(lastDutyTime + (4 * time.Second))
+
 	for operatorID, expectedErr := range it.StartDutyErrors {
 		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
 			if expectedErr != nil {
 				return fmt.Errorf("expected an error")
 			}
-		} else if !errors.Is(actualErr.(error), expectedErr) {
-			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+		} else {
+			aerr, ok := actualErr.(error)
+			if !ok && expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+			if !errors.Is(aerr, expectedErr) {
+				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+			}
 		}
 	}
 
 	const dutyLength = 8 * time.Second
 	<-time.After(biggestDutyDelay + dutyLength) // TODO: more elegant solution
-
-	instanceMap := map[spectypes.OperatorID][]*protocolstorage.StoredInstance{}
-	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-		for _, expectedInstance := range expectedInstances {
-			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-				GetHighestInstance(expectedInstance.State.ID)
-			if err != nil {
-				return err
-			}
-
-			instanceMap[expectedOperatorID] = append(instanceMap[expectedOperatorID], storedInstance)
-		}
-	}
-
-	jsonInstances, err := json.Marshal(instanceMap)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("\nactual instances:\n%v\n\n", string(jsonInstances))
-
-	jsonExpectedInstances, err := json.Marshal(it.ExpectedInstances)
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf("\nexpected instances:\n%v\n\n", string(jsonExpectedInstances))
 
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
 		for i, expectedInstance := range expectedInstances {
@@ -247,6 +235,9 @@ func (it *IntegrationTest) Run() error {
 				GetHighestInstance(expectedInstance.State.ID)
 			if err != nil {
 				return err
+			}
+			if storedInstance == nil {
+				return fmt.Errorf("stored instance is nil")
 			}
 
 			if err := assertInstance(storedInstance, expectedInstance); err != nil {
@@ -291,13 +282,12 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 			},
 			Beacon: beaconNode{spectestingutils.NewTestingBeaconNode()},
 			Signer: sCtx.keyManagers[operatorID],
-			Logger: sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID))),
 		}
 
 		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
 
+		options.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		val := protocolvalidator.NewValidator(sCtx.ctx, options)
-		val.DutyRunners = validator.SetupRunners(sCtx.ctx, l, options)
 		validators[operatorID] = val
 	}
 
@@ -346,8 +336,8 @@ func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectyp
 	}
 }
 
-func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) ScheduledDuty {
-	return ScheduledDuty{
+func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) scheduledDuty {
+	return scheduledDuty{
 		Duty:  createDuty(pk, slot, idx, role),
 		Delay: delay,
 	}

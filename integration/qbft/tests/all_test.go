@@ -4,22 +4,24 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/types"
-	logging "github.com/ipfs/go-log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
 )
 
 func Test_Integration_QBFTScenarios(t *testing.T) {
-	_ = logging.SetLogLevelRegex("ssv/*.", "debug") // for debugging
+	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
 
 	scenariosToRun := []*scenarios.IntegrationTest{
-		// scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
-		// scenarios.RoundChange(types.BNRoleAttester), // TODO: test other roles
-		scenarios.FPlus1Decided(types.BNRoleAttester), // TODO: test other roles
+		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
+		scenarios.RoundChange(types.BNRoleAttester),
+		scenarios.FPlus1Decided(types.BNRoleAttester),
 	}
 
 	for _, scenario := range scenariosToRun {
-		require.NoError(t, scenario.Run())
+		scenario := scenario
+		t.Run(scenario.Name, func(t *testing.T) {
+			require.NoError(t, scenario.Run())
+		})
 	}
 }

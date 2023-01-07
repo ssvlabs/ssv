@@ -3,7 +3,7 @@ package discovery
 import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"go.uber.org/zap"
 )
 

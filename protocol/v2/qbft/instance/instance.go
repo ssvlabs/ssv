@@ -2,15 +2,13 @@ package instance
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
-
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
@@ -51,8 +49,7 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
-			zap.Uint64("height", uint64(height))).
-			With(zap.String("w", fmt.Sprintf("node-%d", share.OperatorID))),
+			zap.Uint64("height", uint64(height))),
 	}
 }
 
@@ -65,11 +62,10 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		// propose if this node is the proposer
-		leader := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
-
 		i.logger.Debug("starting QBFT instance")
-		if leader == i.State.Share.OperatorID {
+
+		// propose if this node is the proposer
+		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -79,11 +75,6 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
 					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
-				} else {
-					i.logger.Debug("broadcast proposal",
-						zap.Uint64("round", uint64(proposal.Message.Round)),
-						zap.Any("signers", proposal.Signers),
-						zap.Any("message", proposal))
 				}
 			}
 		}
@@ -109,7 +100,7 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
-	if err := msg.Validate(); err != nil {
+	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
@@ -136,6 +127,61 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 		return false, nil, nil, res.(error)
 	}
 	return i.State.Decided, i.State.DecidedValue, aggregatedCommit, nil
+}
+
+func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
+	if err := msg.Validate(); err != nil {
+		return errors.Wrap(err, "invalid signed message")
+	}
+
+	if msg.Message.Round < i.State.Round {
+		return errors.New("past round")
+	}
+
+	switch msg.Message.MsgType {
+	case specqbft.ProposalMsgType:
+		return isValidProposal(
+			i.State,
+			i.config,
+			msg,
+			i.config.GetValueCheckF(),
+			i.State.Share.Committee,
+		)
+	case specqbft.PrepareMsgType:
+		proposedMsg := i.State.ProposalAcceptedForCurrentRound
+		if proposedMsg == nil {
+			return errors.New("did not receive proposal for this round")
+		}
+		acceptedProposalData, err := proposedMsg.Message.GetCommitData()
+		if err != nil {
+			return errors.Wrap(err, "could not get accepted proposal data")
+		}
+		return validSignedPrepareForHeightRoundAndValue(
+			i.config,
+			msg,
+			i.State.Height,
+			i.State.Round,
+			acceptedProposalData.Data,
+			i.State.Share.Committee,
+		)
+	case specqbft.CommitMsgType:
+		proposedMsg := i.State.ProposalAcceptedForCurrentRound
+		if proposedMsg == nil {
+			return errors.New("did not receive proposal for this round")
+		}
+		return validateCommit(
+			i.config,
+			msg,
+			i.State.Height,
+			i.State.Round,
+			i.State.ProposalAcceptedForCurrentRound,
+			i.State.Share.Committee,
+		)
+	case specqbft.RoundChangeMsgType:
+		return validRoundChange(i.State, i.config, msg, i.State.Height, msg.Message.Round)
+	default:
+		return errors.New("signed message type not supported")
+	}
 }
 
 // IsDecided interface implementation

@@ -2,15 +2,13 @@ package topics
 
 import (
 	"context"
-	"io"
-	"time"
-
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/bloxapp/ssv/network/forks"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network/forks"
+	"io"
+	"time"
 )
 
 var (
@@ -198,8 +196,6 @@ func (ctrl *topicsCtrl) start(name string, sub *pubsub.Subscription) {
 		}
 		ctrl.logger.Debug("could not rejoin topic", zap.String("topic", name), zap.Error(err))
 	}
-
-	zap.L().Debug("topicsCtrl ctx err", zap.Error(ctrl.ctx.Err()))
 }
 
 // listen handles incoming messages from the topic
@@ -231,7 +227,6 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}
-	zap.L().Debug("topics ctx err", zap.Error(ctx.Err()))
 	return nil
 }
 

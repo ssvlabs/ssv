@@ -2,16 +2,16 @@ package validator
 
 import (
 	"encoding/hex"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strings"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -102,6 +102,7 @@ func ShareFromValidatorEvent(
 	validatorShare.DomainType = types.GetDefaultDomain()
 	validatorShare.Committee = committee
 	validatorShare.SetOperators(validatorRegistrationEvent.OperatorPublicKeys)
+	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
@@ -128,7 +129,7 @@ func SetOperatorPublicKeys(
 }
 
 func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {
-	yamlFile, err := ioutil.ReadFile(filepath.Clean(path))
+	yamlFile, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return err
 	}

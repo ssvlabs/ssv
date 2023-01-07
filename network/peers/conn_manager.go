@@ -3,9 +3,9 @@ package peers
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/records"
-	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 )
 
@@ -13,7 +13,7 @@ const (
 	protectedTag = "ssv/subnets"
 )
 
-// ConnManager is a wrapper on top of go-libp2p-core/connmgr.ConnManager.
+// ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {

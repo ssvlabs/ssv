@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -35,7 +34,7 @@ type Validator struct {
 	Signer      spectypes.KeyManager
 
 	Storage *storage.QBFTStores
-	Q       msgqueue.MsgQueue
+	Queues  map[spectypes.BeaconRole]msgqueue.MsgQueue
 
 	state uint32
 }
@@ -45,12 +44,14 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
-	logger := options.Logger.
-		With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey))).
-		With(zap.String("w", fmt.Sprintf("node-%d", options.SSVShare.OperatorID)))
+	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
+	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
 	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
-	q, _ := msgqueue.New(logger, indexers) // TODO: handle error
+	for _, dutyRunner := range options.DutyRunners {
+		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
+		queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
+	}
 
 	v := &Validator{
 		ctx:         ctx,
@@ -62,7 +63,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
-		Q:           q,
+		Queues:      queues,
 		state:       uint32(NotStarted),
 	}
 

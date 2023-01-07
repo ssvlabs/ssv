@@ -4,7 +4,7 @@ import (
 	crand "crypto/rand"
 	"github.com/bloxapp/ssv/network/commons"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 	"testing"
 )

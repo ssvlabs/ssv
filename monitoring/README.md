@@ -34,6 +34,7 @@ METRICS_API_PORT=15000
 * `ssv:node_status` Health check status of operator node
 * `ssv:eth1:node_status` Health check status of eth1 node
 * `ssv:beacon:node_status` Health check status of beacon node
+* `ssv:beacon:attestation_data_request_duration_seconds` Attestation data request duration (seconds)
 * `ssv:network:connected_peers{pubKey}` Count connected peers for a validator
 * `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
 * `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
@@ -44,6 +45,11 @@ METRICS_API_PORT=15000
 * `ssv:validator:ibft_current_slot{pubKey}` Current running slot
 * `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
 * `ssv:validator:running_ibfts_count_all` Count all running IBFTs
+* `ssv:validator:consensus_duration_seconds{pubKey}` Consensus duration (seconds)
+* `ssv:validator:instance_stage_duration_seconds{stage, pubKey}` Instance stage duration (seconds)
+* `ssv:validator:signature_collection_duration_seconds{pubKey}` Signature collection duration (seconds)
+* `ssv:validator:attestation_submission_duration_seconds{pubKey}` Attestation duration (seconds)
+* `ssv:validator:attestation_full_flow_duration_seconds{pubKey}` Attestation full flow duration (seconds)
 
 
 ### Grafana

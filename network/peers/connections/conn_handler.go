@@ -2,14 +2,16 @@ package connections
 
 import (
 	"context"
+	"time"
+
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peerstore"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils/tasks"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peerstore"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"time"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -77,9 +79,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			disconnect(net, conn)
 			return errors.New("reached peers limit")
 		}
-		if !ch.checkSubnets(conn) {
-			_logger.Debug("disconnecting after subnets check",
-				zap.String("dir", conn.Stat().Direction.String()))
+		if !ch.checkSubnets(conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
+			_logger.Debug("disconnecting incoming connection after subnets check")
 			disconnect(net, conn)
 			return errors.New("peer doesn't share enough subnets")
 		}

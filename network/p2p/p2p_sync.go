@@ -6,9 +6,9 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -44,6 +44,11 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	}()
 
 	return nil
+}
+
+func (n *p2pNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, from specqbft.Height) {
+	//TODO implement me
+	//panic("implement me")
 }
 
 // LastDecided fetches last decided from a random set of peers

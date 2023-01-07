@@ -4,45 +4,18 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	logging "github.com/ipfs/go-log"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
-
-// HistoricalInstanceCapacity represents the upper bound of InstanceContainer a processmsg can process messages for as messages are not
-// guaranteed to arrive in a timely fashion, we physically limit how far back the processmsg will process messages for
-const HistoricalInstanceCapacity int = 5
-
-type InstanceContainer [HistoricalInstanceCapacity]*instance.Instance
-
-func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
-	for _, inst := range i {
-		if inst != nil {
-			if inst.GetHeight() == height {
-				return inst
-			}
-		}
-	}
-	return nil
-}
-
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
-func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
-	for idx := HistoricalInstanceCapacity - 1; idx > 0; idx-- {
-		i[idx] = i[idx-1]
-	}
-	i[0] = instance
-}
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
@@ -72,15 +45,13 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger: logger.
-			With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())).
-			With(zap.String("w", fmt.Sprintf("node-%d", share.OperatorID))),
+		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
 	}
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
 func (c *Controller) StartNewInstance(value []byte) error {
-	if err := c.canStartInstance(value); err != nil {
+	if err := c.canStartInstanceForValue(value); err != nil {
 		return errors.Wrap(err, "can't start new QBFT instance")
 	}
 
@@ -150,6 +121,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 	return msg, nil
 }
 
+// BaseMsgValidation returns error if msg is invalid (base validation)
 func (c *Controller) baseMsgValidation(msg *specqbft.SignedMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.Message.Identifier) {
@@ -179,13 +151,18 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	return i
 }
 
-// canStartInstance start new instance only if current was decided
-func (c *Controller) canStartInstance(value []byte) error {
+func (c *Controller) canStartInstanceForValue(value []byte) error {
 	// check value
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
 	}
 
+	return c.CanStartInstance()
+}
+
+// CanStartInstance returns nil if controller can start a new instance
+func (c *Controller) CanStartInstance() error {
+	// check prev instance if prev instance is not the first instance
 	inst := c.StoredInstances.FindInstance(c.Height)
 	if inst == nil {
 		return nil
@@ -199,33 +176,7 @@ func (c *Controller) canStartInstance(value []byte) error {
 
 // GetRoot returns the state's deterministic root
 func (c *Controller) GetRoot() ([]byte, error) {
-	rootStruct := struct {
-		Identifier             []byte
-		Height                 specqbft.Height
-		InstanceRoots          [][]byte
-		HigherReceivedMessages map[spectypes.OperatorID]specqbft.Height
-		Domain                 spectypes.DomainType
-		Share                  *spectypes.Share
-	}{
-		Identifier:             c.Identifier,
-		Height:                 c.Height,
-		InstanceRoots:          make([][]byte, len(c.StoredInstances)),
-		HigherReceivedMessages: c.FutureMsgsContainer,
-		Domain:                 c.Domain,
-		Share:                  c.Share,
-	}
-
-	for i, inst := range c.StoredInstances {
-		if inst != nil {
-			r, err := inst.GetRoot()
-			if err != nil {
-				return nil, errors.Wrap(err, "failed getting instance root")
-			}
-			rootStruct.InstanceRoots[i] = r
-		}
-	}
-
-	marshaledRoot, err := json.Marshal(rootStruct)
+	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode state")
 	}

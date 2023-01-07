@@ -34,7 +34,7 @@ type P2PNetwork interface {
 }
 
 // GetValidatorStats returns stats of validators, including the following:
-//  - the amount of validators in the network
-//  - the amount of active validators in the network (i.e. not slashed or existed)
-//  - the amount of validators assigned to this operator
+//   - the amount of validators in the network
+//   - the amount of active validators in the network (i.e. not slashed or existed)
+//   - the amount of validators assigned to this operator
 type GetValidatorStats func() (uint64, uint64, uint64, error)

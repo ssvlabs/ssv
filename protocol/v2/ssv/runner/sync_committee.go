@@ -137,6 +137,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
+		r.logger.Info("successfully submitted sync msg!!!")
 	}
 	r.GetState().Finished = true
 
@@ -158,9 +159,7 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
 func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
-	// TODO - waitOneThirdOrValidBlock
-
-	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot()
+	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
