@@ -40,12 +40,12 @@ type IntegrationTest struct {
 	Name              string
 	OperatorIDs       []spectypes.OperatorID
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	Duties            map[spectypes.OperatorID][]ScheduledDuty
+	Duties            map[spectypes.OperatorID][]scheduledDuty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
 	StartDutyErrors   map[spectypes.OperatorID]error
 }
 
-type ScheduledDuty struct {
+type scheduledDuty struct {
 	Duty  *spectypes.Duty
 	Delay time.Duration
 }
@@ -268,7 +268,6 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 			},
 			Beacon: beaconNode{spectestingutils.NewTestingBeaconNode()},
 			Signer: sCtx.keyManagers[operatorID],
-			Logger: sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID))),
 		}
 
 		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
@@ -323,8 +322,8 @@ func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectyp
 	}
 }
 
-func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) ScheduledDuty {
-	return ScheduledDuty{
+func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) scheduledDuty {
+	return scheduledDuty{
 		Duty:  createDuty(pk, slot, idx, role),
 		Delay: delay,
 	}

@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -45,9 +44,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
-	logger := options.Logger.
-		With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey))).
-		With(zap.String("w", fmt.Sprintf("node-%d", options.SSVShare.OperatorID)))
+	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
 	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())

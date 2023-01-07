@@ -2,16 +2,13 @@ package instance
 
 import (
 	"encoding/json"
-	"fmt"
 	"sync"
-	"time"
-
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
@@ -52,8 +49,7 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
-			zap.Uint64("height", uint64(height))).
-			With(zap.String("w", fmt.Sprintf("node-%d", share.OperatorID))),
+			zap.Uint64("height", uint64(height))),
 	}
 }
 
@@ -76,15 +72,9 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 				i.logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
-				time.Sleep(100 * time.Millisecond)
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
 					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
-				} else {
-					i.logger.Debug("broadcast proposal",
-						zap.Uint64("round", uint64(proposal.Message.Round)),
-						zap.Any("signers", proposal.Signers),
-						zap.Any("message", proposal))
 				}
 			}
 		}
