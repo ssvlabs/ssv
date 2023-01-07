@@ -28,8 +28,8 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 		16000 * time.Millisecond,
 		24000 * time.Millisecond,
 	}
-	consensusDataList, proposalDataList, prepareDataList, commitDataList, roundChangeDataList, err := messageDataForSlots(role, pk, slots...)
-	_ = roundChangeDataList // TODO: fix
+
+	consensusData, proposalData, prepareData, commitData, _, err := messageDataForSlot(role, pk, slots[1])
 	if err != nil {
 		panic(err)
 	}
@@ -45,7 +45,12 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 			4: delays[1],
 		},
 		InitialInstances: nil,
-		Duties:           createFPlus1Duties(role, pk, slots, delays),
+		Duties: map[spectypes.OperatorID][]scheduledDuty{
+			1: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
+			2: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
+			3: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
+			4: {},
+		},
 		ExpectedInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
 			1: {
 				&protocolstorage.StoredInstance{
@@ -55,16 +60,16 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 						Round:             specqbft.FirstRound,
 						Height:            1,
 						LastPreparedRound: specqbft.FirstRound,
-						LastPreparedValue: consensusDataList[1],
+						LastPreparedValue: consensusData,
 						ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 							MsgType:    specqbft.ProposalMsgType,
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       proposalDataList[1],
+							Data:       proposalData,
 						}),
 						Decided:      true,
-						DecidedValue: consensusDataList[1],
+						DecidedValue: consensusData,
 						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
@@ -72,7 +77,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       proposalDataList[1],
+									Data:       proposalData,
 								}),
 							},
 						}},
@@ -83,21 +88,21 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 							},
 						}},
@@ -109,7 +114,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -118,7 +123,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -127,7 +132,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 							},
@@ -140,7 +145,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       spectestingutils.PrepareDataBytes(consensusDataList[1]),
+							Data:       spectestingutils.PrepareDataBytes(consensusData),
 						},
 					},
 				},
@@ -153,16 +158,16 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 						Round:             specqbft.FirstRound,
 						Height:            1,
 						LastPreparedRound: specqbft.FirstRound,
-						LastPreparedValue: consensusDataList[1],
+						LastPreparedValue: consensusData,
 						ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 							MsgType:    specqbft.ProposalMsgType,
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       proposalDataList[1],
+							Data:       proposalData,
 						}),
 						Decided:      true,
-						DecidedValue: consensusDataList[1],
+						DecidedValue: consensusData,
 						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
@@ -170,7 +175,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       proposalDataList[1],
+									Data:       proposalData,
 								}),
 							},
 						}},
@@ -181,21 +186,21 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 							},
 						}},
@@ -207,7 +212,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -216,7 +221,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -225,7 +230,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 							},
@@ -238,7 +243,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       spectestingutils.PrepareDataBytes(consensusDataList[1]),
+							Data:       spectestingutils.PrepareDataBytes(consensusData),
 						},
 					},
 				},
@@ -251,16 +256,16 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 						Round:             specqbft.FirstRound,
 						Height:            1,
 						LastPreparedRound: specqbft.FirstRound,
-						LastPreparedValue: consensusDataList[1],
+						LastPreparedValue: consensusData,
 						ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 							MsgType:    specqbft.ProposalMsgType,
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       proposalDataList[1],
+							Data:       proposalData,
 						}),
 						Decided:      true,
-						DecidedValue: consensusDataList[1],
+						DecidedValue: consensusData,
 						ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
@@ -268,7 +273,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       proposalDataList[1],
+									Data:       proposalData,
 								}),
 							},
 						}},
@@ -279,21 +284,21 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 									MsgType:    specqbft.PrepareMsgType,
 									Height:     1,
 									Round:      specqbft.FirstRound,
 									Identifier: identifier[:],
-									Data:       prepareDataList[1],
+									Data:       prepareData,
 								}),
 							},
 						}},
@@ -305,7 +310,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -314,7 +319,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 								&specqbft.SignedMessage{
@@ -323,7 +328,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 										Height:     1,
 										Round:      specqbft.FirstRound,
 										Identifier: identifier[:],
-										Data:       commitDataList[1],
+										Data:       commitData,
 									},
 								},
 							},
@@ -336,7 +341,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       spectestingutils.PrepareDataBytes(consensusDataList[1]),
+							Data:       spectestingutils.PrepareDataBytes(consensusData),
 						},
 					},
 				},
@@ -352,7 +357,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 						LastPreparedValue:               nil,
 						ProposalAcceptedForCurrentRound: nil,
 						Decided:                         true,
-						DecidedValue:                    consensusDataList[1],
+						DecidedValue:                    consensusData,
 						ProposeContainer:                &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 						PrepareContainer:                &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 						CommitContainer:                 &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
@@ -364,7 +369,7 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 							Height:     1,
 							Round:      specqbft.FirstRound,
 							Identifier: identifier[:],
-							Data:       spectestingutils.PrepareDataBytes(consensusDataList[1]),
+							Data:       spectestingutils.PrepareDataBytes(consensusData),
 						},
 					},
 				},
@@ -376,14 +381,5 @@ func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
 			3: nil,
 			4: nil,
 		},
-	}
-}
-
-func createFPlus1Duties(role spectypes.BeaconRole, pk []byte, slots []spec.Slot, delays []time.Duration) map[spectypes.OperatorID][]ScheduledDuty {
-	return map[spectypes.OperatorID][]ScheduledDuty{
-		1: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
-		2: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
-		3: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1])},
-		4: {},
 	}
 }
