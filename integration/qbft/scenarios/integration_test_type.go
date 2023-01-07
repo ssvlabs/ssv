@@ -3,7 +3,6 @@ package scenarios
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -214,35 +213,6 @@ func (it *IntegrationTest) Run() error {
 			}
 		}
 	}
-
-	instanceMap := map[spectypes.OperatorID][]*protocolstorage.StoredInstance{}
-	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-		for _, expectedInstance := range expectedInstances {
-			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-				GetHighestInstance(expectedInstance.State.ID)
-			if err != nil {
-				return err
-			}
-			if storedInstance == nil {
-				return fmt.Errorf("stored instance is nil")
-			}
-
-			instanceMap[expectedOperatorID] = append(instanceMap[expectedOperatorID], storedInstance)
-		}
-	}
-
-	jsonInstances, err := json.Marshal(instanceMap)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("\nactual instances:\n%v\n\n", string(jsonInstances))
-
-	jsonExpectedInstances, err := json.Marshal(it.ExpectedInstances)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("\nexpected instances:\n%v\n\n", string(jsonExpectedInstances))
 
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
 		for i, expectedInstance := range expectedInstances {
