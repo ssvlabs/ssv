@@ -2,7 +2,7 @@ package eth1
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -98,7 +98,7 @@ func LoadABI(abiFilePath string) error {
 		return errors.Wrap(err, "failed to open abi")
 	}
 
-	raw, err := ioutil.ReadAll(jsonFile)
+	raw, err := io.ReadAll(jsonFile)
 	if err != nil {
 		return errors.Wrap(err, "failed to read abi")
 	}
