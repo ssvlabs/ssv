@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"github.com/multiformats/go-multistream"
 	"math/rand"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -220,12 +221,13 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		logger := plogger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			logger.Debug("could not make stream request", zap.Error(err))
+			if err != multistream.ErrNotSupported {
+				logger.Debug("could not make stream request", zap.Error(err))
+			}
 			continue
 		}
 		mid := msgID(raw)
 		if distinct[mid] {
-			// logger.Debug("duplicated sync msg", zap.String("mid", mid))
 			continue
 		}
 		distinct[mid] = true
