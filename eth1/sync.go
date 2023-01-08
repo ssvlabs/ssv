@@ -108,9 +108,9 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 }
 
 // determineSyncOffset decides what is the value of sync offset by using one of (by priority):
-//   1. last saved sync offset
-//   2. provided value (from config)
-//   3. default sync offset (the genesis block of the contract)
+//  1. last saved sync offset
+//  2. provided value (from config)
+//  3. default sync offset (the genesis block of the contract)
 func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
 	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
 	if err != nil {

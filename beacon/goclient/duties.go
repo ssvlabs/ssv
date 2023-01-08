@@ -1,32 +1,46 @@
 package goclient
 
 import (
+	"fmt"
 	eth2client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
+	"time"
 )
 
 func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	var duties []*spectypes.Duty
+	type FetchFunc func(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 
-	if attesterDuties, err := gc.fetchAttesterDuties(epoch, validatorIndices); err != nil {
-		gc.logger.Warn("failed to get attestation duties", zap.Error(err))
-	} else {
-		duties = append(duties, attesterDuties...)
+	fetchers := map[spectypes.BeaconRole]FetchFunc{
+		spectypes.BNRoleAttester:      gc.fetchAttesterDuties,
+		spectypes.BNRoleProposer:      gc.fetchProposerDuties,
+		spectypes.BNRoleSyncCommittee: gc.fetchSyncCommitteeDuties,
 	}
-	if proposerDuties, err := gc.fetchProposerDuties(epoch, validatorIndices); err != nil {
-		gc.logger.Warn("failed to get proposer duties", zap.Error(err))
-	} else {
-		duties = append(duties, proposerDuties...)
+	duties := make([]*spectypes.Duty, 0)
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+
+	start := time.Now()
+	for role, fetcher := range fetchers {
+		wg.Add(1)
+		go func(role spectypes.BeaconRole, fetchFunc FetchFunc) {
+			defer wg.Done()
+			if fetchedDuties, err := fetchFunc(epoch, validatorIndices); err == nil {
+				lock.Lock()
+				duties = append(duties, fetchedDuties...)
+				lock.Unlock()
+			} else {
+				gc.logger.Warn(fmt.Sprintf("failed to get %s duties", role.String()), zap.Error(err))
+			}
+		}(role, fetcher)
 	}
-	if syncCommitteeDuties, err := gc.fetchSyncCommitteeDuties(epoch, validatorIndices); err != nil {
-		gc.logger.Warn("failed to get sync committee duties", zap.Error(err))
-	} else {
-		duties = append(duties, syncCommitteeDuties...)
-	}
+	wg.Wait()
+
+	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration", time.Since(start).Seconds()))
 	return duties, nil
 }
 

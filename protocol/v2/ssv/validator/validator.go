@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -47,7 +49,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())
+	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
 	for _, dutyRunner := range options.DutyRunners {
 		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 		queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
@@ -66,7 +68,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Queues:      queues,
 		state:       uint32(NotStarted),
 	}
-
 	return v
 }
 
@@ -76,7 +77,16 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
-	return dutyRunner.StartNewDuty(duty)
+	err := dutyRunner.StartNewDuty(duty)
+
+	// init timer
+	if err == nil {
+		newInstance := dutyRunner.GetBaseRunner().State.RunningInstance
+		if newInstance != nil {
+			v.registerTimeoutHandler(newInstance, dutyRunner.GetBaseRunner().QBFTController.Height)
+		}
+	}
+	return err
 }
 
 // ProcessMessage processes Network Message of all types
@@ -107,6 +117,27 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
+	case message.SSVEventMsgType:
+		eventMsg := types.EventMsg{}
+		if err := eventMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get event Message from network Message")
+		}
+		switch eventMsg.Type {
+		case types.Timeout:
+			err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
+			if err != nil {
+				logger.Warn("on timeout failed", zap.Error(err)) // need to return error instead?
+			}
+			return nil
+		case types.ExecuteDuty:
+			err := v.OnExecuteDuty(eventMsg)
+			if err != nil {
+				logger.Warn("failed to execute duty", zap.Error(err)) // need to return error instead?
+			}
+			return nil
+		default:
+			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.String()))
+		}
 	default:
 		return errors.New("unknown msg")
 	}

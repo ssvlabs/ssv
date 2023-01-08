@@ -187,7 +187,8 @@ func TestWalletStorage(t *testing.T) {
 	}
 }
 
-/**
+/*
+*
 slashing store tests
 */
 func _bigInt(input string) *big.Int {

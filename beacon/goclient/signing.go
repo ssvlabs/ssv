@@ -21,14 +21,15 @@ func (gc *goClient) DomainData(epoch phase0spec.Epoch, domain phase0spec.DomainT
 
 // ComputeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.
 // Spec pseudocode definition:
-//	def compute_signing_root(ssz_object: SSZObject, domain: Domain) -> Root:
-//    """
-//    Return the signing root for the corresponding signing data.
-//    """
-//    return hash_tree_root(SigningData(
-//        object_root=hash_tree_root(ssz_object),
-//        domain=domain,
-//    ))
+//
+//		def compute_signing_root(ssz_object: SSZObject, domain: Domain) -> Root:
+//	   """
+//	   Return the signing root for the corresponding signing data.
+//	   """
+//	   return hash_tree_root(SigningData(
+//	       object_root=hash_tree_root(ssz_object),
+//	       domain=domain,
+//	   ))
 func (gc *goClient) ComputeSigningRoot(object interface{}, domain phase0spec.Domain) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")

@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"time"
 
@@ -70,10 +71,13 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		lastHeight := v.GetLastHeight(msgID)
 		identifier := msgID.String()
 
+		if processed := v.processExecuteDuty(q, handler, identifier); processed {
+			continue
+		}
 		if processed := v.processHigherHeight(q, handler, identifier, lastHeight, higherCache); processed {
 			continue
 		}
-		if processed := v.processNoRunningInstance(q, handler, msgID, identifier, lastHeight); processed {
+		if processed := v.processNonConsensus(q, handler, identifier, lastHeight); processed {
 			continue
 		}
 		if processed := v.processByState(q, handler, msgID, identifier, lastHeight); processed {
@@ -84,13 +88,13 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		/*v.Queues.Clean(func(index msgqueue.Index) bool {
+		q.Clean(func(index msgqueue.Index) bool {
 			if index.ID != identifier {
 				return false
 			}
 			// remove all msg's that are 2 heights old, besides height 0
 			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
-		})*/
+		})
 	}
 
 	logger.Warn("queue consumer is closed")
@@ -107,13 +111,24 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	return r.GetBaseRunner().QBFTController.Height
 }
 
-// processNoRunningInstance pop msg's only if no current instance running
-func (v *Validator) processNoRunningInstance(q msgqueue.MsgQueue, handler MessageHandler, msgID spectypes.MessageID, identifier string, lastHeight specqbft.Height) bool {
-	runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-	if runner == nil || (runner.GetBaseRunner().State != nil && runner.GetBaseRunner().State.DecidedValue == nil) {
-		return false // only pop when already decided
+func (v *Validator) processExecuteDuty(q msgqueue.MsgQueue, handler MessageHandler, identifier string) bool {
+	iterator := msgqueue.NewIndexIterator().AddIndex(msgqueue.EventMsgIndex(identifier, 0, types.ExecuteDuty))
+
+	msgs := q.PopIndices(1, iterator)
+
+	if len(msgs) == 0 || msgs[0] == nil {
+		return false // no msg found
 	}
 
+	err := handler(msgs[0])
+	if err != nil {
+		logger.Debug("could not handle message", zap.String("error", err.Error()))
+	}
+	return true // msg processed
+}
+
+// processNonConsensus pop pre/post consensus & decided
+func (v *Validator) processNonConsensus(q msgqueue.MsgQueue, handler MessageHandler, identifier string, lastHeight specqbft.Height) bool {
 	logger := v.logger.With(
 		// zap.String("sig state", c.SignatureState.getState().toString()),
 		zap.Int32("height", int32(lastHeight)))
@@ -223,6 +238,7 @@ func (v *Validator) processLateCommit(q msgqueue.MsgQueue, handler MessageHandle
 // getNextMsgForState return msgs depended on the current instance stage
 func (v *Validator) getNextMsgForState(q msgqueue.MsgQueue, identifier string, height specqbft.Height) *spectypes.SSVMessage {
 	iterator := msgqueue.NewIndexIterator()
+	iterator.AddIndex(msgqueue.EventMsgIndex(identifier, height, types.Timeout))
 
 	idxs := msgqueue.SignedMsgIndex(spectypes.SSVConsensusMsgType, identifier, height, false,
 		specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType)
