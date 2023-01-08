@@ -19,7 +19,7 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), role)
 
 	consensusData := &spectypes.ConsensusData{
-		Duty:                      createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)[0],
+		Duty:                      createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)[0],
 		AttestationData:           spectestingutils.TestingAttestationData,
 		BlockData:                 nil,
 		AggregateAndProof:         nil,
@@ -66,6 +66,10 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 		consensusData, err := consensusData.Encode()
 		if err != nil {
 			panic(err)
+		}
+
+		if actual == nil {
+			return fmt.Errorf("expected actual = non-nil, actual = nil")
 		}
 
 		if actual.State == nil {
