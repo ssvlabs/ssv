@@ -88,13 +88,13 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 
 		// clean all old messages. (when stuck on change round stage, msgs not deleted)
-		/*v.Queues.Clean(func(index msgqueue.Index) bool {
+		q.Clean(func(index msgqueue.Index) bool {
 			if index.ID != identifier {
 				return false
 			}
 			// remove all msg's that are 2 heights old, besides height 0
 			return int64(index.H) <= int64(lastHeight-2) // remove all msg's that are 2 heights old. not post consensus & decided
-		})*/
+		})
 	}
 
 	logger.Warn("queue consumer is closed")

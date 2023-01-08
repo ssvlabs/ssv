@@ -122,7 +122,6 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if err := eventMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get event Message from network Message")
 		}
-		// TODO add to spec in order to process in duty runner
 		switch eventMsg.Type {
 		case types.Timeout:
 			err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
@@ -137,7 +136,7 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 			}
 			return nil
 		default:
-			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.ToString()))
+			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.String()))
 		}
 	default:
 		return errors.New("unknown msg")

@@ -15,7 +15,7 @@ const (
 	ExecuteDuty
 )
 
-func (e EventType) ToString() string {
+func (e EventType) String() string {
 	switch e {
 	case Timeout:
 		return "timeoutData"

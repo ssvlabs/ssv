@@ -24,7 +24,6 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
-	i.logger.Debug("recive valid change round msg", zap.Int64("round", int64(signedRoundChange.Message.Round)), zap.Int64("signer", int64(signedRoundChange.Signers[0])))
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		i.State,
 		i.config,
