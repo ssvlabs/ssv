@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -166,7 +164,7 @@ func (c *Controller) CanStartInstance() error {
 		return nil
 	}
 	if decided, _ := inst.IsDecided(); !decided {
-		return errors.New(fmt.Sprintf("previous instance hasn't Decided. h - %d", inst.GetHeight()))
+		return errors.New("previous instance hasn't Decided")
 	}
 
 	return nil
