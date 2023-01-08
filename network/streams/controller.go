@@ -100,7 +100,7 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	}
 
 	return data, func(res []byte) error {
-		cp := make([]byte, len(res), len(res))
+		cp := make([]byte, len(res))
 		copy(cp, res)
 		if err := s.WriteWithTimeout(cp, n.requestTimeout); err != nil {
 			// logger.Warn("could not write to stream", zap.Error(err))
