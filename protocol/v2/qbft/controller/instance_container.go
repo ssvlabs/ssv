@@ -29,6 +29,7 @@ type InstanceContainer interface {
 }
 
 type instanceContainer struct {
+	capacity  int
 	instances []*instance.Instance
 }
 
@@ -37,10 +38,11 @@ type instanceContainer struct {
 // guaranteed to arrive in a timely fashion, we physically limit how far back the processmsg will process messages for.
 func NewInstanceContainer(capacity int, instances ...*instance.Instance) InstanceContainer {
 	if instances == nil {
-		instances = make([]*instance.Instance, 0)
+		instances = make([]*instance.Instance, 0, capacity)
 	}
 
 	return &instanceContainer{
+		capacity:  capacity,
 		instances: instances,
 	}
 }
@@ -72,6 +74,13 @@ func (c *instanceContainer) AddNewInstance(instance *instance.Instance) {
 			break
 		}
 	}
+
+	// If we're at capacity and the new instance is lower than the lowest instance,
+	// don't add it to avoid evicting higher height instances.
+	if len(c.instances) == c.capacity && indexToInsert == len(c.instances) {
+		return
+	}
+
 	c.instances = insertAtIndex(c.instances, indexToInsert, instance)
 }
 
