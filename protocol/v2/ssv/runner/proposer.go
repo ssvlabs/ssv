@@ -109,7 +109,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 }
 
 func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
-	r.logger.Debug("NIV: receive valid consensus", zap.Any("signers", signedMsg.Signers))
+	r.logger.Debug("NIV: receive valid consensus", zap.Int("type", int(signedMsg.Message.MsgType)), zap.Any("signers", signedMsg.Signers))
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")

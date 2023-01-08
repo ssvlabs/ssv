@@ -125,13 +125,17 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		// TODO add to spec in order to process in duty runner
 		switch eventMsg.Type {
 		case types.Timeout:
-			return dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
+			err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
+			if err != nil {
+				logger.Warn("on timeout failed", zap.Error(err)) // need to return error instead?
+			}
+			return nil
 		case types.ExecuteDuty:
 			err := v.OnExecuteDuty(eventMsg)
 			if err != nil {
-				logger.Warn("failed to execute duty", zap.Error(err)) // need to return error?
+				logger.Warn("failed to execute duty", zap.Error(err)) // need to return error instead?
 			}
-			return err
+			return nil
 		default:
 			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.ToString()))
 		}
