@@ -68,112 +68,30 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			panic(err)
 		}
 
-		if actual == nil {
-			return fmt.Errorf("expected actual = non-nil, actual = nil")
-		}
-
-		if actual.State == nil {
-			return fmt.Errorf("expected state = non-nil, actual = nil")
-		}
-
-		if actual.State.Share.OperatorID != operatorID {
-			return fmt.Errorf("expected share operator id = %d, actual = %d", operatorID, actual.State.Share.OperatorID)
-		}
-
-		if !bytes.Equal(actual.State.Share.ValidatorPubKey, spectestingutils.Testing4SharesSet().ValidatorPK.Serialize()) {
-			return fmt.Errorf("expected share validator pub key %s, actual = %s", spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), actual.State.Share.ValidatorPubKey)
-		}
-
-		if !bytes.Equal(actual.State.Share.SharePubKey, spectestingutils.Testing4SharesSet().Shares[operatorID].GetPublicKey().Serialize()) {
-			return fmt.Errorf("expected share share pub key %s, actual = %s", spectestingutils.Testing4SharesSet().Shares[operatorID].GetPublicKey().Serialize(), actual.State.Share.SharePubKey)
-		}
-
-		for i := range spectestingutils.Testing4SharesSet().Committee() {
-			if actual.State.Share.Committee[i].OperatorID != spectestingutils.Testing4SharesSet().Committee()[i].OperatorID &&
-				!bytes.Equal(actual.State.Share.Committee[i].PubKey, spectestingutils.Testing4SharesSet().Committee()[i].PubKey) {
-				return fmt.Errorf("expected share comittee = %+v, actual = %+v", spectestingutils.Testing4SharesSet().Committee(), actual.State.Share.Committee)
-			}
-		}
-
-		if actual.State.Share.Quorum != spectestingutils.Testing4SharesSet().Threshold {
-			return fmt.Errorf("expected share quorum = %d, actual = %d", spectestingutils.Testing4SharesSet().Threshold, actual.State.Share.Quorum)
-		}
-
-		if actual.State.Share.PartialQuorum != spectestingutils.Testing4SharesSet().PartialThreshold {
-			return fmt.Errorf("expected share partial quorum = %d, actual = %d", spectestingutils.Testing4SharesSet().PartialThreshold, actual.State.Share.PartialQuorum)
-		}
-
-		if !bytes.Equal(actual.State.Share.DomainType, spectypes.PrimusTestnet) {
-			return fmt.Errorf("expected share domain type = %s, actual = %s", spectypes.PrimusTestnet, actual.State.Share.DomainType)
-		}
-
-		if !bytes.Equal(actual.State.Share.Graffiti, []byte{}) {
-			return fmt.Errorf("expected share graffiti = %s, actual = %s", []byte{}, actual.State.Share.Graffiti)
-		}
-
-		if !bytes.Equal(actual.State.ID, identifier[:]) {
-			return fmt.Errorf("expected id = %s, actual = %s", identifier[:], actual.State.ID)
-		}
-
-		if actual.State.Round != specqbft.FirstRound {
-			return fmt.Errorf("expected round = %d, actual = %d", specqbft.FirstRound, actual.State.Round)
-		}
-
-		if actual.State.Height != specqbft.FirstHeight {
-			return fmt.Errorf("expected height = %d, actual = %d", specqbft.FirstHeight, actual.State.Height)
-		}
-
-		if actual.State.LastPreparedRound != specqbft.FirstRound {
-			return fmt.Errorf("expected last prepared round = %d, actual = %d", specqbft.FirstRound, actual.State.LastPreparedRound)
-		}
-
-		if !bytes.Equal(actual.State.LastPreparedValue, consensusData) {
-			return fmt.Errorf("expected last prepared value = %s, actual = %s", consensusData, actual.State.LastPreparedValue)
-		}
-
 		proposalData, err := (&specqbft.ProposalData{
 			Data:                     consensusData,
 			RoundChangeJustification: nil,
 			PrepareJustification:     nil,
 		}).Encode()
 		if err != nil {
-			return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
+			panic(err)
 		}
 
 		prepareData, err := (&specqbft.PrepareData{
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			return fmt.Errorf("error during encoding specqbft.PrepareData: %w", err)
+			panic(err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			return fmt.Errorf("error during encoding specqbft.CommitData: %w", err)
+			panic(err)
 		}
 
 		expectedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-			MsgType:    specqbft.ProposalMsgType,
-			Height:     specqbft.FirstHeight,
-			Round:      specqbft.FirstRound,
-			Identifier: identifier[:],
-			Data:       proposalData,
-		})
-		if err := deepValidateSignedMessage(expectedMsg, actual.State.ProposalAcceptedForCurrentRound); err != nil {
-			return fmt.Errorf("expected signed message = %+v, actual = %+v", expectedMsg, actual.State.ProposalAcceptedForCurrentRound)
-		}
-
-		if actual.State.Decided != true {
-			return fmt.Errorf("expected decided = %v, actual = %v", true, actual.State.Decided)
-		}
-
-		if !bytes.Equal(actual.State.DecidedValue, consensusData) {
-			return fmt.Errorf("expected decided value = %s, actual = %s", consensusData, actual.State.DecidedValue)
-		}
-
-		expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     specqbft.FirstHeight,
 			Round:      specqbft.FirstRound,
@@ -211,51 +129,90 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			}
 		}
 
-		if foundedMsgsCounter < 3 {
-			return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least 3, actual = %d", foundedMsgsCounter)
+		if !actual.State.Share.HasQuorum(foundedMsgsCounter) {
+			return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least %d, actual = %d", actual.State.Share.Quorum, foundedMsgsCounter)
+		}
+
+		actual.State.ProposeContainer = nil
+		actual.State.PrepareContainer = nil
+		actual.State.CommitContainer = nil
+
+		expectedStoredInstance := &protocolstorage.StoredInstance{
+			State: &specqbft.State{
+				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
+				ID:                identifier[:],
+				Round:             specqbft.FirstRound,
+				Height:            specqbft.FirstHeight,
+				LastPreparedRound: specqbft.FirstRound,
+				LastPreparedValue: consensusData,
+				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+					MsgType:    specqbft.ProposalMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       proposalData,
+				}),
+				Decided:      true,
+				DecidedValue: consensusData,
+
+				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
+			},
+			DecidedMessage: &specqbft.SignedMessage{
+				Message: &specqbft.Message{
+					MsgType:    specqbft.CommitMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       spectestingutils.PrepareDataBytes(consensusData),
+				},
+			},
+		}
+
+		expectedStateRoot, err := expectedStoredInstance.State.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from expected state: %w", err)
+		}
+
+		actualStateRoot, err := actual.State.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from actual state: %w", err)
+		}
+
+		if !bytes.Equal(expectedStateRoot, actualStateRoot) {
+			return fmt.Errorf("expected and actual state roots doesn't matching, expected state = %+v, actual = %+v", expectedStoredInstance.State, actual.State)
+		}
+
+		expectedDecidedMessageRoot, err := expectedStoredInstance.DecidedMessage.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from expected decided message: %w", err)
+		}
+
+		actualDecidedMessageRoot, err := actual.DecidedMessage.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from actual decided message: %w", err)
+		}
+
+		if !bytes.Equal(expectedDecidedMessageRoot, actualDecidedMessageRoot) {
+			return fmt.Errorf("expected and actual decided message roots doesn't matching, expected decided message = %+v, actual = %+v", expectedStoredInstance.DecidedMessage, actual.DecidedMessage)
 		}
 
 		return nil
 	}
 }
 
-func deepValidateSignedMessage(expected, actual *specqbft.SignedMessage) error {
-	if !bytes.Equal(expected.Signature, actual.Signature) {
-		return fmt.Errorf("expected signed message signature = %s, actual = %s", expected.Signature, actual.Signature)
-	}
-
-	for i := range expected.Signers {
-		if expected.Signers[i] != actual.Signers[i] {
-			return fmt.Errorf("expected signed message signer N%d operator id = %d, actual = %d", i, expected.Signers[i], actual.Signers[i])
-		}
-	}
-
-	if expected.Message.MsgType != actual.Message.MsgType {
-		return fmt.Errorf("expected signed message type = %d, actual = %d", expected.Message.MsgType, actual.Message.MsgType)
-	}
-
-	if expected.Message.Height != actual.Message.Height {
-		return fmt.Errorf("expected signed message height = %d, actual = %d", expected.Message.Height, actual.Message.Height)
-	}
-
-	if expected.Message.Round != actual.Message.Round {
-		return fmt.Errorf("expected signed message round = %d, actual = %d", expected.Message.Round, actual.Message.Round)
-	}
-
-	if !bytes.Equal(expected.Message.Identifier, actual.Message.Identifier) {
-		return fmt.Errorf("expected signed message identifier = %s, actual = %s", expected.Message.Identifier, actual.Message.Identifier)
-	}
-
-	if !bytes.Equal(expected.Message.Data, actual.Message.Data) {
-		return fmt.Errorf("expected signed message data = %s, actual = %s", expected.Message.Data, actual.Message.Data)
-	}
-
-	return nil
-}
-
 func isMessageExistInRound(message *specqbft.SignedMessage, round []*specqbft.SignedMessage) bool {
 	for i := range round {
-		if err := deepValidateSignedMessage(message, round[i]); err == nil {
+		expectedRoot, err := message.GetRoot()
+		if err != nil {
+			return false
+		}
+
+		actualRoot, err := round[i].GetRoot()
+		if err != nil {
+			return false
+		}
+
+		if bytes.Equal(expectedRoot, actualRoot) {
 			return true
 		}
 	}

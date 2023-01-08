@@ -197,9 +197,6 @@ func (it *IntegrationTest) Run() error {
 				return fmt.Errorf("stored instance is nil")
 			}
 
-			//storedInstance.State.GetRoot()
-			//storedInstance.DecidedMessage.GetRoot()
-
 			if err := instanceValidator(storedInstance); err != nil {
 				return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
 			}
