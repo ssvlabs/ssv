@@ -40,16 +40,16 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 		},
 		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
 			1: {
-				instanceValidator(consensusData, 1, identifier),
+				regularInstanceValidator(consensusData, 1, identifier),
 			},
 			2: {
-				instanceValidator(consensusData, 2, identifier),
+				regularInstanceValidator(consensusData, 2, identifier),
 			},
 			3: {
-				instanceValidator(consensusData, 3, identifier),
+				regularInstanceValidator(consensusData, 3, identifier),
 			},
 			4: {
-				instanceValidator(consensusData, 4, identifier),
+				regularInstanceValidator(consensusData, 4, identifier),
 			},
 		},
 		StartDutyErrors: map[spectypes.OperatorID]error{
@@ -61,7 +61,7 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 	}
 }
 
-func instanceValidator(consensusData *spectypes.ConsensusData, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
+func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
 		consensusData, err := consensusData.Encode()
 		if err != nil {
