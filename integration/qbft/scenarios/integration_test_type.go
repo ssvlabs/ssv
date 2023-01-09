@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sort"
 	"sync"
 	"time"
 
@@ -507,12 +506,6 @@ func assertState(actual *specqbft.State, expected *specqbft.State) error {
 
 		actualCopy.CommitContainer = nil
 		expectedCopy.CommitContainer = nil
-	}
-
-	for _, messages := range actualCopy.PrepareContainer.Msgs {
-		sort.Slice(messages, func(i, j int) bool {
-			return messages[i].Signers[0] < messages[j].Signers[0]
-		})
 	}
 
 	actualRoot, err := actualCopy.GetRoot()
