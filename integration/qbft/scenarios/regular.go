@@ -104,9 +104,9 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 
 		foundedMsgsCounter := 0 //at the end of test it must be at least 3
 		for i := 1; i <= 4; i++ {
-			operatorID := spectypes.OperatorID(i)
+			operatorIDIterator := spectypes.OperatorID(i)
 
-			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorID], operatorID, &specqbft.Message{
+			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
 				MsgType:    specqbft.PrepareMsgType,
 				Height:     specqbft.FirstHeight,
 				Round:      specqbft.FirstRound,
@@ -117,7 +117,7 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 				return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
 			}
 
-			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorID], operatorID, &specqbft.Message{
+			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.FirstHeight,
 				Round:      specqbft.FirstRound,
