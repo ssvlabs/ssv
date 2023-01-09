@@ -14,7 +14,6 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
@@ -164,23 +163,30 @@ func (it *IntegrationTest) Run() error {
 		}
 	}
 
-	var eg errgroup.Group
+	var startErr error
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 	for _, val := range validators {
 		// TODO: add logging for every node
-		v := val
-		eg.Go(func() error {
-			// think of a way to extend test struct to include another parameter that schedules start of validator
-			<-time.After(it.ValidatorDelays[v.Share.OperatorID])
-			if err := v.Start(); err != nil {
-				return fmt.Errorf("could not start validator: %w", err)
+		wg.Add(1)
+		go func(val *protocolvalidator.Validator) {
+			defer wg.Done()
+
+			<-time.After(it.ValidatorDelays[val.Share.OperatorID])
+
+			if err := val.Start(); err != nil {
+				mu.Lock()
+				startErr = fmt.Errorf("could not start validator: %w", err)
+				mu.Unlock()
 			}
 			<-time.After(time.Second * 3)
-			return nil
-		})
+		}(val)
 	}
 
-	if err := eg.Wait(); err != nil {
-		return err
+	wg.Wait()
+
+	if startErr != nil {
+		return startErr
 	}
 
 	var lastDutyTime time.Duration
