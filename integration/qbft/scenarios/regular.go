@@ -74,13 +74,29 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
 		}
 
+		prepareData, err := (&specqbft.PrepareData{
+			Data: consensusData,
+		}).Encode()
+		if err != nil {
+			panic(err)
+		}
+
+		commitData, err := (&specqbft.CommitData{
+			Data: consensusData,
+		}).Encode()
+		if err != nil {
+			panic(err)
+		}
+
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose countainer expected lenth = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
 		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-			MsgType: specqbft.ProposalMsgType,
-			Height:  specqbft.FirstHeight,
-			Round:   specqbft.FirstRound,
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.FirstHeight,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Data:       proposalData,
 		})
 		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
 			return err
@@ -92,18 +108,22 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			operatorIDIterator := spectypes.OperatorID(i)
 
 			expectedPreparedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType: specqbft.PrepareMsgType,
-				Height:  specqbft.FirstHeight,
-				Round:   specqbft.FirstRound,
+				MsgType:    specqbft.PrepareMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       prepareData,
 			})
 			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
 				foundedPreparedMsgsCounter++
 			}
 
 			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType: specqbft.CommitMsgType,
-				Height:  specqbft.FirstHeight,
-				Round:   specqbft.FirstRound,
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
 			})
 			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
 				foundedCommitMsgsCounter++
@@ -165,14 +185,7 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 	}
 }
 
-// validateSignedMessage compared specqbft.SignedMessage-s, !!! IGNORES .Message.Identifier and .Message.Data !!! checks only first signer !!!
 func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
-	expected.Message.Identifier = nil //if someone add this fields by mistake
-	expected.Message.Data = nil       //if someone add this fields by mistake
-
-	actual.Message.Identifier = nil
-	actual.Message.Data = nil
-
 	for i := range expected.Signers {
 		if expected.Signers[i] != actual.Signers[i] {
 			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
