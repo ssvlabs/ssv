@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/pkg/errors"
-	"io/ioutil"
+	"os"
 )
 
 type Compare struct {
@@ -16,7 +16,7 @@ type Compare struct {
 }
 
 func (c *Compare) ReplaceMap() error {
-	output, err := ioutil.ReadFile(c.SSVPath)
+	output, err := os.ReadFile(c.SSVPath)
 	if err != nil {
 		return err
 	}
@@ -28,23 +28,23 @@ func (c *Compare) ReplaceMap() error {
 
 		output = bytes.Replace(output, []byte(kv.Key), []byte(kv.Value), -1)
 	}
-	if err = ioutil.WriteFile(c.SSVPath, output, 0666); err != nil {
+	if err = os.WriteFile(c.SSVPath, output, 0666); err != nil {
 		return err
 	}
 
-	output, err = ioutil.ReadFile(c.SpecPath)
+	output, err = os.ReadFile(c.SpecPath)
 	if err != nil {
 		return err
 	}
 
 	for _, kv := range c.SpecReplace {
 		if cnt := bytes.Count(output, []byte(kv.Key)); cnt == 0 {
-			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", kv.Value))
+			return errors.New(fmt.Sprintf("%s - no occurrences found to replace in spec", kv.Key))
 		}
 
 		output = bytes.Replace(output, []byte(kv.Key), []byte(kv.Value), -1)
 	}
-	if err = ioutil.WriteFile(c.SpecPath, output, 0666); err != nil {
+	if err = os.WriteFile(c.SpecPath, output, 0666); err != nil {
 		return err
 	}
 	return nil
