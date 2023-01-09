@@ -14,10 +14,6 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 
 	scenariosToRun := []*scenarios.IntegrationTest{
 		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
-		//scenarios.Regular(types.BNRoleAggregator), //fails on OperatorID = 3
-		//scenarios.Regular(types.BNRoleProposer),z //fails
-		//scenarios.Regular(types.BNRoleSyncCommittee),
-		//scenarios.Regular(types.BNRoleSyncCommitteeContribution),
 		//scenarios.RoundChange(types.BNRoleAttester),
 		//scenarios.FPlus1Decided(types.BNRoleAttester),
 	}
