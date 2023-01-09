@@ -331,6 +331,10 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(duty *spectypes.Duty) error 
 	return nil
 }
 
+func (r *SyncCommitteeAggregatorRunner) SetTimeoutF(timeoutF TimeoutF) {
+	r.BaseRunner.timeoutF = timeoutF
+}
+
 func (r *SyncCommitteeAggregatorRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
