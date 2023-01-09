@@ -141,26 +141,26 @@ func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2ppro
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
 		if err != nil {
-			n.logger.Warn("could not handle stream", zap.Error(err))
+			n.logger.Debug("could not handle stream", zap.Error(err))
 			return
 		}
 		smsg, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
-			n.logger.Warn("could not decode msg from stream", zap.Error(err))
+			n.logger.Debug("could not decode msg from stream", zap.Error(err))
 			return
 		}
 		result, err := handler(smsg)
 		if err != nil {
-			n.logger.Warn("could not handle msg from stream", zap.Error(err))
+			n.logger.Debug("could not handle msg from stream", zap.Error(err))
 			return
 		}
 		resultBytes, err := n.fork.EncodeNetworkMsg(result)
 		if err != nil {
-			n.logger.Warn("could not encode msg", zap.Error(err))
+			n.logger.Debug("could not encode msg", zap.Error(err))
 			return
 		}
 		if err := respond(resultBytes); err != nil {
-			n.logger.Warn("could not respond to stream", zap.Error(err))
+			n.logger.Debug("could not respond to stream", zap.Error(err))
 			return
 		}
 	})

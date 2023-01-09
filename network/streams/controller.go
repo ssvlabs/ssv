@@ -2,6 +2,7 @@ package streams
 
 import (
 	"context"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core"
@@ -57,7 +58,10 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	}
 	stream := NewStream(s)
 	defer func() {
-		_ = stream.Close()
+		err := stream.Close()
+		if err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
+			n.logger.Debug("failed to close stream (request)", zap.String("s_id", stream.ID()), zap.Error(err))
+		}
 	}()
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
 	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
@@ -86,16 +90,12 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
 	// logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
-		//TODO: remove line below after TODO inside the if-statement is resolved
-		// nolint: staticcheck
-		if err := s.Close(); err != nil {
-			// TODO (amir): investigate
-			// logger.Warn("could not close stream", zap.Error(err))
+		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
+			n.logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
-		// logger.Warn("could not read stream msg", zap.Error(err))
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
@@ -103,7 +103,7 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 		cp := make([]byte, len(res))
 		copy(cp, res)
 		if err := s.WriteWithTimeout(cp, n.requestTimeout); err != nil {
-			// logger.Warn("could not write to stream", zap.Error(err))
+			// logger.Debug("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
 		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()
