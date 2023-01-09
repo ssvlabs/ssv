@@ -8,6 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -15,10 +19,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
-
-	"go.uber.org/zap"
 )
 
 // HostProvider holds host instance
@@ -83,7 +83,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*10)
+				ctx, cancel := context.WithTimeout(pctx, time.Second*15)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -168,7 +168,7 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		UDPPort:           udpPort,
 		HostAddress:       "",
 		HostDNS:           "",
-		RequestTimeout:    10 * time.Second,
+		RequestTimeout:    15 * time.Second,
 		MaxBatchResponse:  25,
 		MaxPeers:          maxPeers,
 		PubSubTrace:       false,
@@ -179,5 +179,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
+		P2pLog:            true,
 	}
 }

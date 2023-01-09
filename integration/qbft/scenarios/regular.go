@@ -28,11 +28,11 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 		Name:             "regular",
 		OperatorIDs:      []spectypes.OperatorID{1, 2, 3, 4},
 		InitialInstances: nil,
-		Duties: map[spectypes.OperatorID][]*spectypes.Duty{
-			1: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role),
-			2: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role),
-			3: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role),
-			4: createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role),
+		Duties: map[spectypes.OperatorID][]scheduledDuty{
+			1: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
+			2: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
+			3: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
+			4: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
 		},
 		ExpectedInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
 			1: {
@@ -151,7 +151,29 @@ func storedInstanceForOperatorID(operatorID spectypes.OperatorID, identifier spe
 				specqbft.FirstRound: {
 					&specqbft.SignedMessage{
 						Message: &specqbft.Message{
-							Data: commitData,
+							MsgType:    specqbft.CommitMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       commitData,
+						},
+					},
+					&specqbft.SignedMessage{
+						Message: &specqbft.Message{
+							MsgType:    specqbft.CommitMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       commitData,
+						},
+					},
+					&specqbft.SignedMessage{
+						Message: &specqbft.Message{
+							MsgType:    specqbft.CommitMsgType,
+							Height:     specqbft.FirstHeight,
+							Round:      specqbft.FirstRound,
+							Identifier: identifier[:],
+							Data:       commitData,
 						},
 					},
 				},

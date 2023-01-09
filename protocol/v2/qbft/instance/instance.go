@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()

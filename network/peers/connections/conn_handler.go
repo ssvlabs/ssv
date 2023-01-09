@@ -2,14 +2,16 @@ package connections
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"time"
+
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
+
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle

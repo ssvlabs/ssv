@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -39,9 +40,14 @@ type IntegrationTest struct {
 	Name              string
 	OperatorIDs       []spectypes.OperatorID
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	Duties            map[spectypes.OperatorID][]*spectypes.Duty
-	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	Duties            map[spectypes.OperatorID][]scheduledDuty
+	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
 	StartDutyErrors   map[spectypes.OperatorID]error
+}
+
+type scheduledDuty struct {
+	Duty  *spectypes.Duty
+	Delay time.Duration
 }
 
 type scenarioContext struct {
@@ -55,8 +61,9 @@ type scenarioContext struct {
 }
 
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
+	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
-		return logex.Build("simulation", zapcore.DebugLevel, nil).With(zap.String("who", s))
+		return l.With(zap.String("who", s))
 	}
 	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
 	logger.Info("creating resources")
@@ -157,6 +164,7 @@ func (it *IntegrationTest) Run() error {
 
 	var eg errgroup.Group
 	for _, val := range validators {
+		// TODO: add logging for every node
 		v := val
 		eg.Go(func() error {
 			if err := v.Start(); err != nil {
@@ -171,24 +179,43 @@ func (it *IntegrationTest) Run() error {
 		return err
 	}
 
-	actualErrMap := map[spectypes.OperatorID]error{}
+	var lastDutyTime time.Duration
+	actualErrMap := sync.Map{}
 	for _, val := range validators {
-		for _, duty := range it.Duties[val.Share.OperatorID] {
-			startDutyErr := val.StartDuty(duty)
-			actualErrMap[val.Share.OperatorID] = startDutyErr
+		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
+			val, scheduledDuty := val, scheduledDuty
+			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			if lastDutyTime < scheduledDuty.Delay {
+				lastDutyTime = scheduledDuty.Delay
+			}
+			time.AfterFunc(scheduledDuty.Delay, func() {
+				sCtx.logger.Info("starting duty")
+				startDutyErr := val.StartDuty(scheduledDuty.Duty)
+				actualErrMap.Store(val.Share.OperatorID, startDutyErr)
+			})
 		}
 	}
+
+	<-time.After(lastDutyTime + (4 * time.Second))
 
 	for operatorID, expectedErr := range it.StartDutyErrors {
-		if !errors.Is(actualErrMap[operatorID], expectedErr) {
-			return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErrMap[operatorID])
+		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
+			if expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+		} else {
+			aerr, ok := actualErr.(error)
+			if !ok && expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+			if !errors.Is(aerr, expectedErr) {
+				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+			}
 		}
 	}
 
-	<-time.After(2 * time.Second)
-
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-		for _, expectedInstance := range expectedInstances {
+		for i, expectedInstance := range expectedInstances {
 			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
 			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
 				GetHighestInstance(expectedInstance.State.ID)
@@ -199,27 +226,8 @@ func (it *IntegrationTest) Run() error {
 				return fmt.Errorf("stored instance is nil")
 			}
 
-			decidedRoot, err := storedInstance.DecidedMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("stored instance decided message root: %w", err)
-			}
-
-			expectedDecidedRoot, err := expectedInstance.DecidedMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("ex[ected instance decided message root: %w", err)
-			}
-
-			if !bytes.Equal(decidedRoot, expectedDecidedRoot) {
-				return fmt.Errorf("decided message roots are not equal")
-			}
-
-			if storedInstance.State == nil && expectedInstance.State == nil {
-				return nil
-			}
-
-			si, ei := storedInstance.State, expectedInstance.State
-			if si == nil && ei != nil || si != nil && ei == nil || !matchedStates(*si, *ei) {
-				return fmt.Errorf("states don't match")
+			if err := assertInstance(storedInstance, expectedInstance); err != nil {
+				return fmt.Errorf("assert instance (oid %v, idx %v): %w", expectedOperatorID, i, err)
 			}
 		}
 	}
@@ -258,7 +266,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 					Liquidated:   false,
 				},
 			},
-			Beacon: spectestingutils.NewTestingBeaconNode(),
+			Beacon: beaconNode{spectestingutils.NewTestingBeaconNode()},
 			Signer: sCtx.keyManagers[operatorID],
 		}
 
@@ -281,6 +289,43 @@ var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.Opera
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
 		Committee:       keysSet.Committee(),
+	}
+}
+
+func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole) *spectypes.Duty {
+	var pkBytes [48]byte
+	copy(pkBytes[:], pk)
+
+	var testingDuty *spectypes.Duty
+	switch role {
+	case spectypes.BNRoleAttester:
+		testingDuty = spectestingutils.TestingAttesterDuty
+	case spectypes.BNRoleAggregator:
+		testingDuty = spectestingutils.TestingAggregatorDuty
+	case spectypes.BNRoleProposer:
+		testingDuty = spectestingutils.TestingProposerDuty
+	case spectypes.BNRoleSyncCommittee:
+		testingDuty = spectestingutils.TestingSyncCommitteeDuty
+	case spectypes.BNRoleSyncCommitteeContribution:
+		testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
+	}
+
+	return &spectypes.Duty{
+		Type:                    role,
+		PubKey:                  pkBytes,
+		Slot:                    slot,
+		ValidatorIndex:          idx,
+		CommitteeIndex:          testingDuty.CommitteeIndex,
+		CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
+		CommitteeLength:         testingDuty.CommitteeLength,
+		ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
+	}
+}
+
+func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) scheduledDuty {
+	return scheduledDuty{
+		Duty:  createDuty(pk, slot, idx, role),
+		Delay: delay,
 	}
 }
 
@@ -319,38 +364,116 @@ func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...s
 	return duties
 }
 
-// pass states by value to modify them
-func matchedStates(actual specqbft.State, expected specqbft.State) bool {
+func assertInstance(actual *protocolstorage.StoredInstance, expected *protocolstorage.StoredInstance) error {
+	if actual == nil && expected == nil {
+		return nil
+	}
+
+	if actual != nil && expected == nil {
+		return fmt.Errorf("expected nil instance")
+	}
+
+	if actual == nil && expected != nil {
+		return fmt.Errorf("expected non-nil instance")
+	}
+
+	if err := assertDecided(actual.DecidedMessage, expected.DecidedMessage); err != nil {
+		return fmt.Errorf("decided: %w", err)
+	}
+
+	if err := assertState(actual.State, expected.State); err != nil {
+		return fmt.Errorf("state: %w", err)
+	}
+
+	return nil
+}
+
+func assertDecided(actual *specqbft.SignedMessage, expected *specqbft.SignedMessage) error {
+	if actual == nil && expected == nil {
+		return fmt.Errorf("expected nil")
+	}
+
+	if actual == nil && expected != nil {
+		return fmt.Errorf("expected non-nil")
+	}
+
+	actualRoot, err := actual.GetRoot()
+	if err != nil {
+		return fmt.Errorf("actual root: %w", err)
+	}
+
+	expectedRoot, err := expected.GetRoot()
+	if err != nil {
+		return fmt.Errorf("expected root: %w", err)
+	}
+
+	if !bytes.Equal(actualRoot, expectedRoot) {
+		return fmt.Errorf("roots differ")
+	}
+
+	return nil
+}
+
+func assertState(actual *specqbft.State, expected *specqbft.State) error {
+	if actual == nil && expected == nil {
+		return fmt.Errorf("expected nil")
+	}
+
+	if actual == nil && expected != nil {
+		return fmt.Errorf("expected non-nil")
+	}
+
+	actualCopy, expectedCopy := *actual, *expected
+
 	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
 	if expected.Decided {
-		for round, messages := range expected.CommitContainer.Msgs {
-			signers, _ := actual.CommitContainer.LongestUniqueSignersForRoundAndValue(round, messages[0].Message.Data)
-			if !actual.Share.HasQuorum(len(signers)) {
-				return false
+		if want, got := len(expectedCopy.CommitContainer.Msgs), len(actualCopy.CommitContainer.Msgs); want != got {
+			return fmt.Errorf("wrong commit message count, want %d, got %d", want, got)
+		}
+
+		for round, messages := range expectedCopy.CommitContainer.Msgs {
+			for i, message := range messages {
+				expectedRoot, err := message.GetRoot()
+				if err != nil {
+					return fmt.Errorf("get expected commit message root: %w", err)
+				}
+
+				actualRoot, err := actualCopy.CommitContainer.Msgs[round][i].GetRoot()
+				if err != nil {
+					return fmt.Errorf("get actual commit message root: %w", err)
+				}
+
+				if !bytes.Equal(expectedRoot, actualRoot) {
+					return fmt.Errorf("expected and actual commit roots differ")
+				}
 			}
 		}
 
-		actual.CommitContainer = nil
-		expected.CommitContainer = nil
+		actualCopy.CommitContainer = nil
+		expectedCopy.CommitContainer = nil
 	}
 
-	for _, messages := range actual.PrepareContainer.Msgs {
+	for _, messages := range actualCopy.PrepareContainer.Msgs {
 		sort.Slice(messages, func(i, j int) bool {
 			return messages[i].Signers[0] < messages[j].Signers[0]
 		})
 	}
 
-	actualRoot, err := actual.GetRoot()
+	actualRoot, err := actualCopy.GetRoot()
 	if err != nil {
-		return false
+		return fmt.Errorf("actual root: %w", err)
 	}
 
-	expectedRoot, err := expected.GetRoot()
+	expectedRoot, err := expectedCopy.GetRoot()
 	if err != nil {
-		return false
+		return fmt.Errorf("expected root: %w", err)
 	}
 
-	return bytes.Equal(actualRoot, expectedRoot)
+	if !bytes.Equal(actualRoot, expectedRoot) {
+		return fmt.Errorf("roots differ")
+	}
+
+	return nil
 }
 
 type msgRouter struct {
@@ -358,6 +481,14 @@ type msgRouter struct {
 }
 
 func (m *msgRouter) Route(message spectypes.SSVMessage) {
+	if message.MsgType == spectypes.SSVConsensusMsgType {
+		sm := &specqbft.SignedMessage{}
+		if err := sm.Decode(message.Data); err != nil {
+			zap.L().Debug("router got malformed consensus message")
+		} else {
+			zap.L().Debug("router got consensus message", zap.Any("message", sm))
+		}
+	}
 	m.validator.HandleMessage(&message)
 }
 
@@ -365,4 +496,17 @@ func newMsgRouter(v *protocolvalidator.Validator) *msgRouter {
 	return &msgRouter{
 		validator: v,
 	}
+}
+
+type beaconNode struct {
+	*spectestingutils.TestingBeaconNode
+}
+
+// GetAttestationData returns attestation data by the given slot and committee index
+func (bn beaconNode) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+	data := spectestingutils.TestingAttestationData
+	data.Slot = slot
+	data.Index = committeeIndex
+
+	return data, nil
 }
