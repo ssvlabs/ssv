@@ -185,15 +185,11 @@ func (it *IntegrationTest) Run() error {
 	}
 
 	var lastDutyTime time.Duration
-	biggestDutyDelay := time.Duration(0)
 
 	actualErrMap := sync.Map{}
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
-			if scheduledDuty.Delay > biggestDutyDelay {
-				biggestDutyDelay = scheduledDuty.Delay
-			}
 
 			if lastDutyTime < scheduledDuty.Delay {
 				lastDutyTime = scheduledDuty.Delay
@@ -226,9 +222,6 @@ func (it *IntegrationTest) Run() error {
 			}
 		}
 	}
-
-	const dutyLength = 8 * time.Second
-	<-time.After(biggestDutyDelay + dutyLength) // TODO: more elegant solution
 
 	if it.ExpectedInstances != nil {
 		for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
