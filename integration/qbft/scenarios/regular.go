@@ -1,6 +1,9 @@
 package scenarios
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -16,7 +19,7 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), role)
 
 	consensusData := &spectypes.ConsensusData{
-		Duty:                      createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)[0],
+		Duty:                      createDuties(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)[0],
 		AttestationData:           spectestingutils.TestingAttestationData,
 		BlockData:                 nil,
 		AggregateAndProof:         nil,
@@ -27,6 +30,7 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 	return &IntegrationTest{
 		Name:             "regular",
 		OperatorIDs:      []spectypes.OperatorID{1, 2, 3, 4},
+		Identifier:       identifier,
 		InitialInstances: nil,
 		Duties: map[spectypes.OperatorID][]scheduledDuty{
 			1: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
@@ -34,18 +38,18 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 			3: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
 			4: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, role)}},
 		},
-		ExpectedInstances: map[spectypes.OperatorID][]*protocolstorage.StoredInstance{
+		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
 			1: {
-				storedInstanceForOperatorID(1, identifier, consensusData),
+				instanceValidator(consensusData, 1, identifier),
 			},
 			2: {
-				storedInstanceForOperatorID(2, identifier, consensusData),
+				instanceValidator(consensusData, 2, identifier),
 			},
 			3: {
-				storedInstanceForOperatorID(3, identifier, consensusData),
+				instanceValidator(consensusData, 3, identifier),
 			},
 			4: {
-				storedInstanceForOperatorID(4, identifier, consensusData),
+				instanceValidator(consensusData, 4, identifier),
 			},
 		},
 		StartDutyErrors: map[spectypes.OperatorID]error{
@@ -57,137 +61,160 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 	}
 }
 
-func storedInstanceForOperatorID(operatorID spectypes.OperatorID, identifier spectypes.MessageID, data *spectypes.ConsensusData) *protocolstorage.StoredInstance {
-	consensusData, err := data.Encode()
-	if err != nil {
-		panic(err)
-	}
+func instanceValidator(consensusData *spectypes.ConsensusData, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
+	return func(actual *protocolstorage.StoredInstance) error {
+		consensusData, err := consensusData.Encode()
+		if err != nil {
+			panic(err)
+		}
 
-	proposalData, err := (&specqbft.ProposalData{
-		Data:                     consensusData,
-		RoundChangeJustification: nil,
-		PrepareJustification:     nil,
-	}).Encode()
-	if err != nil {
-		panic(err)
-	}
+		proposalData, err := (&specqbft.ProposalData{
+			Data:                     consensusData,
+			RoundChangeJustification: nil,
+			PrepareJustification:     nil,
+		}).Encode()
+		if err != nil {
+			panic(err)
+		}
 
-	prepareData, err := (&specqbft.PrepareData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		panic(err)
-	}
+		prepareData, err := (&specqbft.PrepareData{
+			Data: consensusData,
+		}).Encode()
+		if err != nil {
+			panic(err)
+		}
 
-	commitData, err := (&specqbft.CommitData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		panic(err)
-	}
+		commitData, err := (&specqbft.CommitData{
+			Data: consensusData,
+		}).Encode()
+		if err != nil {
+			panic(err)
+		}
 
-	return &protocolstorage.StoredInstance{
-		State: &specqbft.State{
-			Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
-			ID:                identifier[:],
-			Round:             specqbft.FirstRound,
-			Height:            specqbft.FirstHeight,
-			LastPreparedRound: specqbft.FirstRound,
-			LastPreparedValue: consensusData,
-			ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-				MsgType:    specqbft.ProposalMsgType,
+		expectedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.FirstHeight,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Data:       proposalData,
+		})
+		if !isMessageExistInRound(expectedMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) {
+			return fmt.Errorf("poposal message %+v wasn't found at actual.State.ProposeContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+		}
+
+		foundedMsgsCounter := 0 //at the end of test it must be at least 3
+		for i := 1; i <= 4; i++ {
+			operatorIDIterator := spectypes.OperatorID(i)
+
+			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
+				MsgType:    specqbft.PrepareMsgType,
 				Height:     specqbft.FirstHeight,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
-				Data:       proposalData,
-			}),
-			Decided:      true,
-			DecidedValue: consensusData,
-			ProposeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-				specqbft.FirstRound: {
-					spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-						MsgType:    specqbft.ProposalMsgType,
-						Height:     specqbft.FirstHeight,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       proposalData,
-					}),
-				},
-			}},
-			PrepareContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-				specqbft.FirstRound: {
-					spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-						MsgType:    specqbft.PrepareMsgType,
-						Height:     specqbft.FirstHeight,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       prepareData,
-					}),
-					spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-						MsgType:    specqbft.PrepareMsgType,
-						Height:     specqbft.FirstHeight,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       prepareData,
-					}),
-					spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
-						MsgType:    specqbft.PrepareMsgType,
-						Height:     specqbft.FirstHeight,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       prepareData,
-					}),
-					spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
-						MsgType:    specqbft.PrepareMsgType,
-						Height:     specqbft.FirstHeight,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       prepareData,
-					}),
-				},
-			}},
-			// NOTE: need to keep round keys and commit message data, there's a special check for CommitContainer
-			CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
-				specqbft.FirstRound: {
-					&specqbft.SignedMessage{
-						Message: &specqbft.Message{
-							MsgType:    specqbft.CommitMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       commitData,
-						},
-					},
-					&specqbft.SignedMessage{
-						Message: &specqbft.Message{
-							MsgType:    specqbft.CommitMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       commitData,
-						},
-					},
-					&specqbft.SignedMessage{
-						Message: &specqbft.Message{
-							MsgType:    specqbft.CommitMsgType,
-							Height:     specqbft.FirstHeight,
-							Round:      specqbft.FirstRound,
-							Identifier: identifier[:],
-							Data:       commitData,
-						},
-					},
-				},
-			}},
-			RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-		},
-		DecidedMessage: &specqbft.SignedMessage{
-			Message: &specqbft.Message{
+				Data:       prepareData,
+			})
+			if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+				return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+			}
+
+			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.FirstHeight,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
-				Data:       spectestingutils.PrepareDataBytes(consensusData),
+				Data:       commitData,
+			})
+			if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+				foundedMsgsCounter++
+			}
+		}
+
+		if !actual.State.Share.HasQuorum(foundedMsgsCounter) {
+			return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least %d, actual = %d", actual.State.Share.Quorum, foundedMsgsCounter)
+		}
+
+		actual.State.ProposeContainer = nil
+		actual.State.PrepareContainer = nil
+		actual.State.CommitContainer = nil
+
+		expectedStoredInstance := &protocolstorage.StoredInstance{
+			State: &specqbft.State{
+				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
+				ID:                identifier[:],
+				Round:             specqbft.FirstRound,
+				Height:            specqbft.FirstHeight,
+				LastPreparedRound: specqbft.FirstRound,
+				LastPreparedValue: consensusData,
+				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+					MsgType:    specqbft.ProposalMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       proposalData,
+				}),
+				Decided:      true,
+				DecidedValue: consensusData,
+
+				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 			},
-		},
+			DecidedMessage: &specqbft.SignedMessage{
+				Message: &specqbft.Message{
+					MsgType:    specqbft.CommitMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       spectestingutils.PrepareDataBytes(consensusData),
+				},
+			},
+		}
+
+		expectedStateRoot, err := expectedStoredInstance.State.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from expected state: %w", err)
+		}
+
+		actualStateRoot, err := actual.State.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from actual state: %w", err)
+		}
+
+		if !bytes.Equal(expectedStateRoot, actualStateRoot) {
+			return fmt.Errorf("expected and actual state roots doesn't matching, expected state = %+v, actual = %+v", expectedStoredInstance.State, actual.State)
+		}
+
+		expectedDecidedMessageRoot, err := expectedStoredInstance.DecidedMessage.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from expected decided message: %w", err)
+		}
+
+		actualDecidedMessageRoot, err := actual.DecidedMessage.GetRoot()
+		if err != nil {
+			return fmt.Errorf("error during geting root from actual decided message: %w", err)
+		}
+
+		if !bytes.Equal(expectedDecidedMessageRoot, actualDecidedMessageRoot) {
+			return fmt.Errorf("expected and actual decided message roots doesn't matching, expected decided message = %+v, actual = %+v", expectedStoredInstance.DecidedMessage, actual.DecidedMessage)
+		}
+
+		return nil
 	}
+}
+
+func isMessageExistInRound(message *specqbft.SignedMessage, round []*specqbft.SignedMessage) bool {
+	for i := range round {
+		expectedRoot, err := message.GetRoot()
+		if err != nil {
+			return false
+		}
+
+		actualRoot, err := round[i].GetRoot()
+		if err != nil {
+			return false
+		}
+
+		if bytes.Equal(expectedRoot, actualRoot) {
+			return true
+		}
+	}
+	return false
 }

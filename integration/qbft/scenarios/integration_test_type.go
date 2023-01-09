@@ -37,13 +37,15 @@ import (
 
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
-	Name              string
-	OperatorIDs       []spectypes.OperatorID
-	ValidatorDelays   map[spectypes.OperatorID]time.Duration
-	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
-	Duties            map[spectypes.OperatorID][]scheduledDuty
-	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
-	StartDutyErrors   map[spectypes.OperatorID]error
+	Name               string
+	OperatorIDs        []spectypes.OperatorID
+	Identifier         spectypes.MessageID
+	ValidatorDelays    map[spectypes.OperatorID]time.Duration
+	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	Duties             map[spectypes.OperatorID][]scheduledDuty
+	ExpectedInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
+	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
+	StartDutyErrors    map[spectypes.OperatorID]error
 }
 
 type scheduledDuty struct {
@@ -228,20 +230,42 @@ func (it *IntegrationTest) Run() error {
 	const dutyLength = 8 * time.Second
 	<-time.After(biggestDutyDelay + dutyLength) // TODO: more elegant solution
 
-	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-		for i, expectedInstance := range expectedInstances {
-			mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-			storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-				GetHighestInstance(expectedInstance.State.ID)
-			if err != nil {
-				return err
-			}
-			if storedInstance == nil {
-				return fmt.Errorf("stored instance is nil")
-			}
+	if it.ExpectedInstances != nil {
+		for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
+			for i, expectedInstance := range expectedInstances {
+				mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
+				storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
+					GetHighestInstance(expectedInstance.State.ID)
+				if err != nil {
+					return err
+				}
+				if storedInstance == nil {
+					return fmt.Errorf("stored instance is nil")
+				}
 
-			if err := assertInstance(storedInstance, expectedInstance); err != nil {
-				return fmt.Errorf("assert instance (oid %v, idx %v): %w", expectedOperatorID, i, err)
+				if err := assertInstance(storedInstance, expectedInstance); err != nil {
+					return fmt.Errorf("assert instance (oid %v, idx %v): %w", expectedOperatorID, i, err)
+				}
+			}
+		}
+	}
+
+	if it.InstanceValidators != nil {
+		for operatorID, instanceValidators := range it.InstanceValidators {
+			for i, instanceValidator := range instanceValidators {
+				mid := spectypes.MessageIDFromBytes(it.Identifier[:])
+				storedInstance, err := sCtx.stores[operatorID].Get(mid.GetRoleType()).
+					GetHighestInstance(it.Identifier[:])
+				if err != nil {
+					return err
+				}
+				if storedInstance == nil {
+					return fmt.Errorf("stored instance is nil")
+				}
+
+				if err := instanceValidator(storedInstance); err != nil {
+					return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
+				}
 			}
 		}
 	}
