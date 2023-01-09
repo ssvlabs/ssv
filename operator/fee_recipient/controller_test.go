@@ -38,8 +38,8 @@ func TestSubmitProposal(t *testing.T) {
 
 	operatorKey := "123456789"
 
-	_, collection := createStorage(t)
-	//defer db.Close()
+	db, collection := createStorage(t)
+	defer db.Close()
 	network := beacon.NewNetwork(core.PraterNetwork, 0)
 	populateStorage(t, collection, operatorKey)
 
@@ -69,6 +69,8 @@ func TestSubmitProposal(t *testing.T) {
 			subscription <- 20 // should not call submit
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 32 // first slot of epoch
+			time.Sleep(time.Millisecond * 500)
+			subscription <- 63 // should not call submit
 			return nil
 		})
 
@@ -120,25 +122,33 @@ func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
 }
 
 func populateStorage(t *testing.T, storage validator.ICollection, operatorKey string) {
-	for i := 0; i < 1000; i++ {
-		ownerAddr := fmt.Sprintf("%d", i)
+	createShare := func(index int, operatorKey string) *types.SSVShare {
+		ownerAddr := fmt.Sprintf("%d", index)
 		ownerAddrByte := [20]byte{}
 		copy(ownerAddrByte[:], ownerAddr)
 
-		share := &types.SSVShare{
-			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", i))},
+		return &types.SSVShare{
+			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", index))},
 			Metadata: types.Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
-					Index: phase0.ValidatorIndex(i),
+					Index: phase0.ValidatorIndex(index),
 				},
 				OwnerAddress: hex.EncodeToString(ownerAddrByte[:]),
 				Operators:    [][]byte{[]byte(operatorKey)},
 				Liquidated:   false,
 			},
 		}
-		require.NoError(t, storage.SaveValidatorShare(share))
 	}
+
+	for i := 0; i < 1000; i++ {
+		require.NoError(t, storage.SaveValidatorShare(createShare(i, operatorKey)))
+	}
+
+	// add none committee share
+	require.NoError(t, storage.SaveValidatorShare(createShare(2000, "operatorpubkey")))
+
 	all, err := storage.GetFilteredValidatorShares(validator.NotLiquidatedAndByOperatorPubKey(operatorKey))
 	require.NoError(t, err)
 	require.Equal(t, 1000, len(all))
+
 }
