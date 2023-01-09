@@ -68,10 +68,8 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
 
 	if err := stream.WriteWithTimeout(data, n.requestTimeout); err != nil {
+		_ = s.Reset()
 		return nil, errors.Wrap(err, "could not write to stream")
-	}
-	if err := s.CloseWrite(); err != nil {
-		return nil, errors.Wrap(err, "could not close write stream")
 	}
 	res, err := stream.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
@@ -96,6 +94,7 @@ func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, 
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)
 	if err != nil {
+		_ = stream.Reset()
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
 
