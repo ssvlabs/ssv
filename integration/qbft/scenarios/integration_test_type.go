@@ -61,7 +61,7 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
-type RootGetter interface {
+type rootGetter interface {
 	GetRoot() ([]byte, error)
 }
 
@@ -563,7 +563,7 @@ func (bn beaconNode) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	return data, nil
 }
 
-func validateByRoot(expected, actual RootGetter) error {
+func validateByRoot(expected, actual rootGetter) error {
 	expectedRoot, err := expected.GetRoot()
 	if err != nil {
 		return fmt.Errorf("error during geting root from expected: %w", err)
