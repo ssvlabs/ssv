@@ -18,7 +18,8 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 		return nil
 	}
 	c.Height = highestInstance.GetHeight()
-	c.StoredInstances.SetInstances([]*instance.Instance{highestInstance})
+	c.StoredInstances.reset()
+	c.StoredInstances.addNewInstance(highestInstance)
 	return nil
 }
 

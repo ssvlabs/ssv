@@ -36,7 +36,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
 		i.State.CommitContainer.AddMsg(msg)
-		c.StoredInstances.AddNewInstance(i)
+		c.StoredInstances.addNewInstance(i)
 	} else if decided, _ := inst.IsDecided(); !decided {
 		inst.State.Decided = true
 		inst.State.Round = msg.Message.Round

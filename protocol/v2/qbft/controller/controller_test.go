@@ -17,7 +17,7 @@ func TestController_Marshaling(t *testing.T) {
 	decoded := &Controller{
 		// Since StoredInstances is an interface, it wouldn't be decoded properly.
 		// Therefore, we set it to NewInstanceContainer which implements json.Unmarshaler
-		StoredInstances: NewInstanceContainer(DefaultInstanceContainerCapacity),
+		StoredInstances: make(InstanceContainer, 0, DefaultInstanceContainerCapacity),
 	}
 	require.NoError(t, decoded.Decode(byts))
 

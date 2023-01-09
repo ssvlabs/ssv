@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"log"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -28,6 +29,7 @@ type Controller struct {
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
 	config              qbft.IConfig
+	fullNode            bool
 	logger              *zap.Logger
 }
 
@@ -43,13 +45,11 @@ func NewController(
 		Height:              specqbft.FirstHeight,
 		Domain:              domain,
 		Share:               share,
-		StoredInstances:     NewInstanceContainer(DefaultInstanceContainerCapacity),
+		StoredInstances:     make(InstanceContainer, 0, DefaultInstanceContainerCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
+		fullNode:            fullNode,
 		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
-	}
-	if fullNode {
-		c.StoredInstances = NewStorageInstanceContainer(c.StoredInstances, c.logger, config, share, identifier)
 	}
 	return c
 }
@@ -96,6 +96,7 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	inst := c.InstanceForHeight(msg.Message.Height)
 	if inst == nil {
+		log.Printf("instance not found for height %d, container: %s", msg.Message.Height, c.StoredInstances.String())
 		return nil, errors.New("instance not found")
 	}
 
@@ -134,7 +135,29 @@ func (c *Controller) baseMsgValidation(msg *specqbft.SignedMessage) error {
 }
 
 func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instance {
-	return c.StoredInstances.FindInstance(height)
+	// Search in memory.
+	if inst := c.StoredInstances.FindInstance(height); inst != nil {
+		return inst
+	}
+
+	// Search in storage, if full node.
+	if !c.fullNode {
+		return nil
+	}
+	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
+	if err != nil {
+		c.logger.Error("could not load instance from storage",
+			zap.Uint64("height", uint64(height)),
+			zap.Uint64("ctrl_height", uint64(c.Height)),
+			zap.Error(err))
+		return nil
+	}
+	if storedInst == nil {
+		return nil
+	}
+	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst.State = storedInst.State
+	return inst
 }
 
 func (c *Controller) bumpHeight() {
@@ -149,7 +172,7 @@ func (c *Controller) GetIdentifier() []byte {
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
-	c.StoredInstances.AddNewInstance(i)
+	c.StoredInstances.addNewInstance(i)
 	return i
 }
 
@@ -199,7 +222,7 @@ func (c *Controller) Decode(data []byte) error {
 	}
 
 	config := c.GetConfig()
-	for _, i := range c.StoredInstances.Instances() {
+	for _, i := range c.StoredInstances {
 		if i != nil {
 			// TODO-spec-align changed due to instance and controller are not in same package as in spec, do we still need it for test?
 			i.SetConfig(config)
