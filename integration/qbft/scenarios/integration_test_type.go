@@ -39,6 +39,7 @@ import (
 type IntegrationTest struct {
 	Name              string
 	OperatorIDs       []spectypes.OperatorID
+	ValidatorDelays   map[spectypes.OperatorID]time.Duration
 	InitialInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties            map[spectypes.OperatorID][]scheduledDuty
 	ExpectedInstances map[spectypes.OperatorID][]*protocolstorage.StoredInstance // TODO: rewrite to assertion functions
@@ -167,6 +168,8 @@ func (it *IntegrationTest) Run() error {
 		// TODO: add logging for every node
 		v := val
 		eg.Go(func() error {
+			// think of a way to extend test struct to include another parameter that schedules start of validator
+			<-time.After(it.ValidatorDelays[v.Share.OperatorID])
 			if err := v.Start(); err != nil {
 				return fmt.Errorf("could not start validator: %w", err)
 			}
@@ -180,14 +183,22 @@ func (it *IntegrationTest) Run() error {
 	}
 
 	var lastDutyTime time.Duration
+	biggestDutyDelay := time.Duration(0)
+
 	actualErrMap := sync.Map{}
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
-			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			if scheduledDuty.Delay > biggestDutyDelay {
+				biggestDutyDelay = scheduledDuty.Delay
+			}
+
 			if lastDutyTime < scheduledDuty.Delay {
 				lastDutyTime = scheduledDuty.Delay
 			}
+
+			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
 				startDutyErr := val.StartDuty(scheduledDuty.Duty)
@@ -213,6 +224,9 @@ func (it *IntegrationTest) Run() error {
 			}
 		}
 	}
+
+	const dutyLength = 8 * time.Second
+	<-time.After(biggestDutyDelay + dutyLength) // TODO: more elegant solution
 
 	for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
 		for i, expectedInstance := range expectedInstances {
@@ -481,14 +495,6 @@ type msgRouter struct {
 }
 
 func (m *msgRouter) Route(message spectypes.SSVMessage) {
-	if message.MsgType == spectypes.SSVConsensusMsgType {
-		sm := &specqbft.SignedMessage{}
-		if err := sm.Decode(message.Data); err != nil {
-			zap.L().Debug("router got malformed consensus message")
-		} else {
-			zap.L().Debug("router got consensus message", zap.Any("message", sm))
-		}
-	}
 	m.validator.HandleMessage(&message)
 }
 
