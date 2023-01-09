@@ -1,7 +1,6 @@
 package goclient
 
 import (
-	eth2client "github.com/attestantio/go-eth2-client"
 	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -9,14 +8,11 @@ import (
 )
 
 func (gc *goClient) DomainData(epoch phase0spec.Epoch, domain phase0spec.DomainType) (phase0spec.Domain, error) {
-	if provider, isProvider := gc.client.(eth2client.DomainProvider); isProvider {
-		data, err := provider.Domain(gc.ctx, domain, epoch)
-		if err != nil {
-			return phase0spec.Domain{}, err
-		}
-		return data, nil
+	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	if err != nil {
+		return phase0spec.Domain{}, err
 	}
-	return phase0spec.Domain{}, errors.New("client does not support DomainProvider")
+	return data, nil
 }
 
 // ComputeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.

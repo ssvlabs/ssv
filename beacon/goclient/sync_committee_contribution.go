@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	eth2client "github.com/attestantio/go-eth2-client"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -31,14 +31,9 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 
 // GetSyncCommitteeContribution returns
 func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint64) (*altair.SyncCommitteeContribution, error) {
-	provider, isProvider := gc.client.(eth2client.BeaconBlockRootProvider)
-	if !isProvider {
-		return nil, errors.New("client does not support BeaconBlockRootProvider")
-	}
-
 	gc.waitOneThirdOrValidBlock(uint64(slot))
 
-	blockRoot, err := provider.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
+	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
 		return nil, err
 	}
@@ -48,21 +43,14 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 
 	gc.waitToSlotTwoThirds(uint64(slot))
 
-	if provider, isProvider := gc.client.(eth2client.SyncCommitteeContributionProvider); isProvider {
-		contribution, err := provider.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
-		if err != nil {
-			return nil, err
-		}
-		return contribution, nil
+	contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("client does not support SyncCommitteeContributionProvider")
+	return contribution, nil
 }
 
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *goClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
-	provider, isProvider := gc.client.(eth2client.SyncCommitteeContributionsSubmitter)
-	if !isProvider {
-		return errors.New("client does not support SyncCommitteeContributionsSubmitter")
-	}
-	return provider.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
 }

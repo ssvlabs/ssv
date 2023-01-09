@@ -2,14 +2,14 @@ package goclient
 
 import (
 	"encoding/binary"
-	eth2client "github.com/attestantio/go-eth2-client"
+	time2 "time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/config/params"
 	"github.com/prysmaticlabs/prysm/crypto/hash"
 	"github.com/prysmaticlabs/prysm/time"
 	"github.com/prysmaticlabs/prysm/time/slots"
-	time2 "time"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -28,11 +28,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.New("Validator is not an aggregator")
 	}
 
-	dataProvider, isProvider := gc.client.(eth2client.AttestationDataProvider)
-	if !isProvider {
-		return nil, errors.New("client does not support AttestationDataProvider")
-	}
-	data, err := dataProvider.AttestationData(gc.ctx, slot, committeeIndex)
+	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
 	}
@@ -45,11 +41,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if err != nil {
 		return nil, errors.Wrap(err, "AttestationData.HashTreeRoot")
 	}
-	aggregateAttestationProvider, isProvider := gc.client.(eth2client.AggregateAttestationProvider)
-	if !isProvider {
-		return nil, errors.New("client does not support AggregateAttestationProvider")
-	}
-	aggregateData, err := aggregateAttestationProvider.AggregateAttestation(gc.ctx, slot, root)
+	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get aggregate attestation")
 	}
@@ -69,13 +61,10 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	if provider, isProvider := gc.client.(eth2client.AggregateAttestationsSubmitter); isProvider {
-		if err := provider.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg}); err != nil {
-			return err
-		}
-		return nil
+	if err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg}); err != nil {
+		return err
 	}
-	return errors.New("client does not support AggregateAttestationsSubmitter")
+	return nil
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee
