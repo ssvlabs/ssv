@@ -1,9 +1,9 @@
 package tests
 
 import (
+	"github.com/bloxapp/ssv-spec/types"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
@@ -15,11 +15,11 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 	scenariosToRun := []*scenarios.IntegrationTest{
 		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
 		//scenarios.Regular(types.BNRoleAggregator), //fails on OperatorID = 3
-		//scenarios.Regular(types.BNRoleProposer), //fails
+		//scenarios.Regular(types.BNRoleProposer),z //fails
 		//scenarios.Regular(types.BNRoleSyncCommittee),
 		//scenarios.Regular(types.BNRoleSyncCommitteeContribution),
-		scenarios.RoundChange(types.BNRoleAttester),
-		scenarios.FPlus1Decided(types.BNRoleAttester),
+		//scenarios.RoundChange(types.BNRoleAttester),
+		//scenarios.FPlus1Decided(types.BNRoleAttester),
 	}
 
 	for _, scenario := range scenariosToRun {

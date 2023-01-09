@@ -63,6 +63,10 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
+type GetterRoot interface {
+	GetRoot() ([]byte, error)
+}
+
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
 	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
@@ -539,4 +543,22 @@ func (bn beaconNode) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 	data.Index = committeeIndex
 
 	return data, nil
+}
+
+func validateByRoot(expected, actual GetterRoot) error {
+	expectedRoot, err := expected.GetRoot()
+	if err != nil {
+		return fmt.Errorf("error during geting root from expected: %w", err)
+	}
+
+	actualRoot, err := actual.GetRoot()
+	if err != nil {
+		return fmt.Errorf("error during geting root from actual: %w", err)
+	}
+
+	if !bytes.Equal(expectedRoot, actualRoot) {
+		return fmt.Errorf("expected and actual roots don't match") //create a breakpoint and check states
+	}
+
+	return nil
 }

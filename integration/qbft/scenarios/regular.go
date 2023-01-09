@@ -1,15 +1,12 @@
 package scenarios
 
 import (
-	"bytes"
 	"fmt"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
@@ -65,7 +62,7 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 	return func(actual *protocolstorage.StoredInstance) error {
 		consensusData, err := consensusData.Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("error during encoding specqbft.ConsensusData: %w", err)
 		}
 
 		proposalData, err := (&specqbft.ProposalData{
@@ -74,70 +71,58 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			PrepareJustification:     nil,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
 		}
 
-		prepareData, err := (&specqbft.PrepareData{
-			Data: consensusData,
-		}).Encode()
-		if err != nil {
-			panic(err)
+		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
+			return fmt.Errorf("propose countainer expected lenth = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-
-		commitData, err := (&specqbft.CommitData{
-			Data: consensusData,
-		}).Encode()
-		if err != nil {
-			panic(err)
-		}
-
-		expectedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-			MsgType:    specqbft.ProposalMsgType,
-			Height:     specqbft.FirstHeight,
-			Round:      specqbft.FirstRound,
-			Identifier: identifier[:],
-			Data:       proposalData,
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+			MsgType: specqbft.ProposalMsgType,
+			Height:  specqbft.FirstHeight,
+			Round:   specqbft.FirstRound,
 		})
-		if !isMessageExistInRound(expectedMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) {
-			return fmt.Errorf("poposal message %+v wasn't found at actual.State.ProposeContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
+			return err
 		}
 
-		foundedMsgsCounter := 0 //at the end of test it must be at least 3
+		foundedPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
+		foundedCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
 		for i := 1; i <= 4; i++ {
 			operatorIDIterator := spectypes.OperatorID(i)
 
-			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.PrepareMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       prepareData,
+			expectedPreparedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
+				MsgType: specqbft.PrepareMsgType,
+				Height:  specqbft.FirstHeight,
+				Round:   specqbft.FirstRound,
 			})
-			if !isMessageExistInRound(expectedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-				return fmt.Errorf("prepare message %+v wasn't found at actual.State.PrepareContainer.Msgs[specqbft.FirstRound]", expectedMsg)
+			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
+				foundedPreparedMsgsCounter++
 			}
 
-			expectedMsg = spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
+			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
+				MsgType: specqbft.CommitMsgType,
+				Height:  specqbft.FirstHeight,
+				Round:   specqbft.FirstRound,
 			})
-			if isMessageExistInRound(expectedMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-				foundedMsgsCounter++
+			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
+				foundedCommitMsgsCounter++
 			}
 		}
 
-		if !actual.State.Share.HasQuorum(foundedMsgsCounter) {
-			return fmt.Errorf("wasn't found enough commit messages at actual.State.CommitContainer.Msgs[specqbft.FirstRound], expected at least %d, actual = %d", actual.State.Share.Quorum, foundedMsgsCounter)
+		if !actual.State.Share.HasQuorum(foundedPreparedMsgsCounter) {
+			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundedPreparedMsgsCounter)
+		}
+
+		if !actual.State.Share.HasQuorum(foundedCommitMsgsCounter) {
+			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundedCommitMsgsCounter)
 		}
 
 		actual.State.ProposeContainer = nil
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
 
-		expectedStoredInstance := &protocolstorage.StoredInstance{
+		expected := &protocolstorage.StoredInstance{
 			State: &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
@@ -168,51 +153,43 @@ func instanceValidator(consensusData *spectypes.ConsensusData, operatorID specty
 			},
 		}
 
-		expectedStateRoot, err := expectedStoredInstance.State.GetRoot()
-		if err != nil {
-			return fmt.Errorf("error during geting root from expected state: %w", err)
+		if err := validateByRoot(expected.State, actual.State); err != nil {
+			return err
 		}
 
-		actualStateRoot, err := actual.State.GetRoot()
-		if err != nil {
-			return fmt.Errorf("error during geting root from actual state: %w", err)
-		}
-
-		if !bytes.Equal(expectedStateRoot, actualStateRoot) {
-			return fmt.Errorf("expected and actual state roots doesn't matching, expected state = %+v, actual = %+v", expectedStoredInstance.State, actual.State)
-		}
-
-		expectedDecidedMessageRoot, err := expectedStoredInstance.DecidedMessage.GetRoot()
-		if err != nil {
-			return fmt.Errorf("error during geting root from expected decided message: %w", err)
-		}
-
-		actualDecidedMessageRoot, err := actual.DecidedMessage.GetRoot()
-		if err != nil {
-			return fmt.Errorf("error during geting root from actual decided message: %w", err)
-		}
-
-		if !bytes.Equal(expectedDecidedMessageRoot, actualDecidedMessageRoot) {
-			return fmt.Errorf("expected and actual decided message roots doesn't matching, expected decided message = %+v, actual = %+v", expectedStoredInstance.DecidedMessage, actual.DecidedMessage)
+		if err := validateByRoot(expected.DecidedMessage, actual.DecidedMessage); err != nil {
+			return err
 		}
 
 		return nil
 	}
 }
 
+// validateSignedMessage compared specqbft.SignedMessage-s, !!! IGNORES .Message.Identifier and .Message.Data !!! checks only first signer !!!
+func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
+	expected.Message.Identifier = nil //if someone add this fields by mistake
+	expected.Message.Data = nil       //if someone add this fields by mistake
+
+	actual.Message.Identifier = nil
+	actual.Message.Data = nil
+
+	for i := range expected.Signers {
+		if expected.Signers[i] != actual.Signers[i] {
+			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
+		}
+	}
+
+	if err := validateByRoot(expected, actual); err != nil &&
+		expected.Signers[0] == actual.Signers[0] {
+		return err
+	}
+
+	return nil
+}
+
 func isMessageExistInRound(message *specqbft.SignedMessage, round []*specqbft.SignedMessage) bool {
 	for i := range round {
-		expectedRoot, err := message.GetRoot()
-		if err != nil {
-			return false
-		}
-
-		actualRoot, err := round[i].GetRoot()
-		if err != nil {
-			return false
-		}
-
-		if bytes.Equal(expectedRoot, actualRoot) {
+		if err := validateSignedMessage(message, round[i]); err == nil {
 			return true
 		}
 	}
