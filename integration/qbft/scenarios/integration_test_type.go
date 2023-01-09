@@ -455,21 +455,20 @@ func assertState(actual *specqbft.State, expected *specqbft.State) error {
 
 	actualCopy, expectedCopy := *actual, *expected
 
-	for round, messages := range actualCopy.PrepareContainer.Msgs {
+	if want, got := len(expectedCopy.PrepareContainer.Msgs), len(actualCopy.PrepareContainer.Msgs); want != got {
+		return fmt.Errorf("wrong prepare message count, want %d, got %d", want, got)
+	}
+
+	for round, messages := range expectedCopy.PrepareContainer.Msgs {
 		for i, message := range messages {
-			actualRoot, err := message.GetRoot()
-			if err != nil {
-				return fmt.Errorf("get actual prepare message root: %w", err)
-			}
-
-			expectedMessagesInRound, ok := expectedCopy.PrepareContainer.Msgs[round]
-			if !ok {
-				return fmt.Errorf("got unexpected prepare message")
-			}
-
-			expectedRoot, err := expectedMessagesInRound[i].GetRoot()
+			expectedRoot, err := message.GetRoot()
 			if err != nil {
 				return fmt.Errorf("get expected prepare message root: %w", err)
+			}
+
+			actualRoot, err := actualCopy.PrepareContainer.Msgs[round][i].GetRoot()
+			if err != nil {
+				return fmt.Errorf("get actual prepare message root: %w", err)
 			}
 
 			if !bytes.Equal(expectedRoot, actualRoot) {
