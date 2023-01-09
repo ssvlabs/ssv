@@ -456,6 +456,31 @@ func assertState(actual *specqbft.State, expected *specqbft.State) error {
 
 	actualCopy, expectedCopy := *actual, *expected
 
+	if want, got := len(expectedCopy.PrepareContainer.Msgs), len(actualCopy.PrepareContainer.Msgs); want != got {
+		return fmt.Errorf("wrong prepare message count, want %d, got %d", want, got)
+	}
+
+	for round, messages := range expectedCopy.PrepareContainer.Msgs {
+		for i, message := range messages {
+			expectedRoot, err := message.GetRoot()
+			if err != nil {
+				return fmt.Errorf("get expected prepare message root: %w", err)
+			}
+
+			actualRoot, err := actualCopy.PrepareContainer.Msgs[round][i].GetRoot()
+			if err != nil {
+				return fmt.Errorf("get actual prepare message root: %w", err)
+			}
+
+			if !bytes.Equal(expectedRoot, actualRoot) {
+				return fmt.Errorf("expected and actual prepare roots differ")
+			}
+		}
+	}
+
+	actualCopy.PrepareContainer = nil
+	expectedCopy.PrepareContainer = nil
+
 	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
 	if expected.Decided {
 		if want, got := len(expectedCopy.CommitContainer.Msgs), len(actualCopy.CommitContainer.Msgs); want != got {
