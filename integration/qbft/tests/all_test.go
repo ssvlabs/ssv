@@ -19,7 +19,7 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 		//scenarios.Regular(types.BNRoleSyncCommittee),
 		//scenarios.Regular(types.BNRoleSyncCommitteeContribution),
 		scenarios.RoundChange(types.BNRoleAttester),
-		scenarios.FPlus1Decided(types.BNRoleAttester),
+		scenarios.F1Decided(types.BNRoleAttester),
 	}
 
 	for _, scenario := range scenariosToRun {
