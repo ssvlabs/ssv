@@ -79,34 +79,42 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 						}},
 						PrepareContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
 							specqbft.FirstRound: {
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareData,
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareData,
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareData,
-								}),
-								spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[4], 4, &specqbft.Message{
-									MsgType:    specqbft.PrepareMsgType,
-									Height:     2,
-									Round:      specqbft.FirstRound,
-									Identifier: identifier[:],
-									Data:       prepareData,
-								}),
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.PrepareMsgType,
+										Height:     2,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       prepareData,
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.PrepareMsgType,
+										Height:     2,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       prepareData,
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.PrepareMsgType,
+										Height:     2,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       prepareData,
+									},
+								},
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.PrepareMsgType,
+										Height:     2,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       prepareData,
+									},
+								},
 							},
 						}},
 						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{

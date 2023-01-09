@@ -52,17 +52,17 @@ func (ts *streamWrapper) CloseWrite() error {
 
 // ReadWithTimeout reads with timeout
 func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) {
-	if err := ts.s.SetReadDeadline(time.Now().Add(timeout)); err != nil {
-		return nil, errors.Wrap(err, "could not set read deadline")
-	}
+	//if err := ts.s.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+	//	return nil, errors.Wrap(err, "could not set read deadline")
+	//}
 	return io.ReadAll(ts.s)
 }
 
 // WriteWithTimeout reads next message with timeout
 func (ts *streamWrapper) WriteWithTimeout(data []byte, timeout time.Duration) error {
-	if err := ts.s.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return errors.Wrap(err, "could not set write deadline")
-	}
+	//if err := ts.s.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+	//	return errors.Wrap(err, "could not set write deadline")
+	//}
 
 	n := len(data)
 	bytsWrote, err := ts.s.Write(data)

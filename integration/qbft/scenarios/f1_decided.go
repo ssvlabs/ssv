@@ -11,7 +11,7 @@ import (
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
-func FPlus1Decided(role spectypes.BeaconRole) *IntegrationTest {
+func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 	pk := spectestingutils.Testing4SharesSet().ValidatorPK.Serialize()
 	identifier := spectypes.NewMsgID(pk, role)
 
