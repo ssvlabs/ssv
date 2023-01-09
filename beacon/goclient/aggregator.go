@@ -2,13 +2,13 @@ package goclient
 
 import (
 	"encoding/binary"
-	time2 "time"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/config/params"
 	"github.com/prysmaticlabs/prysm/crypto/hash"
-	"github.com/prysmaticlabs/prysm/time"
+	prysmtime "github.com/prysmaticlabs/prysm/time"
 	"github.com/prysmaticlabs/prysm/time/slots"
 )
 
@@ -61,10 +61,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
 func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggregateAndProof) error {
-	if err := gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg}); err != nil {
-		return err
-	}
-	return nil
+	return gc.client.SubmitAggregateAttestations(gc.ctx, []*phase0.SignedAggregateAndProof{msg})
 }
 
 // IsAggregator returns true if the signature is from the input validator. The committee
@@ -95,12 +92,12 @@ func (gc *goClient) waitToSlotTwoThirds(slot uint64) {
 
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := time.Until(finalTime)
+	wait := prysmtime.Until(finalTime)
 	if wait <= 0 {
 		return
 	}
 
-	t := time2.NewTimer(wait)
+	t := time.NewTimer(wait)
 	defer t.Stop()
 	for range t.C {
 		return
