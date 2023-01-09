@@ -11,14 +11,20 @@ func InstanceSet() []utils.KeyValue {
 	instanceMap.Set("package instance", "package qbft")
 	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"\n", "")
 	instanceMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
-	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	instanceMap.Set("logging \"github.com/ipfs/go-log\"\n", "")
+	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	instanceMap.Set("\"go.uber.org/zap\"\n\n", "")
 	instanceMap.Set("specqbft.", "")
 	instanceMap.Set("spectypes.", "types.")
-	instanceMap.Set("types.IConfig", "IConfig")
+	instanceMap.Set("qbft.IConfig", "IConfig")
 
 	// list of approved changes in code between spec and implementation
-	instanceMap.Set("// TODO align spec to add else to avoid broadcast errored proposal\n\t\t\t} else {\n\t\t\t\t// nolint\n\t\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t\t}\n\t\t\t}",
-		"}\n\t\t\t// nolint\n\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}")
+	instanceMap.Set("var logger = logging.Logger(\"ssv/protocol/qbft/instance\").Desugar()", "")
+	instanceMap.Set("logger *zap.Logger", "")
+	instanceMap.Set("logger: logger.With(zap.String(\"identifier\", types.MessageIDFromBytes(identifier).String()),\n\t\t\tzap.Uint64(\"height\", uint64(height))),", "")
+	instanceMap.Set("i.logger.Debug(\"starting QBFT instance\")", "")
+	instanceMap.Set("if err != nil {\n\t\t\t\ti.logger.Warn(\"failed to create proposal\", zap.Error(err))\n\t\t\t\t// TODO align spec to add else to avoid broadcast errored proposal\n\t\t\t} else {\n\t\t\t\t// nolint\n\t\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\t\ti.logger.Warn(\"failed to broadcast proposal\", zap.Error(err))\n\t\t\t\t}\n\t\t\t}",
+		"if err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}\n\t\t\t// nolint\n\t\t\tif err := i.Broadcast(proposal); err != nil {\n\t\t\t\tfmt.Printf(\"%s\\n\", err.Error())\n\t\t\t}")
 	instanceMap.Set("// SetConfig returns the instance config\nfunc (i *Instance) SetConfig(config IConfig) {\n\ti.config = config\n}", "")
 
 	return instanceMap.Range()
@@ -26,6 +32,9 @@ func InstanceSet() []utils.KeyValue {
 
 func SpecInstanceSet() []utils.KeyValue {
 	var specInstanceMap = utils.NewMap()
+	specInstanceMap.Set("\"fmt\"\n", "")
+	specInstanceMap.Set("\"github.com/bloxapp/ssv-spec/types\"\n", "")
+
 	// We import from spec - so for the diff we remove it from spec
 	specInstanceMap.Set("type ProposedValueCheckF func(data []byte) error", "")
 	specInstanceMap.Set("type ProposerF func(state *State, round Round) types.OperatorID", "")
