@@ -33,8 +33,14 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 	}
 
 	data := &spectypes.ConsensusData{
-		Duty:                      createDuty(pk, slots[3], 1, role),
-		AttestationData:           spectestingutils.TestingAttestationData,
+		Duty: createDuty(pk, slots[3], 1, role),
+		AttestationData: &spec.AttestationData{
+			Slot:            slots[3],
+			Index:           spectestingutils.TestingAttestationData.Index,
+			BeaconBlockRoot: spectestingutils.TestingAttestationData.BeaconBlockRoot,
+			Source:          spectestingutils.TestingAttestationData.Source,
+			Target:          spectestingutils.TestingAttestationData.Target,
+		},
 		BlockData:                 nil,
 		AggregateAndProof:         nil,
 		SyncCommitteeBlockRoot:    spec.Root{},
