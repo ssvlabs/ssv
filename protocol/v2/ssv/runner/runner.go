@@ -55,6 +55,9 @@ type BaseRunner struct {
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 	logger         *zap.Logger
+
+	// implementation vars
+	TimeoutF TimeoutF `json:"-"`
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -208,6 +211,8 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
+
+	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }

@@ -48,13 +48,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
-	queues := make(map[spectypes.BeaconRole]msgqueue.MsgQueue)
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
-	for _, dutyRunner := range options.DutyRunners {
-		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
-		queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
-	}
-
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
@@ -65,9 +58,19 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
-		Queues:      queues,
+		Queues:      make(map[spectypes.BeaconRole]msgqueue.MsgQueue), // populate below
 		state:       uint32(NotStarted),
 	}
+
+	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
+	for _, dutyRunner := range options.DutyRunners {
+		// set timeout F
+		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
+
+		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
+		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
+	}
+
 	return v
 }
 
@@ -77,16 +80,7 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
-	err := dutyRunner.StartNewDuty(duty)
-
-	// init timer
-	if err == nil {
-		newInstance := dutyRunner.GetBaseRunner().State.RunningInstance
-		if newInstance != nil {
-			v.registerTimeoutHandler(newInstance, dutyRunner.GetBaseRunner().QBFTController.Height)
-		}
-	}
-	return err
+	return dutyRunner.StartNewDuty(duty)
 }
 
 // ProcessMessage processes Network Message of all types

@@ -5,20 +5,10 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
-
-func (v *Validator) registerTimeoutHandler(instance *instance.Instance, height specqbft.Height) {
-	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
-	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
-	if ok {
-		timer.OnTimeout(v.onTimeout(identifier, height))
-	}
-}
 
 func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {
