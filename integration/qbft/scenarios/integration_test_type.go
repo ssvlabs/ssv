@@ -265,6 +265,9 @@ func (it *IntegrationTest) Run() error {
 	}
 
 	if it.InstanceValidators != nil {
+		if bytes.Equal(it.Identifier[:], bytes.Repeat([]byte{0}, len(it.Identifier))) {
+			return fmt.Errorf("indentifier is not set")
+		}
 		for operatorID, instanceValidators := range it.InstanceValidators {
 			for i, instanceValidator := range instanceValidators {
 				mid := spectypes.MessageIDFromBytes(it.Identifier[:])
@@ -611,6 +614,21 @@ func validateByRoot(expected, actual spectypes.Root) error {
 
 	if !bytes.Equal(expectedRoot, actualRoot) {
 		return fmt.Errorf("expected and actual roots don't match") //create a breakpoint and check states
+	}
+
+	return nil
+}
+
+func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
+	for i := range expected.Signers {
+		//TODO: add also specqbft.SignedMessage.Signature check
+		if expected.Signers[i] != actual.Signers[i] {
+			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
+		}
+	}
+
+	if err := validateByRoot(expected, actual); err != nil {
+		return err
 	}
 
 	return nil
