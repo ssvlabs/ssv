@@ -233,10 +233,6 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
-func (r *ProposerRunner) SetTimeoutF(timeoutF TimeoutF) {
-	r.BaseRunner.timeoutF = timeoutF
-}
-
 func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }

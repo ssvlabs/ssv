@@ -590,3 +590,27 @@ func validateByRoot(expected, actual spectypes.Root) error {
 
 	return nil
 }
+
+func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
+	for i := range expected.Signers {
+		//TODO: add also specqbft.SignedMessage.Signature check
+		if expected.Signers[i] != actual.Signers[i] {
+			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
+		}
+	}
+
+	if err := validateByRoot(expected, actual); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func isMessageExistInRound(message *specqbft.SignedMessage, roundMsgs []*specqbft.SignedMessage) bool {
+	for i := range roundMsgs {
+		if err := validateSignedMessage(message, roundMsgs[i]); err == nil {
+			return true
+		}
+	}
+	return false
+}

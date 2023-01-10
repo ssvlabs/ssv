@@ -193,10 +193,6 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
-func (r *AttesterRunner) SetTimeoutF(timeoutF TimeoutF) {
-	r.BaseRunner.timeoutF = timeoutF
-}
-
 func (r *AttesterRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
