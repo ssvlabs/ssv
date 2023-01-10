@@ -1,7 +1,9 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -202,6 +204,12 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		}
 
 		if !stateFound {
+			actualStateJSON, err := json.Marshal(actual.State)
+			if err != nil {
+				return fmt.Errorf("marshal actual state")
+			}
+
+			log.Printf("actual state: %v", string(actualStateJSON))
 			return fmt.Errorf("state doesn't match any possible expected state")
 		}
 
