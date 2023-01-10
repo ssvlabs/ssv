@@ -272,7 +272,7 @@ func (it *IntegrationTest) Run() error {
 					return err
 				}
 				if storedInstance == nil {
-					return fmt.Errorf("stored instance is nil")
+					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
 				}
 
 				if err := instanceValidator(storedInstance); err != nil {
