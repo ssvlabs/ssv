@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -55,12 +54,38 @@ func init() {
 	}
 }
 
+// Client defines all go-eth2-client interfaces used in ssv
+type Client interface {
+	eth2client.Service
+
+	eth2client.AttestationDataProvider
+	eth2client.AggregateAttestationProvider
+	eth2client.AggregateAttestationsSubmitter
+	eth2client.AttestationDataProvider
+	eth2client.AttestationsSubmitter
+	eth2client.BeaconCommitteeSubscriptionsSubmitter
+	eth2client.SyncCommitteeSubscriptionsSubmitter
+	eth2client.AttesterDutiesProvider
+	eth2client.ProposerDutiesProvider
+	eth2client.SyncCommitteeDutiesProvider
+	eth2client.NodeSyncingProvider
+	eth2client.BeaconBlockProposalProvider
+	eth2client.BeaconBlockSubmitter
+	eth2client.DomainProvider
+	eth2client.BeaconBlockRootProvider
+	eth2client.SyncCommitteeMessagesSubmitter
+	eth2client.BeaconBlockRootProvider
+	eth2client.SyncCommitteeContributionProvider
+	eth2client.SyncCommitteeContributionsSubmitter
+	eth2client.ValidatorsProvider
+}
+
 // goClient implementing Beacon struct
 type goClient struct {
 	ctx            context.Context
 	logger         *zap.Logger
 	network        beaconprotocol.Network
-	client         client.Service
+	client         Client
 	indicesMapLock sync.Mutex
 	graffiti       []byte
 }
@@ -92,7 +117,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		ctx:            opt.Context,
 		logger:         logger,
 		network:        network,
-		client:         httpClient,
+		client:         httpClient.(*http.Service),
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
 	}
@@ -105,19 +130,17 @@ func (gc *goClient) HealthCheck() []string {
 	if gc.client == nil {
 		return []string{"not connected to beacon node"}
 	}
-	if provider, isProvider := gc.client.(eth2client.NodeSyncingProvider); isProvider {
-		ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-		defer cancel()
-		syncState, err := provider.NodeSyncing(ctx)
-		if err != nil {
-			metricsBeaconNodeStatus.Set(float64(statusUnknown))
-			return []string{"could not get beacon node sync state"}
-		}
-		if syncState != nil && syncState.IsSyncing {
-			metricsBeaconNodeStatus.Set(float64(statusSyncing))
-			return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-				syncState.HeadSlot, syncState.SyncDistance)}
-		}
+	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
+	defer cancel()
+	syncState, err := gc.client.NodeSyncing(ctx)
+	if err != nil {
+		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		return []string{"could not get beacon node sync state"}
+	}
+	if syncState != nil && syncState.IsSyncing {
+		metricsBeaconNodeStatus.Set(float64(statusSyncing))
+		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
+			syncState.HeadSlot, syncState.SyncDistance)}
 	}
 	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return []string{}

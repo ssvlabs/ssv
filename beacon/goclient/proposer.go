@@ -1,7 +1,8 @@
 package goclient
 
 import (
-	eth2client "github.com/attestantio/go-eth2-client"
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -10,30 +11,30 @@ import (
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
 func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
-	if provider, isProvider := gc.client.(eth2client.BeaconBlockProposalProvider); isProvider {
-		// TODO need to support blinded?
-		// TODO what with fee recipient?
-		sig := phase0.BLSSignature{}
-		copy(sig[:], randao[:])
+	// TODO need to support blinded?
+	// TODO what with fee recipient?
+	sig := phase0.BLSSignature{}
+	copy(sig[:], randao[:])
 
-		beaconBlockRoot, err := provider.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
-		if err != nil {
-			return nil, err
-		}
-		return beaconBlockRoot.Bellatrix, nil
+	beaconBlockRoot, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.New("client does not support BeaconBlockProposalProvider")
+
+	switch beaconBlockRoot.Version {
+	case spec.DataVersionBellatrix:
+		return beaconBlockRoot.Bellatrix, nil
+	default:
+		return nil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlockRoot.Version))
+	}
 }
 
 // SubmitBeaconBlock submit the block to the node
 func (gc *goClient) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error {
-	if provider, isProvider := gc.client.(eth2client.BeaconBlockSubmitter); isProvider {
-		versionedBlock := &spec.VersionedSignedBeaconBlock{
-			Version:   spec.DataVersionBellatrix,
-			Bellatrix: block,
-		}
-
-		return provider.SubmitBeaconBlock(gc.ctx, versionedBlock)
+	versionedBlock := &spec.VersionedSignedBeaconBlock{
+		Version:   spec.DataVersionBellatrix,
+		Bellatrix: block,
 	}
-	return errors.New("client does not support BeaconBlockSubmitter")
+
+	return gc.client.SubmitBeaconBlock(gc.ctx, versionedBlock)
 }
