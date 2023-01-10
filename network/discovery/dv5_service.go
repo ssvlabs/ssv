@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
@@ -139,10 +140,16 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
+	zeroSubnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
+
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
 			dvs.logger.Debug("could not read subnets", zap.String("enr", e.Node.String()))
+			return
+		}
+		if bytes.Equal(zeroSubnets, nodeSubnets) {
+			dvs.logger.Debug("skipping zero subnets", zap.String("enr", e.Node.String()))
 			return
 		}
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
