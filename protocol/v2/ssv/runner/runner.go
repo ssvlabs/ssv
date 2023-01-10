@@ -46,6 +46,11 @@ type Runner interface {
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(duty *spectypes.Duty) error
+
+	//implementation functions
+
+	// SetTimeoutF sets timeout function handler
+	SetTimeoutF(timeoutF TimeoutF)
 }
 
 type BaseRunner struct {
@@ -55,6 +60,9 @@ type BaseRunner struct {
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 	logger         *zap.Logger
+
+	// implementation vars
+	timeoutF TimeoutF
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -208,6 +216,8 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
+
+	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }
