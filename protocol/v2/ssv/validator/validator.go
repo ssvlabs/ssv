@@ -65,7 +65,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
 	for _, dutyRunner := range options.DutyRunners {
 		// set timeout F
-		dutyRunner.SetTimeoutF(v.onTimeout)
+		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 
 		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
 		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q

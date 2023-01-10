@@ -227,10 +227,6 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
-func (r *AggregatorRunner) SetTimeoutF(timeoutF TimeoutF) {
-	r.BaseRunner.timeoutF = timeoutF
-}
-
 func (r *AggregatorRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }

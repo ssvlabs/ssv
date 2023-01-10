@@ -46,11 +46,6 @@ type Runner interface {
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(duty *spectypes.Duty) error
-
-	//implementation functions
-
-	// SetTimeoutF sets timeout function handler
-	SetTimeoutF(timeoutF TimeoutF)
 }
 
 type BaseRunner struct {
@@ -62,7 +57,7 @@ type BaseRunner struct {
 	logger         *zap.Logger
 
 	// implementation vars
-	timeoutF TimeoutF
+	TimeoutF TimeoutF `json:"-"`
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty

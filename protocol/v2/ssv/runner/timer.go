@@ -13,6 +13,6 @@ func (br *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height
 	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
 	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
 	if ok {
-		timer.OnTimeout(br.timeoutF(identifier, height))
+		timer.OnTimeout(br.TimeoutF(identifier, height))
 	}
 }

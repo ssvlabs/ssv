@@ -175,10 +175,6 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
-func (r *SyncCommitteeRunner) SetTimeoutF(timeoutF TimeoutF) {
-	r.BaseRunner.timeoutF = timeoutF
-}
-
 func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
