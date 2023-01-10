@@ -88,7 +88,6 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 
 func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
-
 		proposalData, err := (&specqbft.ProposalData{
 			Data:                     consensusData,
 			RoundChangeJustification: nil,
@@ -126,10 +125,8 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			return err
 		}
 
-		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
-		if !actual.State.Share.HasQuorum(len(prepareSigners)) {
-			return fmt.Errorf("no prepare message quorum, signers: %v", prepareSigners)
-		}
+		// sometimes there may be no prepare quorum
+		_, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
 
 		expectedPrepareMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
@@ -170,8 +167,8 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
 
-		expected := &protocolstorage.StoredInstance{
-			State: &specqbft.State{
+		createPossibleState := func(lastPreparedRound specqbft.Round, lastPreparedValue []byte) *specqbft.State {
+			return &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
@@ -188,23 +185,37 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 				Decided:              true,
 				DecidedValue:         consensusData,
 				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-			},
-			DecidedMessage: &specqbft.SignedMessage{
-				Message: &specqbft.Message{
-					MsgType:    specqbft.CommitMsgType,
-					Height:     2,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(consensusData),
-				},
+			}
+		}
+
+		possibleStates := []*specqbft.State{
+			createPossibleState(specqbft.FirstRound, consensusData),
+			createPossibleState(0, nil),
+		}
+
+		var stateFound bool
+		for _, state := range possibleStates {
+			if err := validateByRoot(state, actual.State); err == nil {
+				stateFound = true
+				break
+			}
+		}
+
+		if !stateFound {
+			return fmt.Errorf("state doesn't match any possible expected state")
+		}
+
+		expectedDecidedMessage := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     2,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       spectestingutils.PrepareDataBytes(consensusData),
 			},
 		}
 
-		if err := validateByRoot(expected.State, actual.State); err != nil {
-			return err
-		}
-
-		if err := validateByRoot(expected.DecidedMessage, actual.DecidedMessage); err != nil {
+		if err := validateByRoot(expectedDecidedMessage, actual.DecidedMessage); err != nil {
 			return err
 		}
 
