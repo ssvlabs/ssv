@@ -558,3 +558,21 @@ func (bn beaconNode) GetAttestationData(slot spec.Slot, committeeIndex spec.Comm
 
 	return data, nil
 }
+
+func validateByRoot(expected, actual spectypes.Root) error {
+	expectedRoot, err := expected.GetRoot()
+	if err != nil {
+		return fmt.Errorf("root getting error: %w", err)
+	}
+
+	actualRoot, err := actual.GetRoot()
+	if err != nil {
+		return fmt.Errorf("root getting error: %w", err)
+	}
+
+	if !bytes.Equal(expectedRoot, actualRoot) {
+		return fmt.Errorf("expected and actual roots don't match") //create a breakpoint and check states
+	}
+
+	return nil
+}
