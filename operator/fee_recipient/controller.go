@@ -22,6 +22,7 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
+// RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
 	Start()
 }
@@ -37,6 +38,7 @@ type ControllerOptions struct {
 	OperatorPublicKey string
 }
 
+// recipientController implementation of RecipientController
 type recipientController struct {
 	logger            *zap.Logger
 	ctx               context.Context
