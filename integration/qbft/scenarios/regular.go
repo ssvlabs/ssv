@@ -63,13 +63,13 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 
 func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
-		consensusData, err := consensusData.Encode()
+		encodedConsensusData, err := consensusData.Encode()
 		if err != nil {
 			return fmt.Errorf("encode consensus data: %w", err)
 		}
 
 		proposalData, err := (&specqbft.ProposalData{
-			Data:                     consensusData,
+			Data:                     encodedConsensusData,
 			RoundChangeJustification: nil,
 			PrepareJustification:     nil,
 		}).Encode()
@@ -78,14 +78,14 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 		}
 
 		prepareData, err := (&specqbft.PrepareData{
-			Data: consensusData,
+			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
 			panic(err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
-			Data: consensusData,
+			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
 			panic(err)
@@ -176,7 +176,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 				Round:             specqbft.FirstRound,
 				Height:            specqbft.FirstHeight,
 				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: consensusData,
+				LastPreparedValue: encodedConsensusData,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     specqbft.FirstHeight,
@@ -185,7 +185,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 					Data:       proposalData,
 				}),
 				Decided:      true,
-				DecidedValue: consensusData,
+				DecidedValue: encodedConsensusData,
 
 				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 			},
@@ -195,7 +195,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 					Height:     specqbft.FirstHeight,
 					Round:      specqbft.FirstRound,
 					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(consensusData),
+					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
 				},
 			},
 		}
