@@ -3,6 +3,7 @@ package runner
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
@@ -13,6 +14,6 @@ func (br *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height
 	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
 	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
 	if ok {
-		timer.OnTimeout(br.timeoutF(identifier, height))
+		timer.OnTimeout(br.TimeoutF(identifier, height))
 	}
 }

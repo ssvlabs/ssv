@@ -197,17 +197,23 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 
 	logger.Debug("subscribing to topics")
 
+	var wg sync.WaitGroup
 	for _, pk := range pks {
 		vpk, err := hex.DecodeString(pk)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "could not decode validator public key")
 		}
 		for _, node := range ln.Nodes {
-			if err := node.Subscribe(vpk); err != nil {
-				return nil, nil, err
-			}
+			wg.Add(1)
+			go func(node network.P2PNetwork, vpk []byte) {
+				defer wg.Done()
+				if err := node.Subscribe(vpk); err != nil {
+					logger.Warn("could not subscribe to topic", zap.Error(err))
+				}
+			}(node, vpk)
 		}
 	}
+	wg.Wait()
 	// let the nodes subscribe
 	<-time.After(time.Second)
 	for _, pk := range pks {

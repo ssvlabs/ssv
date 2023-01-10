@@ -4,28 +4,23 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"time"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-	"github.com/prysmaticlabs/prysm/time/slots"
-	"go.uber.org/zap"
-
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	prysmtypes "github.com/prysmaticlabs/eth2-types"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
-
-const (
-	slotChanBuffer = 32
-)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -35,8 +30,6 @@ type DutyExecutor interface {
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
 	Start()
-	// CurrentSlotChan will trigger every slot
-	CurrentSlotChan() <-chan uint64
 }
 
 // ControllerOptions holds the needed dependencies
@@ -50,6 +43,7 @@ type ControllerOptions struct {
 	GenesisEpoch        uint64
 	DutyLimit           uint64
 	ForkVersion         forksprotocol.ForkVersion
+	Ticker              slot_ticker.Ticker
 }
 
 // dutyController internal implementation of DutyController
@@ -63,9 +57,7 @@ type dutyController struct {
 	validatorController validator.Controller
 	genesisEpoch        uint64
 	dutyLimit           uint64
-
-	// chan
-	currentSlotC chan uint64
+	ticker              slot_ticker.Ticker
 }
 
 var secPerSlot int64 = 12
@@ -82,6 +74,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
+		ticker:              opts.Ticker,
 	}
 	return &dc
 }
@@ -92,16 +85,9 @@ func (dc *dutyController) Start() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
-	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := slots.NewSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
-	dc.listenToTicker(slotTicker.C())
-}
-
-func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
-	if dc.currentSlotC == nil {
-		dc.currentSlotC = make(chan uint64, slotChanBuffer)
-	}
-	return dc.currentSlotC
+	tickerChan := make(chan prysmtypes.Slot, 32)
+	dc.ticker.Subscribe(tickerChan)
+	dc.listenToTicker(tickerChan)
 }
 
 // ExecuteDuty tries to execute the given duty
@@ -122,23 +108,9 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		executeDutyData := types.ExecuteDutyData{Duty: duty}
-		edd, err := json.Marshal(executeDutyData)
+		ssvMsg, err := createDutyExecuteMsg(duty, pubKey)
 		if err != nil {
-			return errors.Wrap(err, "failed to marshal execute duty data")
-		}
-		msg := types.EventMsg{
-			Type: types.ExecuteDuty,
-			Data: edd,
-		}
-		data, err := msg.Encode()
-		if err != nil {
-			return errors.Wrap(err, "failed to encode event msg")
-		}
-		ssvMsg := &spectypes.SSVMessage{
-			MsgType: message.SSVEventMsgType,
-			MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
-			Data:    data,
+			return err
 		}
 		v.Queues[duty.Type].Add(ssvMsg)
 	} else {
@@ -147,14 +119,32 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
+// createDutyExecuteMsg returns ssvMsg with event type of duty execute
+func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	edd, err := json.Marshal(executeDutyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+	}
+	msg := types.EventMsg{
+		Type: types.ExecuteDuty,
+		Data: edd,
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode event msg")
+	}
+	return &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
+		Data:    data,
+	}, nil
+}
+
 // listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
 	for currentSlot := range slots {
-		// notify current slot to channel
-		go dc.notifyCurrentSlot(currentSlot)
-
 		// execute duties
-		dc.logger.Info("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
@@ -162,12 +152,6 @@ func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
 		for i := range duties {
 			go dc.onDuty(&duties[i])
 		}
-	}
-}
-
-func (dc *dutyController) notifyCurrentSlot(slot prysmtypes.Slot) {
-	if dc.currentSlotC != nil {
-		dc.currentSlotC <- uint64(slot)
 	}
 }
 
