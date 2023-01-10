@@ -605,12 +605,3 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 
 	return nil
 }
-
-func isMessageExistInRound(message *specqbft.SignedMessage, roundMsgs []*specqbft.SignedMessage) bool {
-	for i := range roundMsgs {
-		if err := validateSignedMessage(message, roundMsgs[i]); err == nil {
-			return true
-		}
-	}
-	return false
-}

@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"bytes"
 	"fmt"
 	"time"
 
@@ -105,10 +106,70 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			panic(err)
 		}
 
+		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
+		if !actual.State.Share.HasQuorum(len(commitSigners)) {
+			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
+		}
+
+		expectedCommitMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     2,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
+			},
+		}
+		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected commit root: %w", err)
+		}
+
+		for i, commitMessage := range commitMessages {
+			actualCommitRoot, err := commitMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual commit root: %w", err)
+			}
+
+			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
+				return fmt.Errorf("commit message root mismatch, index %d", i)
+			}
+		}
+
+		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
+		if !actual.State.Share.HasQuorum(len(prepareSigners)) {
+			return fmt.Errorf("no prepare message quorum, signers: %v", prepareSigners)
+		}
+
+		expectedPrepareMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.PrepareMsgType,
+				Height:     2,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       prepareData,
+			},
+		}
+		expectedPrepareRoot, err := expectedPrepareMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected prepare root: %w", err)
+		}
+
+		for i, prepareMessage := range prepareMessages {
+			actualPrepareRoot, err := prepareMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual prepare root: %w", err)
+			}
+
+			if !bytes.Equal(actualPrepareRoot, expectedPrepareRoot) {
+				return fmt.Errorf("prepare message root mismatch, index %d", i)
+			}
+		}
+
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     2,
 			Round:      specqbft.FirstRound,
@@ -117,42 +178,6 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		})
 		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
 			return err
-		}
-
-		foundPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
-		foundCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
-		for i := 1; i <= 4; i++ {
-			operatorIDIterator := spectypes.OperatorID(i)
-
-			expectedPreparedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.PrepareMsgType,
-				Height:     2,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       prepareData,
-			})
-			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-				foundPreparedMsgsCounter++
-			}
-
-			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     2,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
-			})
-			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-				foundCommitMsgsCounter++
-			}
-		}
-
-		if !actual.State.Share.HasQuorum(foundPreparedMsgsCounter) {
-			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundPreparedMsgsCounter)
-		}
-
-		if !actual.State.Share.HasQuorum(foundCommitMsgsCounter) {
-			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundCommitMsgsCounter)
 		}
 
 		actual.State.ProposeContainer = nil
