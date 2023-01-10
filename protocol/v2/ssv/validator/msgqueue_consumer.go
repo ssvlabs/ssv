@@ -3,16 +3,16 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/pkg/errors"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/patrickmn/go-cache"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the msg. return error if exist

@@ -2,9 +2,8 @@ package streams
 
 import (
 	"context"
-	"time"
-
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/host"
