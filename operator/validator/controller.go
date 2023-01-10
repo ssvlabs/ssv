@@ -70,8 +70,8 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
-	//NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
-	DutyRoles []spectypes.BeaconRole
+	NewDecidedHandler          qbftcontroller.NewDecidedHandler
+	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"4096" env-description:"Number of goroutines to use for message workers"`
@@ -163,6 +163,7 @@ func NewController(options ControllerOptions) Controller {
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
 		DutyRunners:          nil, // set per validator
+		NewDecidedHandler:    options.NewDecidedHandler,
 		FullNode:             options.FullNode,
 		FullNodeNonCommittee: options.FullNodeNonCommittee,
 	}
@@ -642,8 +643,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	}
 
 	domainType := types.GetDefaultDomain()
-	generateConfig := func(role spectypes.BeaconRole) *qbft.Config {
-		return &qbft.Config{
+	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
+		config := &qbft.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
 			Domain:      domainType,
@@ -657,6 +658,12 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			Network: options.Network,
 			Timer:   roundtimer.New(ctx, logger, nil),
 		}
+		config.ValueCheckF = valueCheckF
+
+		identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, role)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
+		return qbftCtrl
 	}
 
 	runners := runner.DutyRunners{}
@@ -664,39 +671,23 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		switch role {
 		case spectypes.BNRoleAttester:
 			valCheck := specssv.AttesterValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig(spectypes.BNRoleAttester)
-			config.ValueCheckF = valCheck
-			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleAttester)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
-
+			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
 			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig(spectypes.BNRoleProposer)
-			config.ValueCheckF = proposedValueCheck
-			identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, spectypes.BNRoleProposer)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
 		case spectypes.BNRoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig(spectypes.BNRoleAggregator)
-			config.ValueCheckF = aggregatorValueCheckF
-			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleAggregator)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)
 			runners[role] = runner.NewAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, aggregatorValueCheckF)
 		case spectypes.BNRoleSyncCommittee:
 			syncCommitteeValueCheckF := specssv.SyncCommitteeValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig(spectypes.BNRoleSyncCommittee)
-			config.ValueCheckF = syncCommitteeValueCheckF
-			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommittee)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+			qbftCtrl := buildController(spectypes.BNRoleSyncCommittee, syncCommitteeValueCheckF)
 			runners[role] = runner.NewSyncCommitteeRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeValueCheckF)
 		case spectypes.BNRoleSyncCommitteeContribution:
 			syncCommitteeContributionValueCheckF := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			config := generateConfig(spectypes.BNRoleSyncCommitteeContribution)
-			config.ValueCheckF = syncCommitteeContributionValueCheckF
-			identifier := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution)
-			qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF)
 		}
 	}

@@ -28,6 +28,7 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 		Network: opts.Network,
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
+	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		logger.Debug("failed to load highest instance", zap.Error(err))
 	}

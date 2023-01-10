@@ -73,6 +73,9 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		c.Height = msg.Message.Height
 	}
 	if !prevDecided {
+		if c.NewDecidedHandler != nil {
+			c.NewDecidedHandler(msg)
+		}
 		return msg, nil
 	}
 	return nil, nil

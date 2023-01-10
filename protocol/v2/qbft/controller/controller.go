@@ -18,6 +18,10 @@ import (
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
 
+// NewDecidedHandler handles newly saved decided messages.
+// it will be called in a new goroutine to avoid concurrency issues
+type NewDecidedHandler func(msg *specqbft.SignedMessage)
+
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
 	Identifier []byte
@@ -28,6 +32,7 @@ type Controller struct {
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
+	NewDecidedHandler   NewDecidedHandler
 	config              qbft.IConfig
 	fullNode            bool
 	logger              *zap.Logger

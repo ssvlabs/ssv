@@ -5,6 +5,7 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ibft/storage"
+	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -17,6 +18,7 @@ type Options struct {
 	SSVShare             *types.SSVShare
 	Signer               spectypes.KeyManager
 	DutyRunners          runner.DutyRunners
+	NewDecidedHandler    qbftctrl.NewDecidedHandler
 	FullNode             bool
 	FullNodeNonCommittee bool
 }
