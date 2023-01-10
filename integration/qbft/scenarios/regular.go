@@ -91,18 +91,34 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			panic(err)
 		}
 
-		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
-			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
+		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
+		if !actual.State.Share.HasQuorum(len(commitSigners)) {
+			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-			MsgType:    specqbft.ProposalMsgType,
-			Height:     specqbft.FirstHeight,
-			Round:      specqbft.FirstRound,
-			Identifier: identifier[:],
-			Data:       proposalData,
-		})
-		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
-			return err
+
+		expectedCommitMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
+			},
+		}
+		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected commit root: %w", err)
+		}
+
+		for i, commitMessage := range commitMessages {
+			actualCommitRoot, err := commitMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual commit root: %w", err)
+			}
+
+			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
+				return fmt.Errorf("commit message root mismatch, index %d", i)
+			}
 		}
 
 		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
@@ -135,34 +151,18 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			}
 		}
 
-		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
-		if !actual.State.Share.HasQuorum(len(commitSigners)) {
-			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
+		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
+			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-
-		expectedCommitMsg := &specqbft.SignedMessage{
-			Message: &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
-			},
-		}
-		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
-		if err != nil {
-			return fmt.Errorf("expected commit root: %w", err)
-		}
-
-		for i, commitMessage := range commitMessages {
-			actualCommitRoot, err := commitMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("actual commit root: %w", err)
-			}
-
-			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
-				return fmt.Errorf("commit message root mismatch, index %d", i)
-			}
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     specqbft.FirstHeight,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Data:       proposalData,
+		})
+		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
+			return err
 		}
 
 		actual.State.ProposeContainer = nil
@@ -225,13 +225,4 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	}
 
 	return nil
-}
-
-func isMessageExistInRound(message *specqbft.SignedMessage, roundMsgs []*specqbft.SignedMessage) bool {
-	for i := range roundMsgs {
-		if err := validateSignedMessage(message, roundMsgs[i]); err == nil {
-			return true
-		}
-	}
-	return false
 }
