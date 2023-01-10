@@ -85,7 +85,7 @@ func (mr *MockDutyControllerMockRecorder) Start() *gomock.Call {
 // CurrentSlotChan mocks base method
 func (m *MockDutyController) CurrentSlotChan() <-chan uint64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CurrentSlotChan")
+	ret := m.ctrl.Call(m, "Subscribe")
 	ret0, _ := ret[0].(<-chan uint64)
 	return ret0
 }
@@ -93,5 +93,5 @@ func (m *MockDutyController) CurrentSlotChan() <-chan uint64 {
 // CurrentSlotChan indicates an expected call of CurrentSlotChan
 func (mr *MockDutyControllerMockRecorder) CurrentSlotChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentSlotChan", reflect.TypeOf((*MockDutyController)(nil).CurrentSlotChan))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockDutyController)(nil).CurrentSlotChan))
 }

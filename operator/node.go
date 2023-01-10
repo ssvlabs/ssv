@@ -5,7 +5,10 @@ import (
 	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/operator/fee_recipient"
+	slot_ticker "github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/pkg/errors"
+	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -53,16 +56,18 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork     beaconprotocol.Network
-	context        context.Context
-	validatorsCtrl validator.Controller
-	logger         *zap.Logger
-	beacon         beaconprotocol.Beacon
-	net            network.P2PNetwork
-	storage        storage.Storage
-	qbftStorage    qbftstorageprotocol.QBFTStore
-	eth1Client     eth1.Client
-	dutyCtrl       duties.DutyController
+	ethNetwork       beaconprotocol.Network
+	context          context.Context
+	ticker           slot_ticker.Ticker
+	validatorsCtrl   validator.Controller
+	logger           *zap.Logger
+	beacon           beaconprotocol.Beacon
+	net              network.P2PNetwork
+	storage          storage.Storage
+	qbftStorage      qbftstorageprotocol.QBFTStore
+	eth1Client       eth1.Client
+	dutyCtrl         duties.DutyController
+	feeRecipientCtrl fee_recipient.RecipientController
 	// fork           *forks.Forker
 
 	forkVersion forksprotocol.ForkVersion
@@ -74,10 +79,12 @@ type operatorNode struct {
 // New is the constructor of operatorNode
 func New(opts Options) Node {
 	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork)
 
 	node := &operatorNode{
 		context:        opts.Context,
 		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
+		ticker:         ticker,
 		validatorsCtrl: opts.ValidatorController,
 		ethNetwork:     opts.ETHNetwork,
 		beacon:         opts.Beacon,
@@ -96,8 +103,20 @@ func New(opts Options) Node {
 			DutyLimit:           opts.DutyLimit,
 			Executor:            opts.DutyExec,
 			ForkVersion:         opts.ForkVersion,
+			Ticker:              ticker,
 		}),
-
+		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
+			Logger:       opts.Logger,
+			Ctx:          opts.Context,
+			BeaconClient: opts.Beacon,
+			EthNetwork:   opts.ETHNetwork,
+			ShareStorage: validator.NewCollection(validator.CollectionOptions{
+				DB:     opts.DB,
+				Logger: opts.Logger,
+			}),
+			Ticker:            ticker,
+			OperatorPublicKey: opts.ValidatorOptions.OperatorPubKey,
+		}),
 		forkVersion: opts.ForkVersion,
 
 		ws:        opts.WS,
@@ -132,12 +151,17 @@ func (n *operatorNode) Start() error {
 		}
 	}()
 
+	// slot ticker init
+	go n.ticker.Start()
+
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets()
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot()
 	go n.reportOperators()
+
+	go n.feeRecipientCtrl.Start()
 	n.dutyCtrl.Start()
 
 	return nil
@@ -145,7 +169,9 @@ func (n *operatorNode) Start() error {
 
 // listenForCurrentSlot listens to current slot and trigger relevant components if needed
 func (n *operatorNode) listenForCurrentSlot() {
-	for slot := range n.dutyCtrl.CurrentSlotChan() {
+	tickerChan := make(chan types.Slot, 32)
+	n.ticker.Subscribe(tickerChan)
+	for slot := range tickerChan {
 		n.setFork(slot)
 	}
 }

@@ -14,8 +14,8 @@ func (n *operatorNode) getForkVersion(slot uint64) forksprotocol.ForkVersion {
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed
-func (n *operatorNode) setFork(slot uint64) {
-	currentVersion := n.getForkVersion(slot)
+func (n *operatorNode) setFork(slot types.Slot) {
+	currentVersion := n.getForkVersion(uint64(slot))
 	if currentVersion == n.forkVersion {
 		return
 	}

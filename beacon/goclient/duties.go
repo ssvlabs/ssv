@@ -39,7 +39,7 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	}
 	wg.Wait()
 
-	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration", time.Since(start).Seconds()))
+	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration (sec)", time.Since(start).Seconds()))
 	return duties, nil
 }
 
