@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -225,10 +226,6 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "can't broadcast partial selection proof sig")
 	}
 	return nil
-}
-
-func (r *AggregatorRunner) SetTimeoutF(timeoutF TimeoutF) {
-	r.BaseRunner.timeoutF = timeoutF
 }
 
 func (r *AggregatorRunner) GetBaseRunner() *BaseRunner {

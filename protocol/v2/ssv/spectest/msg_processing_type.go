@@ -2,11 +2,12 @@ package spectest
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv-spec/qbft"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"testing"
 
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+
+	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
