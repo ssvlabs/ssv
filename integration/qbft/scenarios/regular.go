@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -105,7 +106,6 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 		}
 
 		foundPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
-		foundCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
 		for i := 1; i <= 4; i++ {
 			operatorIDIterator := spectypes.OperatorID(i)
 
@@ -119,25 +119,40 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
 				foundPreparedMsgsCounter++
 			}
-
-			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
-			})
-			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-				foundCommitMsgsCounter++
-			}
 		}
 
 		if !actual.State.Share.HasQuorum(foundPreparedMsgsCounter) {
 			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundPreparedMsgsCounter)
 		}
 
-		if !actual.State.Share.HasQuorum(foundCommitMsgsCounter) {
-			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundCommitMsgsCounter)
+		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
+		if !actual.State.Share.HasQuorum(len(commitSigners)) {
+			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
+		}
+
+		expectedCommitMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
+			},
+		}
+		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected commit root: %w", err)
+		}
+
+		for i, commitMessage := range commitMessages {
+			actualCommitRoot, err := commitMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual commit root: %w", err)
+			}
+
+			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
+				return fmt.Errorf("commit message root mismatch, index %d", i)
+			}
 		}
 
 		actual.State.ProposeContainer = nil
