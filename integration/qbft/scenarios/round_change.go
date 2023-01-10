@@ -49,6 +49,7 @@ func RoundChange(role spectypes.BeaconRole) *IntegrationTest {
 	return &IntegrationTest{
 		Name:             "round change",
 		OperatorIDs:      []spectypes.OperatorID{1, 2, 3, 4},
+		Identifier:       identifier,
 		InitialInstances: nil,
 		Duties: map[spectypes.OperatorID][]scheduledDuty{
 			1: {createScheduledDuty(pk, slots[0], 1, role, delays[0]), createScheduledDuty(pk, slots[1], 1, role, delays[1]), createScheduledDuty(pk, slots[2], 1, role, delays[2]), createScheduledDuty(pk, slots[3], 1, role, delays[3])},

@@ -263,6 +263,9 @@ func (it *IntegrationTest) Run() error {
 	}
 
 	if it.InstanceValidators != nil {
+		if bytes.Equal(it.Identifier[:], bytes.Repeat([]byte{0}, len(it.Identifier))) {
+			return fmt.Errorf("indentifier is not set")
+		}
 		for operatorID, instanceValidators := range it.InstanceValidators {
 			for i, instanceValidator := range instanceValidators {
 				mid := spectypes.MessageIDFromBytes(it.Identifier[:])
