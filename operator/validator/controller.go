@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -22,9 +25,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
@@ -69,7 +70,7 @@ type ControllerOptions struct {
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
 	ForkVersion                forksprotocol.ForkVersion
-	// NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
+	//NewDecidedHandler          v1qbftcontroller.NewDecidedHandler
 	DutyRoles []spectypes.BeaconRole
 
 	// worker flags
@@ -93,7 +94,7 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
-	// OnFork(forkVersion forksprotocol.ForkVersion) error
+	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
 // controller implements Controller
@@ -148,13 +149,13 @@ func NewController(options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := &validator.Options{ // TODO add vars
+	validatorOptions := &validator.Options{ //TODO add vars
 		Network: options.Network,
 		Beacon:  options.Beacon,
 		Storage: storageMap,
-		// Share:   nil,  // set per validator
+		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
-		// Mode: validator.ModeRW // set per validator
+		//Mode: validator.ModeRW // set per validator
 		DutyRunners: nil, // set per validator
 	}
 
