@@ -62,7 +62,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 	return func(actual *protocolstorage.StoredInstance) error {
 		consensusData, err := consensusData.Encode()
 		if err != nil {
-			return fmt.Errorf("error during encoding specqbft.ConsensusData: %w", err)
+			return fmt.Errorf("encode consensus data: %w", err)
 		}
 
 		proposalData, err := (&specqbft.ProposalData{
@@ -71,7 +71,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			PrepareJustification:     nil,
 		}).Encode()
 		if err != nil {
-			return fmt.Errorf("error during encoding specqbft.ProposalData: %w", err)
+			return fmt.Errorf("encode proposal data: %w", err)
 		}
 
 		prepareData, err := (&specqbft.PrepareData{
@@ -89,7 +89,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 		}
 
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
-			return fmt.Errorf("propose countainer expected lenth = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
+			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
 		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
@@ -102,8 +102,8 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			return err
 		}
 
-		foundedPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
-		foundedCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
+		foundPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
+		foundCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
 		for i := 1; i <= 4; i++ {
 			operatorIDIterator := spectypes.OperatorID(i)
 
@@ -115,7 +115,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 				Data:       prepareData,
 			})
 			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-				foundedPreparedMsgsCounter++
+				foundPreparedMsgsCounter++
 			}
 
 			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
@@ -126,16 +126,16 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 				Data:       commitData,
 			})
 			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-				foundedCommitMsgsCounter++
+				foundCommitMsgsCounter++
 			}
 		}
 
-		if !actual.State.Share.HasQuorum(foundedPreparedMsgsCounter) {
-			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundedPreparedMsgsCounter)
+		if !actual.State.Share.HasQuorum(foundPreparedMsgsCounter) {
+			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundPreparedMsgsCounter)
 		}
 
-		if !actual.State.Share.HasQuorum(foundedCommitMsgsCounter) {
-			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundedCommitMsgsCounter)
+		if !actual.State.Share.HasQuorum(foundCommitMsgsCounter) {
+			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundCommitMsgsCounter)
 		}
 
 		actual.State.ProposeContainer = nil
@@ -187,22 +187,22 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 
 func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	for i := range expected.Signers {
+		//TODO: add also specqbft.SignedMessage.Signature check
 		if expected.Signers[i] != actual.Signers[i] {
 			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
 		}
 	}
 
-	if err := validateByRoot(expected, actual); err != nil &&
-		expected.Signers[0] == actual.Signers[0] {
+	if err := validateByRoot(expected, actual); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func isMessageExistInRound(message *specqbft.SignedMessage, round []*specqbft.SignedMessage) bool {
-	for i := range round {
-		if err := validateSignedMessage(message, round[i]); err == nil {
+func isMessageExistInRound(message *specqbft.SignedMessage, roundMsgs []*specqbft.SignedMessage) bool {
+	for i := range roundMsgs {
+		if err := validateSignedMessage(message, roundMsgs[i]); err == nil {
 			return true
 		}
 	}
