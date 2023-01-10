@@ -1,7 +1,6 @@
 package scenarios
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
@@ -113,34 +112,18 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			panic(err)
 		}
 
-		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
-		if !actual.State.Share.HasQuorum(len(commitSigners)) {
-			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
+		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
+			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-
-		expectedCommitMsg := &specqbft.SignedMessage{
-			Message: &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     2,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
-			},
-		}
-		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
-		if err != nil {
-			return fmt.Errorf("expected commit root: %w", err)
-		}
-
-		for i, commitMessage := range commitMessages {
-			actualCommitRoot, err := commitMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("actual commit root: %w", err)
-			}
-
-			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
-				return fmt.Errorf("commit message root mismatch, index %d", i)
-			}
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     2,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Data:       proposalData,
+		})
+		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
+			return err
 		}
 
 		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
@@ -157,34 +140,30 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 				Data:       prepareData,
 			},
 		}
-		expectedPrepareRoot, err := expectedPrepareMsg.GetRoot()
-		if err != nil {
-			return fmt.Errorf("expected prepare root: %w", err)
-		}
-
-		for i, prepareMessage := range prepareMessages {
-			actualPrepareRoot, err := prepareMessage.GetRoot()
-			if err != nil {
-				return fmt.Errorf("actual prepare root: %w", err)
-			}
-
-			if !bytes.Equal(actualPrepareRoot, expectedPrepareRoot) {
+		for i, actualPrepareMessage := range prepareMessages {
+			if err := validateSignedMessage(expectedPrepareMsg, actualPrepareMessage); err != nil {
 				return fmt.Errorf("prepare message root mismatch, index %d", i)
 			}
 		}
 
-		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
-			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
+		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
+		if !actual.State.Share.HasQuorum(len(commitSigners)) {
+			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-			MsgType:    specqbft.ProposalMsgType,
-			Height:     2,
-			Round:      specqbft.FirstRound,
-			Identifier: identifier[:],
-			Data:       proposalData,
-		})
-		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
-			return err
+
+		expectedCommitMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     2,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
+			},
+		}
+		for i, actualCommitMessage := range commitMessages {
+			if err := validateSignedMessage(expectedCommitMsg, actualCommitMessage); err != nil {
+				return fmt.Errorf("commit message root mismatch, index %d", i)
+			}
 		}
 
 		actual.State.ProposeContainer = nil

@@ -14,7 +14,7 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 
 	scenariosToRun := []*scenarios.IntegrationTest{
 		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
-		//scenarios.RoundChange(types.BNRoleAttester), // TODO: fix and uncomment
+		scenarios.RoundChange(types.BNRoleAttester),
 		//scenarios.F1Decided(types.BNRoleAttester), // TODO: fix and uncomment
 	}
 
