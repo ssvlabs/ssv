@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/aquasecurity/table"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
@@ -188,33 +187,33 @@ func (m mockConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
 	)
 }
 
-type mockNonConsensusMessage struct {
-	Role types.BeaconRole
-	Type ssv.PartialSigMsgType
-	Slot phase0.Slot
-}
-
-func (m mockNonConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
-	factory := ssvMessageFactory(m.Role)
-	return factory(
-		nil,
-		&ssv.SignedPartialSignatureMessage{
-			Message: ssv.PartialSignatureMessages{
-				Type: m.Type,
-				Messages: []*ssv.PartialSignatureMessage{
-					{
-						// Slot:             m.Slot,
-						PartialSignature: []byte{},
-						SigningRoot:      []byte{},
-						Signer:           0,
-					},
-				},
-			},
-			Signature: []byte{1, 2, 3, 4},
-			Signer:    types.OperatorID(1),
-		},
-	)
-}
+//type mockNonConsensusMessage struct {
+//	Role types.BeaconRole
+//	Type ssv.PartialSigMsgType
+//	Slot phase0.Slot
+//}
+//
+//func (m mockNonConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
+//	factory := ssvMessageFactory(m.Role)
+//	return factory(
+//		nil,
+//		&ssv.SignedPartialSignatureMessage{
+//			Message: ssv.PartialSignatureMessages{
+//				Type: m.Type,
+//				Messages: []*ssv.PartialSignatureMessage{
+//					{
+//						// Slot:             m.Slot,
+//						PartialSignature: []byte{},
+//						SigningRoot:      []byte{},
+//						Signer:           0,
+//					},
+//				},
+//			},
+//			Signature: []byte{1, 2, 3, 4},
+//			Signer:    types.OperatorID(1),
+//		},
+//	)
+//}
 
 type messageSlice []*DecodedSSVMessage
 
