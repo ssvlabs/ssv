@@ -1,6 +1,7 @@
 package scenarios
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -62,13 +63,13 @@ func Regular(role spectypes.BeaconRole) *IntegrationTest {
 
 func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
-		consensusData, err := consensusData.Encode()
+		encodedConsensusData, err := consensusData.Encode()
 		if err != nil {
 			return fmt.Errorf("encode consensus data: %w", err)
 		}
 
 		proposalData, err := (&specqbft.ProposalData{
-			Data:                     consensusData,
+			Data:                     encodedConsensusData,
 			RoundChangeJustification: nil,
 			PrepareJustification:     nil,
 		}).Encode()
@@ -77,17 +78,77 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 		}
 
 		prepareData, err := (&specqbft.PrepareData{
-			Data: consensusData,
+			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
 			panic(err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
-			Data: consensusData,
+			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
 			panic(err)
+		}
+
+		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
+		if !actual.State.Share.HasQuorum(len(commitSigners)) {
+			return fmt.Errorf("no commit message quorum, signers: %v", commitSigners)
+		}
+
+		expectedCommitMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       commitData,
+			},
+		}
+		expectedCommitRoot, err := expectedCommitMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected commit root: %w", err)
+		}
+
+		for i, commitMessage := range commitMessages {
+			actualCommitRoot, err := commitMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual commit root: %w", err)
+			}
+
+			if !bytes.Equal(actualCommitRoot, expectedCommitRoot) {
+				return fmt.Errorf("commit message root mismatch, index %d", i)
+			}
+		}
+
+		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
+		if !actual.State.Share.HasQuorum(len(prepareSigners)) {
+			return fmt.Errorf("no prepare message quorum, signers: %v", prepareSigners)
+		}
+
+		expectedPrepareMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.PrepareMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       prepareData,
+			},
+		}
+		expectedPrepareRoot, err := expectedPrepareMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected prepare root: %w", err)
+		}
+
+		for i, prepareMessage := range prepareMessages {
+			actualPrepareRoot, err := prepareMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual prepare root: %w", err)
+			}
+
+			if !bytes.Equal(actualPrepareRoot, expectedPrepareRoot) {
+				return fmt.Errorf("prepare message root mismatch, index %d", i)
+			}
 		}
 
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
@@ -104,42 +165,6 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			return err
 		}
 
-		foundPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
-		foundCommitMsgsCounter := 0   //at the end of test it must be at least == Quorum
-		for i := 1; i <= 4; i++ {
-			operatorIDIterator := spectypes.OperatorID(i)
-
-			expectedPreparedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.PrepareMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       prepareData,
-			})
-			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-				foundPreparedMsgsCounter++
-			}
-
-			expectedCommitMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
-				MsgType:    specqbft.CommitMsgType,
-				Height:     specqbft.FirstHeight,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       commitData,
-			})
-			if isMessageExistInRound(expectedCommitMsg, actual.State.CommitContainer.Msgs[specqbft.FirstRound]) {
-				foundCommitMsgsCounter++
-			}
-		}
-
-		if !actual.State.Share.HasQuorum(foundPreparedMsgsCounter) {
-			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundPreparedMsgsCounter)
-		}
-
-		if !actual.State.Share.HasQuorum(foundCommitMsgsCounter) {
-			return fmt.Errorf("not enough messages in commit container. expected = %d, actual = %d", actual.State.Share.Quorum, foundCommitMsgsCounter)
-		}
-
 		actual.State.ProposeContainer = nil
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
@@ -151,7 +176,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 				Round:             specqbft.FirstRound,
 				Height:            specqbft.FirstHeight,
 				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: consensusData,
+				LastPreparedValue: encodedConsensusData,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     specqbft.FirstHeight,
@@ -160,7 +185,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 					Data:       proposalData,
 				}),
 				Decided:      true,
-				DecidedValue: consensusData,
+				DecidedValue: encodedConsensusData,
 
 				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 			},
@@ -170,7 +195,7 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 					Height:     specqbft.FirstHeight,
 					Round:      specqbft.FirstRound,
 					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(consensusData),
+					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
 				},
 			},
 		}
@@ -185,4 +210,19 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 
 		return nil
 	}
+}
+
+func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
+	for i := range expected.Signers {
+		//TODO: add also specqbft.SignedMessage.Signature check
+		if expected.Signers[i] != actual.Signers[i] {
+			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
+		}
+	}
+
+	if err := validateByRoot(expected, actual); err != nil {
+		return err
+	}
+
+	return nil
 }
