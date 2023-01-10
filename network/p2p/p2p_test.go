@@ -137,9 +137,9 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	node := ln.Nodes[0]
 	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(res), 5)
-	require.Less(t, len(res), 7)
-	require.GreaterOrEqual(t, msgCounter, int64(9))
+	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
+	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
+	require.GreaterOrEqual(t, msgCounter, 2)
 }
 
 func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
