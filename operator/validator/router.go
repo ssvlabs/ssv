@@ -2,9 +2,8 @@ package validator
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/network/forks"
+	"go.uber.org/zap"
 )
 
 const bufSize = 1024

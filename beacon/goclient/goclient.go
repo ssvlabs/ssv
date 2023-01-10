@@ -78,6 +78,7 @@ type Client interface {
 	eth2client.SyncCommitteeContributionProvider
 	eth2client.SyncCommitteeContributionsSubmitter
 	eth2client.ValidatorsProvider
+	eth2client.ProposalPreparationsSubmitter
 }
 
 // goClient implementing Beacon struct

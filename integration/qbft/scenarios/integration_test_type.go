@@ -61,6 +61,16 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
+func (sctx *scenarioContext) Close() error {
+	for _, n := range sctx.nodes {
+		_ = n.Close()
+	}
+	for _, d := range sctx.dbs {
+		d.Close()
+	}
+	return nil
+}
+
 func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
 	l := logex.Build("simulation", zapcore.DebugLevel, nil)
 	loggerFactory := func(s string) *zap.Logger {
@@ -144,6 +154,10 @@ func (it *IntegrationTest) Run() error {
 	if err != nil {
 		return err
 	}
+	defer func() {
+		_ = sCtx.Close()
+		<-time.After(time.Second)
+	}()
 
 	validators, err := it.createValidators(sCtx)
 	if err != nil {
@@ -200,7 +214,7 @@ func (it *IntegrationTest) Run() error {
 				lastDutyTime = scheduledDuty.Delay
 			}
 
-			sCtx.logger.Info("going to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			sCtx.logger.Debug("about to start duty", zap.Duration("delay", scheduledDuty.Delay))
 
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
@@ -575,28 +589,4 @@ func validateByRoot(expected, actual spectypes.Root) error {
 	}
 
 	return nil
-}
-
-func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
-	for i := range expected.Signers {
-		//TODO: add also specqbft.SignedMessage.Signature check
-		if expected.Signers[i] != actual.Signers[i] {
-			return fmt.Errorf("signers not matching. expected = %+v, actual = %+v", expected.Signers, actual.Signers)
-		}
-	}
-
-	if err := validateByRoot(expected, actual); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func isMessageExistInRound(message *specqbft.SignedMessage, roundMsgs []*specqbft.SignedMessage) bool {
-	for i := range roundMsgs {
-		if err := validateSignedMessage(message, roundMsgs[i]); err == nil {
-			return true
-		}
-	}
-	return false
 }

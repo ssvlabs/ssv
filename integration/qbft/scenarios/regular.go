@@ -2,11 +2,13 @@ package scenarios
 
 import (
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
@@ -65,7 +67,6 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			return fmt.Errorf("encode consensus data: %w", err)
 		}
 
-		//TODO: consider use messageDataForSlot() instead of following
 		proposalData, err := (&specqbft.ProposalData{
 			Data:                     consensusData,
 			RoundChangeJustification: nil,

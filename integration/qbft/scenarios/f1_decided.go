@@ -360,8 +360,20 @@ func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 						DecidedValue:                    consensusData,
 						ProposeContainer:                &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 						PrepareContainer:                &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-						CommitContainer:                 &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-						RoundChangeContainer:            &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
+						CommitContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+							specqbft.FirstRound: {
+								&specqbft.SignedMessage{
+									Message: &specqbft.Message{
+										MsgType:    specqbft.CommitMsgType,
+										Height:     1,
+										Round:      specqbft.FirstRound,
+										Identifier: identifier[:],
+										Data:       commitData,
+									},
+								},
+							},
+						}},
+						RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
 					},
 					DecidedMessage: &specqbft.SignedMessage{
 						Message: &specqbft.Message{

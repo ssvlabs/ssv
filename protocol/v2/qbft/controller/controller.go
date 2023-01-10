@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	logging "github.com/ipfs/go-log"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
@@ -80,13 +79,10 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
 	if isDecidedMsg(c.Share, msg) {
-		c.logger.Debug("controller processes decided message", zap.Any("message", msg))
 		return c.UponDecided(msg)
 	} else if msg.Message.Height > c.Height {
-		c.logger.Debug("controller processes future message", zap.Any("message", msg))
 		return c.UponFutureMsg(msg)
 	} else {
-		c.logger.Debug("controller processes existing message", zap.Any("message", msg))
 		return c.UponExistingInstanceMsg(msg)
 	}
 }

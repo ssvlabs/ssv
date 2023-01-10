@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"fmt"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -37,4 +38,15 @@ func (gc *goClient) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error 
 	}
 
 	return gc.client.SubmitBeaconBlock(gc.ctx, versionedBlock)
+}
+
+func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+	var preparations []*v1.ProposalPreparation
+	for index, recipient := range feeRecipients {
+		preparations = append(preparations, &v1.ProposalPreparation{
+			ValidatorIndex: index,
+			FeeRecipient:   recipient,
+		})
+	}
+	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
 }
