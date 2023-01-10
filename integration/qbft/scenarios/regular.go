@@ -105,24 +105,34 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			return err
 		}
 
-		foundPreparedMsgsCounter := 0 //at the end of test it must be at least == Quorum
-		for i := 1; i <= 4; i++ {
-			operatorIDIterator := spectypes.OperatorID(i)
+		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
+		if !actual.State.Share.HasQuorum(len(prepareSigners)) {
+			return fmt.Errorf("no prepare message quorum, signers: %v", prepareSigners)
+		}
 
-			expectedPreparedMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[operatorIDIterator], operatorIDIterator, &specqbft.Message{
+		expectedPrepareMsg := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
 				MsgType:    specqbft.PrepareMsgType,
 				Height:     specqbft.FirstHeight,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       prepareData,
-			})
-			if isMessageExistInRound(expectedPreparedMsg, actual.State.PrepareContainer.Msgs[specqbft.FirstRound]) {
-				foundPreparedMsgsCounter++
-			}
+			},
+		}
+		expectedPrepareRoot, err := expectedPrepareMsg.GetRoot()
+		if err != nil {
+			return fmt.Errorf("expected prepare root: %w", err)
 		}
 
-		if !actual.State.Share.HasQuorum(foundPreparedMsgsCounter) {
-			return fmt.Errorf("not enough messages in prepare container. expected = %d, actual = %d", actual.State.Share.Quorum, foundPreparedMsgsCounter)
+		for i, prepareMessage := range prepareMessages {
+			actualPrepareRoot, err := prepareMessage.GetRoot()
+			if err != nil {
+				return fmt.Errorf("actual prepare root: %w", err)
+			}
+
+			if !bytes.Equal(actualPrepareRoot, expectedPrepareRoot) {
+				return fmt.Errorf("prepare message root mismatch, index %d", i)
+			}
 		}
 
 		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
