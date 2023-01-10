@@ -138,7 +138,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
-	require.LessOrEqual(t, len(res), 6) // less than 6 unique heights
+	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
 	require.GreaterOrEqual(t, msgCounter, int64(n/2))
 }
 
