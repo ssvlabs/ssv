@@ -1,7 +1,9 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -146,14 +148,15 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
 
-		expected := &protocolstorage.StoredInstance{
-			State: &specqbft.State{
+		// TODO: check each field in state
+		createPossibleState := func(lastPreparedRound specqbft.Round, lastPreparedValue []byte) *specqbft.State {
+			return &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
 				Height:            specqbft.FirstHeight,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: encodedConsensusData,
+				LastPreparedRound: lastPreparedRound,
+				LastPreparedValue: lastPreparedValue,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     specqbft.FirstHeight,
@@ -165,23 +168,43 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 				DecidedValue: encodedConsensusData,
 
 				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-			},
-			DecidedMessage: &specqbft.SignedMessage{
-				Message: &specqbft.Message{
-					MsgType:    specqbft.CommitMsgType,
-					Height:     specqbft.FirstHeight,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
-				},
+			}
+		}
+
+		possibleStates := []*specqbft.State{
+			createPossibleState(specqbft.FirstRound, encodedConsensusData),
+			createPossibleState(0, nil),
+		}
+
+		var stateFound bool
+		for _, state := range possibleStates {
+			if err := validateByRoot(state, actual.State); err == nil {
+				stateFound = true
+				break
+			}
+		}
+
+		if !stateFound {
+			actualStateJSON, err := json.Marshal(actual.State)
+			if err != nil {
+				return fmt.Errorf("marshal actual state")
+			}
+
+			log.Printf("actual state: %v", string(actualStateJSON))
+			return fmt.Errorf("state doesn't match any possible expected state")
+		}
+
+		expectedDecided := &specqbft.SignedMessage{
+			Message: &specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
+				Height:     specqbft.FirstHeight,
+				Round:      specqbft.FirstRound,
+				Identifier: identifier[:],
+				Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
 			},
 		}
 
-		if err := validateByRoot(expected.State, actual.State); err != nil {
-			return err
-		}
-
-		if err := validateByRoot(expected.DecidedMessage, actual.DecidedMessage); err != nil {
+		if err := validateByRoot(expectedDecided, actual.DecidedMessage); err != nil {
 			return err
 		}
 

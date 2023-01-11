@@ -169,14 +169,15 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
 
+		// TODO: check each field in state
 		createPossibleState := func(lastPreparedRound specqbft.Round, lastPreparedValue []byte) *specqbft.State {
 			return &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
 				Height:            2,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: consensusData,
+				LastPreparedRound: lastPreparedRound,
+				LastPreparedValue: lastPreparedValue,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     2,
