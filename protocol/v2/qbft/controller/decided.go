@@ -72,10 +72,10 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		// bump height
 		c.Height = msg.Message.Height
 	}
+	if c.NewDecidedHandler != nil {
+		c.NewDecidedHandler(msg)
+	}
 	if !prevDecided {
-		if c.NewDecidedHandler != nil {
-			c.NewDecidedHandler(msg)
-		}
 		return msg, nil
 	}
 	return nil, nil
