@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -36,6 +37,11 @@ type beaconValidator interface {
 	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*eth2apiv1.Validator, error)
 }
 
+type proposer interface {
+	// SubmitProposalPreparation with fee recipients
+	SubmitProposalPreparation(feeRecipients map[spec.ValidatorIndex]bellatrix.ExecutionAddress) error
+}
+
 // TODO need to handle differently (by spec)
 type signer interface {
 	ComputeSigningRoot(object interface{}, domain phase0spec.Domain) ([32]byte, error)
@@ -48,6 +54,7 @@ type Beacon interface {
 	beaconSubscriber
 	beaconValidator
 	signer // TODO need to handle differently
+	proposer
 }
 
 // Options for controller struct creation

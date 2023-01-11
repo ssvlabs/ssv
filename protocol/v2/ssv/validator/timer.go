@@ -5,23 +5,10 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
-
-func (v *Validator) registerTimeoutHandler(dutyRunner runner.Runner) {
-	newInstance := dutyRunner.GetBaseRunner().State.RunningInstance
-	if newInstance != nil {
-		identifier := spectypes.MessageIDFromBytes(newInstance.State.ID)
-		timer, ok := newInstance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
-		if ok {
-			timer.OnTimeout(v.onTimeout(identifier, dutyRunner.GetBaseRunner().QBFTController.Height))
-		}
-	}
-}
 
 func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {

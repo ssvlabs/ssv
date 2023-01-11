@@ -108,6 +108,11 @@ func (b beaconMock) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[p
 	panic("implement me")
 }
 
+func (b beaconMock) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (b beaconMock) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
 	if object == nil {
 		return [32]byte{}, errors.New("cannot compute signing root of nil")
