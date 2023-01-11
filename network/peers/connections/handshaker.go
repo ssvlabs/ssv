@@ -173,9 +173,9 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if err != nil || ni != nil {
 		return err
 	}
-	if err := h.preHandshake(conn); err != nil {
-		return errors.Wrap(err, "could not perform pre-handshake")
-	}
+	//if err := h.preHandshake(conn); err != nil {
+	//	return errors.Wrap(err, "could not perform pre-handshake")
+	//}
 	ni, err = h.nodeInfoFromStream(conn)
 	if err != nil {
 		// fallbacks to user agent

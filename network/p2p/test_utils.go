@@ -83,7 +83,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*10)
+				ctx, cancel := context.WithTimeout(pctx, time.Second*15)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -179,5 +179,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
+		P2pLog:            true,
 	}
 }
