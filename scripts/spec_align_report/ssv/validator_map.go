@@ -6,10 +6,13 @@ func validatorSet() []utils.KeyValue {
 	var mapSet = utils.NewMap()
 	mapSet.Set("package validator", "package ssv")
 	mapSet.Set("\"context\"\n", "")
+	mapSet.Set("\"encoding/hex\"\n", "")
+	mapSet.Set("\"github.com/bloxapp/ssv/protocol/v2/message\"\n", "")
 	mapSet.Set("specssv \"github.com/bloxapp/ssv-spec/ssv\"\n", "")
 	mapSet.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
+	mapSet.Set("logging \"github.com/ipfs/go-log\"\n", "")
 	mapSet.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"", "\"github.com/bloxapp/ssv-spec/qbft\"")
-	mapSet.Set("\"go.uber.org/zap\"\n", "")
+	mapSet.Set("\"go.uber.org/zap\"\n\n", "")
 	mapSet.Set("\"github.com/bloxapp/ssv/ibft/storage\"\n", "")
 	mapSet.Set("\"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue\"\n", "")
 	mapSet.Set("\"github.com/bloxapp/ssv/protocol/v2/ssv/runner\"\n", "")
@@ -18,6 +21,7 @@ func validatorSet() []utils.KeyValue {
 	mapSet.Set("ctx    context.Context\n", "")
 	mapSet.Set("cancel context.CancelFunc\n", "")
 	mapSet.Set("logger *zap.Logger\n", "")
+	mapSet.Set("var logger = logging.Logger(\"ssv/protocol/ssv/validator\").Desugar()\n", "")
 	mapSet.Set("specqbft.Network", "Network")
 	mapSet.Set("specssv.", "")
 	mapSet.Set("specqbft.", "qbft.")
@@ -26,11 +30,11 @@ func validatorSet() []utils.KeyValue {
 	mapSet.Set("*types.SSVShare", "*types.Share")
 
 	mapSet.Set("Storage *storage.QBFTStores\n", "")
-	mapSet.Set("Queues       msgqueue.MsgQueue\n", "")
+	mapSet.Set("Queues  map[types.BeaconRole]msgqueue.MsgQueue\n", "")
 	mapSet.Set("state uint32\n", "")
 
 	// not aligned to spec due to use of options and queue
-	mapSet.Set("func NewValidator(pctx context.Context, options Options) *Validator {\n\toptions.defaults()\n\tctx, cancel := context.WithCancel(pctx)\n\n\tindexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer())\n\tq, _ := msgqueue.New(options.Logger, indexers) // TODO: handle error\n\n\tv := &Validator{\n\t\tctx:         ctx,\n\t\tcancel:      cancel,\n\t\tlogger:      options.Logger,",
+	mapSet.Set("func NewValidator(pctx context.Context, options Options) *Validator {\n\toptions.defaults()\n\tctx, cancel := context.WithCancel(pctx)\n\n\tlogger := logger.With(zap.String(\"validator\", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))\n\n\tqueues := make(map[types.BeaconRole]msgqueue.MsgQueue)\n\tindexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())\n\tfor _, dutyRunner := range options.DutyRunners {\n\t\tq, _ := msgqueue.New(logger, indexers) // TODO: handle error\n\t\tqueues[dutyRunner.GetBaseRunner().BeaconRoleType] = q\n\t}\n\n\tv := &Validator{\n\t\tctx:         ctx,\n\t\tcancel:      cancel,\n\t\tlogger:      logger,",
 		"func NewValidator(\n\tnetwork Network,\n\tbeacon BeaconNode,\n\tshare *types.Share,\n\tsigner types.KeyManager,\n\trunners map[types.BeaconRole]Runner,\n) *Validator {\n\treturn &Validator{")
 	mapSet.Set("options.DutyRunners", "runners")
 	mapSet.Set("options.Network", "network")
@@ -38,14 +42,17 @@ func validatorSet() []utils.KeyValue {
 	mapSet.Set("Storage:     options.Storage,\n", "")
 	mapSet.Set("options.SSVShare", "share")
 	mapSet.Set("options.Signer", "signer")
-	mapSet.Set("Queues:           q,\n", "")
+	mapSet.Set("Queues:      queues,\n", "")
 	mapSet.Set("state:       uint32(NotStarted),\n", "")
 	mapSet.Set("return v\n", "")
 
-	// We use share as we dont have runners in non committee validator
+	// We use share as we don't have runners in non committee validator
 	mapSet.Set("validateMessage(v.Share.Share,", "v.validateMessage(dutyRunner,")
 	mapSet.Set("func validateMessage(share types.Share,", "func (v *Validator) validateMessage(runner Runner,")
 	mapSet.Set("!share.ValidatorPubKey", "!v.Share.ValidatorPubKey")
+
+	mapSet.Set("err := dutyRunner.StartNewDuty(duty)\n\n\tif err == nil {\n\t\tv.registerTimeoutHandler(dutyRunner)\n\t}\n\treturn err", "return dutyRunner.StartNewDuty(duty)")
+	mapSet.Set("case message.SSVEventMsgType:\n\t\treturn v.handleEventMessage(msg, dutyRunner)\n", "")
 
 	return mapSet.Range()
 }

@@ -123,7 +123,6 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	}
 
 	for _, root := range roots {
-		// Reconstruct signature.
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			return errors.Wrap(err, "could not reconstruct post consensus signature")
@@ -137,7 +136,6 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
 			zap.Int64("slot", int64(duty.Slot)))
 
-		// Produce signed Attestation.
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{

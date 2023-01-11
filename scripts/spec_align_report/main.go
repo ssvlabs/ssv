@@ -18,7 +18,6 @@ func main() {
 	}
 
 	qbft.ProcessController()
-
 	qbft.ProcessInstance()
 
 	ssv.ProcessRunner()
