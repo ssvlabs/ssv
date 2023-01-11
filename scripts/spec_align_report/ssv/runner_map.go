@@ -19,11 +19,13 @@ func RunnerSet() []utils.KeyValue {
 	runnerSet.Set("specqbft.", "qbft.")
 	runnerSet.Set("spectypes.", "types.")
 	runnerSet.Set("controller.Controller", "qbft.Controller")
-	runnerSet.Set("logger         *zap.Logger", "")
+	runnerSet.Set("logger         *zap.Logger\n", "")
+	runnerSet.Set("// implementation vars\n\tTimeoutF TimeoutF `json:\"-\"`\n", "")
 
 	runnerSet.Set(" else {\n\t\tif inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {\n\t\t\tif err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {\n\t\t\t\tb.logger.Warn(\"failed to save instance\",\n\t\t\t\t\tzap.Uint64(\"height\", uint64(decidedMsg.Message.Height)),\n\t\t\t\t\tzap.Error(err))\n\t\t\t}\n\t\t}\n\t}", "")
 	// TODO change in spec to didDecideCorrectly to didDecideRunningInstanceCorrectly  decided := decidedMsg != nil && b.State.RunningInstance != nil
 	runnerSet.Set("decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()", "decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()")
+	runnerSet.Set("b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)\n", "")
 	return runnerSet.Range()
 }
 func SpecRunnerSet() []utils.KeyValue {

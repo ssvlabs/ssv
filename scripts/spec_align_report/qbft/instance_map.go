@@ -81,7 +81,7 @@ func PrepareSet() []utils.KeyValue {
 
 	prepareMap.Set("specqbft.", "")
 	prepareMap.Set("spectypes.", "types.")
-	prepareMap.Set("i.logger.Debug(\"got prepare quorum, broadcasting commit message\",\n\t\tzap.Uint64(\"round\", uint64(i.State.Round)),\n\t\tzap.Any(\"signers\", commitMsg.Signers))\n", "")
+	prepareMap.Set("i.logger.Debug(\"got prepare quorum, broadcasting commit message\", // TODO: what node?\n\t\tzap.Uint64(\"round\", uint64(i.State.Round)),\n\t\tzap.Any(\"signers\", commitMsg.Signers))\n", "")
 	return prepareMap.Range()
 }
 func SpecPrepareSet() []utils.KeyValue {
