@@ -123,7 +123,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 					logger.Debug("could not handle message (partial signature)", zap.String("error", err.Error()),
 						zap.Int64("signer", int64(psm.Signer)))
 				}
-				if !shouldPop(instStat, msg) {
+				if !shouldPop(logger, instStat, msg) {
 					continue
 				}
 			}
@@ -132,7 +132,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 }
 
-func shouldPop(stat *specqbft.State, msg *queue.DecodedSSVMessage) bool {
+func shouldPop(logger *zap.Logger, stat *specqbft.State, msg *queue.DecodedSSVMessage) bool {
 	if stat != nil {
 		switch msg.MsgType {
 		case spectypes.SSVConsensusMsgType:
@@ -146,16 +146,18 @@ func shouldPop(stat *specqbft.State, msg *queue.DecodedSSVMessage) bool {
 				case specqbft.PrepareMsgType:
 					// don't pop if we didn't see proposal yet
 					if stat.ProposalAcceptedForCurrentRound == nil {
+						logger.Debug("avoiding pop (prepare)")
 						return false
 					}
 				case specqbft.CommitMsgType:
 					// don't pop if prepare round is lower
 					if stat.LastPreparedRound < signedMsg.Message.Round {
+						logger.Debug("avoiding pop (commit)")
 						return false
 					}
 				case specqbft.RoundChangeMsgType:
 				}
-				return stat.Round > signedMsg.Message.Round
+				//return stat.Round > signedMsg.Message.Round
 			}
 		default:
 		}
