@@ -9,10 +9,10 @@ import (
 
 type TimeoutF func(identifier spectypes.MessageID, height specqbft.Height) func()
 
-func (br *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height specqbft.Height) {
+func (b *BaseRunner) registerTimeoutHandler(instance *instance.Instance, height specqbft.Height) {
 	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
 	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
 	if ok {
-		timer.OnTimeout(br.TimeoutF(identifier, height))
+		timer.OnTimeout(b.TimeoutF(identifier, height))
 	}
 }
