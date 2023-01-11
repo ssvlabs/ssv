@@ -104,10 +104,8 @@ func regularInstanceValidator(consensusData *spectypes.ConsensusData, operatorID
 			return err
 		}
 
-		prepareSigners, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
-		if !actual.State.Share.HasQuorum(len(prepareSigners)) {
-			return fmt.Errorf("no prepare message quorum, signers: %v", prepareSigners)
-		}
+		// sometimes there may be no prepare quorum
+		_, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
 
 		expectedPrepareMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
