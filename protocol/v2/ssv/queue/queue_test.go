@@ -30,7 +30,9 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 	require.Nil(t, popped)
 
 	// Pop 1st message.
-	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
+	popped, pop := queue.Peek(FilterRole(msg.MsgID.GetRoleType()))
+	require.Equal(t, 2, queue.Len())
+	pop()
 	require.Equal(t, 1, queue.Len())
 	require.Equal(t, msg, popped)
 

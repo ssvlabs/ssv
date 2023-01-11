@@ -86,20 +86,28 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 			// Construct a representation of the current state.
 			state := *q.queueState
+			var instStat *specqbft.State
+			var hasRunningInstance bool
 			runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-			state.HasRunningInstance = runner != nil && runner.HasRunningDuty() &&
-				runner.GetBaseRunner().State.RunningInstance != nil
+			if runner != nil && runner.HasRunningDuty() {
+				inst := runner.GetBaseRunner().State.RunningInstance
+				if inst != nil {
+					hasRunningInstance = true
+					instStat = inst.State
+				}
+			}
+			state.HasRunningInstance = hasRunningInstance
 			state.Height = v.GetLastHeight(msgID)
-
 			// Sort the queue according to the current state.
 			q.Q.Sort(queue.NewMessagePrioritizer(&state))
 
 			// Pop the highest priority message and handle it.
-			msg := q.Q.Pop(queue.FilterRole(msgID.GetRoleType()))
+			msg, pop := q.Q.Peek(queue.FilterRole(msgID.GetRoleType()))
 			if msg == nil {
 				logger.Debug("could not pop message from queue")
 				continue
 			}
+
 			err := handler(msg.SSVMessage)
 			if err != nil {
 				switch msg.SSVMessage.MsgType {
@@ -115,10 +123,44 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 					logger.Debug("could not handle message (partial signature)", zap.String("error", err.Error()),
 						zap.Int64("signer", int64(psm.Signer)))
 				}
-				continue
+				if !shouldPop(instStat, msg) {
+					continue
+				}
 			}
+			pop()
 		}
 	}
+}
+
+func shouldPop(stat *specqbft.State, msg *queue.DecodedSSVMessage) bool {
+	if stat != nil {
+		switch msg.MsgType {
+		case spectypes.SSVConsensusMsgType:
+			signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+			if !ok {
+				return true
+			}
+			if stat.Height == signedMsg.Message.Height {
+				switch signedMsg.Message.MsgType {
+				case specqbft.ProposalMsgType:
+				case specqbft.PrepareMsgType:
+					// don't pop if we didn't see proposal yet
+					if stat.ProposalAcceptedForCurrentRound == nil {
+						return false
+					}
+				case specqbft.CommitMsgType:
+					// don't pop if prepare round is lower
+					if stat.LastPreparedRound < signedMsg.Message.Round {
+						return false
+					}
+				case specqbft.RoundChangeMsgType:
+				}
+				return stat.Round > signedMsg.Message.Round
+			}
+		default:
+		}
+	}
+	return true
 }
 
 // GetLastHeight returns the last height for the given identifier

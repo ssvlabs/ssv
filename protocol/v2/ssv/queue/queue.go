@@ -11,6 +11,9 @@ import (
 // Filter is a function that returns true if the given message should be included.
 type Filter func(*DecodedSSVMessage) bool
 
+// Pop removes a message from the queue
+type Pop func()
+
 // FilterRole returns a Filter which returns true for messages whose BeaconRole matches the given role.
 func FilterRole(role types.BeaconRole) Filter {
 	return func(msg *DecodedSSVMessage) bool {
@@ -28,6 +31,9 @@ type Queue interface {
 
 	// Pop removes and returns the front message in the queue.
 	Pop(Filter) *DecodedSSVMessage
+
+	// Peek enables to see the top element at the moment, and returns a function to pop it on demand
+	Peek(filter Filter) (*DecodedSSVMessage, Pop)
 
 	// Len returns the count of messages in the queue.
 	Len() int
@@ -73,17 +79,23 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 // Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
 func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
-	highest, highestElement := q.peek(filter)
-	if highestElement != nil {
-		q.mu.Lock()
-		defer q.mu.Unlock()
+	highest, pop := q.Peek(filter)
+	pop()
+	return highest
+}
 
-		q.messages.Remove(highestElement)
-		if highest != nil {
-			metricMsgQRatio.WithLabelValues(hex.EncodeToString(highest.MsgID.GetPubKey())).Dec()
+// Peek returns the top message and a function to remove it
+func (q *PriorityQueue) Peek(filter Filter) (*DecodedSSVMessage, Pop) {
+	highest, highestElement := q.peek(filter)
+	remove := func() {
+		if highestElement != nil {
+			q.mu.Lock()
+			defer q.mu.Unlock()
+
+			q.messages.Remove(highestElement)
 		}
 	}
-	return highest
+	return highest, remove
 }
 
 func (q *PriorityQueue) peek(filter Filter) (highest *DecodedSSVMessage, highestElement *list.Element) {
