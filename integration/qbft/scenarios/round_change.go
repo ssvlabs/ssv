@@ -1,7 +1,9 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -202,6 +204,12 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		}
 
 		if !stateFound {
+			actualStateJSON, err := json.Marshal(actual.State)
+			if err != nil {
+				return fmt.Errorf("marshal actual state")
+			}
+
+			log.Printf("actual state: %v", string(actualStateJSON))
 			return fmt.Errorf("state doesn't match any possible expected state")
 		}
 
@@ -221,56 +229,4 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 
 		return nil
 	}
-}
-
-func messageDataForSlot(role spectypes.BeaconRole, pk []byte, slot spec.Slot) (consensusData, proposalData, prepareData, commitData, roundChangeData []byte, err error) {
-	data := &spectypes.ConsensusData{
-		Duty:                      createDuty(pk, slot, 1, role),
-		AttestationData:           spectestingutils.TestingAttestationData,
-		BlockData:                 nil,
-		AggregateAndProof:         nil,
-		SyncCommitteeBlockRoot:    spec.Root{},
-		SyncCommitteeContribution: map[spec.BLSSignature]*altair.SyncCommitteeContribution{},
-	}
-
-	data.AttestationData.Slot = slot
-
-	consensusData, err = data.Encode()
-	if err != nil {
-		return
-	}
-
-	proposalData, err = (&specqbft.ProposalData{
-		Data:                     consensusData,
-		RoundChangeJustification: nil,
-		PrepareJustification:     nil,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	prepareData, err = (&specqbft.PrepareData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	commitData, err = (&specqbft.CommitData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	roundChangeData, err = (&specqbft.RoundChangeData{
-		PreparedRound:            0,
-		PreparedValue:            nil,
-		RoundChangeJustification: nil,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	return consensusData, proposalData, prepareData, commitData, roundChangeData, nil
 }
