@@ -143,18 +143,18 @@ func shouldPop(logger *zap.Logger, stat *specqbft.State, msg *queue.DecodedSSVMe
 			if stat.Height == signedMsg.Message.Height {
 				switch signedMsg.Message.MsgType {
 				case specqbft.ProposalMsgType:
-				case specqbft.PrepareMsgType:
-					// don't pop if we didn't see proposal yet
-					if stat.ProposalAcceptedForCurrentRound == nil {
-						logger.Debug("avoiding pop (prepare)")
-						return false
-					}
-				case specqbft.CommitMsgType:
-					// don't pop if prepare round is lower
-					if stat.LastPreparedRound < signedMsg.Message.Round {
-						logger.Debug("avoiding pop (commit)")
-						return false
-					}
+				//case specqbft.PrepareMsgType:
+				//	// don't pop if we didn't see proposal yet
+				//	if stat.ProposalAcceptedForCurrentRound == nil {
+				//		logger.Debug("avoiding pop (prepare)")
+				//		return false
+				//	}
+				//case specqbft.CommitMsgType:
+				//	// don't pop if prepare round is lower
+				//	if stat.LastPreparedRound < signedMsg.Message.Round {
+				//		logger.Debug("avoiding pop (commit)")
+				//		return false
+				//	}
 				case specqbft.RoundChangeMsgType:
 				}
 				//return stat.Round > signedMsg.Message.Round
