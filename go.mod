@@ -15,15 +15,15 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
+	github.com/hashicorp/go-multierror v1.1.1
 	github.com/herumi/bls-eth-go-binary v0.0.0-20220509081320-2d8ab06de53c
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-libp2p v0.24.2
-	github.com/libp2p/go-libp2p-connmgr v0.4.0
-	github.com/libp2p/go-libp2p-discovery v0.7.0
 	github.com/libp2p/go-libp2p-kad-dht v0.20.0
 	github.com/libp2p/go-libp2p-pubsub v0.8.2
 	github.com/multiformats/go-multiaddr v0.8.0
+	github.com/multiformats/go-multistream v0.3.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
@@ -37,7 +37,6 @@ require (
 	github.com/wealdtech/go-eth2-util v1.6.3
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.24.0
-	golang.org/x/sync v0.1.0
 	google.golang.org/grpc v1.40.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -79,7 +78,6 @@ require (
 	github.com/google/pprof v0.0.0-20221219190121-3cb0bae90811 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.0.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/huin/goupnp v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -100,7 +98,6 @@ require (
 	github.com/libp2p/go-cidranger v1.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.1.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.2.0 // indirect
-	github.com/libp2p/go-libp2p-core v0.20.1 // indirect
 	github.com/libp2p/go-libp2p-kbucket v0.5.0 // indirect
 	github.com/libp2p/go-libp2p-record v0.2.0 // indirect
 	github.com/libp2p/go-msgio v0.2.0 // indirect
@@ -133,7 +130,6 @@ require (
 	github.com/multiformats/go-multibase v0.1.1 // indirect
 	github.com/multiformats/go-multicodec v0.7.0 // indirect
 	github.com/multiformats/go-multihash v0.2.1 // indirect
-	github.com/multiformats/go-multistream v0.3.3 // indirect
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/onsi/ginkgo/v2 v2.6.1 // indirect
 	github.com/opencontainers/runtime-spec v1.0.2 // indirect
@@ -173,6 +169,7 @@ require (
 	golang.org/x/exp v0.0.0-20230105000112-eab7a2c85304 // indirect
 	golang.org/x/mod v0.7.0 // indirect
 	golang.org/x/net v0.5.0 // indirect
+	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.4.0 // indirect
 	golang.org/x/text v0.6.0 // indirect
 	golang.org/x/tools v0.5.0 // indirect
