@@ -105,17 +105,17 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, errors.New("instance not found")
 	}
 
-	prevDecided, _ := inst.IsDecided()
+	// prevDecided, _ := inst.IsDecided()
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	// if previously Decided we do not return Decided true again
-	if prevDecided {
-		return nil, err
-	}
+	// // if previously Decided we do not return Decided true again
+	// if prevDecided {
+	// 	return nil, err
+	// }
 
 	// save the highest Decided
 	if !decided {
