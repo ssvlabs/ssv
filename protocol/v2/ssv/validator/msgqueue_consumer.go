@@ -3,8 +3,9 @@ package validator
 import (
 	"context"
 	"fmt"
-	"github.com/pkg/errors"
 	"time"
+
+	"github.com/pkg/errors"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -136,15 +137,6 @@ func (v *Validator) processNoRunningInstance(q msgqueue.MsgQueue, handler Messag
 		return false // no msg found
 	}
 
-	if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
-		var sm specqbft.SignedMessage
-		if err := sm.Decode(msgs[0].Data); err != nil {
-			v.logger.Debug("TestTest processNoRunningInstance error", zap.Error(err))
-		} else {
-			v.logger.Debug("TestTest processNoRunningInstance", zap.Int32("height", int32(sm.Message.Height)))
-		}
-	}
-
 	err := handler(msgs[0])
 	if err != nil {
 		logger.Debug("could not handle message", zap.String("error", err.Error()))
@@ -169,15 +161,6 @@ func (v *Validator) processByState(q msgqueue.MsgQueue, handler MessageHandler, 
 		return false // no msg found
 	}
 
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		var sm specqbft.SignedMessage
-		if err := sm.Decode(msg.Data); err != nil {
-			v.logger.Debug("TestTest processByState error", zap.Error(err))
-		} else {
-			v.logger.Debug("TestTest processByState", zap.Int32("height", int32(sm.Message.Height)))
-		}
-	}
-
 	err := handler(msg)
 	if err != nil {
 		v.logger.Debug("could not handle msg", zap.Error(err))
@@ -199,15 +182,6 @@ func (v *Validator) processHigherHeight(q msgqueue.MsgQueue, handler MessageHand
 	})
 
 	if len(msgs) > 0 {
-		if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
-			var sm specqbft.SignedMessage
-			if err := sm.Decode(msgs[0].Data); err != nil {
-				v.logger.Debug("TestTest processHigherHeight error", zap.Error(err))
-			} else {
-				v.logger.Debug("TestTest processHigherHeight", zap.Int32("height", int32(sm.Message.Height)))
-			}
-		}
-
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Debug("could not handle msg", zap.Error(err))
@@ -238,15 +212,6 @@ func (v *Validator) processLateCommit(q msgqueue.MsgQueue, handler MessageHandle
 	msgs := q.PopIndices(1, iterator)
 
 	if len(msgs) > 0 {
-		if msgs[0].MsgType == spectypes.SSVConsensusMsgType {
-			var sm specqbft.SignedMessage
-			if err := sm.Decode(msgs[0].Data); err != nil {
-				v.logger.Debug("TestTest processLateCommit error", zap.Error(err))
-			} else {
-				v.logger.Debug("TestTest processLateCommit", zap.Int32("height", int32(sm.Message.Height)))
-			}
-		}
-
 		err := handler(msgs[0])
 		if err != nil {
 			v.logger.Debug("could not handle msg", zap.Error(err))

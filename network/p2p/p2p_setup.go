@@ -167,7 +167,6 @@ func (n *p2pNetwork) setupPeerServices() error {
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
-	n.logger.Debug("TestTest self metadata", zap.String("node_Version", self.Metadata.NodeVersion))
 	getPrivKey := func() crypto.PrivKey {
 		return libPrivKey
 	}

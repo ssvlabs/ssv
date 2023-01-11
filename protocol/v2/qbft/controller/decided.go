@@ -67,7 +67,6 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	// }
 	if isFutureDecided {
 		// sync gap
-		c.logger.Debug("TestTest SyncingGap", zap.Uint64("from", uint64(c.Height)), zap.Uint64("to", uint64(msg.Message.Height)))
 		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height

@@ -386,12 +386,12 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 					time.Sleep(30 * time.Second)
 					err := c.network.Subscribe(validatorShare.ValidatorPubKey)
 					if err != nil {
-						c.logger.Error("TestTest failed to subscribe to network", zap.Error(err))
+						c.logger.Error("failed to subscribe to network", zap.Error(err))
 					}
 					messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
 					err = c.network.SyncHighestDecided(messageID)
 					if err != nil {
-						c.logger.Error("TestTest failed to sync highest decided", zap.Error(err))
+						c.logger.Error("failed to sync highest decided", zap.Error(err))
 					}
 					// c.network.SyncDecidedByRange(spectypes.NewMsgID(validatorShare.ValidatorPubKey, role), 0, 000)
 				}()

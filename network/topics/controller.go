@@ -110,11 +110,8 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	name = ctrl.fork.GetTopicFullName(name)
 	topic := ctrl.container.Get(name)
 	if topic == nil {
-		ctrl.logger.Debug("TestTest topicsCtrl.Peers", zap.String("name", name), zap.Any("topic", topic))
 		return nil, nil
 	}
-	peers := topic.ListPeers()
-	ctrl.logger.Debug("TestTest topicsCtrl.Peers", zap.String("name", name), zap.Any("topic", topic), zap.Any("peers", peers))
 	return topic.ListPeers(), nil
 }
 
