@@ -48,5 +48,13 @@ func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMess
 	}
 	c.logger.Debug("TestTest saving decided instance",
 		zap.Uint64("height", uint64(msg.Message.Height)), zap.Any("signers", msg.Signers), zap.Int("type", int(msg.Message.MsgType)), zap.Stack("stack"))
+	// highest := msg.Message.Height >= c.Height
+	// if c.fullNode {
+	// 	return c.config.GetStorage().SaveInstance(storedInstance, highest)
+	// }
+	// if highest {
+	// 	return c.config.GetStorage().SaveHighestInstance(storedInstance)
+	// }
+	// return nil
 	return c.config.GetStorage().SaveInstance(storedInstance)
 }
