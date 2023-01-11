@@ -43,7 +43,8 @@ lint:
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v $(shell go list ./... | grep -v /integration/)
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
 
 .PHONY: integration-test
 integration-test:
