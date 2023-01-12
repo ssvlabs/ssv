@@ -1,10 +1,8 @@
 package controller
 
 import (
-	"fmt"
 	"math/rand"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -162,12 +160,4 @@ func requireHeights(t *testing.T, i []*instance.Instance, heights ...specqbft.He
 		actualHeights = append(actualHeights, v.State.Height)
 	}
 	require.EqualValues(t, heights, actualHeights, "expected heights to match")
-}
-
-func formatInstances(i InstanceContainer) string {
-	heights := make([]string, 0, len(i))
-	for _, v := range i {
-		heights = append(heights, fmt.Sprintf("%d", v.State.Height))
-	}
-	return strings.Join(heights, ", ")
 }

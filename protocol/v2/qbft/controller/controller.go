@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -30,7 +31,7 @@ type Controller struct {
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
-	NewDecidedHandler   NewDecidedHandler
+	NewDecidedHandler   NewDecidedHandler `json:"-"`
 	config              qbft.IConfig
 	fullNode            bool
 	logger              *zap.Logger
