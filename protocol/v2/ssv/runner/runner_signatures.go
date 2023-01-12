@@ -21,7 +21,7 @@ func (b *BaseRunner) signBeaconObject(
 		return nil, errors.Wrap(err, "could not get beacon domain")
 	}
 
-	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share.SharePubKey)
+	sig, r, err := runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share.SharePubKey, runner.GetBaseRunner().BeaconRoleType)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
