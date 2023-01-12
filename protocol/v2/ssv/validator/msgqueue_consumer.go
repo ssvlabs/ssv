@@ -37,6 +37,8 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			return
 		}
 		q.Q.Push(decodedMsg)
+		v.logger.Debug("message added to queue", zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
+			zap.String("msgID", msg.MsgID.String()))
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
@@ -109,20 +111,20 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			}
 
 			err := handler(msg.SSVMessage)
+			switch msg.SSVMessage.MsgType {
+			case spectypes.SSVConsensusMsgType:
+				sm := msg.Body.(*specqbft.SignedMessage)
+				logger.Debug("could not handle message (consensus)", zap.Error(err),
+					zap.Int64("msg_height", int64(sm.Message.Height)),
+					zap.Int64("msg_round", int64(sm.Message.Round)),
+					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+					zap.Any("signers", sm.Signers))
+			case spectypes.SSVPartialSignatureMsgType:
+				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+				logger.Debug("could not handle message (partial signature)", zap.Error(err),
+					zap.Int64("signer", int64(psm.Signer)))
+			}
 			if err != nil {
-				switch msg.SSVMessage.MsgType {
-				case spectypes.SSVConsensusMsgType:
-					sm := msg.Body.(*specqbft.SignedMessage)
-					logger.Debug("could not handle message (consensus)", zap.String("error", err.Error()),
-						zap.Int64("msg_height", int64(sm.Message.Height)),
-						zap.Int64("msg_round", int64(sm.Message.Round)),
-						zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-						zap.Any("signers", sm.Signers))
-				case spectypes.SSVPartialSignatureMsgType:
-					psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
-					logger.Debug("could not handle message (partial signature)", zap.String("error", err.Error()),
-						zap.Int64("signer", int64(psm.Signer)))
-				}
 				if !shouldPop(logger, instStat, msg) {
 					continue
 				}
