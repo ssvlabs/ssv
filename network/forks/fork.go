@@ -4,7 +4,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )

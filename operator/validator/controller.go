@@ -7,7 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -260,6 +262,11 @@ func (c *controller) handleRouterMessages() {
 		case msg := <-ch:
 			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
+
+			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
+			if msg.MsgType == message.SSVEventMsgType {
+				continue
+			}
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(&msg)

@@ -11,9 +11,9 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	libp2p_protocol "github.com/libp2p/go-libp2p-core/protocol"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 

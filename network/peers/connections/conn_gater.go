@@ -2,16 +2,16 @@ package connections
 
 import (
 	"github.com/bloxapp/ssv/network/peers"
-	"github.com/libp2p/go-libp2p-core/connmgr"
-	"github.com/libp2p/go-libp2p-core/control"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/control"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"go.uber.org/zap"
 )
 
 // connGater implements ConnectionGater interface:
-// https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go
+// https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 // TODO: add IP limiting
 type connGater struct {
 	logger *zap.Logger

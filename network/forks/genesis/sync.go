@@ -1,7 +1,7 @@
 package genesis
 
 import (
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )

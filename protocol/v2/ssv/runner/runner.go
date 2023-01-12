@@ -181,7 +181,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
 	decided := decidedMsg != nil
-	decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
+	decidedRunningInstance := decided && (b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight())
 
 	if !decided {
 		return false, nil
@@ -216,9 +216,6 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	}
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
-
-	// registers a timeout handler
-	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }

@@ -47,5 +47,6 @@ func SignedPostConsensusMsgIndex(mid string) Index {
 		H:    specqbft.FirstHeight,
 		Cmt:  -1, // as unknown
 		D:    false,
+		Et:   -1,
 	}
 }

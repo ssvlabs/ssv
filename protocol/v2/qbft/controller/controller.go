@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"log"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -101,7 +99,6 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	inst := c.InstanceForHeight(msg.Message.Height)
 	if inst == nil {
-		log.Printf("instance not found for height %d, container: %s", msg.Message.Height, c.StoredInstances.String())
 		return nil, errors.New("instance not found")
 	}
 

@@ -12,8 +12,8 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -289,7 +289,6 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, from specqbft.Height) {
 	//TODO implement me
-	panic("implement me")
 }
 
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {

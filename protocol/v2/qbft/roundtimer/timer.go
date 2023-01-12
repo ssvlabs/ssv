@@ -90,12 +90,11 @@ func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
 func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
-	done := t.done
 	select {
 	case <-ctx.Done():
 	case <-timeout:
 		if t.Round() == round {
-			if done != nil {
+			if done := t.done; done != nil {
 				done()
 			}
 		}
