@@ -86,7 +86,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	if err := km.IsDutySlashable(pk, obj, role); err != nil {
+	if err := km.slashingProtection(pk, obj, role); err != nil {
 		return nil, nil, err
 	}
 
@@ -100,7 +100,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 	return sig, r[:], nil
 }
 
-func (km *ethKeyManagerSigner) IsDutySlashable(pk []byte, obj ssz.HashRoot, role spectypes.BeaconRole) error {
+func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, role spectypes.BeaconRole) error {
 	switch role {
 	case spectypes.BNRoleAttester:
 		data, ok := obj.(*spec.AttestationData)
