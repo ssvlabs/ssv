@@ -16,8 +16,8 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 		scenarios.RegularAttester(),
 		scenarios.RegularAggregator(),
 		scenarios.RegularProposer(),
-		//scenarios.RegularSyncCommittee(),
-		//scenarios.RegularSyncCommitteeContribution(),
+		scenarios.RegularSyncCommittee(),
+		//scenariRegularSyncCommitteeContribution(),
 		scenarios.RoundChange(types.BNRoleAttester),
 		scenarios.F1Decided(types.BNRoleAttester),
 	}
