@@ -77,13 +77,13 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 		go func(node network.P2PNetwork, i int) {
 			logger := loggerFactory(fmt.Sprintf("node-%d", i))
 			if err := node.Start(); err != nil {
-				logger.Error("could not start node", zap.Error(err))
+				logger.Warn("could not start node", zap.Error(err))
 				wg.Done()
 				return
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*10)
+				ctx, cancel := context.WithTimeout(pctx, time.Second*15)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -94,7 +94,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 					return
 				}
-				// logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 			}(node, logger)
 		}(node, i)
 	}
@@ -179,5 +179,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
+		P2pLog:            true,
 	}
 }

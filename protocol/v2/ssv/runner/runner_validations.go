@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -27,7 +27,7 @@ func (b *BaseRunner) validatePreConsensusMsg(runner Runner, signedMsg *specssv.S
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
 }
 
-func (b *BaseRunner) validatePostConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -40,11 +40,18 @@ func (b *BaseRunner) validatePostConsensusMsg(runner Runner, signedMsg *specssv.
 	if b.State.RunningInstance == nil {
 		return errors.New("no running consensus instance")
 	}
-	if decided, _ := b.State.RunningInstance.IsDecided(); !decided {
+	decided, decidedValueByts := b.State.RunningInstance.IsDecided()
+
+	if !decided {
 		return errors.New("consensus instance not decided")
 	}
 
-	if err := b.validatePartialSigMsg(signedMsg, b.State.StartingDuty.Slot); err != nil {
+	decidedValue := &types.ConsensusData{}
+	if err := decidedValue.Decode(decidedValueByts); err != nil {
+		return errors.Wrap(err, "failed to parse decided value to ConsensusData")
+	}
+
+	if err := b.validatePartialSigMsg(signedMsg, decidedValue.Duty.Slot); err != nil {
 		return err
 	}
 

@@ -2,7 +2,7 @@ package goclient
 
 import (
 	"fmt"
-	eth2client "github.com/attestantio/go-eth2-client"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -10,28 +10,22 @@ import (
 
 // GetSyncMessageBlockRoot returns beacon block root for sync committee
 func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, error) {
-	if provider, isProvider := gc.client.(eth2client.BeaconBlockRootProvider); isProvider {
-		// Wait a 1/3 into the slot.
-		gc.waitOneThirdOrValidBlock(uint64(slot))
-		root, err := provider.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
-		if err != nil {
-			return phase0.Root{}, err
-		}
-		if root == nil {
-			return phase0.Root{}, errors.New("root is nil")
-		}
-		return *root, nil
+	// Wait a 1/3 into the slot.
+	gc.waitOneThirdOrValidBlock(uint64(slot))
+	root, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
+	if err != nil {
+		return phase0.Root{}, err
 	}
-	return phase0.Root{}, errors.New("client does not support BeaconBlockRootProvider")
+	if root == nil {
+		return phase0.Root{}, errors.New("root is nil")
+	}
+	return *root, nil
 }
 
 // SubmitSyncMessage submits a signed sync committee msg
 func (gc *goClient) SubmitSyncMessage(msg *altair.SyncCommitteeMessage) error {
-	if provider, isProvider := gc.client.(eth2client.SyncCommitteeMessagesSubmitter); isProvider {
-		if err := provider.SubmitSyncCommitteeMessages(gc.ctx, []*altair.SyncCommitteeMessage{msg}); err != nil {
-			return err
-		}
-		return nil
+	if err := gc.client.SubmitSyncCommitteeMessages(gc.ctx, []*altair.SyncCommitteeMessage{msg}); err != nil {
+		return err
 	}
-	return errors.New("client does not support SyncCommitteeMessagesSubmitter")
+	return nil
 }

@@ -76,7 +76,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 
 // ProcessMsg processes a new msg, returns decided message or error
 func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	if err := c.baseMsgValidation(msg); err != nil {
+	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
 
@@ -87,7 +87,7 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	if isDecidedMsg(c.Share, msg) {
+	if IsDecidedMsg(c.Share, msg) {
 		return c.UponDecided(msg)
 	} else if msg.Message.Height > c.Height {
 		return c.UponFutureMsg(msg)
@@ -127,7 +127,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 }
 
 // BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) baseMsgValidation(msg *specqbft.SignedMessage) error {
+func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.Message.Identifier) {
 		return errors.New("message doesn't belong to Identifier")

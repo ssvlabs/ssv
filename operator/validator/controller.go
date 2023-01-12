@@ -658,7 +658,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
-				logger.Debug("leader", zap.Int("", int(leader)))
+				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Storage: options.Storage.Get(role),

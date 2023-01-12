@@ -102,7 +102,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 		anyIsAggregator = true
 
 		// fetch sync committee contribution
-		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(duty.ValidatorSyncCommitteeIndices[i])
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(r.GetState().StartingDuty.ValidatorSyncCommitteeIndices[i])
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee subnet ID")
 		}
@@ -220,7 +220,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *specssv.
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
-			r.logger.Debug("submitted successfully sync committee aggregator!!!")
+			r.logger.Debug("submitted successfully sync committee aggregator!")
 			break
 		}
 	}
@@ -287,7 +287,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(duty *spectypes.Duty) error 
 		Type:     specssv.ContributionProofs,
 		Messages: []*specssv.PartialSignatureMessage{},
 	}
-	for _, index := range duty.ValidatorSyncCommitteeIndices {
+	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
 		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(index)
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee subnet ID")

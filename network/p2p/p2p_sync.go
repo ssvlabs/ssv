@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multiformats/go-multistream"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -238,33 +240,40 @@ func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
 
 func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2pprotocol.RequestHandler) {
 	handler := p2pprotocol.CombineRequestHandlers(handlers...)
+	streamHandler := n.handleStream(handler)
 	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
+		err := streamHandler(stream)
+		if err != nil {
+			n.logger.Debug("stream handler failed", zap.Error(err))
+		}
+	})
+}
+
+func (n *p2pNetwork) handleStream(handler p2pprotocol.RequestHandler) func(stream libp2pnetwork.Stream) error {
+	return func(stream libp2pnetwork.Stream) error {
 		req, respond, done, err := n.streamCtrl.HandleStream(stream)
 		defer done()
+
 		if err != nil {
-			n.logger.Warn("could not handle stream", zap.Error(err))
-			return
+			return errors.Wrap(err, "could not handle stream")
 		}
 		smsg, err := n.fork.DecodeNetworkMsg(req)
 		if err != nil {
-			n.logger.Warn("could not decode msg from stream", zap.Error(err))
-			return
+			return errors.Wrap(err, "could not decode msg from stream")
 		}
 		result, err := handler(smsg)
 		if err != nil {
-			n.logger.Warn("could not handle msg from stream", zap.Error(err))
-			return
+			return errors.Wrap(err, "could not handle msg from stream")
 		}
 		resultBytes, err := n.fork.EncodeNetworkMsg(result)
 		if err != nil {
-			n.logger.Warn("could not encode msg", zap.Error(err))
-			return
+			return errors.Wrap(err, "could not encode msg")
 		}
 		if err := respond(resultBytes); err != nil {
-			n.logger.Warn("could not respond to stream", zap.Error(err))
-			return
+			return errors.Wrap(err, "could not respond to stream")
 		}
-	})
+		return nil
+	}
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
@@ -335,7 +344,9 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		logger := logger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			logger.Debug("could not make stream request", zap.Error(err))
+			if err != multistream.ErrNotSupported {
+				logger.Debug("could not make stream request", zap.Error(err))
+			}
 			continue
 		}
 		mid := msgID(raw)

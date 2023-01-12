@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := utils.CloneSpec("main", "675c93af14b3867f52d34e394f3843a2e8bce4e9"); err != nil {
+	if err := utils.CloneSpec("V0.2.8", ""); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -18,7 +18,6 @@ func main() {
 	}
 
 	qbft.ProcessController()
-
 	qbft.ProcessInstance()
 
 	ssv.ProcessRunner()

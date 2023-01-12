@@ -142,6 +142,43 @@ func (mr *MockbeaconValidatorMockRecorder) GetValidatorData(validatorPubKeys int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorData", reflect.TypeOf((*MockbeaconValidator)(nil).GetValidatorData), validatorPubKeys)
 }
 
+// Mockproposer is a mock of proposer interface.
+type Mockproposer struct {
+	ctrl     *gomock.Controller
+	recorder *MockproposerMockRecorder
+}
+
+// MockproposerMockRecorder is the mock recorder for Mockproposer.
+type MockproposerMockRecorder struct {
+	mock *Mockproposer
+}
+
+// NewMockproposer creates a new mock instance.
+func NewMockproposer(ctrl *gomock.Controller) *Mockproposer {
+	mock := &Mockproposer{ctrl: ctrl}
+	mock.recorder = &MockproposerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *Mockproposer) EXPECT() *MockproposerMockRecorder {
+	return m.recorder
+}
+
+// SubmitProposalPreparation mocks base method.
+func (m *Mockproposer) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposalPreparation", feeRecipients)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitProposalPreparation indicates an expected call of SubmitProposalPreparation.
+func (mr *MockproposerMockRecorder) SubmitProposalPreparation(feeRecipients interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparation", reflect.TypeOf((*Mockproposer)(nil).SubmitProposalPreparation), feeRecipients)
+}
+
 // Mocksigner is a mock of signer interface.
 type Mocksigner struct {
 	ctrl     *gomock.Controller
@@ -393,6 +430,20 @@ func (m *MockBeacon) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error
 func (mr *MockBeaconMockRecorder) SubmitBeaconBlock(block interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).SubmitBeaconBlock), block)
+}
+
+// SubmitProposalPreparation mocks base method.
+func (m *MockBeacon) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitProposalPreparation", feeRecipients)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitProposalPreparation indicates an expected call of SubmitProposalPreparation.
+func (mr *MockBeaconMockRecorder) SubmitProposalPreparation(feeRecipients interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitProposalPreparation", reflect.TypeOf((*MockBeacon)(nil).SubmitProposalPreparation), feeRecipients)
 }
 
 // SubmitSignedAggregateSelectionProof mocks base method.

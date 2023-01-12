@@ -64,10 +64,10 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		id := conn.RemotePeer()
-		_logger := ch.logger.With(zap.String("targetPeer", id.String()))
+		logger := ch.logger.With(zap.String("targetPeer", id.String()))
 		ok, err := ch.handshake(conn)
 		if err != nil {
-			_logger.Warn("could not handshake with peer", zap.Error(err))
+			logger.Debug("could not handshake with peer", zap.Error(err))
 		}
 		if !ok {
 			disconnect(net, conn)
@@ -78,12 +78,11 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			return errors.New("reached peers limit")
 		}
 		if !ch.checkSubnets(conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
-			_logger.Debug("disconnecting incoming connection after subnets check")
 			disconnect(net, conn)
 			return errors.New("peer doesn't share enough subnets")
 		}
-		_logger.Debug("new connection is ready",
-			zap.String("dir", conn.Stat().Direction.String()))
+		//logger.Debug("new connection is ready",
+		//	zap.String("dir", conn.Stat().Direction.String()))
 		metricsConnections.Inc()
 		return nil
 	}
@@ -126,10 +125,10 @@ func (ch *connHandler) handshake(conn libp2pnetwork.Conn) (bool, error) {
 	err := ch.handshaker.Handshake(conn)
 	if err != nil {
 		switch err {
-		case peers.ErrIndexingInProcess, errHandshakeInProcess:
+		case peers.ErrIndexingInProcess, errHandshakeInProcess, peerstore.ErrNotFound:
 			// ignored errors
 			return true, nil
-		case errPeerWasFiltered, errUnknownUserAgent, peerstore.ErrNotFound:
+		case errPeerWasFiltered, errUnknownUserAgent:
 			// ignored errors but we still close connection
 			return false, nil
 		default:

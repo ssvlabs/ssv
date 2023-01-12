@@ -170,7 +170,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
-		r.logger.Debug("successfully proposed block!!!")
+		r.logger.Info("successfully proposed block!")
 	}
 	r.GetState().Finished = true
 

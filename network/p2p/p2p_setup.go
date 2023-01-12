@@ -19,6 +19,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
@@ -104,12 +105,13 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
 
+	limitsCfg := rcmgr.DefaultLimits.AutoScale()
 	// TODO: enable and extract resource manager params as config
-	// rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
-	// if err != nil {
-	//	return errors.Wrap(err, "could not create resource manager")
-	//}
-	// opts = append(opts, libp2p.ResourceManager(rmgr))
+	rmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limitsCfg))
+	if err != nil {
+		return errors.Wrap(err, "could not create resource manager")
+	}
+	opts = append(opts, libp2p.ResourceManager(rmgr))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
