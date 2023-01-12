@@ -17,6 +17,7 @@ eth1:
 p2p:
   Bootnodes: ""
   P2pLog: true
+  Discovery: "mdns"
   # Subnets: "0x0000000000000000ffffffffffffffff" # 64-127
   # Subnets: "0x00000000000000000000001000000000" # 92
   Subnets: "0xffffffffffffffffffffffffffffffff"
