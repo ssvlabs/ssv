@@ -15,7 +15,7 @@ func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.He
 	return func() {
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		hasDuty := dr.HasRunningDuty()
-		v.logger.Debug("on timeout", zap.Int64("height", int64(height)), zap.Bool("hadDuty", hasDuty))
+		v.logger.Debug("on timeout", zap.String("identifier", identifier.String()), zap.Int64("height", int64(height)), zap.Bool("hadDuty", hasDuty))
 		if !hasDuty {
 			return
 		}
