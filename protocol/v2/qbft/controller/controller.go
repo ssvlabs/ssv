@@ -120,6 +120,11 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, nil
 	}
 
+	if decidedMsg == nil || decidedMsg.Message == nil {
+		c.logger.Debug("was gonna send decided msg but decided msg is nil")
+		return nil, nil
+	}
+
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
