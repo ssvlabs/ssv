@@ -29,6 +29,7 @@ var (
 		migrationCleanShares,
 		migrationRemoveChangeRoundSync,
 		migrationAddGraffiti,
+		migrationCleanRegistryData,
 	}
 )
 
