@@ -60,7 +60,10 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 				zap.Uint64("height", uint64(msg.Message.Height)),
 				zap.Error(err))
 		} else {
-			c.logger.Debug("saved instance upon decided", zap.Uint64("msg_height", uint64(msg.Message.Height)), zap.Uint64("ctrl_height", uint64(c.Height)))
+			c.logger.Debug("saved instance upon decided",
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(c.Height)),
+				zap.Any("signers", msg.Signers))
 		}
 	}
 	// }
