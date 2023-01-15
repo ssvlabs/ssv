@@ -43,13 +43,12 @@ lint:
 .PHONY: full-test
 full-test:
 	@echo "Running all tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v $(shell go list ./... | grep -v /integration/)
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
 
 .PHONY: integration-test
 integration-test:
 	@echo "Running integration tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD}  -p 1 -v ./integration/...
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
 
 .PHONY: unit-test
 unit-test:
@@ -92,7 +91,6 @@ endif
 docker:
 	@echo "node ${NODES_ID}"
 	@docker rm -f ssv_node && docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node && docker logs ssv_node --follow
-
 
 .PHONY: docker-image
 docker-image:

@@ -10,7 +10,7 @@ import (
 )
 
 var AttesterRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
 //var AttesterRunner7Operators = func(keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -18,7 +18,7 @@ var AttesterRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
 //}
 
 var ProposerRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
 var AggregatorRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {

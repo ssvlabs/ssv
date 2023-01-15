@@ -137,7 +137,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
-		r.logger.Info("successfully submitted sync msg!!!")
+		r.logger.Debug("successfully submitted sync committee!")
 	}
 	r.GetState().Finished = true
 
