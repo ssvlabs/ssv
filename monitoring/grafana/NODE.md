@@ -69,6 +69,7 @@ Row 2:
 
 Row 3:
 * Node info (table, version + operator-id + peer-id)
+* Version distribution (table, version + operator-id + peer-id)
 
 ### Network Messaging
 
