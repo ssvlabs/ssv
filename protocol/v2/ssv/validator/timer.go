@@ -5,6 +5,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -19,10 +20,15 @@ func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.He
 
 		msg, err := v.createTimerMessage(identifier, height)
 		if err != nil {
-			v.logger.Warn("failed to create timer msg", zap.Error(err))
+			v.logger.Debug("failed to create timer msg", zap.Error(err))
 			return
 		}
-		v.Queues[identifier.GetRoleType()].Add(msg)
+		dec, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			v.logger.Debug("failed to decode timer msg", zap.Error(err))
+			return
+		}
+		v.Queues[identifier.GetRoleType()].Q.Push(dec)
 	}
 }
 

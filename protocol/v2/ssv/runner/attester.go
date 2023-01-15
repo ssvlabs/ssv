@@ -163,6 +163,9 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	if r.BaseRunner.State.DecidedValue == nil {
+		return nil, spectypes.DomainAttester, errors.New("failed to create expected roots: no decided value")
+	}
 	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AttestationData}, spectypes.DomainAttester, nil
 }
 
