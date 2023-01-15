@@ -305,6 +305,7 @@ func (c *controller) handleAccountEnableEvent(
 			if err := c.collection.SaveValidatorShare(share); err != nil {
 				return nil, errors.Wrap(err, "could not save validator share")
 			}
+			// TODO: update km with minimal slashing protection
 
 			if ongoingSync {
 				c.onShareStart(share)

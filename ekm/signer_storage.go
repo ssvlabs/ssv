@@ -209,6 +209,13 @@ func (s *signerStorage) RetrieveHighestAttestation(pubKey []byte) *eth.Attestati
 	return ret
 }
 
+func (s *signerStorage) RemoveHighestAttestation(pubKey []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
+}
+
 func (s *signerStorage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBlock) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -243,4 +250,11 @@ func (s *signerStorage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock 
 		return nil
 	}
 	return ret
+}
+
+func (s *signerStorage) RemoveHighestProposal(pubKey []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
 }

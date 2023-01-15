@@ -187,8 +187,8 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.minimalSlashingData(shareKey.GetPublicKey().Serialize()); err != nil {
-			return errors.Wrap(err, "could not save add minimal slashing protection")
+		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
+			return errors.Wrap(err, "could not save minimal slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
@@ -197,7 +197,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) minimalSlashingData(pk []byte) error {
+func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	currentSlot := km.storage.Network().EstimatedCurrentSlot()
 	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
 	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
@@ -208,10 +208,10 @@ func (km *ethKeyManagerSigner) minimalSlashingData(pk []byte) error {
 	minBlockData := minimalBlockProtectionData(highestProposal)
 
 	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
-		return errors.Wrap(err, "could not save zero highest attestation")
+		return errors.Wrap(err, "could not save minimal highest attestation")
 	}
 	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
-		return errors.Wrap(err, "could not save zero highest proposal")
+		return errors.Wrap(err, "could not save minimal highest proposal")
 	}
 	return nil
 }
@@ -225,6 +225,16 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc != nil {
+		pkDecoded, err := hex.DecodeString(pubKey)
+		if err != nil {
+			return errors.Wrap(err, "could not hex decode share public key")
+		}
+		if err := km.storage.RemoveHighestAttestation(pkDecoded); err != nil {
+			return errors.Wrap(err, "could not remove highest attestation")
+		}
+		if err := km.storage.RemoveHighestProposal(pkDecoded); err != nil {
+			return errors.Wrap(err, "could not remove highest proposal")
+		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKey); err != nil {
 			return errors.Wrap(err, "could not delete share")
 		}
