@@ -22,6 +22,10 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
+// minimal att&block epoch/slot distance to protect slashing
+var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(2)
+var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(1)
+
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
@@ -183,24 +187,31 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		currentSlot := km.storage.Network().EstimatedCurrentSlot()
-		currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
-		highestTarget := currentEpoch + 2
-		highestSource := highestTarget - 1
-		highestProposal := currentSlot + 1
-
-		minAttData := minimalAttProtectionData(highestSource, highestTarget)
-		minBlockData := minimalBlockProtectionData(highestProposal)
-
-		if err := km.storage.SaveHighestAttestation(shareKey.GetPublicKey().Serialize(), minAttData); err != nil {
-			return errors.Wrap(err, "could not save zero highest attestation")
-		}
-		if err := km.storage.SaveHighestProposal(shareKey.GetPublicKey().Serialize(), minBlockData); err != nil {
-			return errors.Wrap(err, "could not save zero highest proposal")
+		if err := km.minimalSlashingData(shareKey.GetPublicKey().Serialize()); err != nil {
+			return errors.Wrap(err, "could not save add minimal slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
+	}
+	return nil
+}
+
+func (km *ethKeyManagerSigner) minimalSlashingData(pk []byte) error {
+	currentSlot := km.storage.Network().EstimatedCurrentSlot()
+	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
+	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
+	highestSource := highestTarget - 1
+	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance
+
+	minAttData := minimalAttProtectionData(highestSource, highestTarget)
+	minBlockData := minimalBlockProtectionData(highestProposal)
+
+	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
+		return errors.Wrap(err, "could not save zero highest attestation")
+	}
+	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
+		return errors.Wrap(err, "could not save zero highest proposal")
 	}
 	return nil
 }
