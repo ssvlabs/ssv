@@ -102,7 +102,10 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 		if err != nil {
 			return errors.Wrap(err, "could not save historical instance")
 		} else {
-			i.logger.Debug("SavedHistoricalInstance", zap.String("identifier", hex.EncodeToString(instance.State.ID)), zap.Uint64("height", uint64(instance.State.Height)))
+			i.logger.Debug("SavedHistoricalInstance",
+				zap.String("identifier", hex.EncodeToString(instance.State.ID)),
+				zap.Uint64("height", uint64(instance.State.Height)),
+				zap.Int("signers", len(instance.DecidedMessage.Signers)))
 		}
 	}
 
