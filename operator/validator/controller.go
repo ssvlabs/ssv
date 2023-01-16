@@ -390,8 +390,8 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 					role := role
 					jobs <- spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
 				}
-				close(jobs)
 			}
+			close(jobs)
 		}()
 
 		// Start a worker goroutine to SyncHighestDecided and Subscribe for each job.
