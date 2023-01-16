@@ -138,7 +138,7 @@ spec:
         - name: NETWORK_ID
           value: "shifu-stage"
         - name: FULLNODE
-          value: "false"
+          value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v3-1
