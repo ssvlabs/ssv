@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -102,10 +103,14 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 		if err != nil {
 			return errors.Wrap(err, "could not save historical instance")
 		} else {
+			var signers []spectypes.OperatorID
+			if instance.DecidedMessage != nil {
+				signers = instance.DecidedMessage.Signers
+			}
 			i.logger.Debug("Saved historical instance",
 				zap.String("identifier", hex.EncodeToString(instance.State.ID)),
 				zap.Uint64("height", uint64(instance.State.Height)),
-				zap.Any("signers", instance.DecidedMessage.Signers))
+				zap.Any("signers", signers))
 		}
 	}
 
