@@ -371,6 +371,8 @@ func (c *controller) getValidators() ([]*types.SSVShare, error) {
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*types.SSVShare) {
 	if c.validatorOptions.FullNodeNonCommittee {
+		return
+
 		jobs := make(chan spectypes.MessageID)
 
 		// Produce a job for each share and role.
@@ -416,6 +418,7 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			}
 		}()
 
+		// TODO: updateValidatorMetadata should be called here as well.
 		return
 	}
 
