@@ -370,6 +370,55 @@ func (c *controller) getValidators() ([]*types.SSVShare, error) {
 // setupValidators setup and starts validators from the given shares
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
 func (c *controller) setupValidators(shares []*types.SSVShare) {
+	if c.validatorOptions.FullNodeNonCommittee {
+		jobs := make(chan spectypes.MessageID)
+
+		// Produce a job for each share and role.
+		go func() {
+			for _, validatorShare := range shares {
+				opts := *c.validatorOptions
+				opts.SSVShare = validatorShare
+
+				allRoles := []spectypes.BeaconRole{
+					spectypes.BNRoleAttester,
+					spectypes.BNRoleAggregator,
+					spectypes.BNRoleProposer,
+					spectypes.BNRoleSyncCommittee,
+					spectypes.BNRoleSyncCommitteeContribution,
+				}
+				for _, role := range allRoles {
+					role := role
+					jobs <- spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
+				}
+				close(jobs)
+			}
+		}()
+
+		// Start a worker goroutine to SyncHighestDecided and Subscribe for each job.
+		go func() {
+			for messageID := range jobs {
+				c.logger.Debug("starting non committee validator",
+					zap.String("role", messageID.GetRoleType().String()),
+					zap.String("pubkey", hex.EncodeToString(messageID.GetPubKey())))
+
+				// TODO: do we still need to subscribe if configured to all subnets?
+				err := c.network.Subscribe(messageID.GetPubKey())
+				if err != nil {
+					c.logger.Error("failed to subscribe to network", zap.Error(err))
+				}
+
+				err = c.network.SyncHighestDecided(messageID)
+				if err != nil {
+					c.logger.Error("failed to sync highest decided", zap.Error(err))
+				}
+
+				time.Sleep(2 * time.Second)
+			}
+		}()
+
+		return
+	}
+
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
