@@ -1,15 +1,27 @@
 package queue
 
 import (
-	"container/list"
-	"encoding/hex"
-	"sync"
-
 	"github.com/bloxapp/ssv-spec/types"
+	"sync/atomic"
+	"unsafe"
 )
 
 // Filter is a function that returns true if the given message should be included.
 type Filter func(*DecodedSSVMessage) bool
+
+func combineFilters(filters ...Filter) Filter {
+	return func(msg *DecodedSSVMessage) bool {
+		if msg == nil {
+			return false
+		}
+		for _, f := range filters {
+			if !f(msg) {
+				return false
+			}
+		}
+		return true
+	}
+}
 
 // Pop removes a message from the queue
 type Pop func()
@@ -25,100 +37,102 @@ func FilterRole(role types.BeaconRole) Filter {
 type Queue interface {
 	// Push inserts a message to the queue.
 	Push(*DecodedSSVMessage)
-
-	// Sort updates the queue's order using the given MessagePrioritizer.
-	Sort(MessagePrioritizer)
-
 	// Pop removes and returns the front message in the queue.
-	Pop(Filter) *DecodedSSVMessage
-
-	// Peek enables to see the top element at the moment, and returns a function to pop it on demand
-	Peek(filter Filter) (*DecodedSSVMessage, Pop)
-
-	// Len returns the count of messages in the queue.
-	Len() int
+	Pop(MessagePrioritizer, ...Filter) *DecodedSSVMessage
+	// IsEmpty checks if the q is empty
+	IsEmpty() bool
 }
 
 // PriorityQueue is queue of DecodedSSVMessage ordered by a MessagePrioritizer.
 type PriorityQueue struct {
-	prioritizer MessagePrioritizer
-
-	// messages holds the unread messages.
-	// We use container/list instead of a slice or map for
-	// the low-allocation inserts & removals.
-	// TODO: consider a deque instead of container/list:
-	// - https://github.com/gammazero/deque
-	// - https://github.com/edwingeng/deque
-	messages *list.List
-	mu       sync.RWMutex
+	head unsafe.Pointer
 }
 
 // New initialized a PriorityQueue with the given MessagePrioritizer.
 // If prioritizer is nil, the messages will be returned in the order they were pushed.
-func New(prioritizer MessagePrioritizer) Queue {
+func New() Queue {
+	h := unsafe.Pointer(&msgItem{})
 	return &PriorityQueue{
-		prioritizer: prioritizer,
-		messages:    list.New(),
+		head: h,
 	}
-}
-
-// Sort updates the queue's MessagePrioritizer.
-func (p *PriorityQueue) Sort(prioritizer MessagePrioritizer) {
-	p.prioritizer = prioritizer
 }
 
 // Push inserts a message to the queue.
 func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	q.messages.PushBack(msg)
-	metricMsgQRatio.WithLabelValues(hex.EncodeToString(msg.MsgID.GetPubKey())).Inc()
+	n := &msgItem{value: unsafe.Pointer(msg), next: q.head}
+	added := cas(&q.head, q.head, unsafe.Pointer(n))
+	if added {
+		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
+	}
 }
 
 // Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
-func (q *PriorityQueue) Pop(filter Filter) *DecodedSSVMessage {
-	highest, pop := q.Peek(filter)
-	pop()
-	return highest
-}
-
-// Peek returns the top message and a function to remove it
-func (q *PriorityQueue) Peek(filter Filter) (*DecodedSSVMessage, Pop) {
-	highest, highestElement := q.peek(filter)
-	remove := func() {
-		if highestElement != nil {
-			q.mu.Lock()
-			defer q.mu.Unlock()
-
-			q.messages.Remove(highestElement)
-		}
+func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filters ...Filter) *DecodedSSVMessage {
+	res := q.pop(prioritizer, filters...)
+	if res != nil {
+		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
 	}
-	return highest, remove
+	return res
 }
 
-func (q *PriorityQueue) peek(filter Filter) (highest *DecodedSSVMessage, highestElement *list.Element) {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-
-	for e := q.messages.Front(); e != nil; e = e.Next() {
-		msg := e.Value.(*DecodedSSVMessage)
-		if filter != nil && !filter(msg) {
-			continue
-		}
-		if highest == nil || (q.prioritizer != nil && q.prioritizer.Prior(msg, highest)) {
-			highest = msg
-			highestElement = e
-		}
+func (q *PriorityQueue) IsEmpty() bool {
+	h := load(&q.head)
+	if h == nil {
+		return true
 	}
-	return
+	return h.Value() == nil
 }
 
-// Len returns the count of messages in the queue.
-func (q *PriorityQueue) Len() int {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
+func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filters ...Filter) *DecodedSSVMessage {
+	var h, beforeHighest, previous *msgItem
+	currentP := q.head
 
-	return q.messages.Len()
+	filter := combineFilters(filters...)
+
+	for currentP != nil {
+		current := load(&currentP)
+		val := current.Value()
+		if h == nil || (filter(val) && prioritizer.Prior(val, h.Value())) {
+			if previous != nil {
+				beforeHighest = previous
+			}
+			h = current
+		}
+		previous = current
+		currentP = current.NextP()
+	}
+
+	if beforeHighest != nil {
+		cas(&beforeHighest.next, beforeHighest.NextP(), h.NextP())
+	} else {
+		atomic.StorePointer(&q.head, h.NextP())
+	}
+
+	return h.Value()
+}
+
+func load(p *unsafe.Pointer) *msgItem {
+	return (*msgItem)(atomic.LoadPointer(p))
+}
+
+func cas(p *unsafe.Pointer, old, new unsafe.Pointer) bool {
+	return atomic.CompareAndSwapPointer(p, old, new)
+}
+
+type msgItem struct {
+	value unsafe.Pointer //*DecodedSSVMessage
+	next  unsafe.Pointer
+}
+
+func (i *msgItem) Value() *DecodedSSVMessage {
+	return (*DecodedSSVMessage)(atomic.LoadPointer(&i.value))
+}
+
+func (i *msgItem) Next() *msgItem {
+	return (*msgItem)(atomic.LoadPointer(&i.next))
+}
+
+func (i *msgItem) NextP() unsafe.Pointer {
+	return atomic.LoadPointer(&i.next)
 }

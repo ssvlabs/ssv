@@ -81,30 +81,24 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			logger.Debug("queue consumer is closed")
 			return nil
 		case <-ticker.C:
-			if q.Q.Len() == 0 {
+			if q.Q.IsEmpty() {
 				// Queue is empty.
 				continue
 			}
 
 			// Construct a representation of the current state.
 			state := *q.queueState
-			var instStat *specqbft.State
-			var hasRunningInstance bool
 			runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
 			if runner != nil && runner.HasRunningDuty() {
 				inst := runner.GetBaseRunner().State.RunningInstance
 				if inst != nil {
-					hasRunningInstance = true
-					instStat = inst.State
+					state.HasRunningInstance = true
 				}
 			}
-			state.HasRunningInstance = hasRunningInstance
 			state.Height = v.GetLastHeight(msgID)
-			// Sort the queue according to the current state.
-			q.Q.Sort(queue.NewMessagePrioritizer(&state))
 
 			// Pop the highest priority message and handle it.
-			msg, pop := q.Q.Peek(queue.FilterRole(msgID.GetRoleType()))
+			msg := q.Q.Pop(queue.NewMessagePrioritizer(&state), queue.FilterRole(msgID.GetRoleType()))
 			if msg == nil {
 				logger.Debug("could not pop message from queue")
 				continue
@@ -124,12 +118,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				logger.Debug("could not handle message (partial signature)", zap.Error(err),
 					zap.Int64("signer", int64(psm.Signer)))
 			}
-			if err != nil {
-				if !shouldPop(logger, instStat, msg) {
-					continue
-				}
-			}
-			pop()
 		}
 	}
 }

@@ -65,7 +65,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		// set timeout F
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = queueContainer{
-			Q: queue.New(nil),
+			Q: queue.New(),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,

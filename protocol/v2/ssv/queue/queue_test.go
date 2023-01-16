@@ -16,33 +16,28 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 		Slot:               64,
 		Quorum:             4,
 	}
-	prioritizer := NewMessagePrioritizer(mockState)
-	queue := New(prioritizer)
+	queue := New()
+
+	require.True(t, queue.IsEmpty())
 
 	// Push 2 messages.
 	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
-	require.Equal(t, 1, queue.Len())
 	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
-	require.Equal(t, 2, queue.Len())
-
-	// Pop non-existing BeaconRole.
-	popped := queue.Pop(FilterRole(types.BNRoleProposer))
-	require.Nil(t, popped)
+	require.False(t, queue.IsEmpty())
 
 	// Pop 1st message.
-	popped, pop := queue.Peek(FilterRole(msg.MsgID.GetRoleType()))
-	require.Equal(t, 2, queue.Len())
-	pop()
-	require.Equal(t, 1, queue.Len())
+	popped := queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
+	//require.False(t, queue.IsEmpty())
 	require.Equal(t, msg, popped)
 
 	// Pop 2nd message.
-	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
-	require.Equal(t, 0, queue.Len())
+	popped = queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
+	require.True(t, queue.IsEmpty())
+	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.Pop(FilterRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
 	require.Nil(t, popped)
 }
 
@@ -51,7 +46,7 @@ func TestPriorityQueueOrder(t *testing.T) {
 	for _, test := range messagePriorityTests {
 		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
 			// Create the PriorityQueue and populate it with messages.
-			q := New(NewMessagePrioritizer(test.state))
+			q := New()
 
 			decodedMessages := make([]*DecodedSSVMessage, len(test.messages))
 			for i, m := range test.messages {
@@ -67,7 +62,7 @@ func TestPriorityQueueOrder(t *testing.T) {
 
 			// Pop messages from the queue and compare to the expected order.
 			for i, excepted := range decodedMessages {
-				actual := q.Pop(nil)
+				actual := q.Pop(NewMessagePrioritizer(test.state))
 				require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 			}
 		})
@@ -82,7 +77,7 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 		Quorum:             4,
 	}
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := New(prioritizer)
+	queue := New()
 
 	decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(b, err)
@@ -90,7 +85,7 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			queue.Push(decoded)
-			queue.Pop(FilterRole(types.BNRoleProposer))
+			queue.Pop(prioritizer, FilterRole(types.BNRoleProposer))
 		}
 	})
 }
