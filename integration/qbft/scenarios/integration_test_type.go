@@ -3,8 +3,10 @@ package scenarios
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -96,7 +98,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 
 	forkVersion := protocolforks.GenesisForkVersion
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)/2, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)-1, false)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +258,12 @@ func (it *IntegrationTest) Run() error {
 				if storedInstance == nil {
 					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
 				}
+
+				jsonInstance, err := json.Marshal(storedInstance)
+				if err != nil {
+					return fmt.Errorf("encode stored instance: %w", err)
+				}
+				log.Printf("stored instance %d: %v\n", operatorID, string(jsonInstance))
 
 				if err := instanceValidator(storedInstance); err != nil {
 					return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
