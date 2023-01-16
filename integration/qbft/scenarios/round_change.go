@@ -103,7 +103,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode prepare data: %w", err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
