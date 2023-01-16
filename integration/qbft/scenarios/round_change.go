@@ -175,8 +175,8 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
 				Height:            2,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: consensusData,
+				LastPreparedRound: lastPreparedRound,
+				LastPreparedValue: lastPreparedValue,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     2,

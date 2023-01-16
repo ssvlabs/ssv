@@ -13,7 +13,7 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
 
 	scenariosToRun := []*scenarios.IntegrationTest{
-		scenarios.Regular(types.BNRoleAttester), // TODO: test other roles
+		scenarios.Regular(types.BNRoleAttester),
 		scenarios.RoundChange(types.BNRoleAttester),
 		scenarios.F1Decided(types.BNRoleAttester),
 	}
