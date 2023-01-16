@@ -103,7 +103,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, errors.New("instance not found")
 	}
 
-	// prevDecided, _ := inst.IsDecided()
+	prevDecided, _ := inst.IsDecided()
 
 	decided, _, decidedMsg, err := inst.ProcessMsg(msg)
 	if err != nil {
@@ -121,6 +121,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 	}
 
 	if decidedMsg == nil || decidedMsg.Message == nil {
+		// TODO: remove this log after it stopped happening.
 		c.logger.Debug("was gonna send decided msg but decided msg is nil")
 		return nil, nil
 	}
@@ -129,6 +130,11 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
+
+	if prevDecided {
+		return nil, err
+	}
+
 	return decidedMsg, nil
 }
 
