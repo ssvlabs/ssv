@@ -127,7 +127,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			return err
 		}
 
-		// sometimes there may be no prepare quorum
+		// sometimes there may be no prepare quorum TODO add quorum check after fixes
 		_, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
 
 		expectedPrepareMsg := &specqbft.SignedMessage{
