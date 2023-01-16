@@ -43,7 +43,7 @@ Row 1:
 
 Row 2:
 * Goroutines (time-series) \
-  `kubelet_volume_stats_used_bytes{}`
+  `go_goroutines{}`
 * CPU (k8s) (time-series) \
   `container_cpu_usage_seconds_total{}`
 
@@ -68,8 +68,10 @@ Row 2:
   `ssv_p2p_dht_peers_found{} = <counter>` and `ssv_p2p_dht_peers_rejected{} = <counter>`
 
 Row 3:
-* Node info (table, version + operator-id + peer-id)
-* Version distribution (table, version + operator-id + peer-id)
+* Node info (table, version + operator-id + peer-id) \
+  **TODO** `ssv_p2p_node_info`
+* Version distribution (time-series, version + operator-id) \
+  **TODO** `ssv_p2p_node_info`
 
 ### Network Messaging
 

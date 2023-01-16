@@ -18,7 +18,8 @@ Row 1:
 * Validators (gauge bar, off|idle|working|change-round) \
   `ssv_validators_status{mode=off|idle|working} = <counter>` 
 and `ssv_qbft_instance_round{identifier} = <counter>`
-* **TBD** Operator data (gauge bar, on|off + total rate + effectiveness)
+* Operator data (gauge bar, on|off + total rate + effectiveness) \
+  **TBD**
 
 Row 2:
 * Submitted roles (time-series, labeled by role type) \
