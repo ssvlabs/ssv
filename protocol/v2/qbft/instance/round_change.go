@@ -71,18 +71,12 @@ func (i *Instance) uponRoundChange(
 }
 
 func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanceStartValue []byte) error {
-	oldRound := i.State.Round
 	i.State.Round = newRound
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
-	}
-
-	if newRound%10 == 0 {
-		i.logger.Debug("got change round partial quorum, broadcasting change round message",
-			zap.Uint64("new_round", uint64(newRound)), zap.Uint64("old_round", uint64(oldRound)))
 	}
 
 	if err := i.Broadcast(roundChange); err != nil {
@@ -117,7 +111,7 @@ func hasReceivedProposalJustificationForLeadingRound(
 	roundChangeMsgContainer *specqbft.MsgContainer,
 	valCheck specqbft.ProposedValueCheckF,
 ) (*specqbft.SignedMessage, []byte, error) {
-	roundChanges := roundChangeMsgContainer.MessagesForRound(state.Round)
+	roundChanges := roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.Round)
 	// optimization, if no round change quorum can return false
 	if !specqbft.HasQuorum(state.Share, roundChanges) {
 		return nil, nil, nil

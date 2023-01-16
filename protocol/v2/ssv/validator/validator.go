@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -46,7 +45,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
-	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
+	logger = logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	v := &Validator{
 		ctx:         ctx,
@@ -112,26 +111,7 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
-		eventMsg := types.EventMsg{}
-		if err := eventMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get event Message from network Message")
-		}
-		switch eventMsg.Type {
-		case types.Timeout:
-			err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(eventMsg)
-			if err != nil {
-				logger.Warn("on timeout failed", zap.Error(err)) // need to return error instead?
-			}
-			return nil
-		case types.ExecuteDuty:
-			err := v.OnExecuteDuty(eventMsg)
-			if err != nil {
-				logger.Warn("failed to execute duty", zap.Error(err)) // need to return error instead?
-			}
-			return nil
-		default:
-			return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.String()))
-		}
+		return v.handleEventMessage(msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
