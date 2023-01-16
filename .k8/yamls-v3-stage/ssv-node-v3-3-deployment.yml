@@ -21,6 +21,9 @@ spec:
       protocol: TCP
       targetPort: 15303
       name: port-15303
+    - port: 16303
+      protocol: TCP
+      targetPort: 16303
   selector:
     app: ssv-node-v3-3
 ---
@@ -137,6 +140,8 @@ spec:
           value: "true"
         - name: NETWORK_ID
           value: "shifu-stage"
+        - name: WS_API_PORT
+          value: "16303"
         - name: FULLNODE
           value: "true"
         volumeMounts:
