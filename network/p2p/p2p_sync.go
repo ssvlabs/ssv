@@ -63,6 +63,9 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 		return
 	}
 
+	// TODO: remove this after testing
+	return
+
 	go func() {
 		logger := n.logger.With(
 			zap.String("what", "SyncDecidedByRange"),
