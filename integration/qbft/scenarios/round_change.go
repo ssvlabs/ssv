@@ -103,14 +103,14 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode prepare data: %w", err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode commit data: %w", err)
 		}
 
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
@@ -127,7 +127,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			return err
 		}
 
-		// sometimes there may be no prepare quorum
+		// sometimes there may be no prepare quorum TODO add quorum check after fixes
 		_, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
 
 		expectedPrepareMsg := &specqbft.SignedMessage{
@@ -175,8 +175,8 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
 				Height:            2,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: consensusData,
+				LastPreparedRound: lastPreparedRound,
+				LastPreparedValue: lastPreparedValue,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
 					Height:     2,

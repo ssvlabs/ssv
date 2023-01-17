@@ -69,14 +69,14 @@ func regularProposerInstanceValidator(operatorID spectypes.OperatorID, identifie
 			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode prepare data: %w", err)
 		}
 
 		commitData, err := (&specqbft.CommitData{
 			Data: encodedConsensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode commit data: %w", err)
 		}
 
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
