@@ -10,34 +10,34 @@ import (
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
-// RegularAggregator integration test.
+// RegularSyncCommittee integration test.
 // TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
-func RegularAggregator() *IntegrationTest {
-	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectypes.BNRoleAggregator)
+func RegularSyncCommittee() *IntegrationTest {
+	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectypes.BNRoleSyncCommittee)
 
 	return &IntegrationTest{
-		Name:             "regular aggregator",
+		Name:             "regular sync committee",
 		OperatorIDs:      []spectypes.OperatorID{1, 2, 3, 4},
 		Identifier:       identifier,
 		InitialInstances: nil,
 		Duties: map[spectypes.OperatorID][]scheduledDuty{
-			1: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAggregator)}},
-			2: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAggregator)}},
-			3: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAggregator)}},
-			4: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAggregator)}},
+			1: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleSyncCommittee)}},
+			2: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleSyncCommittee)}},
+			3: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleSyncCommittee)}},
+			4: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleSyncCommittee)}},
 		},
 		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
 			1: {
-				regularAggregatorInstanceValidator(1, identifier),
+				regularSyncCommitteeInstanceValidator(1, identifier),
 			},
 			2: {
-				regularAggregatorInstanceValidator(2, identifier),
+				regularSyncCommitteeInstanceValidator(2, identifier),
 			},
 			3: {
-				regularAggregatorInstanceValidator(3, identifier),
+				regularSyncCommitteeInstanceValidator(3, identifier),
 			},
 			4: {
-				regularAggregatorInstanceValidator(4, identifier),
+				regularSyncCommitteeInstanceValidator(4, identifier),
 			},
 		},
 		StartDutyErrors: map[spectypes.OperatorID]error{
@@ -49,9 +49,11 @@ func RegularAggregator() *IntegrationTest {
 	}
 }
 
-func regularAggregatorInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
+func regularSyncCommitteeInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
-		encodedConsensusData, err := spectestingutils.TestAggregatorConsensusData.Encode()
+		consensusData := spectestingutils.TestSyncCommitteeConsensusData
+
+		encodedConsensusData, err := consensusData.Encode()
 		if err != nil {
 			return fmt.Errorf("encode consensus data: %w", err)
 		}
