@@ -82,7 +82,7 @@ func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) 
 func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
 	val, found, err := i.get(highestInstanceKey, identifier[:])
 	if !found {
-		return nil, nil
+		return nil, errors.New("could not find highest instance")
 	}
 	if err != nil {
 		return nil, err
