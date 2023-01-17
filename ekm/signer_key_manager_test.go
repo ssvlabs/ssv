@@ -161,23 +161,23 @@ func TestSlashing(t *testing.T) {
 	}
 
 	t.Run("sign once", func(t *testing.T) {
-		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
-		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.BNRoleAttester)
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
 		require.Nil(t, sig)
 	})
 
 	t.Run("sign once", func(t *testing.T) {
-		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.BNRoleProposer)
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
-		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.BNRoleProposer)
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, spec.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Nil(t, sig)
 	})
