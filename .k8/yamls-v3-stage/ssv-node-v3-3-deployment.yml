@@ -24,6 +24,7 @@ spec:
     - port: 16303
       protocol: TCP
       targetPort: 16303
+      name: port-16303
   selector:
     app: ssv-node-v3-3
 ---

@@ -24,6 +24,7 @@ spec:
     - port: 16301
       protocol: TCP
       targetPort: 16301
+      name: port-16301
   selector:
     app: ssv-node-v3-1
 ---
