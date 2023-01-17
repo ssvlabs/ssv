@@ -3,10 +3,7 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"math/rand"
-	"strings"
-	"time"
 
 	"github.com/multiformats/go-multistream"
 
@@ -21,7 +18,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 // extremeLowPeerCount is the maximum number of peers considered as too low
@@ -29,130 +25,21 @@ import (
 const extremelyLowPeerCount = 32
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	go func() {
-		logger := n.logger.With(zap.String("identifier", mid.String()))
-		lastDecided, err := n.LastDecided(mid)
-		if err != nil {
-			logger.Debug("highest decided: sync failed", zap.Error(err))
-			return
-		}
-		if len(lastDecided) == 0 {
-			logger.Debug("highest decided: no messages were synced")
-			return
-		}
-		results := p2pprotocol.SyncResults(lastDecided)
-		results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
-			raw, err := m.Encode()
-			if err != nil {
-				logger.Warn("could not encode signed message")
-				return
-			}
-			n.msgRouter.Route(spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
-				Data:    raw,
-			})
-		})
-	}()
-
-	return nil
+	return n.syncer.SyncHighestDecided(context.Background(), mid, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(msg)
+	})
 }
 
 func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.Height) {
 	if !n.cfg.SyncHistory {
 		return
 	}
-
-	go func() {
-		logger := n.logger.With(
-			zap.String("what", "SyncDecidedByRange"),
-			zap.String("identifier", mid.String()),
-			zap.Uint64("from", uint64(from)),
-			zap.Uint64("to", uint64(to)))
-		logger.Debug("syncing decided by range")
-
-		err := n.getDecidedByRange(context.Background(), logger, mid, from, to, func(sm *specqbft.SignedMessage) error {
-			raw, err := sm.Encode()
-			if err != nil {
-				logger.Warn("could not encode signed message")
-				return nil
-			}
-			n.msgRouter.Route(spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
-				Data:    raw,
-			})
-			return nil
-		})
-		if err != nil {
-			logger.Debug("sync failed", zap.Error(err))
-		}
-	}()
-}
-
-func (n *p2pNetwork) getDecidedByRange(ctx context.Context, logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, handler func(*specqbft.SignedMessage) error) error {
-	const getHistoryRetries = 2
-
-	var (
-		visited = make(map[specqbft.Height]struct{})
-		msgs    []p2pprotocol.SyncResult
-	)
-
-	tail := from
-	var err error
-	for tail < to {
-		err := tasks.RetryWithContext(ctx, func() error {
-			start := time.Now()
-			msgs, tail, err = n.GetHistory(mid, tail, to)
-			if err != nil {
-				return err
-			}
-			handled := 0
-			p2pprotocol.SyncResults(msgs).ForEachSignedMessage(func(m *specqbft.SignedMessage) {
-				if ctx.Err() != nil {
-					return
-				}
-				if _, ok := visited[m.Message.Height]; ok {
-					return
-				}
-				if err := handler(m); err != nil {
-					logger.Warn("could not handle signed message")
-				}
-				handled++
-				visited[m.Message.Height] = struct{}{}
-			})
-			logger.Debug("received and processed history batch",
-				zap.Int64("tail", int64(tail)),
-				zap.Duration("duration", time.Since(start)),
-				zap.Int("results_count", len(msgs)),
-				// TODO: remove this after testing
-				zap.String("results", func() string {
-					// Prints msgs as:
-					//   "(type=1 height=1 round=1) (type=1 height=2 round=1) ..."
-					var s []string
-					for _, m := range msgs {
-						var sm *specqbft.SignedMessage
-						if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-							sm = &specqbft.SignedMessage{}
-							if err := sm.Decode(m.Msg.Data); err != nil {
-								s = append(s, fmt.Sprintf("(%v)", err))
-								continue
-							}
-							s = append(s, fmt.Sprintf("(type=%d height=%d round=%d)", m.Msg.MsgType, sm.Message.Height, sm.Message.Round))
-						}
-						s = append(s, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
-					}
-					return strings.Join(s, ", ")
-				}()),
-				zap.Int("handled", handled))
-			return nil
-		}, getHistoryRetries)
-		if err != nil {
-			return err
-		}
+	err := n.syncer.SyncDecidedByRange(context.Background(), mid, from, to, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(msg)
+	})
+	if err != nil {
+		n.logger.Error("failed to sync decided by range", zap.Error(err))
 	}
-
-	return nil
 }
 
 // LastDecided fetches last decided from a random set of peers

@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -71,6 +72,7 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+	syncer           syncing.Syncer
 }
 
 // New creates a new p2p network
@@ -93,6 +95,7 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 	}
+	n.syncer = syncing.NewConcurrent(ctx, syncing.New(logger, n), 4, nil)
 	return n
 }
 
