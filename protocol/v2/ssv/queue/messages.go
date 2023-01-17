@@ -68,6 +68,21 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	return -1
 }
 
+// compareRound returns an integer comparing the message's round (if exist) to the current.
+// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+func compareRound(state *State, m *DecodedSSVMessage) int {
+	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
+		if mm.Message.Round == state.Round {
+			return 2
+		}
+		if mm.Message.Round > state.Round {
+			return 1
+		}
+		return -1
+	}
+	return 0
+}
+
 // messageScore returns a score based on the top level message type,
 // where event type messages are prioritized over other types.
 func messageScore(m *DecodedSSVMessage) int {
@@ -108,7 +123,8 @@ func messageTypeScore(state *State, m *DecodedSSVMessage, relativeHeight int) in
 func consensusTypeScore(state *State, m *DecodedSSVMessage) int {
 	if isConsensusMessage(state, m) {
 		return scoreByPrecedence(state, m,
-			isMessageOfType(qbft.ProposalMsgType), isMessageOfType(qbft.PrepareMsgType), isMessageOfType(qbft.CommitMsgType))
+			isMessageOfType(qbft.ProposalMsgType), isMessageOfType(qbft.PrepareMsgType),
+			isMessageOfType(qbft.CommitMsgType), isMessageOfType(qbft.RoundChangeMsgType))
 	}
 	return 0
 }

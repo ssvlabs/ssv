@@ -10,6 +10,7 @@ import (
 type State struct {
 	HasRunningInstance bool
 	Height             qbft.Height
+	Round              qbft.Round
 	Slot               phase0.Slot
 	Quorum             uint64
 }
@@ -47,6 +48,11 @@ func (p *standardPrioritizer) Prior(a, b *DecodedSSVMessage) bool {
 	}
 
 	scoreA, scoreB := messageTypeScore(p.state, a, relativeHeightA), messageTypeScore(p.state, b, relativeHeightB)
+	if scoreA != scoreB {
+		return scoreA > scoreB
+	}
+
+	scoreA, scoreB = compareRound(p.state, a), compareRound(p.state, b)
 	if scoreA != scoreB {
 		return scoreA > scoreB
 	}

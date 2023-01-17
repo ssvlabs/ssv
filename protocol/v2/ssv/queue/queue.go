@@ -58,6 +58,11 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 // Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
 func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+	if filter == nil {
+		filter = func(*DecodedSSVMessage) bool {
+			return true
+		}
+	}
 	res := q.pop(prioritizer, filter)
 	if res != nil {
 		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
@@ -90,6 +95,10 @@ func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 		}
 		previous = current
 		currentP = current.NextP()
+	}
+
+	if h == nil {
+		return nil
 	}
 
 	if beforeHighest != nil {
