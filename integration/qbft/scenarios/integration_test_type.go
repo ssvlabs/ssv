@@ -343,14 +343,15 @@ func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectyp
 	}
 
 	return &spectypes.Duty{
-		Type:                    role,
-		PubKey:                  pkBytes,
-		Slot:                    slot,
-		ValidatorIndex:          idx,
-		CommitteeIndex:          testingDuty.CommitteeIndex,
-		CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
-		CommitteeLength:         testingDuty.CommitteeLength,
-		ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
+		Type:                          role,
+		PubKey:                        pkBytes,
+		Slot:                          slot,
+		ValidatorIndex:                idx,
+		CommitteeIndex:                testingDuty.CommitteeIndex,
+		CommitteesAtSlot:              testingDuty.CommitteesAtSlot,
+		CommitteeLength:               testingDuty.CommitteeLength,
+		ValidatorCommitteeIndex:       testingDuty.ValidatorCommitteeIndex,
+		ValidatorSyncCommitteeIndices: testingDuty.ValidatorSyncCommitteeIndices,
 	}
 }
 
