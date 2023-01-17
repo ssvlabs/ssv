@@ -96,6 +96,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				}
 			}
 			state.Height = v.GetLastHeight(msgID)
+			state.Round = v.GetLastRound(msgID)
 
 			// Pop the highest priority message and handle it.
 			msg := q.Q.Pop(queue.NewMessagePrioritizer(&state), queue.FilterRole(msgID.GetRoleType()))
@@ -129,4 +130,19 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 		return specqbft.Height(0)
 	}
 	return r.GetBaseRunner().QBFTController.Height
+}
+
+// GetLastRound returns the last height for the given identifier
+func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
+	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	if r == nil {
+		return specqbft.Round(1)
+	}
+	if r != nil && r.HasRunningDuty() {
+		inst := r.GetBaseRunner().State.RunningInstance
+		if inst != nil {
+			return inst.State.Round
+		}
+	}
+	return specqbft.Round(1)
 }
