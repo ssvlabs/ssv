@@ -22,6 +22,10 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
+// minimal att&block epoch/slot distance to protect slashing
+var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(2)
+var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(1)
+
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
@@ -69,7 +73,7 @@ func newSlashingProtection(store core.SlashingStore) core.SlashingProtector {
 	return slashingprotection.NewNormalProtection(store)
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte, role spectypes.BeaconRole) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte, domainType spec.DomainType) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -86,7 +90,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	if err := km.slashingProtection(pk, obj, role); err != nil {
+	if err := km.slashingProtection(pk, obj, domainType); err != nil {
 		return nil, nil, err
 	}
 
@@ -100,9 +104,9 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 	return sig, r[:], nil
 }
 
-func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, role spectypes.BeaconRole) error {
-	switch role {
-	case spectypes.BNRoleAttester:
+func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, domainType spec.DomainType) error {
+	switch domainType {
+	case spectypes.DomainAttester:
 		data, ok := obj.(*spec.AttestationData)
 		if !ok {
 			return errors.New("could not convert obj to attestation data")
@@ -114,7 +118,7 @@ func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, r
 			return err
 		}
 
-	case spectypes.BNRoleProposer:
+	case spectypes.DomainProposer:
 		data, ok := obj.(*bellatrix.BeaconBlock)
 		if !ok {
 			return errors.New("could not convert obj to beacon block")
@@ -183,15 +187,31 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.storage.SaveHighestAttestation(shareKey.GetPublicKey().Serialize(), zeroSlotAttestation); err != nil {
-			return errors.Wrap(err, "could not save zero highest attestation")
-		}
-		if err := km.storage.SaveHighestProposal(shareKey.GetPublicKey().Serialize(), zeroSlotBeaconBlock); err != nil {
-			return errors.Wrap(err, "could not save zero highest proposal")
+		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
+			return errors.Wrap(err, "could not save minimal slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
+	}
+	return nil
+}
+
+func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
+	currentSlot := km.storage.Network().EstimatedCurrentSlot()
+	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
+	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
+	highestSource := highestTarget - 1
+	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance
+
+	minAttData := minimalAttProtectionData(highestSource, highestTarget)
+	minBlockData := minimalBlockProtectionData(highestProposal)
+
+	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
+		return errors.Wrap(err, "could not save minimal highest attestation")
+	}
+	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
+		return errors.Wrap(err, "could not save minimal highest proposal")
 	}
 	return nil
 }
@@ -205,6 +225,16 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc != nil {
+		pkDecoded, err := hex.DecodeString(pubKey)
+		if err != nil {
+			return errors.Wrap(err, "could not hex decode share public key")
+		}
+		if err := km.storage.RemoveHighestAttestation(pkDecoded); err != nil {
+			return errors.Wrap(err, "could not remove highest attestation")
+		}
+		if err := km.storage.RemoveHighestProposal(pkDecoded); err != nil {
+			return errors.Wrap(err, "could not remove highest proposal")
+		}
 		if err := km.wallet.DeleteAccountByPublicKey(pubKey); err != nil {
 			return errors.Wrap(err, "could not delete share")
 		}
@@ -224,63 +254,39 @@ func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-// zeroSlotAttestation is a place holder attestation data representing all zero values
-var zeroSlotAttestation = &eth.AttestationData{
-	Slot:            0,
-	CommitteeIndex:  0,
-	BeaconBlockRoot: make([]byte, 32),
-	Source: &eth.Checkpoint{
-		Epoch: 0,
-		Root:  make([]byte, 32),
-	},
-	Target: &eth.Checkpoint{
-		Epoch: 0,
-		Root:  make([]byte, 32),
-	},
+func minimalAttProtectionData(source, target prysmtypes.Epoch) *eth.AttestationData {
+	return &eth.AttestationData{
+		BeaconBlockRoot: make([]byte, 32),
+		Source: &eth.Checkpoint{
+			Epoch: source,
+			Root:  make([]byte, 32),
+		},
+		Target: &eth.Checkpoint{
+			Epoch: target,
+			Root:  make([]byte, 32),
+		},
+	}
 }
 
-// zeroSlotAttestation is a place holder beacon block representing all zero values
-var zeroSlotBeaconBlock = &eth.BeaconBlock{
-	Slot:          0,
-	ProposerIndex: 1,
-	ParentRoot: []byte{
-		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-		0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-	},
-	StateRoot: []byte{
-		0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-		0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
-	},
-	Body: &eth.BeaconBlockBody{
-		RandaoReveal: []byte{
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-			0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-			0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-			0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-		},
-		Eth1Data: &eth.Eth1Data{
-			DepositRoot: []byte{
-				0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
-				0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5a, 0x5b, 0x5c, 0x5d, 0x5e, 0x5f,
+func minimalBlockProtectionData(slot prysmtypes.Slot) *eth.BeaconBlock {
+	return &eth.BeaconBlock{
+		Slot:       slot,
+		ParentRoot: make([]byte, 32),
+		StateRoot:  make([]byte, 32),
+		Body: &eth.BeaconBlockBody{
+			RandaoReveal: make([]byte, 96),
+			Eth1Data: &eth.Eth1Data{
+				DepositRoot: make([]byte, 32),
+				BlockHash:   make([]byte, 32),
 			},
-			DepositCount: 16384,
-			BlockHash: []byte{
-				0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f,
-				0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a, 0x7b, 0x7c, 0x7d, 0x7e, 0x7f,
-			},
+			Graffiti:          make([]byte, 32),
+			ProposerSlashings: []*eth.ProposerSlashing{},
+			AttesterSlashings: []*eth.AttesterSlashing{},
+			Attestations:      []*eth.Attestation{},
+			Deposits:          []*eth.Deposit{},
+			VoluntaryExits:    []*eth.SignedVoluntaryExit{},
 		},
-		Graffiti: []byte{
-			0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-			0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
-		},
-		ProposerSlashings: []*eth.ProposerSlashing{},
-		AttesterSlashings: []*eth.AttesterSlashing{},
-		Attestations:      []*eth.Attestation{},
-		Deposits:          []*eth.Deposit{},
-		VoluntaryExits:    []*eth.SignedVoluntaryExit{},
-	},
+	}
 }
 
 // specAttDataToPrysmAttData a simple func converting between data types
