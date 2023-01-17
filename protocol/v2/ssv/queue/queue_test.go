@@ -62,7 +62,7 @@ func TestPriorityQueueOrder(t *testing.T) {
 
 			// Pop messages from the queue and compare to the expected order.
 			for i, excepted := range decodedMessages {
-				actual := q.Pop(NewMessagePrioritizer(test.state))
+				actual := q.Pop(NewMessagePrioritizer(test.state), nil)
 				require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 			}
 		})

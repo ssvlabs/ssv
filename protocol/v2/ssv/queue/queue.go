@@ -9,20 +9,6 @@ import (
 // Filter is a function that returns true if the given message should be included.
 type Filter func(*DecodedSSVMessage) bool
 
-func combineFilters(filters ...Filter) Filter {
-	return func(msg *DecodedSSVMessage) bool {
-		if msg == nil {
-			return false
-		}
-		for _, f := range filters {
-			if !f(msg) {
-				return false
-			}
-		}
-		return true
-	}
-}
-
 // Pop removes a message from the queue
 type Pop func()
 
@@ -38,7 +24,7 @@ type Queue interface {
 	// Push inserts a message to the queue.
 	Push(*DecodedSSVMessage)
 	// Pop removes and returns the front message in the queue.
-	Pop(MessagePrioritizer, ...Filter) *DecodedSSVMessage
+	Pop(MessagePrioritizer, Filter) *DecodedSSVMessage
 	// IsEmpty checks if the q is empty
 	IsEmpty() bool
 }
@@ -51,6 +37,7 @@ type PriorityQueue struct {
 // New initialized a PriorityQueue with the given MessagePrioritizer.
 // If prioritizer is nil, the messages will be returned in the order they were pushed.
 func New() Queue {
+	// nolint
 	h := unsafe.Pointer(&msgItem{})
 	return &PriorityQueue{
 		head: h,
@@ -59,7 +46,9 @@ func New() Queue {
 
 // Push inserts a message to the queue.
 func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
+	// nolint
 	n := &msgItem{value: unsafe.Pointer(msg), next: q.head}
+	// nolint
 	added := cas(&q.head, q.head, unsafe.Pointer(n))
 	if added {
 		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
@@ -68,8 +57,8 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 
 // Pop removes & returns the highest priority message which matches the given filter.
 // Returns nil if no message is found.
-func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filters ...Filter) *DecodedSSVMessage {
-	res := q.pop(prioritizer, filters...)
+func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+	res := q.pop(prioritizer, filter)
 	if res != nil {
 		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
 	}
@@ -84,11 +73,9 @@ func (q *PriorityQueue) IsEmpty() bool {
 	return h.Value() == nil
 }
 
-func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filters ...Filter) *DecodedSSVMessage {
+func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
 	var h, beforeHighest, previous *msgItem
 	currentP := q.head
-
-	filter := combineFilters(filters...)
 
 	for currentP != nil {
 		current := load(&currentP)
