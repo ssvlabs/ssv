@@ -221,7 +221,7 @@ func f1DecidedNonConsensusInstanceValidator(consensusData []byte, operatorID spe
 			Data: consensusData,
 		}).Encode()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("encode commit data: %w", err)
 		}
 
 		commitSigners, commitMessages := actual.State.CommitContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, commitData)
