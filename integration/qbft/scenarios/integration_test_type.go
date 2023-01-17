@@ -3,8 +3,10 @@ package scenarios
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -257,6 +259,12 @@ func (it *IntegrationTest) Run() error {
 					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
 				}
 
+				jsonInstance, err := json.Marshal(storedInstance)
+				if err != nil {
+					return fmt.Errorf("encode stored instance: %w", err)
+				}
+				log.Printf("stored instance %d: %v\n", operatorID, string(jsonInstance))
+
 				if err := instanceValidator(storedInstance); err != nil {
 					return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
 				}
@@ -359,6 +367,41 @@ func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, rol
 		Duty:  createDuty(pk, slot, idx, role),
 		Delay: delay,
 	}
+}
+
+func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...spectypes.BeaconRole) []*spectypes.Duty {
+	var pkBytes [48]byte
+	copy(pkBytes[:], pk)
+
+	duties := make([]*spectypes.Duty, 0, len(roles))
+	for _, role := range roles {
+		var testingDuty *spectypes.Duty
+		switch role {
+		case spectypes.BNRoleAttester:
+			testingDuty = spectestingutils.TestingAttesterDuty
+		case spectypes.BNRoleAggregator:
+			testingDuty = spectestingutils.TestingAggregatorDuty
+		case spectypes.BNRoleProposer:
+			testingDuty = spectestingutils.TestingProposerDuty
+		case spectypes.BNRoleSyncCommittee:
+			testingDuty = spectestingutils.TestingSyncCommitteeDuty
+		case spectypes.BNRoleSyncCommitteeContribution:
+			testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
+		}
+
+		duties = append(duties, &spectypes.Duty{
+			Type:                    role,
+			PubKey:                  pkBytes,
+			Slot:                    slot,
+			ValidatorIndex:          idx,
+			CommitteeIndex:          testingDuty.CommitteeIndex,
+			CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
+			CommitteeLength:         testingDuty.CommitteeLength,
+			ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
+		})
+	}
+
+	return duties
 }
 
 type msgRouter struct {
