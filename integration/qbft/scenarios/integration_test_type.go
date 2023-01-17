@@ -35,6 +35,8 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
+var sharesSet *spectestingutils.TestKeySet
+
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
 	Name               string
@@ -147,9 +149,11 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 	return sCtx, nil
 }
 
-func (it *IntegrationTest) Run() error {
+func (it *IntegrationTest) Run(f int) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	sharesSet = getShareSet(f)
 
 	sCtx, err := it.bootstrap(ctx)
 	if err != nil {
@@ -287,7 +291,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 	}
 
 	for _, operatorID := range it.OperatorIDs {
-		err := sCtx.keyManagers[operatorID].AddShare(spectestingutils.Testing4SharesSet().Shares[operatorID])
+		err := sCtx.keyManagers[operatorID].AddShare(sharesSet.Shares[operatorID])
 		if err != nil {
 			return nil, err
 		}
@@ -296,7 +300,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectype
 			Storage: sCtx.stores[operatorID],
 			Network: sCtx.nodes[operatorID],
 			SSVShare: &types.SSVShare{
-				Share: *testingShare(spectestingutils.Testing4SharesSet(), operatorID),
+				Share: *testingShare(sharesSet, operatorID),
 				Metadata: types.Metadata{
 					BeaconMetadata: &protocolbeacon.ValidatorMetadata{
 						Index: spec.ValidatorIndex(1),
@@ -428,4 +432,21 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	}
 
 	return nil
+}
+
+func getShareSet(f int) *spectestingutils.TestKeySet {
+	switch f {
+	case 1:
+		return spectestingutils.Testing4SharesSet()
+	case 2:
+		return spectestingutils.Testing7SharesSet()
+	case 3:
+		return spectestingutils.Testing10SharesSet()
+	default:
+		panic("unsupported f")
+	}
+}
+
+func getF3plus1(f int) int {
+	return 3*f + 1
 }

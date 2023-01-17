@@ -2,30 +2,22 @@ package tests
 
 import (
 	"github.com/bloxapp/ssv-spec/types"
-	"testing"
-
-	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
+	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func Test_Integration_QBFTScenarios(t *testing.T) {
 	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
 
-	scenariosToRun := []*scenarios.IntegrationTest{
-		scenarios.RegularAttester(),
-		scenarios.RegularAggregator(),
-		scenarios.RegularProposer(),
-		scenarios.RegularSyncCommittee(),
-		scenarios.RegularSyncCommitteeContribution(),
-		scenarios.RoundChange(types.BNRoleAttester),
-		scenarios.F1Decided(types.BNRoleAttester),
-	}
+	require.NoError(t, scenarios.RegularAttester(1).Run(1))
+	require.NoError(t, scenarios.RegularAttester(2).Run(2))
+	require.NoError(t, scenarios.RegularAttester(3).Run(3))
 
-	for _, scenario := range scenariosToRun {
-		scenario := scenario
-		t.Run(scenario.Name, func(t *testing.T) {
-			require.NoError(t, scenario.Run())
-		})
-	}
+	require.NoError(t, scenarios.RegularAggregator().Run(1))
+	require.NoError(t, scenarios.RegularProposer().Run(1))
+	require.NoError(t, scenarios.RegularSyncCommittee().Run(1))
+	require.NoError(t, scenarios.RegularSyncCommitteeContribution().Run(1))
+	require.NoError(t, scenarios.RoundChange(types.BNRoleAttester).Run(1))
+	require.NoError(t, scenarios.F1Decided(types.BNRoleAttester).Run(1))
 }
