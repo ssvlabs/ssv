@@ -404,3 +404,111 @@ func TestSavingHighestAttestation(t *testing.T) {
 		})
 	}
 }
+
+func TestRemovingHighestAttestation(t *testing.T) {
+	_, storage := testWallet(t)
+	defer storage.db.Close()
+
+	tests := []struct {
+		name    string
+		att     *eth.AttestationData
+		account core.ValidatorAccount
+	}{
+		{
+			name: "remove highest attestation",
+			att: &eth.AttestationData{
+				Slot:            30,
+				CommitteeIndex:  1,
+				BeaconBlockRoot: make([]byte, 32),
+				Source: &eth.Checkpoint{
+					Epoch: 1,
+					Root:  make([]byte, 32),
+				},
+				Target: &eth.Checkpoint{
+					Epoch: 4,
+					Root:  make([]byte, 32),
+				},
+			},
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// save
+			err := storage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
+			require.NoError(t, err)
+
+			// fetch
+			att := storage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			require.NotNil(t, att)
+
+			// test equal
+			aRoot, err := att.HashTreeRoot()
+			require.NoError(t, err)
+			bRoot, err := test.att.HashTreeRoot()
+			require.NoError(t, err)
+			require.EqualValues(t, aRoot, bRoot)
+
+			// remove
+			err = storage.RemoveHighestAttestation(test.account.ValidatorPublicKey())
+			require.NoError(t, err)
+
+			// fetch
+			att = storage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			require.Nil(t, att)
+		})
+	}
+}
+
+func TestRemovingHighestProposal(t *testing.T) {
+	_, storage := testWallet(t)
+	defer storage.db.Close()
+
+	tests := []struct {
+		name     string
+		proposal *eth.BeaconBlock
+		account  core.ValidatorAccount
+	}{
+		{
+			name:     "remove highest proposal",
+			proposal: testBlock(t),
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// save
+			err := storage.SaveHighestProposal(test.account.ValidatorPublicKey(), test.proposal)
+			require.NoError(t, err)
+
+			// fetch
+			proposal := storage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			require.NotNil(t, proposal)
+
+			// test equal
+			aRoot, err := proposal.HashTreeRoot()
+			require.NoError(t, err)
+			bRoot, err := proposal.HashTreeRoot()
+			require.NoError(t, err)
+			require.EqualValues(t, aRoot, bRoot)
+
+			// remove
+			err = storage.RemoveHighestProposal(test.account.ValidatorPublicKey())
+			require.NoError(t, err)
+
+			// fetch
+			proposal = storage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			require.Nil(t, proposal)
+		})
+	}
+}
