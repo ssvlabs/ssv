@@ -15,7 +15,7 @@ type Pop func()
 // FilterRole returns a Filter which returns true for messages whose BeaconRole matches the given role.
 func FilterRole(role types.BeaconRole) Filter {
 	return func(msg *DecodedSSVMessage) bool {
-		return msg.MsgID.GetRoleType() == role
+		return msg != nil && msg.MsgID.GetRoleType() == role
 	}
 }
 
@@ -80,11 +80,13 @@ func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 	for currentP != nil {
 		current := load(&currentP)
 		val := current.Value()
-		if h == nil || (filter(val) && prioritizer.Prior(val, h.Value())) {
-			if previous != nil {
-				beforeHighest = previous
+		if val != nil {
+			if h == nil || (filter(val) && prioritizer.Prior(val, h.Value())) {
+				if previous != nil {
+					beforeHighest = previous
+				}
+				h = current
 			}
-			h = current
 		}
 		previous = current
 		currentP = current.NextP()
