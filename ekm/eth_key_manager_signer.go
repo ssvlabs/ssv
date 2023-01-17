@@ -69,7 +69,7 @@ func newSlashingProtection(store core.SlashingStore) core.SlashingProtector {
 	return slashingprotection.NewNormalProtection(store)
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte, role spectypes.BeaconRole) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte, domainType spec.DomainType) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -86,7 +86,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 		return nil, nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	if err := km.slashingProtection(pk, obj, role); err != nil {
+	if err := km.slashingProtection(pk, obj, domainType); err != nil {
 		return nil, nil, err
 	}
 
@@ -100,9 +100,9 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Do
 	return sig, r[:], nil
 }
 
-func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, role spectypes.BeaconRole) error {
-	switch role {
-	case spectypes.BNRoleAttester:
+func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, domainType spec.DomainType) error {
+	switch domainType {
+	case spectypes.DomainAttester:
 		data, ok := obj.(*spec.AttestationData)
 		if !ok {
 			return errors.New("could not convert obj to attestation data")
@@ -114,7 +114,7 @@ func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, r
 			return err
 		}
 
-	case spectypes.BNRoleProposer:
+	case spectypes.DomainProposer:
 		data, ok := obj.(*bellatrix.BeaconBlock)
 		if !ok {
 			return errors.New("could not convert obj to beacon block")
