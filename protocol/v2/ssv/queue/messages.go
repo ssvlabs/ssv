@@ -108,7 +108,7 @@ func messageTypeScore(state *State, m *DecodedSSVMessage, relativeHeight int) in
 func consensusTypeScore(state *State, m *DecodedSSVMessage) int {
 	if isConsensusMessage(state, m) {
 		return scoreByPrecedence(state, m,
-			isMessageOfType(qbft.PrepareMsgType), isMessageOfType(qbft.ProposalMsgType), isMessageOfType(qbft.CommitMsgType))
+			isMessageOfType(qbft.ProposalMsgType), isMessageOfType(qbft.PrepareMsgType), isMessageOfType(qbft.CommitMsgType))
 	}
 	return 0
 }
