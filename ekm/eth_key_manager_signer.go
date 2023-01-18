@@ -188,12 +188,15 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
+		fmt.Println("MinimalSlashingProtection account not found")
 		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
 			return errors.Wrap(err, "could not save minimal slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
+	} else {
+		fmt.Println("MinimalSlashingProtection account found")
 	}
 	return nil
 }
