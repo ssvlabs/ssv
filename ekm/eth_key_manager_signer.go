@@ -208,10 +208,14 @@ func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	minBlockData := minimalBlockProtectionData(highestProposal)
 
 	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
-		return errors.Wrap(err, "could not save minimal highest attestation")
+		return errors.Wrapf(err, "could not save minimal highest attestation for %s", string(pk))
 	}
 	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
-		return errors.Wrap(err, "could not save minimal highest proposal")
+		return errors.Wrapf(err, "could not save minimal highest proposal for %s", string(pk))
+	}
+	hP := km.storage.RetrieveHighestProposal(pk)
+	if hP == nil {
+		return errors.Errorf("could not retrieve highest proposal for %s", string(pk))
 	}
 	return nil
 }

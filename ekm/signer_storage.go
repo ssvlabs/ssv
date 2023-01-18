@@ -234,20 +234,20 @@ func (s *signerStorage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock 
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
-	if !found {
-		return nil
-	}
 	if err != nil {
-		return nil
+		panic(fmt.Errorf("could not get highest proposal for %s", string(pubKey)))
+	}
+	if !found {
+		panic(fmt.Errorf("highest proposal not found for %s", string(pubKey)))
 	}
 	if obj.Value == nil || len(obj.Value) == 0 {
-		return nil
+		panic(fmt.Errorf("highest proposal Value/len is nil/0 for %s", string(pubKey)))
 	}
 
 	// decode
 	ret := &eth.BeaconBlock{}
 	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
-		return nil
+		panic(fmt.Errorf("could not unmarshal highest proposal for %s", string(pubKey)))
 	}
 	return ret
 }
