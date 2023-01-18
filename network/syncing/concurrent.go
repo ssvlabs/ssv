@@ -2,6 +2,7 @@ package syncing
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -13,6 +14,10 @@ type Error struct {
 	Operation string
 	MessageID spectypes.MessageID
 	Err       error
+}
+
+func (e Error) Error() string {
+	return fmt.Sprintf("%s(%s): %s", e.Operation, e.MessageID, e.Err)
 }
 
 type ConcurrentSyncer struct {

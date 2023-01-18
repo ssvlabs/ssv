@@ -74,3 +74,13 @@ func TestConcurrentSyncer(t *testing.T) {
 		t.Fatal("error channel should have received an error")
 	}
 }
+
+type mockSyncer struct{}
+
+func (m *mockSyncer) SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler syncing.MessageHandler) error {
+	return nil
+}
+
+func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
+	return nil
+}
