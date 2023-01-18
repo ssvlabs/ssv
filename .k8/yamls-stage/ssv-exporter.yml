@@ -156,7 +156,7 @@ spec:
           - name: NETWORK
             value: "prater"
           - name: DB_PATH
-            value: "./data/db-full-node-a6"
+            value: "./data/db-full-node-a7"
           - name: DB_REPORTING
             value: "false"
           - name: METRICS_API_PORT
