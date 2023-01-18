@@ -83,6 +83,7 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
+
 	n := &p2pNetwork{
 		parentCtx:            pctx,
 		ctx:                  ctx,
@@ -95,7 +96,12 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 	}
-	n.syncer = syncing.NewConcurrent(ctx, syncing.New(logger, n), 4, nil)
+
+	// Create & start ConcurrentSyncer.
+	syncer := syncing.NewConcurrent(ctx, syncing.New(logger, n), 4, nil)
+	go syncer.Run()
+	n.syncer = syncer
+
 	return n
 }
 

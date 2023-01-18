@@ -1,115 +1,76 @@
-package syncing
+package syncing_test
 
-// import (
-// 	"context"
-// 	"testing"
+import (
+	"context"
+	"fmt"
+	"testing"
 
-// 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-// 	spectypes "github.com/bloxapp/ssv-spec/types"
-// 	"github.com/bloxapp/ssv/network/syncing/mocks"
-// 	"github.com/golang/mock/gomock"
-// 	"github.com/pkg/errors"
-// 	"github.com/stretchr/testify/require"
-// )
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/network/syncing"
+	"github.com/bloxapp/ssv/network/syncing/mocks"
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+)
 
-// func TestConcurrentSyncer_SyncHighestDecided(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
+type mockMessageHandler struct {
+	calls   int
+	handler syncing.MessageHandler
+}
 
-// 	mockSyncer := mocks.NewMockSyncer(ctrl)
-// 	mockHandler := mocks.NewMockMessageHandler(ctrl)
-// 	mockErrorChan := make(chan Error, 1)
+func newMockMessageHandler() *mockMessageHandler {
+	m := &mockMessageHandler{}
+	m.handler = func(msg spectypes.SSVMessage) {
+		m.calls++
+	}
+	return m
+}
 
-// 	testCtx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
+func TestConcurrentSyncer(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-// 	testID := spectypes.MessageID{1, 2, 3, 4}
+	// Test setup
+	syncer := mocks.NewMockSyncer(ctrl)
+	errors := make(chan syncing.Error)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	concurrency := 2
+	s := syncing.NewConcurrent(ctx, syncer, concurrency, errors)
 
-// 	mockSyncer.EXPECT().SyncHighestDecided(testCtx, testID, mockHandler).Return(nil)
+	// Run the syncer
+	done := make(chan struct{})
+	go func() {
+		s.Run()
+		close(done)
+	}()
 
-// 	concurrent := NewConcurrent(testCtx, mockSyncer, 1, mockErrorChan)
-// 	err := concurrent.SyncHighestDecided(testCtx, testID, mockHandler)
+	// Test SyncHighestDecided
+	id := spectypes.MessageID{}
+	handler := newMockMessageHandler()
+	syncer.EXPECT().SyncHighestDecided(gomock.Any(), id, gomock.Any()).Return(nil)
+	s.SyncHighestDecided(ctx, id, handler.handler)
 
-// 	require.Nil(t, err)
-// 	require.Len(t, mockErrorChan, 0)
-// }
+	// Test SyncDecidedByRange
+	from := specqbft.Height(1)
+	to := specqbft.Height(10)
+	syncer.EXPECT().SyncDecidedByRange(gomock.Any(), id, from, to, gomock.Any()).Return(nil)
+	s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
 
-// func TestConcurrentSyncer_SyncHighestDecided_Error(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
+	// Test error handling
+	syncer.EXPECT().SyncHighestDecided(gomock.Any(), id, gomock.Any()).Return(fmt.Errorf("test error"))
+	s.SyncHighestDecided(ctx, id, handler.handler)
 
-// 	mockSyncer := mocks.NewMockSyncer(ctrl)
-// 	mockHandler := mocks.NewMockMessageHandler(ctrl)
-// 	mockErrorChan := make(chan Error, 1)
+	// Wait for the syncer to finish
+	cancel()
 
-// 	testCtx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-
-// 	testID := spectypes.MessageID{1, 2, 3, 4}
-// 	testError := errors.New("Test error")
-
-// 	mockSyncer.EXPECT().SyncHighestDecided(testCtx, testID, mockHandler).Return(testError)
-
-// 	concurrent := NewConcurrent(testCtx, mockSyncer, 1, mockErrorChan)
-// 	err := concurrent.SyncHighestDecided(testCtx, testID, mockHandler)
-
-// 	require.Nil(t, err)
-// 	require.Len(t, mockErrorChan, 1)
-
-// 	error := <-mockErrorChan
-// 	require.Equal(t, "SyncHighestDecided", error.Operation)
-// 	require.Equal(t, testID, error.MessageID)
-// 	require.Equal(t, testError, error.Err)
-// }
-
-// func TestConcurrentSyncer_SyncDecidedByRange(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-
-// 	mockSyncer := mocks.NewMockSyncer(ctrl)
-// 	mockHandler := mocks.NewMockMessageHandler(ctrl)
-// 	mockErrorChan := make(chan Error, 1)
-
-// 	testCtx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-// 	testID := spectypes.MessageID{1, 2, 3, 4}
-// 	testFrom := specqbft.Height(1)
-// 	testTo := specqbft.Height(10)
-
-// 	mockSyncer.EXPECT().SyncDecidedByRange(testCtx, testID, testFrom, testTo, mockHandler).Return(nil)
-
-// 	concurrent := NewConcurrent(testCtx, mockSyncer, 1, mockErrorChan)
-// 	err := concurrent.SyncDecidedByRange(testCtx, testID, testFrom, testTo, mockHandler)
-
-// 	require.Nil(t, err)
-// 	require.Len(t, mockErrorChan, 0)
-// }
-
-// func TestConcurrentSyncer_SyncDecidedByRange_Error(t *testing.T) {
-// 	ctrl := gomock.NewController(t)
-// 	defer ctrl.Finish()
-// 	mockSyncer := mocks.NewMockSyncer(ctrl)
-// 	mockHandler := mocks.NewMockMessageHandler(ctrl)
-// 	mockErrorChan := make(chan Error, 1)
-
-// 	testCtx, cancel := context.WithCancel(context.Background())
-// 	defer cancel()
-
-// 	testID := spectypes.MessageID{1, 2, 3, 4}
-// 	testFrom := specqbft.Height(1)
-// 	testTo := specqbft.Height(10)
-// 	testError := errors.New("Test error")
-
-// 	mockSyncer.EXPECT().SyncDecidedByRange(testCtx, testID, testFrom, testTo, mockHandler).Return(testError)
-
-// 	concurrent := NewConcurrent(testCtx, mockSyncer, 1, mockErrorChan)
-// 	err := concurrent.SyncDecidedByRange(testCtx, testID, testFrom, testTo, mockHandler)
-
-// 	require.Nil(t, err)
-// 	require.Len(t, mockErrorChan, 1)
-
-// 	error := <-mockErrorChan
-// 	require.Equal(t, "SyncDecidedByRange", error.Operation)
-// 	require.Equal(t, testID, error.MessageID)
-// 	require.Equal(t, testError, error.Err)
-// }
+	// Verify
+	select {
+	case err := <-errors:
+		require.Equal(t, "SyncHighestDecided", err.Operation)
+		require.Equal(t, id, err.MessageID)
+		require.Equal(t, "test error", err.Err.Error())
+	case <-done:
+		t.Fatal("error channel should have received an error")
+	}
+}
