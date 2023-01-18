@@ -37,8 +37,6 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			return
 		}
 		q.Q.Push(decodedMsg)
-		v.logger.Debug("message added to queue", zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-			zap.String("msgID", msg.MsgID.String()))
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
