@@ -42,7 +42,7 @@ func NewConcurrent(
 		syncer: syncer,
 		ctx:    ctx,
 		// TODO: make the buffer size configurable or better-yet unbounded?
-		jobs:        make(chan func(), 1024),
+		jobs:        make(chan func(), 1024*1024),
 		errors:      errors,
 		concurrency: concurrency,
 	}
@@ -69,6 +69,18 @@ func (s *ConcurrentSyncer) Run() {
 
 	// Wait for workers to finish their current jobs.
 	wg.Wait()
+}
+
+// Queued returns the number of jobs that are queued but not yet started.
+func (s *ConcurrentSyncer) Queued() int {
+	return len(s.jobs)
+}
+
+// Capacity returns the maximum number of jobs that can be queued.
+// When Queued() == Capacity(), then the next call will block
+// until a job is finished.
+func (s *ConcurrentSyncer) Capacity() int {
+	return cap(s.jobs)
 }
 
 func (s *ConcurrentSyncer) SyncHighestDecided(
