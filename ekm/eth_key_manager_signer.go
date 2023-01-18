@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -217,6 +218,7 @@ func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	if hP == nil {
 		return errors.Errorf("could not retrieve highest proposal for %s", string(pk))
 	}
+	fmt.Println("MinimalSlashingProtection was saved")
 	return nil
 }
 
