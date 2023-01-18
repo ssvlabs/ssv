@@ -64,7 +64,7 @@ func TestConcurrentSyncer(t *testing.T) {
 	// Wait for the syncer to finish
 	cancel()
 
-	// Verify
+	// Verify errors.
 	select {
 	case err := <-errors:
 		require.Equal(t, "SyncHighestDecided", err.Operation)
@@ -73,6 +73,7 @@ func TestConcurrentSyncer(t *testing.T) {
 	case <-done:
 		t.Fatal("error channel should have received an error")
 	}
+	<-done
 }
 
 type mockSyncer struct{}
@@ -83,4 +84,39 @@ func (m *mockSyncer) SyncHighestDecided(ctx context.Context, id spectypes.Messag
 
 func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
 	return nil
+}
+
+func BenchmarkConcurrentSyncer(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		// Test setup
+		syncer := &mockSyncer{}
+		errors := make(chan syncing.Error)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		concurrency := 2
+		s := syncing.NewConcurrent(ctx, syncer, concurrency, errors)
+
+		// Run the syncer
+		done := make(chan struct{})
+		go func() {
+			s.Run()
+			close(done)
+		}()
+
+		for i := 0; i < 1024*128; i++ {
+			// Test SyncHighestDecided
+			id := spectypes.MessageID{}
+			handler := newMockMessageHandler()
+			s.SyncHighestDecided(ctx, id, handler.handler)
+
+			// Test SyncDecidedByRange
+			from := specqbft.Height(1)
+			to := specqbft.Height(10)
+			s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
+		}
+
+		// Wait for the syncer to finish
+		cancel()
+		<-done
+	}
 }
