@@ -2,7 +2,6 @@ package ekm
 
 import (
 	"encoding/hex"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -183,8 +182,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
 
-	sharePubKey := shareKey.GetPublicKey().SerializeToHexStr()
-	acc, err := km.wallet.AccountByPublicKey(sharePubKey)
+	acc, err := km.wallet.AccountByPublicKey(shareKey.GetPublicKey().SerializeToHexStr())
 	if err != nil && err.Error() != "account not found" {
 		return errors.Wrap(err, "could not check share existence")
 	}
@@ -195,8 +193,8 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
-	} else {
 	}
+
 	return nil
 }
 
@@ -216,11 +214,6 @@ func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
 		return errors.Wrapf(err, "could not save minimal highest proposal for %s", string(pk))
 	}
-	hP := km.storage.RetrieveHighestProposal(pk)
-	if hP == nil {
-		return errors.Errorf("could not retrieve highest proposal for %s", string(pk))
-	}
-	fmt.Println("MinimalSlashingProtection was saved")
 	return nil
 }
 
