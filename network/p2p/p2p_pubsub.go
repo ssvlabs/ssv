@@ -155,6 +155,7 @@ func (n *p2pNetwork) setValidatorStateSubscribed(pkHex string) bool {
 	if !ok {
 		return false
 	}
+	n.logger.Debug("validator subscribed", zap.Int("subscribed_validators", len(n.activeValidators)), zap.String("pkHex", pkHex))
 	switch currentState {
 	case validatorStateInactive, validatorStateSubscribed:
 		return false
