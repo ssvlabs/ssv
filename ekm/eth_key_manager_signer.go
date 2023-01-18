@@ -30,7 +30,7 @@ var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(1)
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
-	storage           *signerStorage
+	storage           Storage
 	signingUtils      beacon.Beacon
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
@@ -38,7 +38,7 @@ type ethKeyManagerSigner struct {
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
 func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.Beacon, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
-	signerStore := newSignerStorage(db, network)
+	signerStore := NewSignerStorage(db, network)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)

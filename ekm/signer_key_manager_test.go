@@ -30,7 +30,10 @@ const (
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	km, err := NewETHKeyManagerSigner(getStorage(t), nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
+	db, err := getBaseStorage()
+	require.NoError(t, err)
+
+	km, err := NewETHKeyManagerSigner(db, nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
 	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewBeaconMock()
 	require.NoError(t, err)
 
