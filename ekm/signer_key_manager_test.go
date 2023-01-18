@@ -34,7 +34,6 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	require.NoError(t, err)
 
 	km, err := NewETHKeyManagerSigner(db, nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
-	km.(*ethKeyManagerSigner).signingUtils = beacon2.NewBeaconMock()
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

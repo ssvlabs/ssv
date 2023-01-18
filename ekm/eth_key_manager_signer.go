@@ -17,7 +17,6 @@ import (
 	prysmtypes "github.com/prysmaticlabs/eth2-types"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -30,7 +29,6 @@ type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
 	storage           Storage
-	signingUtils      beacon.Beacon
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
 }
@@ -63,7 +61,6 @@ func NewETHKeyManagerSigner(db basedb.IDb, signingUtils beaconprotocol.Beacon, n
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		storage:           signerStore,
-		signingUtils:      signingUtils,
 		domain:            domain,
 		slashingProtector: slashingProtector,
 	}, nil
