@@ -23,8 +23,8 @@ import (
 )
 
 // minimal att&block epoch/slot distance to protect slashing
-var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(2)
-var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(1)
+var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(0)
+var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(0)
 
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
