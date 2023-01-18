@@ -53,6 +53,7 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network) Storage {
 }
 
 func (s *storage) CleanRegistryData() error {
+	fmt.Println(fmt.Sprintf("RemoveAllByCollection %s", string(s.network.Network)+prefix))
 	return s.db.RemoveAllByCollection(s.objPrefix(prefix))
 }
 
