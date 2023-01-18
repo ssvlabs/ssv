@@ -32,6 +32,7 @@ var (
 		migrationRemoveChangeRoundSync,
 		migrationAddGraffiti,
 		migrationCleanRegistryData,
+		migrationCleanRegistryDataIncludingSignerStorage,
 	}
 )
 
@@ -90,7 +91,7 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 		if err != nil {
 			return err
 		}
-		if bytes.Equal(obj.Value, migrationCompleted) && migration.Name != migrationCleanRegistryData.Name {
+		if bytes.Equal(obj.Value, migrationCompleted) {
 			opt.Logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
 			continue
 		}
