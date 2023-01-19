@@ -56,7 +56,7 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 }
 
 func (s *storage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(s.objPrefix(prefix))
+	return s.db.RemoveAllByCollection(s.objPrefix(accountsPrefix))
 }
 
 func (s *storage) objPrefix(obj string) []byte {
