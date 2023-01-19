@@ -102,16 +102,6 @@ var StartNodeCmd = &cobra.Command{
 			Logger.Fatal("failed to create db!", zap.Error(err))
 		}
 
-		migrationOpts := migrations.Options{
-			Db:     db,
-			Logger: Logger,
-			DbPath: cfg.DBOptions.Path,
-		}
-		err = migrations.Run(cmd.Context(), migrationOpts)
-		if err != nil {
-			Logger.Fatal("failed to run migrations", zap.Error(err))
-		}
-
 		if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
 			cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
 		} else {
@@ -122,6 +112,16 @@ var StartNodeCmd = &cobra.Command{
 			zap.String("net-id", cfg.P2pNetworkConfig.NetworkID))
 
 		eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
+		migrationOpts := migrations.Options{
+			Db:      db,
+			Logger:  Logger,
+			DbPath:  cfg.DBOptions.Path,
+			Network: eth2Network,
+		}
+		err = migrations.Run(cmd.Context(), migrationOpts)
+		if err != nil {
+			Logger.Fatal("failed to run migrations", zap.Error(err))
+		}
 
 		currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
 		ssvForkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
@@ -137,7 +137,7 @@ var StartNodeCmd = &cobra.Command{
 				zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, beaconClient, eth2Network, types.GetDefaultDomain())
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain(), Logger)
 		if err != nil {
 			Logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
