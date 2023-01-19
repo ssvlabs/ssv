@@ -79,12 +79,37 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
 	queue := New()
 
-	decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-	require.NoError(b, err)
+	b.SetParallelism(2)
+
+	nmsgs := 250
+	msgs := make(chan *DecodedSSVMessage, nmsgs*3)
+	for i := qbft.FirstHeight; i < qbft.Height(nmsgs); i++ {
+		decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: i, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		require.NoError(b, err)
+		msgs <- decoded
+		decoded, err = DecodeSSVMessage(mockConsensusMessage{Height: i, Type: qbft.CommitMsgType}.ssvMessage(mockState))
+		require.NoError(b, err)
+		msgs <- decoded
+		decoded, err = DecodeSSVMessage(mockConsensusMessage{Height: i, Type: qbft.RoundChangeMsgType}.ssvMessage(mockState))
+		require.NoError(b, err)
+		msgs <- decoded
+	}
+
+	b.ResetTimer()
+	b.StartTimer()
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			queue.Push(decoded)
+			select {
+			case msg := <-msgs:
+				queue.Push(msg)
+			default:
+			}
+		}
+	})
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
 			queue.Pop(prioritizer, FilterRole(types.BNRoleProposer))
 		}
 	})
