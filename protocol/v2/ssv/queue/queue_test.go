@@ -79,8 +79,6 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
 	queue := New()
 
-	b.SetParallelism(2)
-
 	nmsgs := 250
 	msgs := make(chan *DecodedSSVMessage, nmsgs*3)
 	for i := qbft.FirstHeight; i < qbft.Height(nmsgs); i++ {
