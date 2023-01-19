@@ -284,7 +284,7 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	}
 
 	// execution client
-	logger.Info("using registry contract address", zap.String("addr", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", zap.String("address", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
