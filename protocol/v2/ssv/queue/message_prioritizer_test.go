@@ -33,10 +33,10 @@ var messagePriorityTests = []struct {
 		messages: []mockMessage{
 			// 1. Current height/slot:
 			// 1.1. Consensus
-			// 1.1.1. Consensus/Prepare
-			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
-			// 1.1.2. Consensus/Proposal
+			// 1.1.1. Consensus/Proposal
 			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			// 1.1.2. Consensus/Prepare
+			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
 			// 1.1.3. Consensus/Commit
 			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
 			// 1.1.4. Consensus/<Other>
@@ -80,10 +80,10 @@ var messagePriorityTests = []struct {
 			// 1.2. Post-consensus
 			// mockNonConsensusMessage{Slot: 64, Type: ssv.PostConsensusPartialSig},
 			// 1.3. Consensus
-			// 1.3.1. Consensus/Prepare
-			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
-			// 1.3.2. Consensus/Proposal
+			// 1.3.1. Consensus/Proposal
 			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
+			// 1.3.2. Consensus/Prepare
+			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
 			// 1.3.3. Consensus/Commit
 			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
 			// 1.3.4. Consensus/<Other>
