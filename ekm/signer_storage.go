@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
@@ -41,13 +42,15 @@ type Storage interface {
 type storage struct {
 	db      basedb.IDb
 	network beacon.Network
+	logger  *zap.Logger
 	lock    sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.IDb, network beacon.Network) Storage {
+func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger) Storage {
 	return &storage{
 		db:      db,
 		network: network,
+		logger:  logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
 		lock:    sync.RWMutex{},
 	}
 }
@@ -209,12 +212,14 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) *eth.AttestationData
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
+		s.logger.Warn("could not get highest attestation from db")
 		return nil
 	}
 	if !found {
 		return nil
 	}
 	if obj.Value == nil || len(obj.Value) == 0 {
+		s.logger.Warn("highest attestation value is empty")
 		return nil
 	}
 
@@ -252,12 +257,14 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock {
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
+		s.logger.Warn("could not get highest proposal from db")
 		return nil
 	}
 	if !found {
 		return nil
 	}
 	if obj.Value == nil || len(obj.Value) == 0 {
+		s.logger.Warn("highest proposal value is empty")
 		return nil
 	}
 

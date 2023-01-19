@@ -41,7 +41,7 @@ func newStorageForTest() (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0))
+	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), zap.L())
 	return s, func() {
 		db.Close()
 	}

@@ -78,7 +78,7 @@ func (o Options) nodeStorage() operatorstorage.Storage {
 }
 
 func (o Options) signerStorage() ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network)
+	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
 }
 
 // Run executes the migrations.

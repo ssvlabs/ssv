@@ -4,6 +4,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -33,7 +34,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage()
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(db, nil, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain())
+	km, err := NewETHKeyManagerSigner(db, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), zap.L())
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
