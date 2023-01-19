@@ -191,7 +191,7 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 	}
 	if len(cfg.DebugServices) > 0 {
-		_ = logging.SetLogLevelRegex(cfg.DebugServices, "debug")
+		_ = logging.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String())
 	}
 
 	return logger

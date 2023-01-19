@@ -6,12 +6,12 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"time"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -90,7 +90,8 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			if runner != nil && runner.HasRunningDuty() {
 				inst := runner.GetBaseRunner().State.RunningInstance
 				if inst != nil {
-					state.HasRunningInstance = true
+					decided, _ := inst.IsDecided()
+					state.HasRunningInstance = !decided
 				}
 			}
 			state.Height = v.GetLastHeight(msgID)
@@ -103,19 +104,20 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 				continue
 			}
 
-			err := handler(msg.SSVMessage)
-			switch msg.SSVMessage.MsgType {
-			case spectypes.SSVConsensusMsgType:
-				sm := msg.Body.(*specqbft.SignedMessage)
-				logger.Debug("could not handle message (consensus)", zap.Error(err),
-					zap.Int64("msg_height", int64(sm.Message.Height)),
-					zap.Int64("msg_round", int64(sm.Message.Round)),
-					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-					zap.Any("signers", sm.Signers))
-			case spectypes.SSVPartialSignatureMsgType:
-				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
-				logger.Debug("could not handle message (partial signature)", zap.Error(err),
-					zap.Int64("signer", int64(psm.Signer)))
+			if err := handler(msg.SSVMessage); err != nil {
+				switch msg.SSVMessage.MsgType {
+				case spectypes.SSVConsensusMsgType:
+					sm := msg.Body.(*specqbft.SignedMessage)
+					logger.Debug("could not handle message (consensus)", zap.Error(err),
+						zap.Int64("msg_height", int64(sm.Message.Height)),
+						zap.Int64("msg_round", int64(sm.Message.Round)),
+						zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+						zap.Any("signers", sm.Signers))
+				case spectypes.SSVPartialSignatureMsgType:
+					psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+					logger.Debug("could not handle message (partial signature)", zap.Error(err),
+						zap.Int64("signer", int64(psm.Signer)))
+				}
 			}
 		}
 	}
