@@ -60,9 +60,7 @@ var _ metrics.HealthCheckAgent = &eth1Client{}
 
 // NewEth1Client creates a new instance
 func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
-	logger := opts.Logger.With(zap.String("component", "eth1GoETH"),
-		zap.String("address", opts.RegistryContractAddr))
-	logger.Info("eth1 addresses", zap.String("address", opts.NodeAddr))
+	logger := opts.Logger
 
 	ec := eth1Client{
 		ctx:                  opts.Ctx,
@@ -76,7 +74,7 @@ func NewEth1Client(opts ClientOptions) (eth1.Client, error) {
 	}
 
 	if err := ec.connect(); err != nil {
-		logger.Error("failed to connect to the Ethereum client", zap.Error(err))
+		logger.Error("failed to connect to the execution client", zap.Error(err))
 		return nil, err
 	}
 
@@ -131,15 +129,15 @@ func (ec *eth1Client) HealthCheck() []string {
 // connect connects to eth1 client
 func (ec *eth1Client) connect() error {
 	// Create an IPC based RPC connection to a remote node
-	ec.logger.Info("dialing eth1 node...")
+	ec.logger.Info("connecting to execution client", zap.String("address", ec.nodeAddr))
 	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
 	defer cancel()
 	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		ec.logger.Error("could not connect to the eth1 client", zap.Error(err))
+		ec.logger.Error("could not connect to the execution client", zap.Error(err))
 		return err
 	}
-	ec.logger.Info("successfully connected to eth1 goETH")
+	ec.logger.Info("successfully connected to execution client")
 	ec.conn = conn
 	return nil
 }

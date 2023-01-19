@@ -19,7 +19,7 @@ import (
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	go func() {
-		logger := n.logger.With(zap.String("identifier", mid.String()))
+		logger := n.logger.With(zap.String("publicKey", hex.EncodeToString(mid.GetPubKey())), zap.String("role", mid.GetRoleType().String()))
 		lastDecided, err := n.LastDecided(mid)
 		if err != nil {
 			logger.Debug("highest decided: sync failed", zap.Error(err))

@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -36,6 +37,7 @@ func NewController(
 	domain spectypes.DomainType,
 	config qbft.IConfig,
 ) *Controller {
+	msgId := spectypes.MessageIDFromBytes(identifier)
 	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
@@ -44,7 +46,7 @@ func NewController(
 		StoredInstances:     InstanceContainer{},
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
+		logger:              logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String())),
 	}
 }
 
