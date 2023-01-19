@@ -76,11 +76,11 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := setupGlobal(cmd)
 
-		cfg.DBOptions.Ctx = cmd.Context()
-		db := setupDb(logger)
-		operatorStorage, operatorPubKey := setupOperatorStorage(db)
-
 		eth2Network, forkVersion := setupSSVNetwork(logger)
+
+		cfg.DBOptions.Ctx = cmd.Context()
+		db := setupDb(logger, eth2Network)
+		operatorStorage, operatorPubKey := setupOperatorStorage(db)
 
 		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain())
 		if err != nil {
@@ -197,7 +197,7 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 	return logger
 }
 
-func setupDb(logger *zap.Logger) basedb.IDb {
+func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) basedb.IDb {
 	cfg.DBOptions.Logger = logger
 
 	db, err := storage.GetStorageFactory(cfg.DBOptions)
@@ -206,9 +206,10 @@ func setupDb(logger *zap.Logger) basedb.IDb {
 	}
 
 	migrationOpts := migrations.Options{
-		Db:     db,
-		Logger: logger,
-		DbPath: cfg.DBOptions.Path,
+		Db:      db,
+		Logger:  logger,
+		DbPath:  cfg.DBOptions.Path,
+		Network: eth2Network,
 	}
 	err = migrations.Run(cfg.DBOptions.Ctx, migrationOpts)
 	if err != nil {

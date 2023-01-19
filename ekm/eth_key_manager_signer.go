@@ -16,26 +16,27 @@ import (
 	"github.com/pkg/errors"
 	prysmtypes "github.com/prysmaticlabs/eth2-types"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
+	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 // minimal att&block epoch/slot distance to protect slashing
-var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(2)
-var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(1)
+var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(0)
+var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(0)
 
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
-	storage           *signerStorage
+	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType) (spectypes.KeyManager, error) {
-	signerStore := newSignerStorage(db, network)
+func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, logger *zap.Logger) (spectypes.KeyManager, error) {
+	signerStore := NewSignerStorage(db, network, logger)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
@@ -191,6 +192,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 			return errors.Wrap(err, "could not save share")
 		}
 	}
+
 	return nil
 }
 
@@ -205,10 +207,10 @@ func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	minBlockData := minimalBlockProtectionData(highestProposal)
 
 	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
-		return errors.Wrap(err, "could not save minimal highest attestation")
+		return errors.Wrapf(err, "could not save minimal highest attestation for %s", string(pk))
 	}
 	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
-		return errors.Wrap(err, "could not save minimal highest proposal")
+		return errors.Wrapf(err, "could not save minimal highest proposal for %s", string(pk))
 	}
 	return nil
 }
