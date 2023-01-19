@@ -82,7 +82,7 @@ var StartNodeCmd = &cobra.Command{
 		db := setupDb(logger, eth2Network)
 		operatorStorage, operatorPubKey := setupOperatorStorage(db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain())
+		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain(), logger)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
