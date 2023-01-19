@@ -45,6 +45,7 @@ func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMess
 		State:          i.State,
 		DecidedMessage: msg,
 	}
+	// TODO: decide if we want light/full behaviour here instead of inside storage.
 	// highest := msg.Message.Height >= c.Height
 	// if c.fullNode {
 	// 	return c.config.GetStorage().SaveInstance(storedInstance, highest)
