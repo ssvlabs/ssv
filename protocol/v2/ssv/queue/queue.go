@@ -25,7 +25,7 @@ type Queue interface {
 	Push(*DecodedSSVMessage)
 	// Pop removes & returns the highest priority message which matches the given filter.
 	// Returns nil if no message is found.
-	Pop(MessagePrioritizer, Filter) *DecodedSSVMessage
+	Pop(MessagePrioritizer) *DecodedSSVMessage
 	// IsEmpty checks if the q is empty
 	IsEmpty() bool
 }
@@ -56,13 +56,8 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	}
 }
 
-func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
-	if filter == nil {
-		filter = func(*DecodedSSVMessage) bool {
-			return true
-		}
-	}
-	res := q.pop(prioritizer, filter)
+func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+	res := q.pop(prioritizer)
 	if res != nil {
 		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
 	}
@@ -77,7 +72,7 @@ func (q *PriorityQueue) IsEmpty() bool {
 	return h.Value() == nil
 }
 
-func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+func (q *PriorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	var h, beforeHighest, previous *msgItem
 	currentP := q.head
 
@@ -85,7 +80,7 @@ func (q *PriorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 		current := load(&currentP)
 		val := current.Value()
 		if val != nil {
-			if h == nil || (filter(val) && prioritizer.Prior(val, h.Value())) {
+			if h == nil || prioritizer.Prior(val, h.Value()) {
 				if previous != nil {
 					beforeHighest = previous
 				}

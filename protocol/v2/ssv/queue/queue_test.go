@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,18 +25,18 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 	require.False(t, queue.IsEmpty())
 
 	// Pop 1st message.
-	popped := queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
+	popped := queue.Pop(NewMessagePrioritizer(mockState))
 	//require.False(t, queue.IsEmpty())
 	require.Equal(t, msg, popped)
 
 	// Pop 2nd message.
-	popped = queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(NewMessagePrioritizer(mockState))
 	require.True(t, queue.IsEmpty())
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.Pop(NewMessagePrioritizer(mockState), FilterRole(msg.MsgID.GetRoleType()))
+	popped = queue.Pop(NewMessagePrioritizer(mockState))
 	require.Nil(t, popped)
 }
 
@@ -62,7 +61,7 @@ func TestPriorityQueueOrder(t *testing.T) {
 
 			// Pop messages from the queue and compare to the expected order.
 			for i, excepted := range decodedMessages {
-				actual := q.Pop(NewMessagePrioritizer(test.state), nil)
+				actual := q.Pop(NewMessagePrioritizer(test.state))
 				require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 			}
 		})
@@ -108,7 +107,7 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			queue.Pop(prioritizer, FilterRole(types.BNRoleProposer))
+			queue.Pop(prioritizer)
 		}
 	})
 }
