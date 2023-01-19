@@ -70,9 +70,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 	logger.Debug("queue consumer is running")
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
 	for ctx.Err() == nil {
 
 		if q.Q.IsEmpty() {
