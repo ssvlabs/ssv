@@ -88,7 +88,7 @@ func compareRound(state *State, m *DecodedSSVMessage) int {
 func messageScore(m *DecodedSSVMessage) int {
 	switch m.MsgType {
 	case ssvmessage.SSVEventMsgType:
-		return 1
+		return 1 + scoreByPrecedence(nil, m, isMessageEventOfType(ssvtypes.ExecuteDuty), isMessageEventOfType(ssvtypes.Timeout))
 	default:
 		return 0
 	}
@@ -179,6 +179,15 @@ func isMessageOfType(t qbft.MessageType) messageCondition {
 	return func(s *State, m *DecodedSSVMessage) bool {
 		if sm, ok := m.Body.(*qbft.SignedMessage); ok {
 			return sm.Message.MsgType == t
+		}
+		return false
+	}
+}
+
+func isMessageEventOfType(eventType ssvtypes.EventType) messageCondition {
+	return func(s *State, m *DecodedSSVMessage) bool {
+		if em, ok := m.Body.(*ssvtypes.EventMsg); ok {
+			return em.Type == eventType
 		}
 		return false
 	}
