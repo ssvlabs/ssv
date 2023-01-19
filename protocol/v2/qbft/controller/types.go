@@ -11,7 +11,7 @@ import (
 )
 
 // DefaultInstanceContainerCapacity is the default capacity for InstanceContainer.
-const DefaultInstanceContainerCapacity int = 1024
+const DefaultInstanceContainerCapacity int = 5
 
 // InstanceContainer is a fixed-capacity container for instances.
 type InstanceContainer []*instance.Instance

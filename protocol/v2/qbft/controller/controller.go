@@ -160,7 +160,7 @@ func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instanc
 	}
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
-		c.logger.Error("could not load instance from storage",
+		c.logger.Debug("could not load instance from storage",
 			zap.Uint64("height", uint64(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
