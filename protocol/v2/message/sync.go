@@ -1,11 +1,13 @@
 package message
 
 import (
-	"encoding/json"
+	jsoniter "github.com/json-iterator/go"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
+
+var json = jsoniter.ConfigDefault
 
 // StatusCode is the response status code
 type StatusCode uint32
