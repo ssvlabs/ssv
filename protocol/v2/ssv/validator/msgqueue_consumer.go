@@ -73,54 +73,51 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Debug("queue consumer is closed")
-			return nil
-		case <-ticker.C:
-			if q.Q.IsEmpty() {
-				// Queue is empty.
-				continue
-			}
+	for ctx.Err() == nil {
 
-			// Construct a representation of the current state.
-			state := *q.queueState
-			runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-			if runner != nil && runner.HasRunningDuty() {
-				inst := runner.GetBaseRunner().State.RunningInstance
-				if inst != nil {
-					decided, _ := inst.IsDecided()
-					state.HasRunningInstance = !decided
-				}
+		if q.Q.IsEmpty() {
+			time.Sleep(interval)
+			continue
+		}
+		// Construct a representation of the current state.
+		state := *q.queueState
+		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
+		if runner != nil && runner.HasRunningDuty() {
+			inst := runner.GetBaseRunner().State.RunningInstance
+			if inst != nil {
+				decided, _ := inst.IsDecided()
+				state.HasRunningInstance = !decided
 			}
-			state.Height = v.GetLastHeight(msgID)
-			state.Round = v.GetLastRound(msgID)
+		}
+		state.Height = v.GetLastHeight(msgID)
+		state.Round = v.GetLastRound(msgID)
 
-			// Pop the highest priority message and handle it.
-			msg := q.Q.Pop(queue.NewMessagePrioritizer(&state), queue.FilterRole(msgID.GetRoleType()))
-			if msg == nil {
-				logger.Debug("could not pop message from queue")
-				continue
-			}
+		// Pop the highest priority message and handle it.
+		msg := q.Q.Pop(queue.NewMessagePrioritizer(&state), queue.FilterRole(msgID.GetRoleType()))
+		if msg == nil {
+			logger.Debug("could not pop message from queue")
+			time.Sleep(interval)
+			continue
+		}
 
-			if err := handler(msg.SSVMessage); err != nil {
-				switch msg.SSVMessage.MsgType {
-				case spectypes.SSVConsensusMsgType:
-					sm := msg.Body.(*specqbft.SignedMessage)
-					logger.Debug("could not handle message (consensus)", zap.Error(err),
-						zap.Int64("msg_height", int64(sm.Message.Height)),
-						zap.Int64("msg_round", int64(sm.Message.Round)),
-						zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-						zap.Any("signers", sm.Signers))
-				case spectypes.SSVPartialSignatureMsgType:
-					psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
-					logger.Debug("could not handle message (partial signature)", zap.Error(err),
-						zap.Int64("signer", int64(psm.Signer)))
-				}
+		if err := handler(msg.SSVMessage); err != nil {
+			switch msg.SSVMessage.MsgType {
+			case spectypes.SSVConsensusMsgType:
+				sm := msg.Body.(*specqbft.SignedMessage)
+				logger.Debug("could not handle message (consensus)", zap.Error(err),
+					zap.Int64("msg_height", int64(sm.Message.Height)),
+					zap.Int64("msg_round", int64(sm.Message.Round)),
+					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+					zap.Any("signers", sm.Signers))
+			case spectypes.SSVPartialSignatureMsgType:
+				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+				logger.Debug("could not handle message (partial signature)", zap.Error(err),
+					zap.Int64("signer", int64(psm.Signer)))
 			}
 		}
 	}
+	logger.Debug("queue consumer is closed")
+	return nil
 }
 
 // GetLastHeight returns the last height for the given identifier
