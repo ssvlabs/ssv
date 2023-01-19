@@ -10,8 +10,16 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
-// DefaultInstanceContainerCapacity is the default capacity for InstanceContainer.
-const DefaultInstanceContainerCapacity int = 1024
+const (
+	// DefaultInstanceContainerCapacity is the default capacity for InstanceContainer.
+	// This is used when unmarshaling or making an InstanceContainer slice without capacaity.
+	// Keep this value fit for spec tests to pass.
+	DefaultInstanceContainerCapacity int = 1024
+
+	// RuntimeInstanceContainerCapacity is the capacity for InstanceContainer when running a node
+	// with storage.
+	RuntimeInstanceContainerCapacity int = 5
+)
 
 // InstanceContainer is a fixed-capacity container for instances.
 type InstanceContainer []*instance.Instance

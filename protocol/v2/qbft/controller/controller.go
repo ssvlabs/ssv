@@ -49,7 +49,7 @@ func NewController(
 		Height:              specqbft.FirstHeight,
 		Domain:              domain,
 		Share:               share,
-		StoredInstances:     make(InstanceContainer, 0, DefaultInstanceContainerCapacity),
+		StoredInstances:     make(InstanceContainer, 0, RuntimeInstanceContainerCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 		fullNode:            fullNode,
