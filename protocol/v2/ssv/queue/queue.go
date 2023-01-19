@@ -19,17 +19,19 @@ func FilterRole(role types.BeaconRole) Filter {
 	}
 }
 
-// Queue is a queue of DecodedSSVMessage.
+// Queue objective is to receive messages and pop the right msg by to specify priority.
 type Queue interface {
-	// Push inserts a message to the queue.
+	// Push inserts a message to the queue
 	Push(*DecodedSSVMessage)
-	// Pop removes and returns the front message in the queue.
+	// Pop removes & returns the highest priority message which matches the given filter.
+	// Returns nil if no message is found.
 	Pop(MessagePrioritizer, Filter) *DecodedSSVMessage
 	// IsEmpty checks if the q is empty
 	IsEmpty() bool
 }
 
-// PriorityQueue is queue of DecodedSSVMessage ordered by a MessagePrioritizer.
+// PriorityQueue implements Queue, it manages a lock-free linked list of DecodedSSVMessage.
+// Implemented using atomic CAS (CompareAndSwap) operations to handle multiple goroutines that add/pop messages.
 type PriorityQueue struct {
 	head unsafe.Pointer
 }
@@ -44,7 +46,6 @@ func New() Queue {
 	}
 }
 
-// Push inserts a message to the queue.
 func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	// nolint
 	n := &msgItem{value: unsafe.Pointer(msg), next: q.head}
@@ -55,8 +56,6 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	}
 }
 
-// Pop removes & returns the highest priority message which matches the given filter.
-// Returns nil if no message is found.
 func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
 	if filter == nil {
 		filter = func(*DecodedSSVMessage) bool {
@@ -118,19 +117,23 @@ func cas(p *unsafe.Pointer, old, new unsafe.Pointer) bool {
 	return atomic.CompareAndSwapPointer(p, old, new)
 }
 
+// msgItem is an item in the linked list that is used by PriorityQueue
 type msgItem struct {
 	value unsafe.Pointer //*DecodedSSVMessage
 	next  unsafe.Pointer
 }
 
+// Value returns the underlaying value
 func (i *msgItem) Value() *DecodedSSVMessage {
 	return (*DecodedSSVMessage)(atomic.LoadPointer(&i.value))
 }
 
+// Next returns the next item in the list
 func (i *msgItem) Next() *msgItem {
 	return (*msgItem)(atomic.LoadPointer(&i.next))
 }
 
+// NextP returns the next item's pointer
 func (i *msgItem) NextP() unsafe.Pointer {
 	return atomic.LoadPointer(&i.next)
 }
