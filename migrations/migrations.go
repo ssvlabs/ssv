@@ -7,8 +7,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ekm"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -29,6 +31,8 @@ var (
 		migrationCleanShares,
 		migrationRemoveChangeRoundSync,
 		migrationAddGraffiti,
+		migrationCleanRegistryData,
+		migrationCleanRegistryDataIncludingSignerStorage,
 	}
 )
 
@@ -52,13 +56,14 @@ type Migrations []Migration
 
 // Options are configurations for migrations
 type Options struct {
-	Db     basedb.IDb
-	Logger *zap.Logger
-	DbPath string
+	Db      basedb.IDb
+	Logger  *zap.Logger
+	DbPath  string
+	Network beacon.Network
 }
 
 func (o Options) getRegistryStores() []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage()}
+	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(), o.signerStorage()}
 }
 
 func (o Options) validatorStorage() validatorstorage.ICollection {
@@ -70,6 +75,10 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 
 func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db, o.Logger)
+}
+
+func (o Options) signerStorage() ekm.Storage {
+	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
 }
 
 // Run executes the migrations.

@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/storage"
+	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -28,42 +28,46 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getStorage(t *testing.T) basedb.IDb {
-	options := basedb.Options{
+func getBaseStorage() (basedb.IDb, error) {
+	return ssvstorage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Logger: zap.L(),
 		Path:   "",
+	})
+}
+
+func newStorageForTest() (Storage, func()) {
+	db, err := getBaseStorage()
+	if err != nil {
+		return nil, func() {}
 	}
-	db, err := storage.GetStorageFactory(options)
-	require.NoError(t, err)
-	return db
+	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), zap.L())
+	return s, func() {
+		db.Close()
+	}
 }
 
-func getWalletStorage(t *testing.T) *signerStorage {
-	network := beaconprotocol.NewNetwork(core.PraterNetwork, 0)
-	return newSignerStorage(getStorage(t), network)
-}
-
-func testWallet(t *testing.T) (core.Wallet, *signerStorage) {
+func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
 	index := 1
 
-	storage := getWalletStorage(t)
+	//signerStorage := getWalletStorage(t)
+	signerStorage, done := newStorageForTest()
 
-	wallet := hd.NewWallet(&core.WalletContext{Storage: storage})
-	require.NoError(t, storage.SaveWallet(wallet))
+	wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
+	require.NoError(t, signerStorage.SaveWallet(wallet))
 
 	_, err := wallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
 	require.NoError(t, err)
 
-	return wallet, storage
+	return wallet, signerStorage, done
 }
 
 func TestOpeningAccounts(t *testing.T) {
-	wallet, storage := testWallet(t)
-	defer storage.db.Close()
+	wallet, _, done := testWallet(t)
+	defer done()
 	seed := _byteArray("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1fff")
 
 	for i := 0; i < 10; i++ {
@@ -92,30 +96,32 @@ func TestOpeningAccounts(t *testing.T) {
 }
 
 func TestDeleteAccount(t *testing.T) {
-	_, storage := testWallet(t)
-	defer storage.db.Close()
+	_, signerStorage, done := testWallet(t)
+	defer done()
 
-	accts, err := storage.ListAccounts()
+	accts, err := signerStorage.ListAccounts()
 	require.NoError(t, err)
 	require.Len(t, accts, 1)
 
-	require.NoError(t, storage.DeleteAccount(accts[0].ID()))
-	acc, err := storage.OpenAccount(accts[0].ID())
+	require.NoError(t, signerStorage.DeleteAccount(accts[0].ID()))
+	acc, err := signerStorage.OpenAccount(accts[0].ID())
 	require.EqualError(t, err, "account not found")
 	require.Nil(t, acc)
 }
 
 func TestNonExistingWallet(t *testing.T) {
-	storage := getWalletStorage(t)
-	w, err := storage.OpenWallet()
+	signerStorage, done := newStorageForTest()
+	defer done()
+
+	w, err := signerStorage.OpenWallet()
 	require.NotNil(t, err)
 	require.EqualError(t, err, "could not find wallet")
 	require.Nil(t, w)
 }
 
 func TestNonExistingAccount(t *testing.T) {
-	wallet, storage := testWallet(t)
-	defer storage.db.Close()
+	wallet, _, done := testWallet(t)
+	defer done()
 
 	account, err := wallet.AccountByID(uuid.New())
 	require.EqualError(t, err, "account not found")
@@ -146,17 +152,17 @@ func TestWalletStorage(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 
-			wallet, storage := testWallet(t)
-			defer storage.db.Close()
+			wallet, signerStorage, done := testWallet(t)
+			defer done()
 
 			// set encryptor
 			if test.encryptor != nil {
-				storage.SetEncryptor(test.encryptor, test.password)
+				signerStorage.SetEncryptor(test.encryptor, test.password)
 			} else {
-				storage.SetEncryptor(nil, nil)
+				signerStorage.SetEncryptor(nil, nil)
 			}
 
-			err := storage.SaveWallet(wallet)
+			err := signerStorage.SaveWallet(wallet)
 			if err != nil {
 				if test.error != nil {
 					require.Equal(t, test.error.Error(), err.Error())
@@ -167,7 +173,7 @@ func TestWalletStorage(t *testing.T) {
 			}
 
 			// fetch wallet by id
-			fetched, err := storage.OpenWallet()
+			fetched, err := signerStorage.OpenWallet()
 			if err != nil {
 				if test.error != nil {
 					require.Equal(t, test.error.Error(), err.Error())
@@ -222,8 +228,8 @@ func testBlock(t *testing.T) *eth.BeaconBlock {
 }
 
 func TestSavingProposal(t *testing.T) {
-	_, storage := testWallet(t)
-	defer storage.db.Close()
+	_, signerStorage, done := testWallet(t)
+	defer done()
 
 	tests := []struct {
 		name     string
@@ -244,11 +250,11 @@ func TestSavingProposal(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
-			err := storage.SaveHighestProposal(test.account.ValidatorPublicKey(), test.proposal)
+			err := signerStorage.SaveHighestProposal(test.account.ValidatorPublicKey(), test.proposal)
 			require.NoError(t, err)
 
 			// fetch
-			proposal := storage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			proposal := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
 			require.NotNil(t, proposal)
 
 			// test equal
@@ -262,8 +268,8 @@ func TestSavingProposal(t *testing.T) {
 }
 
 func TestSavingAttestation(t *testing.T) {
-	_, storage := testWallet(t)
-	defer storage.db.Close()
+	_, signerStorage, done := testWallet(t)
+	defer done()
 
 	tests := []struct {
 		name    string
@@ -316,11 +322,11 @@ func TestSavingAttestation(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
-			err := storage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
+			err := signerStorage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
 			require.NoError(t, err)
 
 			// fetch
-			att := storage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NotNil(t, att)
 
 			// test equal
@@ -334,8 +340,8 @@ func TestSavingAttestation(t *testing.T) {
 }
 
 func TestSavingHighestAttestation(t *testing.T) {
-	_, storage := testWallet(t)
-	defer storage.db.Close()
+	_, signerStorage, done := testWallet(t)
+	defer done()
 
 	tests := []struct {
 		name    string
@@ -388,11 +394,11 @@ func TestSavingHighestAttestation(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			// save
-			err := storage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
+			err := signerStorage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
 			require.NoError(t, err)
 
 			// fetch
-			att := storage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NotNil(t, att)
 
 			// test equal
@@ -401,6 +407,114 @@ func TestSavingHighestAttestation(t *testing.T) {
 			bRoot, err := test.att.HashTreeRoot()
 			require.NoError(t, err)
 			require.EqualValues(t, aRoot, bRoot)
+		})
+	}
+}
+
+func TestRemovingHighestAttestation(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	tests := []struct {
+		name    string
+		att     *eth.AttestationData
+		account core.ValidatorAccount
+	}{
+		{
+			name: "remove highest attestation",
+			att: &eth.AttestationData{
+				Slot:            30,
+				CommitteeIndex:  1,
+				BeaconBlockRoot: make([]byte, 32),
+				Source: &eth.Checkpoint{
+					Epoch: 1,
+					Root:  make([]byte, 32),
+				},
+				Target: &eth.Checkpoint{
+					Epoch: 4,
+					Root:  make([]byte, 32),
+				},
+			},
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// save
+			err := signerStorage.SaveHighestAttestation(test.account.ValidatorPublicKey(), test.att)
+			require.NoError(t, err)
+
+			// fetch
+			att := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			require.NotNil(t, att)
+
+			// test equal
+			aRoot, err := att.HashTreeRoot()
+			require.NoError(t, err)
+			bRoot, err := test.att.HashTreeRoot()
+			require.NoError(t, err)
+			require.EqualValues(t, aRoot, bRoot)
+
+			// remove
+			err = signerStorage.RemoveHighestAttestation(test.account.ValidatorPublicKey())
+			require.NoError(t, err)
+
+			// fetch
+			att = signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			require.Nil(t, att)
+		})
+	}
+}
+
+func TestRemovingHighestProposal(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	tests := []struct {
+		name     string
+		proposal *eth.BeaconBlock
+		account  core.ValidatorAccount
+	}{
+		{
+			name:     "remove highest proposal",
+			proposal: testBlock(t),
+			account: &mockAccount{
+				id:            uuid.New(),
+				validationKey: _bigInt("5467048590701165350380985526996487573957450279098876378395441669247373404218"),
+			},
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			// save
+			err := signerStorage.SaveHighestProposal(test.account.ValidatorPublicKey(), test.proposal)
+			require.NoError(t, err)
+
+			// fetch
+			proposal := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			require.NotNil(t, proposal)
+
+			// test equal
+			aRoot, err := proposal.HashTreeRoot()
+			require.NoError(t, err)
+			bRoot, err := proposal.HashTreeRoot()
+			require.NoError(t, err)
+			require.EqualValues(t, aRoot, bRoot)
+
+			// remove
+			err = signerStorage.RemoveHighestProposal(test.account.ValidatorPublicKey())
+			require.NoError(t, err)
+
+			// fetch
+			proposal = signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			require.Nil(t, proposal)
 		})
 	}
 }
