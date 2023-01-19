@@ -1,12 +1,10 @@
 package types
 
 import (
+	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
-	jsoniter "github.com/json-iterator/go"
 )
-
-var json = jsoniter.ConfigDefault
 
 type EventType int
 
