@@ -1,10 +1,11 @@
 package qbftstorage
 
 import (
-	"encoding/json"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	jsoniter "github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigDefault
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {

@@ -2,7 +2,6 @@ package instance
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"sync"
 
 	logging "github.com/ipfs/go-log"
@@ -11,8 +10,11 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 )
+
+var json = jsoniter.ConfigDefault
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
 
