@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -12,10 +13,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	logging "github.com/ipfs/go-log"
-	jsoniter "github.com/json-iterator/go"
 )
-
-var json = jsoniter.ConfigDefault
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
 

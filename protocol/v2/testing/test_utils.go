@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"encoding/json"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -13,10 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	jsoniter "github.com/json-iterator/go"
 )
-
-var json = jsoniter.ConfigDefault
 
 // TODO: add missing tests
 

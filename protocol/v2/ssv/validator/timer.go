@@ -1,17 +1,15 @@
 package validator
 
 import (
+	"encoding/json"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
-
-var json = jsoniter.ConfigDefault
 
 func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {

@@ -2,16 +2,14 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	jsoniter "github.com/json-iterator/go"
 )
-
-var json = jsoniter.ConfigDefault
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
