@@ -3,6 +3,7 @@ package storage
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/utils/encoding"
 	"log"
 	"sync"
 
@@ -71,10 +72,11 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 
 // SaveHighestInstance saves the StoredInstance for the highest instance.
 func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
-	value, err := instance.Encode()
+	pool, value, err := encoding.EncodeJSON(instance)
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
+	defer pool()
 	return i.save(value, highestInstanceKey, instance.State.ID)
 }
 
@@ -88,7 +90,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 		return nil, err
 	}
 	ret := &qbftstorage.StoredInstance{}
-	if err := ret.Decode(val); err != nil {
+	if err := encoding.DecodeJSON(val, ret); err != nil {
 		return nil, errors.Wrap(err, "could not decode instance")
 	}
 	return ret, nil
@@ -99,11 +101,11 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
-	value, err := instance.Encode()
+	pool, value, err := encoding.EncodeJSON(instance)
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
-
+	defer pool()
 	return i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
 }
 
@@ -121,10 +123,9 @@ func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Heigh
 		}
 		if found {
 			instance := &qbftstorage.StoredInstance{}
-			if err := instance.Decode(val); err != nil {
+			if err := encoding.DecodeJSON(val, instance); err != nil {
 				return instances, errors.Wrap(err, "could not decode instance")
 			}
-
 			instances = append(instances, instance)
 			continue
 		}
