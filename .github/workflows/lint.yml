@@ -13,16 +13,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - uses: arnested/go-version-action@v1
 
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Install Go ${{ steps.go-version.outputs.minimal }}
+      - name: Setup Go
         uses: actions/setup-go@v3
         with:
-          go-version: ${{ steps.go-version.outputs.minimal }}
-          check-latest: true
+          go-version: 1.19
 
       - name: Run lint-prepare
         run: make lint-prepare
