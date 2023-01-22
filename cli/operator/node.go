@@ -271,6 +271,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorPubKey string, db b
 	cfg.P2pNetworkConfig.Logger = logger
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
+	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 
 	return p2pv1.New(&cfg.P2pNetworkConfig)
 }

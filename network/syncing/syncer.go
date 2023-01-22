@@ -2,6 +2,7 @@ package syncing
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -85,7 +86,8 @@ func (s *syncer) SyncHighestDecided(
 
 	logger := s.logger.With(
 		zap.String("what", "SyncHighestDecided"),
-		zap.String("identifier", id.String()))
+		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
+		zap.String("role", id.GetRoleType().String()))
 
 	lastDecided, err := s.network.LastDecided(id)
 	if err != nil {
@@ -119,7 +121,7 @@ func (s *syncer) SyncHighestDecided(
 
 func (s *syncer) SyncDecidedByRange(
 	ctx context.Context,
-	mid spectypes.MessageID,
+	id spectypes.MessageID,
 	from, to qbft.Height,
 	handler MessageHandler,
 ) error {
@@ -129,7 +131,8 @@ func (s *syncer) SyncDecidedByRange(
 
 	logger := s.logger.With(
 		zap.String("what", "SyncDecidedByRange"),
-		zap.String("identifier", mid.String()),
+		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
+		zap.String("role", id.GetRoleType().String()),
 		zap.Uint64("from", uint64(from)),
 		zap.Uint64("to", uint64(to)))
 	logger.Debug("syncing decided by range")
@@ -137,7 +140,7 @@ func (s *syncer) SyncDecidedByRange(
 	err := s.getDecidedByRange(
 		context.Background(),
 		logger,
-		mid,
+		id,
 		from,
 		to,
 		func(sm *specqbft.SignedMessage) error {
@@ -148,7 +151,7 @@ func (s *syncer) SyncDecidedByRange(
 			}
 			handler(spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
+				MsgID:   id,
 				Data:    raw,
 			})
 			return nil
