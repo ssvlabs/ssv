@@ -29,6 +29,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.Message.Height > c.Height
+	save := true
 
 	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
@@ -45,17 +46,13 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	} else { // decide previously, add if has more signers
 		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
 		if len(msg.Signers) > len(signers) {
-			//TODO: we dont broadcast late decided anymore, so we should check if we can remove this
 			inst.State.CommitContainer.AddMsg(msg)
-			// TODO: update storage
+			save = false
 		}
 	}
 
-	// if msg.Message.Height != c.Height {
-	// Save future instance, if it wasn't decided already (so it hasn't been saved yet.)
-	// if !prevDecided {
-	if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
-		if err = c.SaveInstance(futureInstance, msg); err != nil {
+	if save {
+		if err = c.SaveInstance(inst, msg); err != nil {
 			c.logger.Debug("failed to save instance",
 				zap.Uint64("height", uint64(msg.Message.Height)),
 				zap.Error(err))
@@ -66,8 +63,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 				zap.Any("signers", msg.Signers))
 		}
 	}
-	// }
-	// }
+
 	if isFutureDecided {
 		// sync gap
 		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)

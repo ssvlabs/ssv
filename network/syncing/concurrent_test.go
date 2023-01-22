@@ -36,7 +36,7 @@ func TestConcurrentSyncer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	concurrency := 2
-	s := syncing.NewConcurrent(ctx, syncer, concurrency, errors)
+	s := syncing.NewConcurrent(ctx, syncer, concurrency, syncing.DefaultTimeouts, errors)
 
 	// Run the syncer
 	done := make(chan struct{})
@@ -94,7 +94,7 @@ func BenchmarkConcurrentSyncer(b *testing.B) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		concurrency := 2
-		s := syncing.NewConcurrent(ctx, syncer, concurrency, errors)
+		s := syncing.NewConcurrent(ctx, syncer, concurrency, syncing.DefaultTimeouts, errors)
 
 		// Run the syncer
 		done := make(chan struct{})

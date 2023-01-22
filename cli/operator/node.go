@@ -172,7 +172,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Logger = Logger
 		cfg.P2pNetworkConfig.ForkVersion = ssvForkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)
-		cfg.P2pNetworkConfig.SyncHistory = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 
 		p2pNet := p2pv1.New(cmd.Context(), &cfg.P2pNetworkConfig)
 

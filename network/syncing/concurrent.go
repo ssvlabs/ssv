@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -20,12 +21,30 @@ func (e Error) Error() string {
 	return fmt.Sprintf("%s(%s): %s", e.Operation, e.MessageID, e.Err)
 }
 
+// Timeouts is a set of timeouts for each syncing operation.
+type Timeouts struct {
+	// SyncHighestDecided is the timeout for SyncHighestDecided.
+	// Leave zero to not timeout.
+	SyncHighestDecided time.Duration
+
+	// SyncDecidedByRange is the timeout for SyncDecidedByRange.
+	// Leave zero to not timeout.
+	SyncDecidedByRange time.Duration
+}
+
+var DefaultTimeouts = Timeouts{
+	SyncHighestDecided: 12 * time.Second,
+	SyncDecidedByRange: 30 * time.Minute,
+}
+
+// ConcurrentSyncer is a Syncer that runs the given Syncer's methods concurrently.
 type ConcurrentSyncer struct {
 	syncer      Syncer
 	ctx         context.Context
 	jobs        chan func()
 	errors      chan<- Error
 	concurrency int
+	timeouts    Timeouts
 }
 
 // NewConcurrent returns a new Syncer that runs the given Syncer's methods concurrently.
@@ -36,6 +55,7 @@ func NewConcurrent(
 	ctx context.Context,
 	syncer Syncer,
 	concurrency int,
+	timeouts Timeouts,
 	errors chan<- Error,
 ) *ConcurrentSyncer {
 	return &ConcurrentSyncer{
@@ -45,6 +65,7 @@ func NewConcurrent(
 		jobs:        make(chan func(), 1024*1024),
 		errors:      errors,
 		concurrency: concurrency,
+		timeouts:    timeouts,
 	}
 }
 
@@ -89,7 +110,7 @@ func (s *ConcurrentSyncer) SyncHighestDecided(
 	handler MessageHandler,
 ) error {
 	s.jobs <- func() {
-		err := s.syncer.SyncHighestDecided(s.ctx, id, handler)
+		err := s.syncer.SyncHighestDecided(ctx, id, handler)
 		if err != nil && s.errors != nil {
 			s.errors <- Error{
 				Operation: "SyncHighestDecided",
@@ -108,7 +129,7 @@ func (s *ConcurrentSyncer) SyncDecidedByRange(
 	handler MessageHandler,
 ) error {
 	s.jobs <- func() {
-		err := s.syncer.SyncDecidedByRange(s.ctx, id, from, to, handler)
+		err := s.syncer.SyncDecidedByRange(ctx, id, from, to, handler)
 		if err != nil && s.errors != nil {
 			s.errors <- Error{
 				Operation: "SyncDecidedByRange",

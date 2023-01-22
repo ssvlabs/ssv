@@ -110,11 +110,6 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	// // if previously Decided we do not return Decided true again
-	// if prevDecided {
-	// 	return nil, err
-	// }
-
 	// save the highest Decided
 	if !decided {
 		return nil, nil

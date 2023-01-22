@@ -31,7 +31,7 @@ func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 }
 
 func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.Height) {
-	if !n.cfg.SyncHistory {
+	if !n.cfg.FullNode {
 		return
 	}
 	err := n.syncer.SyncDecidedByRange(context.Background(), mid, from, to, func(msg spectypes.SSVMessage) {

@@ -176,9 +176,9 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger, history bool) (storage.Storage, qbftstorageprotocol.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger, fullNode bool) (storage.Storage, qbftstorageprotocol.QBFTStore) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion, history)
+	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion, fullNode)
 	return sExporter, sIbft
 }
 
