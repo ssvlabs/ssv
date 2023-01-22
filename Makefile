@@ -32,14 +32,8 @@ lint-prepare:
 	@echo "Preparing Linter"
 	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s latest
 
-# First print go version, whereis go and golangci-lint
 .PHONY: lint
 lint:
-	@echo "Running linter"
-	@go version
-	@which go
-	@./bin/golangci-lint version
-	
 	./bin/golangci-lint run -v ./...
 	@if [ ! -z "${UNFORMATTED}" ]; then \
 		echo "Some files requires formatting, please run 'go fmt ./...'"; \
