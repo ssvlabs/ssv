@@ -196,11 +196,11 @@ func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
+	), /* p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
 		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
-	))
+	)*/)
 	return nil
 }
 
@@ -232,7 +232,7 @@ func (c *controller) handleRouterMessages() {
 	ch := c.messageRouter.GetMessageChan()
 
 	for {
-		if rand.Intn(20) == 2 {
+		if rand.Intn(200) == 2 {
 			c.logger.Debug("LIOR: message router status", zap.Int("len", c.messageRouter.Len()))
 		}
 		select {
