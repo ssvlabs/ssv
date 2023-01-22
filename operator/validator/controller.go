@@ -195,11 +195,11 @@ func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
+	), /* p2pprotocol.WithHandler(
 		p2pprotocol.DecidedHistoryProtocol,
 		// TODO: extract maxBatch to config
 		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
-	))
+	)*/)
 	return nil
 }
 
@@ -359,7 +359,9 @@ func (c *controller) StartNetworkHandlers() {
 		c.logger.Panic("could not register stream handlers", zap.Error(err))
 	}
 	c.network.UseMessageRouter(c.messageRouter)
-	go c.handleRouterMessages()
+	for i := 0; i < 50; i++ {
+		go c.handleRouterMessages()
+	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
