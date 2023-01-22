@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
+	"github.com/bloxapp/ssv/storage"
 	"log"
 	"sync"
 	"time"
@@ -24,12 +27,9 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -55,11 +55,31 @@ type scheduledDuty struct {
 type scenarioContext struct {
 	ctx         context.Context
 	logger      *zap.Logger
+	operatorIDs []spectypes.OperatorID
 	nodes       map[spectypes.OperatorID]network.P2PNetwork      // 1 per operator, pass same to each instance
 	nodeKeys    map[spectypes.OperatorID]testing.NodeKeys        // 1 per operator, pass same to each instance
 	stores      map[spectypes.OperatorID]*qbftstorage.QBFTStores // 1 store per operator, pass same store to each instance
 	keyManagers map[spectypes.OperatorID]spectypes.KeyManager    // 1 per operator, pass same to each instance
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
+}
+
+func (sctx *scenarioContext) resetDBs() error {
+	dbs := make(map[spectypes.OperatorID]basedb.IDb)
+	for _, operatorID := range sctx.operatorIDs {
+		db, err := storage.GetStorageFactory(basedb.Options{
+			Type:   "badger-memory",
+			Path:   "",
+			Logger: zap.L(),
+		})
+		if err != nil {
+			return err
+		}
+
+		dbs[operatorID] = db
+	}
+
+	sctx.dbs = dbs
+	return nil
 }
 
 func (sctx *scenarioContext) Close() error {
@@ -72,94 +92,8 @@ func (sctx *scenarioContext) Close() error {
 	return nil
 }
 
-func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, error) {
-	l := logex.Build("simulation", zapcore.DebugLevel, nil)
-	loggerFactory := func(s string) *zap.Logger {
-		return l.With(zap.String("who", s))
-	}
-	logger := loggerFactory(fmt.Sprintf("Bootstrap/%s", it.Name))
-	logger.Info("creating resources")
-
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
-
-	dbs := make(map[spectypes.OperatorID]basedb.IDb)
-	for _, operatorID := range it.OperatorIDs {
-		db, err := storage.GetStorageFactory(basedb.Options{
-			Type:   "badger-memory",
-			Path:   "",
-			Logger: zap.L(),
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		dbs[operatorID] = db
-	}
-
-	forkVersion := protocolforks.GenesisForkVersion
-
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, len(it.OperatorIDs), len(it.OperatorIDs)-1, false)
-	if err != nil {
-		return nil, err
-	}
-
-	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
-	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
-
-	for i, operatorID := range it.OperatorIDs {
-		nodes[operatorID] = ln.Nodes[i]
-		nodeKeys[operatorID] = ln.NodeKeys[i]
-	}
-
-	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
-	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
-	for _, operatorID := range it.OperatorIDs {
-		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", forkVersion)
-
-		storageMap := qbftstorage.NewStores()
-		storageMap.Add(spectypes.BNRoleAttester, store)
-		storageMap.Add(spectypes.BNRoleProposer, store)
-		storageMap.Add(spectypes.BNRoleAggregator, store)
-		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
-		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
-
-		stores[operatorID] = storageMap
-		km := spectestingutils.NewTestingKeyManager()
-		kms[operatorID] = km
-		nodes[operatorID].RegisterHandlers(protocolp2p.WithHandler(
-			protocolp2p.LastDecidedProtocol,
-			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", operatorID)), storageMap, nodes[operatorID]),
-		), protocolp2p.WithHandler(
-			protocolp2p.DecidedHistoryProtocol,
-			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", operatorID)), storageMap, nodes[operatorID], 25),
-		))
-	}
-
-	sCtx := &scenarioContext{
-		ctx:         ctx,
-		logger:      logger,
-		nodes:       nodes,
-		nodeKeys:    nodeKeys,
-		stores:      stores,
-		keyManagers: kms,
-		dbs:         dbs,
-	}
-	return sCtx, nil
-}
-
-func (it *IntegrationTest) Run(sharesSet *spectestingutils.TestKeySet) error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sCtx, err := it.bootstrap(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = sCtx.Close()
-		<-time.After(time.Second)
-	}()
-
+func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
+	sharesSet := getShareSet(f)
 	validators, err := it.createValidators(sCtx, sharesSet)
 	if err != nil {
 		return fmt.Errorf("could not create share: %w", err)
@@ -272,6 +206,9 @@ func (it *IntegrationTest) Run(sharesSet *spectestingutils.TestKeySet) error {
 		}
 	}
 
+	if err := sCtx.resetDBs(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -430,7 +367,76 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	return nil
 }
 
-func GetShareSet(f int) *spectestingutils.TestKeySet {
+func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenarioContext, error) {
+	logger := loggerFactory("Bootstrap")
+	logger.Info("creating resources")
+
+	types.SetDefaultDomain(spectypes.PrimusTestnet)
+
+	dbs := make(map[spectypes.OperatorID]basedb.IDb)
+	for _, operatorID := range operatorIDs {
+		db, err := storage.GetStorageFactory(basedb.Options{
+			Type:   "badger-memory",
+			Path:   "",
+			Logger: zap.L(),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		dbs[operatorID] = db
+	}
+
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, len(operatorIDs), len(operatorIDs)-1, false)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
+	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
+
+	for i, operatorID := range operatorIDs {
+		nodes[operatorID] = ln.Nodes[i]
+		nodeKeys[operatorID] = ln.NodeKeys[i]
+	}
+
+	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
+	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
+	for _, operatorID := range operatorIDs {
+		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
+
+		storageMap := qbftstorage.NewStores()
+		storageMap.Add(spectypes.BNRoleAttester, store)
+		storageMap.Add(spectypes.BNRoleProposer, store)
+		storageMap.Add(spectypes.BNRoleAggregator, store)
+		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
+		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
+
+		stores[operatorID] = storageMap
+		km := spectestingutils.NewTestingKeyManager()
+		kms[operatorID] = km
+		nodes[operatorID].RegisterHandlers(protocolp2p.WithHandler(
+			protocolp2p.LastDecidedProtocol,
+			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", operatorID)), storageMap, nodes[operatorID]),
+		), protocolp2p.WithHandler(
+			protocolp2p.DecidedHistoryProtocol,
+			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", operatorID)), storageMap, nodes[operatorID], 25),
+		))
+	}
+
+	return &scenarioContext{
+		ctx:         ctx,
+		logger:      logger,
+		operatorIDs: operatorIDs,
+		nodes:       nodes,
+		nodeKeys:    nodeKeys,
+		stores:      stores,
+		keyManagers: kms,
+		dbs:         dbs,
+	}, nil
+}
+
+func getShareSet(f int) *spectestingutils.TestKeySet {
 	switch f {
 	case 1:
 		return spectestingutils.Testing4SharesSet()
@@ -445,4 +451,9 @@ func GetShareSet(f int) *spectestingutils.TestKeySet {
 
 func getF3plus1(f int) int {
 	return 3*f + 1
+}
+
+func loggerFactory(s string) *zap.Logger {
+	l := logex.Build("simulation", zapcore.DebugLevel, nil)
+	return l.With(zap.String("who", s))
 }

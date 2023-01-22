@@ -12,7 +12,8 @@ import (
 
 // RegularAttester integration test.
 // TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
-func RegularAttester(f int, sharesSet *spectestingutils.TestKeySet) *IntegrationTest {
+func RegularAttester(f int) *IntegrationTest {
+	sharesSet := getShareSet(f)
 	identifier := spectypes.NewMsgID(sharesSet.ValidatorPK.Serialize(), spectypes.BNRoleAttester)
 
 	operatorIDs := []spectypes.OperatorID{}
