@@ -96,8 +96,8 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
-	logger.Info("connecting to beacon client...")
+	logger := opt.Logger
+	logger.Info("connecting to consensus client...", zap.String("address", opt.BeaconNodeAddr), zap.String("network", opt.Network))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -110,8 +110,7 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
-	logger.Info("successfully connected to beacon client")
+	logger.Info("successfully connected to consensus client", zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{

@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -44,7 +45,8 @@ func NewController(
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
-	c := &Controller{
+	msgId := spectypes.MessageIDFromBytes(identifier)
+	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
 		Domain:              domain,
@@ -52,10 +54,9 @@ func NewController(
 		StoredInstances:     make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		fullNode:            fullNode,
-		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
+		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())),
+			zap.String("role", msgId.GetRoleType().String())),
 	}
-	return c
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error

@@ -112,7 +112,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	}
 	cfg := NewNetConfig(logger, keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode,
 		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
-	p := New(ctx, cfg)
+	cfg.Ctx = ctx
+	p := New(cfg)
 	err = p.Setup()
 	if err != nil {
 		return nil, err

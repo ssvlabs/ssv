@@ -8,8 +8,6 @@ import (
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
 )
 
 // Start starts a Validator.
@@ -44,11 +42,7 @@ func (v *Validator) Start() error {
 func (v *Validator) Stop() error {
 	v.cancel()
 	// clear the msg q
-	for _, q := range v.Queues {
-		q.Clean(func(index msgqueue.Index) bool {
-			return true
-		})
-	}
+	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
 
 	return nil
 }

@@ -1,6 +1,9 @@
 package message
 
-import spectypes "github.com/bloxapp/ssv-spec/types"
+import (
+	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+)
 
 const (
 	// SSVSyncMsgType extends spec msg type
@@ -20,8 +23,10 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "dkg"
 	case SSVSyncMsgType:
 		return "sync"
+	case SSVEventMsgType:
+		return "event"
 	default:
-		return ""
+		return fmt.Sprintf("unknown - %d", mt)
 	}
 }
 

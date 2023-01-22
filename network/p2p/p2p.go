@@ -76,16 +76,15 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(pctx context.Context, cfg *Config) network.P2PNetwork {
-	ctx, cancel := context.WithCancel(pctx)
+func New(cfg *Config) network.P2PNetwork {
+	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger := cfg.Logger.With(zap.String("who", "p2pNetwork"))
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
-
 	n := &p2pNetwork{
-		parentCtx:            pctx,
+		parentCtx:            cfg.Ctx,
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,

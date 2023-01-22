@@ -9,8 +9,6 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"go.uber.org/zap"
 )
 
@@ -65,5 +63,4 @@ type Options struct {
 	MinGenesisTime uint64 `yaml:"MinGenesisTime" env:"MinGenesisTime"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
-	DB             basedb.IDb
 }

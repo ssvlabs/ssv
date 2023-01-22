@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -112,10 +113,15 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		if err != nil {
 			return err
 		}
-		v.Queues[duty.Type].Add(ssvMsg)
+		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		if err != nil {
+			return err
+		}
+		v.Queues[duty.Type].Q.Push(dec)
 	} else {
 		logger.Warn("could not find validator")
 	}
+
 	return nil
 }
 
