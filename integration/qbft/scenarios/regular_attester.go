@@ -12,8 +12,7 @@ import (
 
 // RegularAttester integration test.
 // TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
-func RegularAttester(f int) *IntegrationTest {
-	sharesSet = getShareSet(f)
+func RegularAttester(f int, sharesSet *spectestingutils.TestKeySet) *IntegrationTest {
 	identifier := spectypes.NewMsgID(sharesSet.ValidatorPK.Serialize(), spectypes.BNRoleAttester)
 
 	operatorIDs := []spectypes.OperatorID{}
@@ -26,7 +25,7 @@ func RegularAttester(f int) *IntegrationTest {
 
 		operatorIDs = append(operatorIDs, currentOperatorId)
 		duties[currentOperatorId] = []scheduledDuty{{Duty: createDuty(sharesSet.ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}}
-		instanceValidators[currentOperatorId] = []func(*protocolstorage.StoredInstance) error{regularAttesterInstanceValidator(currentOperatorId, identifier)}
+		instanceValidators[currentOperatorId] = []func(*protocolstorage.StoredInstance) error{regularAttesterInstanceValidator(currentOperatorId, identifier, sharesSet)}
 		startDutyErrors[currentOperatorId] = nil
 	}
 
@@ -41,7 +40,7 @@ func RegularAttester(f int) *IntegrationTest {
 	}
 }
 
-func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
+func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID, sharesSet *spectestingutils.TestKeySet) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
 		encodedConsensusData, err := spectestingutils.TestAttesterConsensusData.Encode()
 		if err != nil {

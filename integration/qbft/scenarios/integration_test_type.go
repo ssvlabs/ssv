@@ -35,8 +35,6 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-var sharesSet *spectestingutils.TestKeySet
-
 // IntegrationTest defines an integration test.
 type IntegrationTest struct {
 	Name               string
@@ -149,11 +147,9 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 	return sCtx, nil
 }
 
-func (it *IntegrationTest) Run(f int) error {
+func (it *IntegrationTest) Run(sharesSet *spectestingutils.TestKeySet) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	sharesSet = getShareSet(f)
 
 	sCtx, err := it.bootstrap(ctx)
 	if err != nil {
@@ -164,7 +160,7 @@ func (it *IntegrationTest) Run(f int) error {
 		<-time.After(time.Second)
 	}()
 
-	validators, err := it.createValidators(sCtx)
+	validators, err := it.createValidators(sCtx, sharesSet)
 	if err != nil {
 		return fmt.Errorf("could not create share: %w", err)
 	}
@@ -279,7 +275,7 @@ func (it *IntegrationTest) Run(f int) error {
 	return nil
 }
 
-func (it *IntegrationTest) createValidators(sCtx *scenarioContext) (map[spectypes.OperatorID]*protocolvalidator.Validator, error) {
+func (it *IntegrationTest) createValidators(sCtx *scenarioContext, sharesSet *spectestingutils.TestKeySet) (map[spectypes.OperatorID]*protocolvalidator.Validator, error) {
 	validators := make(map[spectypes.OperatorID]*protocolvalidator.Validator)
 	operators := make([][]byte, 0)
 	for _, k := range sCtx.nodeKeys {
@@ -434,7 +430,7 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	return nil
 }
 
-func getShareSet(f int) *spectestingutils.TestKeySet {
+func GetShareSet(f int) *spectestingutils.TestKeySet {
 	switch f {
 	case 1:
 		return spectestingutils.Testing4SharesSet()
