@@ -15,7 +15,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(msg *spectypes.SSVMessage) error
+type MessageHandler func(msg *queue.DecodedSSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -97,7 +97,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			continue
 		}
 
-		if err := handler(msg.SSVMessage); err != nil {
+		if err := handler(msg); err != nil {
 			switch msg.SSVMessage.MsgType {
 			case spectypes.SSVConsensusMsgType:
 				sm := msg.Body.(*specqbft.SignedMessage)
@@ -105,7 +105,9 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 					zap.Int64("msg_height", int64(sm.Message.Height)),
 					zap.Int64("msg_round", int64(sm.Message.Round)),
 					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-					zap.Any("signers", sm.Signers))
+					zap.Any("signers", sm.Signers),
+					zap.Any("LIOR:state", state))
+
 			case spectypes.SSVPartialSignatureMsgType:
 				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
 				logger.Debug("could not handle message (partial signature)", zap.Error(err),

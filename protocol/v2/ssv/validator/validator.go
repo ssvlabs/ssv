@@ -88,27 +88,27 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
+func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
 	}
 
-	if err := validateMessage(v.Share.Share, msg); err != nil {
+	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
 		return errors.Wrap(err, "Message invalid")
 	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		signedMsg := &specqbft.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
+		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+		if !ok {
+			return errors.New("could not decode consensus message from network message")
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg := &specssv.SignedPartialSignatureMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get post consensus Message from network Message")
+		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
+		if !ok {
+			return errors.New("could not decode post consensus message from network message")
 		}
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
