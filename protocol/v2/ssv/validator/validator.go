@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/msgqueue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -35,7 +35,7 @@ type Validator struct {
 	Signer      spectypes.KeyManager
 
 	Storage *storage.QBFTStores
-	Queues  map[spectypes.BeaconRole]msgqueue.MsgQueue
+	Queues  map[spectypes.BeaconRole]queueContainer
 
 	state uint32
 }
@@ -45,7 +45,7 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 	options.defaults()
 	ctx, cancel := context.WithCancel(pctx)
 
-	logger = logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
+	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	v := &Validator{
 		ctx:         ctx,
@@ -57,17 +57,22 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
-		Queues:      make(map[spectypes.BeaconRole]msgqueue.MsgQueue), // populate below
+		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
 	}
 
-	indexers := msgqueue.WithIndexers(msgqueue.SignedMsgIndexer(), msgqueue.DecidedMsgIndexer(), msgqueue.SignedPostConsensusMsgIndexer(), msgqueue.EventMsgMsgIndexer())
 	for _, dutyRunner := range options.DutyRunners {
 		// set timeout F
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
-
-		q, _ := msgqueue.New(logger, indexers) // TODO: handle error
-		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = q
+		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = queueContainer{
+			Q: queue.New(),
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             0,
+				Slot:               0,
+				//Quorum:             options.SSVShare.Share,// TODO
+			},
+		}
 	}
 
 	return v
@@ -105,7 +110,6 @@ func (v *Validator) ProcessMessage(msg *spectypes.SSVMessage) error {
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
-
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}

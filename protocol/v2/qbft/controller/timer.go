@@ -19,7 +19,7 @@ func (c *Controller) OnTimeout(msg types.EventMsg) error {
 	}
 	decided, _ := instance.IsDecided()
 	if decided {
-		return errors.New("instance already decided")
+		return nil
 	}
 	return instance.UponRoundTimeout()
 }

@@ -22,5 +22,5 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
-      - name: Run spec tests
+      - name: Run tests
         run: make integration-test

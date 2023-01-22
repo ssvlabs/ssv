@@ -76,7 +76,6 @@ func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger 
 		if err != nil {
 			log.Fatalf("err making logger: %+v", err)
 		}
-		logger = logger.With(zap.String("app", appName))
 		zap.ReplaceGlobals(logger)
 	})
 
