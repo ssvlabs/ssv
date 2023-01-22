@@ -98,7 +98,7 @@ func New(pctx context.Context, cfg *Config) network.P2PNetwork {
 	}
 
 	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(ctx, syncing.New(logger, n), 16, nil)
+	syncer := syncing.NewConcurrent(ctx, syncing.New(logger, n), 16, syncing.DefaultTimeouts, nil)
 	go syncer.Run()
 	n.syncer = syncer
 

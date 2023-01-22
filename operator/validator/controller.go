@@ -349,6 +349,10 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
+	if c.validatorOptions.FullNodeNonCommittee {
+		c.setupNonCommitteeValidators()
+	}
+
 	shares, err := c.getValidators()
 	if err != nil {
 		c.logger.Fatal("failed to get validators shares", zap.Error(err))
@@ -361,9 +365,6 @@ func (c *controller) StartValidators() {
 }
 
 func (c *controller) getValidators() ([]*types.SSVShare, error) {
-	if c.validatorOptions.FullNodeNonCommittee {
-		return c.collection.GetFilteredValidatorShares(NotLiquidated())
-	}
 	return c.collection.GetFilteredValidatorShares(NotLiquidatedAndByOperatorPubKey(c.operatorPubKey))
 }
 
@@ -384,36 +385,6 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			continue
 		}
 
-		// Non-committee full nodes trigger SyncHighestDecided for each validator
-		// to start consensus flow which would save the highest decided instance
-		// and sync any gaps (in protocol/v2/qbft/controller/decided.go).
-		if c.validatorOptions.FullNodeNonCommittee {
-			opts := *c.validatorOptions
-			opts.SSVShare = validatorShare
-			allRoles := []spectypes.BeaconRole{
-				spectypes.BNRoleAttester,
-				spectypes.BNRoleAggregator,
-				spectypes.BNRoleProposer,
-				spectypes.BNRoleSyncCommittee,
-				spectypes.BNRoleSyncCommitteeContribution,
-			}
-			for _, role := range allRoles {
-				role := role
-				time.Sleep(30 * time.Second)
-				err := c.network.Subscribe(validatorShare.ValidatorPubKey)
-				if err != nil {
-					c.logger.Error("failed to subscribe to network", zap.Error(err))
-				}
-				messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
-				err = c.network.SyncHighestDecided(messageID)
-				if err != nil {
-					c.logger.Error("failed to sync highest decided", zap.Error(err))
-				}
-			}
-			started++
-			continue
-		}
-
 		// Start a committee validator.
 		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
 		isStarted, err := c.startValidator(v)
@@ -430,6 +401,45 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
 	go c.updateValidatorsMetadata(fetchMetadata)
+}
+
+// setupNonCommitteeValidators trigger SyncHighestDecided for each validator
+// to start consensus flow which would save the highest decided instance
+// and sync any gaps (in protocol/v2/qbft/controller/decided.go).
+func (c *controller) setupNonCommitteeValidators() {
+	nonCommitteeShares, err := c.collection.GetFilteredValidatorShares(NotLiquidated())
+	if err != nil {
+		c.logger.Fatal("failed to get non-committee validator shares", zap.Error(err))
+	}
+	if len(nonCommitteeShares) == 0 {
+		c.logger.Info("could not find non-committee validators")
+		return
+	}
+
+	for _, validatorShare := range nonCommitteeShares {
+		opts := *c.validatorOptions
+		opts.SSVShare = validatorShare
+		allRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleSyncCommitteeContribution,
+		}
+		for _, role := range allRoles {
+			role := role
+			time.Sleep(30 * time.Second)
+			err := c.network.Subscribe(validatorShare.ValidatorPubKey)
+			if err != nil {
+				c.logger.Error("failed to subscribe to network", zap.Error(err))
+			}
+			messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
+			err = c.network.SyncHighestDecided(messageID)
+			if err != nil {
+				c.logger.Error("failed to sync highest decided", zap.Error(err))
+			}
+		}
+	}
 }
 
 // StartNetworkHandlers init msg worker that handles network messages

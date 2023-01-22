@@ -79,6 +79,10 @@ func (s *syncer) SyncHighestDecided(
 	id spectypes.MessageID,
 	handler MessageHandler,
 ) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	logger := s.logger.With(
 		zap.String("what", "SyncHighestDecided"),
 		zap.String("identifier", id.String()))
@@ -94,17 +98,21 @@ func (s *syncer) SyncHighestDecided(
 	}
 
 	results := protocolp2p.SyncResults(lastDecided)
-	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
+	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
+		if ctx.Err() != nil {
+			return true
+		}
 		raw, err := m.Encode()
 		if err != nil {
 			logger.Debug("could not encode signed message", zap.Error(err))
-			return
+			return false
 		}
 		handler(spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   id,
 			Data:    raw,
 		})
+		return false
 	})
 	return nil
 }
@@ -115,6 +123,10 @@ func (s *syncer) SyncDecidedByRange(
 	from, to qbft.Height,
 	handler MessageHandler,
 ) error {
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	logger := s.logger.With(
 		zap.String("what", "SyncDecidedByRange"),
 		zap.String("identifier", mid.String()),
@@ -166,6 +178,9 @@ func (s *syncer) getDecidedByRange(
 	tail := from
 	var err error
 	for tail < to {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		err := tasks.RetryWithContext(ctx, func() error {
 			start := time.Now()
 			msgs, tail, err = s.network.GetHistory(mid, tail, to)
@@ -173,18 +188,19 @@ func (s *syncer) getDecidedByRange(
 				return err
 			}
 			handled := 0
-			protocolp2p.SyncResults(msgs).ForEachSignedMessage(func(m *specqbft.SignedMessage) {
+			protocolp2p.SyncResults(msgs).ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
 				if ctx.Err() != nil {
-					return
+					return true
 				}
 				if _, ok := visited[m.Message.Height]; ok {
-					return
+					return false
 				}
 				if err := handler(m); err != nil {
 					logger.Warn("could not handle signed message")
 				}
 				handled++
 				visited[m.Message.Height] = struct{}{}
+				return false
 			})
 			logger.Debug("received and processed history batch",
 				zap.Int64("tail", int64(tail)),

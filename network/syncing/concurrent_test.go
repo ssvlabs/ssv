@@ -3,6 +3,7 @@ package syncing_test
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -12,19 +13,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
-
-type mockMessageHandler struct {
-	calls   int
-	handler syncing.MessageHandler
-}
-
-func newMockMessageHandler() *mockMessageHandler {
-	m := &mockMessageHandler{}
-	m.handler = func(msg spectypes.SSVMessage) {
-		m.calls++
-	}
-	return m
-}
 
 func TestConcurrentSyncer(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -67,8 +55,8 @@ func TestConcurrentSyncer(t *testing.T) {
 	// Verify errors.
 	select {
 	case err := <-errors:
-		require.Equal(t, "SyncHighestDecided", err.Operation)
-		require.Equal(t, id, err.MessageID)
+		require.IsType(t, syncing.OperationSyncHighestDecided{}, err.Operation)
+		require.Equal(t, id, err.Operation.(syncing.OperationSyncHighestDecided).ID)
 		require.Equal(t, "test error", err.Err.Error())
 	case <-done:
 		t.Fatal("error channel should have received an error")
@@ -76,14 +64,46 @@ func TestConcurrentSyncer(t *testing.T) {
 	<-done
 }
 
-type mockSyncer struct{}
+func TestConcurrentSyncerMemoryUsage(t *testing.T) {
+	for i := 0; i < 4; i++ {
+		var before runtime.MemStats
+		runtime.ReadMemStats(&before)
 
-func (m *mockSyncer) SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler syncing.MessageHandler) error {
-	return nil
-}
+		// Test setup
+		syncer := &mockSyncer{}
+		errors := make(chan syncing.Error)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		concurrency := 2
+		s := syncing.NewConcurrent(ctx, syncer, concurrency, syncing.DefaultTimeouts, errors)
 
-func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
-	return nil
+		// Run the syncer
+		done := make(chan struct{})
+		go func() {
+			s.Run()
+			close(done)
+		}()
+
+		for i := 0; i < 1024*128; i++ {
+			// Test SyncHighestDecided
+			id := spectypes.MessageID{}
+			handler := newMockMessageHandler()
+			s.SyncHighestDecided(ctx, id, handler.handler)
+
+			// Test SyncDecidedByRange
+			from := specqbft.Height(1)
+			to := specqbft.Height(10)
+			s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
+		}
+
+		// Wait for the syncer to finish
+		cancel()
+		<-done
+
+		var after runtime.MemStats
+		runtime.ReadMemStats(&after)
+		t.Logf("Allocated: %.2f MB", float64(after.TotalAlloc-before.TotalAlloc)/1024/1024)
+	}
 }
 
 func BenchmarkConcurrentSyncer(b *testing.B) {

@@ -57,7 +57,7 @@ type SyncResult struct {
 
 type SyncResults []SyncResult
 
-func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage)) {
+func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
 	for _, res := range results {
 		if res.Msg == nil {
 			continue
@@ -71,7 +71,9 @@ func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.
 			continue
 		}
 		for _, m := range sm.Data {
-			iterator(m)
+			if iterator(m) {
+				return
+			}
 		}
 	}
 }

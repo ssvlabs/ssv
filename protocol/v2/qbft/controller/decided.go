@@ -47,20 +47,25 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
 		if len(msg.Signers) > len(signers) {
 			inst.State.CommitContainer.AddMsg(msg)
+		} else {
 			save = false
 		}
 	}
 
 	if save {
-		if err = c.SaveInstance(inst, msg); err != nil {
-			c.logger.Debug("failed to save instance",
-				zap.Uint64("height", uint64(msg.Message.Height)),
-				zap.Error(err))
-		} else {
-			c.logger.Debug("saved instance upon decided",
-				zap.Uint64("msg_height", uint64(msg.Message.Height)),
-				zap.Uint64("ctrl_height", uint64(c.Height)),
-				zap.Any("signers", msg.Signers))
+		// Retrieve instance from StoredInstances (in case it was created above)
+		// and save it together with the decided message.
+		if inst := c.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
+			if err = c.SaveInstance(inst, msg); err != nil {
+				c.logger.Debug("failed to save instance",
+					zap.Uint64("height", uint64(msg.Message.Height)),
+					zap.Error(err))
+			} else {
+				c.logger.Debug("saved instance upon decided",
+					zap.Uint64("msg_height", uint64(msg.Message.Height)),
+					zap.Uint64("ctrl_height", uint64(c.Height)),
+					zap.Any("signers", msg.Signers))
+			}
 		}
 	}
 

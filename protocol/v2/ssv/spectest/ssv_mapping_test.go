@@ -237,7 +237,6 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 
 func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	base := runner.NewBaseRunner(zap.NewNop())
-	base.QBFTController = &controller.Controller{}
 	byts, _ := json.Marshal(baseRunner)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
@@ -260,6 +259,7 @@ func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.C
 		config,
 		false,
 	)
+	newContr.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
 	newContr.Height = contr.Height
 	newContr.Domain = contr.Domain
 	newContr.StoredInstances = contr.StoredInstances

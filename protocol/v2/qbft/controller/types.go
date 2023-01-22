@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -11,14 +10,11 @@ import (
 )
 
 const (
-	// DefaultInstanceContainerCapacity is the default capacity for InstanceContainer.
-	// This is used when unmarshaling or making an InstanceContainer slice without capacaity.
-	// Keep this value fit for spec tests to pass.
-	DefaultInstanceContainerCapacity int = 1024
+	// InstanceContainerDefaultCapacity is the default capacity for InstanceContainer.
+	InstanceContainerDefaultCapacity int = 5
 
-	// RuntimeInstanceContainerCapacity is the capacity for InstanceContainer when running a node
-	// with storage.
-	RuntimeInstanceContainerCapacity int = 5
+	// InstanceContainerTestCapacity is the capacity for InstanceContainer used in tests.
+	InstanceContainerTestCapacity int = 1024
 )
 
 // InstanceContainer is a fixed-capacity container for instances.
@@ -38,10 +34,8 @@ func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instan
 // addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
 func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 	if cap(*i) == 0 {
-		*i = make(InstanceContainer, 0, DefaultInstanceContainerCapacity)
+		*i = make(InstanceContainer, 0, InstanceContainerDefaultCapacity)
 	}
-
-	log.Printf("adding new instance %d, snapshot before: %s", instance.GetHeight(), i)
 
 	indexToInsert := len(*i)
 	for index, existingInstance := range *i {
@@ -68,8 +62,6 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 			(*i)[indexToInsert] = instance
 		}
 	}
-
-	log.Printf("added instance %d, snapshot after: %s", instance.GetHeight(), i)
 }
 
 // reset will remove all instances from the container, perserving the underlying slice's capacity.
@@ -77,6 +69,7 @@ func (i *InstanceContainer) reset() {
 	*i = (*i)[:0]
 }
 
+// String returns a human-readable representation of the instances. Useful for debugging.
 func (i *InstanceContainer) String() string {
 	heights := make([]string, len(*i))
 	for index, inst := range *i {

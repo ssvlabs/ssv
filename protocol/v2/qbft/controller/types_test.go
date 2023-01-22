@@ -110,9 +110,9 @@ func TestInstances_AddNewInstance(t *testing.T) {
 	})
 
 	t.Run("randoms", func(t *testing.T) {
-		minCap := DefaultInstanceContainerCapacity/2 + 1
-		maxCap := DefaultInstanceContainerCapacity * 2
-		for _, capacity := range []int{minCap, DefaultInstanceContainerCapacity, maxCap} {
+		minCap := InstanceContainerDefaultCapacity/2 + 1
+		maxCap := InstanceContainerDefaultCapacity * 2
+		for _, capacity := range []int{minCap, InstanceContainerDefaultCapacity, maxCap} {
 			// mirror is a slice of heights we've inserted so far.
 			// We use it to compare with the InstanceContainer.
 			mirror := make([]specqbft.Height, 0, capacity)

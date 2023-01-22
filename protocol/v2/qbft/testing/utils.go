@@ -78,11 +78,13 @@ func NewTestingQBFTController(
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {
-	return controller.NewController(
+	ctrl := controller.NewController(
 		identifier,
 		share,
 		types.PrimusTestnet,
 		config,
 		fullNode,
 	)
+	ctrl.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
+	return ctrl
 }

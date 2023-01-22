@@ -12,13 +12,12 @@ import (
 
 // Error describes an error that occurred during a syncing operation.
 type Error struct {
-	Operation string
-	MessageID spectypes.MessageID
+	Operation Operation
 	Err       error
 }
 
 func (e Error) Error() string {
-	return fmt.Sprintf("%s(%s): %s", e.Operation, e.MessageID, e.Err)
+	return fmt.Sprintf("%s: %v", e.Operation, e.Err)
 }
 
 // Timeouts is a set of timeouts for each syncing operation.
@@ -37,11 +36,53 @@ var DefaultTimeouts = Timeouts{
 	SyncDecidedByRange: 30 * time.Minute,
 }
 
+// Operation is a syncing operation that has been queued for execution.
+type Operation interface {
+	run(context.Context, Syncer) error
+	timeout(Timeouts) time.Duration
+}
+
+type OperationSyncHighestDecided struct {
+	ID      spectypes.MessageID
+	Handler MessageHandler
+}
+
+func (o OperationSyncHighestDecided) run(ctx context.Context, s Syncer) error {
+	return s.SyncHighestDecided(ctx, o.ID, o.Handler)
+}
+
+func (o OperationSyncHighestDecided) timeout(t Timeouts) time.Duration {
+	return t.SyncHighestDecided
+}
+
+func (o OperationSyncHighestDecided) String() string {
+	return fmt.Sprintf("SyncHighestDecided(%s)", o.ID)
+}
+
+type OperationSyncDecidedByRange struct {
+	ID      spectypes.MessageID
+	From    specqbft.Height
+	To      specqbft.Height
+	Handler MessageHandler
+}
+
+func (o OperationSyncDecidedByRange) run(ctx context.Context, s Syncer) error {
+	return s.SyncDecidedByRange(ctx, o.ID, o.From, o.To, o.Handler)
+}
+
+func (o OperationSyncDecidedByRange) timeout(t Timeouts) time.Duration {
+	return t.SyncDecidedByRange
+}
+
+func (o OperationSyncDecidedByRange) String() string {
+	return fmt.Sprintf("SyncDecidedByRange(%s, %d, %d)", o.ID, o.From, o.To)
+}
+
 // ConcurrentSyncer is a Syncer that runs the given Syncer's methods concurrently.
 type ConcurrentSyncer struct {
 	syncer      Syncer
 	ctx         context.Context
-	jobs        chan func()
+	jobs        chan Operation
 	errors      chan<- Error
 	concurrency int
 	timeouts    Timeouts
@@ -62,7 +103,7 @@ func NewConcurrent(
 		syncer: syncer,
 		ctx:    ctx,
 		// TODO: make the buffer size configurable or better-yet unbounded?
-		jobs:        make(chan func(), 1024*1024),
+		jobs:        make(chan Operation, 1024*1024),
 		errors:      errors,
 		concurrency: concurrency,
 		timeouts:    timeouts,
@@ -79,7 +120,7 @@ func (s *ConcurrentSyncer) Run() {
 		go func() {
 			defer wg.Done()
 			for job := range s.jobs {
-				job()
+				s.do(job)
 			}
 		}()
 	}
@@ -90,6 +131,18 @@ func (s *ConcurrentSyncer) Run() {
 
 	// Wait for workers to finish their current jobs.
 	wg.Wait()
+}
+
+func (s *ConcurrentSyncer) do(job Operation) {
+	ctx, cancel := context.WithTimeout(s.ctx, job.timeout(s.timeouts))
+	defer cancel()
+	err := job.run(ctx, s.syncer)
+	if err != nil && s.errors != nil {
+		s.errors <- Error{
+			Operation: job,
+			Err:       err,
+		}
+	}
 }
 
 // Queued returns the number of jobs that are queued but not yet started.
@@ -109,15 +162,9 @@ func (s *ConcurrentSyncer) SyncHighestDecided(
 	id spectypes.MessageID,
 	handler MessageHandler,
 ) error {
-	s.jobs <- func() {
-		err := s.syncer.SyncHighestDecided(ctx, id, handler)
-		if err != nil && s.errors != nil {
-			s.errors <- Error{
-				Operation: "SyncHighestDecided",
-				MessageID: id,
-				Err:       err,
-			}
-		}
+	s.jobs <- OperationSyncHighestDecided{
+		ID:      id,
+		Handler: handler,
 	}
 	return nil
 }
@@ -128,15 +175,11 @@ func (s *ConcurrentSyncer) SyncDecidedByRange(
 	from, to specqbft.Height,
 	handler MessageHandler,
 ) error {
-	s.jobs <- func() {
-		err := s.syncer.SyncDecidedByRange(ctx, id, from, to, handler)
-		if err != nil && s.errors != nil {
-			s.errors <- Error{
-				Operation: "SyncDecidedByRange",
-				MessageID: id,
-				Err:       err,
-			}
-		}
+	s.jobs <- OperationSyncDecidedByRange{
+		ID:      id,
+		From:    from,
+		To:      to,
+		Handler: handler,
 	}
 	return nil
 }
