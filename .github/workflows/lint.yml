@@ -2,8 +2,8 @@ name: Lint
 
 on:
   push:
-    branches: 
-      - '**'
+    branches:
+      - "**"
 
   workflow_dispatch:
 
@@ -16,6 +16,12 @@ jobs:
 
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
+
+      - name: Install Go ${{ steps.go-version.outputs.minimal }}
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ steps.go-version.outputs.minimal }}
+          check-latest: true
 
       - name: Run lint-prepare
         run: make lint-prepare
