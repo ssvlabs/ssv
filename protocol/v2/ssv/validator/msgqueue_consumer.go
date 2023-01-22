@@ -107,6 +107,9 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 }
 
 func (v *Validator) logMsg(msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
+	fields = append([]zap.Field{
+		zap.String("role", msg.MsgID.GetRoleType().String()),
+	}, fields...)
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.SignedMessage)

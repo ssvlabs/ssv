@@ -359,7 +359,9 @@ func (c *controller) StartNetworkHandlers() {
 		c.logger.Panic("could not register stream handlers", zap.Error(err))
 	}
 	c.network.UseMessageRouter(c.messageRouter)
-	go c.handleRouterMessages()
+	for i := 0; i < 50; i++ {
+		go c.handleRouterMessages()
+	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
