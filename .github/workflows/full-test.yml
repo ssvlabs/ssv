@@ -3,8 +3,8 @@ name: All tests
 on:
   push:
     branches:
-      - 'main'
-#      - 'stage'
+      - "main"
+  #      - 'stage'
 
   workflow_dispatch:
 
@@ -17,6 +17,11 @@ jobs:
 
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
 
       - name: Full-test
         run: make full-test
