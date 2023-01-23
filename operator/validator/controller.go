@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -233,9 +232,6 @@ func (c *controller) handleRouterMessages() {
 	ch := c.messageRouter.GetMessageChan()
 
 	for {
-		if rand.Intn(200) == 2 {
-			c.logger.Debug("LIOR: message router status", zap.Int("len", c.messageRouter.Len()))
-		}
 		select {
 		case <-ctx.Done():
 			c.logger.Debug("router message handler stopped")

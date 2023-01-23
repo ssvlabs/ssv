@@ -33,7 +33,3 @@ func (r *messageRouter) Route(message spectypes.SSVMessage) {
 func (r *messageRouter) GetMessageChan() <-chan spectypes.SSVMessage {
 	return r.ch
 }
-
-func (r *messageRouter) Len() int {
-	return len(r.ch)
-}
