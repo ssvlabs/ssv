@@ -10,15 +10,15 @@ type eth1NodeStatus int32
 
 var (
 	metricSyncEventsCountSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:eth1:sync:count:success",
+		Name: "ssv_eth1_sync_count_success",
 		Help: "Count succeeded eth1 sync events",
 	}, []string{"etype"})
 	metricSyncEventsCountFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:eth1:sync:count:failed",
+		Name: "ssv_eth1_sync_count_failed",
 		Help: "Count failed eth1 sync events",
 	}, []string{"etype"})
 	metricsEth1NodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:eth1:node_status",
+		Name: "ssv_eth1_status",
 		Help: "Status of the connected eth1 node",
 	})
 	statusUnknown eth1NodeStatus = 0

@@ -13,13 +13,13 @@ import (
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	gc.waitOneThirdOrValidBlock(uint64(slot))
 
-	startTime := prysmtime.Now()
+	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
 	}
 	metricsAttestationDataRequest.WithLabelValues().
-		Observe(prysmtime.Since(startTime).Seconds())
+		Observe(time.Since(startTime).Seconds())
 
 	return attestationData, nil
 }

@@ -25,7 +25,7 @@ type nodeStatus int32
 
 var (
 	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:node_status",
+		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
 	statusNotHealthy nodeStatus = 0

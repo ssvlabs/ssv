@@ -9,6 +9,7 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
+	"time"
 
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -25,6 +26,10 @@ type AttesterRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
+
+	consensusStart     time.Time
+	postConsensusStart time.Time
+	instanceStart      time.Time
 }
 
 func NewAttesterRunnner(
@@ -79,6 +84,12 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 		return nil
 	}
 
+	metricsConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		Observe(time.Since(r.consensusStart).Seconds())
+
+	r.postConsensusStart = time.Now()
+
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
@@ -121,6 +132,10 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	metricsPostConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		Observe(time.Since(r.postConsensusStart).Seconds())
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -143,6 +158,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			AggregationBits: aggregationBitfield,
 		}
 
+		attestationSubmissionStart := time.Now()
+
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.logger.Error("failed to submit attestation to Beacon node",
@@ -150,7 +167,13 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
+		metricsAttestationSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+			Observe(time.Since(attestationSubmissionStart).Seconds())
+
 		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
+
+		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+			Observe(time.Since(r.consensusStart).Seconds())
 	}
 	r.GetState().Finished = true
 
@@ -184,6 +207,7 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 		AttestationData: attData,
 	}
 
+	r.consensusStart = time.Now()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

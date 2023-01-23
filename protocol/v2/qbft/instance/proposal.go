@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -29,6 +30,9 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
 	}
 	i.State.Round = newRound
+
+	i.observeStageDurationMetric("proposal", time.Since(i.stageStart).Seconds())
+	i.stageStart = time.Now()
 
 	proposalData, err := signedProposal.Message.GetProposalData()
 	if err != nil {

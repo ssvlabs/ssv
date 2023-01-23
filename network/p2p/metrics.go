@@ -11,12 +11,12 @@ import (
 var (
 	// MetricsAllConnectedPeers counts all connected peers
 	MetricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:all_connected_peers",
+		Name: "ssv_p2p_all_connected_peers",
 		Help: "Count connected peers",
 	})
 	// MetricsConnectedPeers counts connected peers for a topic
 	MetricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:connected_peers",
+		Name: "ssv_p2p_connected_peers",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
 	// MetricsPeersIdentity tracks peers identity

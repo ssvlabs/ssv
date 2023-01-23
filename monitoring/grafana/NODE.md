@@ -77,11 +77,11 @@ Row 3:
 
 Row 1:
 * Pubsub messages (time-series, rate, in|out|invalid) \
-  `ssv_p2p_pubusb_msg{dir=out|in,topic=*}`, and `ssv_p2p_pubusb_msg_invalid{topic}`
+  `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, and `ssv_p2p_pubsub_msg_invalid{topic}`
 * Outgoing pubsub messages (time-series, rate, labeled by topic) \
-  `ssv_p2p_pubusb_msg{dir=out,topic=<topic_name>} = <counter>`
+  `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>`
 * Incoming pubsub messages (time-series, rate, labeled by topic) \
-  `ssv_p2p_pubusb_msg{dir=in,topic=<topic_name>} = <counter>`
+  `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>`
 
 Row 2:
 * Stream messages (time-series, in|out) \

@@ -339,7 +339,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:beacon:attestation_data_request_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_beacon_attestation_data_request_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -528,7 +528,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:consensus_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_consensus_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -622,7 +622,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"proposal\",instance=~\"$instance.*\"}[$__interval])) by (le)",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"proposal\",instance=~\"$instance.*\"}[$__interval])) by (le)",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -716,7 +716,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"prepare\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -810,7 +810,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"commit\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -904,7 +904,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:signature_collection_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_signature_collection_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -998,7 +998,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv:validator:attestation_submission_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_attestation_submission_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -1303,7 +1303,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ssv:network:all_connected_peers{instance=~\"$instance.*\"}",
+              "expr": "ssv_p2p_all_connected_peers{instance=~\"$instance.*\"}",
               "interval": "",
               "legendFormat": "Connections",
               "refId": "A"
@@ -1615,7 +1615,7 @@
                 "uid": "eXfXfqH7z"
               },
               "exemplar": true,
-              "expr": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
+              "expr": "ssv_p2p_connected_peers{instance=~\"$instance.*\"}",
               "interval": "",
               "legendFormat": "{{pubKey}}",
               "refId": "A"
@@ -3140,7 +3140,7 @@
                 "uid": "eXfXfqH7z"
               },
               "exemplar": false,
-              "expr": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
+              "expr": "ssv_p2p_connected_peers{instance=~\"$instance.*\"}",
               "format": "table",
               "hide": false,
               "instant": true,
@@ -4448,7 +4448,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ssv:beacon:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_beacon_status{instance=~\"$instance.*\"}",
               "instant": true,
               "interval": "",
               "legendFormat": "Beacon",
@@ -4456,7 +4456,7 @@
             },
             {
               "exemplar": true,
-              "expr": "ssv:eth1:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_eth1_status{instance=~\"$instance.*\"}",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4465,7 +4465,7 @@
             },
             {
               "exemplar": true,
-              "expr": "ssv:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_node_status{instance=~\"$instance.*\"}",
               "hide": false,
               "instant": true,
               "interval": "",
@@ -4556,7 +4556,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ssv:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_node_status{instance=~\"$instance.*\"}",
               "format": "time_series",
               "instant": false,
               "interval": "",
@@ -4670,7 +4670,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ssv:eth1:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_eth1_status{instance=~\"$instance.*\"}",
               "interval": "",
               "legendFormat": "",
               "refId": "A"
@@ -4782,7 +4782,7 @@
           "targets": [
             {
               "exemplar": true,
-              "expr": "ssv:beacon:node_status{instance=~\"$instance.*\"}",
+              "expr": "ssv_beacon_status{instance=~\"$instance.*\"}",
               "interval": "",
               "legendFormat": "",
               "refId": "A"

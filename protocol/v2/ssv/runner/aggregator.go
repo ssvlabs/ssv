@@ -11,6 +11,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -23,6 +24,10 @@ type AggregatorRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
+
+	consensusStart     time.Time
+	preConsensusStart  time.Time
+	postConsensusStart time.Time
 }
 
 func NewAggregatorRunner(

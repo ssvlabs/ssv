@@ -188,7 +188,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "ssv:network:connected_peers{instance=~\"$instance.*\",pubKey=\"$pubkey\"}",
+          "expr": "ssv_p2p_connected_peers{instance=~\"$instance.*\",pubKey=\"$pubkey\"}",
           "interval": "",
           "legendFormat": "{{pubKey}}",
           "refId": "A"
@@ -292,7 +292,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:attestation_full_flow_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_attestation_full_flow_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -386,7 +386,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:consensus_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_consensus_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -480,7 +480,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"proposal\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"proposal\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -574,7 +574,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"prepare\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -668,7 +668,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:instance_stage_duration_seconds_bucket{stage=\"commit\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -762,7 +762,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:signature_collection_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_post_consensus_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -856,7 +856,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "sum(increase(ssv:validator:attestation_submission_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
+          "expr": "sum(increase(ssv_validator_attestation_submission_duration_seconds_bucket{instance=~\"$instance.*\",pubKey=\"$pubkey\"}[$__interval])) by (le) ",
           "format": "heatmap",
           "instant": false,
           "interval": "",
@@ -2450,7 +2450,7 @@
           "type": "prometheus",
           "uid": "eXfXfqH7z"
         },
-        "definition": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
+        "definition": "ssv_p2p_connected_peers{instance=~\"$instance.*\"}",
         "description": "",
         "hide": 0,
         "includeAll": false,
@@ -2459,7 +2459,7 @@
         "name": "pubkey",
         "options": [],
         "query": {
-          "query": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
+          "query": "ssv_p2p_connected_peers{instance=~\"$instance.*\"}",
           "refId": "StandardVariableQuery"
         },
         "refresh": 1,

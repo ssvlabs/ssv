@@ -3,6 +3,7 @@ package instance
 import (
 	"encoding/json"
 	"sync"
+	"time"
 
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
@@ -26,6 +27,8 @@ type Instance struct {
 	StartValue  []byte
 
 	logger *zap.Logger
+
+	stageStart time.Time
 }
 
 func NewInstance(
@@ -59,6 +62,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		i.StartValue = value
 		i.State.Round = specqbft.FirstRound
 		i.State.Height = height
+		i.stageStart = time.Now()
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 

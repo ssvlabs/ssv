@@ -48,8 +48,8 @@ Row 3:
 `ssv_qbft_instance_stage_duration_seconds{stage,identifier}`
 
 Row 4:
-* Signature collection duration (seconds) \
-`ssv_beacon_signature_collection_duration_seconds{identifier}`
+* Post-consensus duration (Signature collection duration) (seconds) \
+`ssv_validator_post_consensus_duration_seconds{identifier}`
 * Attestation submission duration (seconds) \
 `ssv_beacon_attestation_submission_duration_seconds{identifier}`
 
