@@ -67,7 +67,7 @@ type ControllerOptions struct {
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
-	FullNodeNonCommittee       bool `yaml:"FullNodeNonCommittee" env:"FULLNODE_NON_COMMITTEE" env-default:"false" env-description:"Save decided history for non committee validators as well"`
+	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -164,10 +164,10 @@ func NewController(options ControllerOptions) Controller {
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
-		DutyRunners:          nil, // set per validator
-		NewDecidedHandler:    options.NewDecidedHandler,
-		FullNode:             options.FullNode,
-		FullNodeNonCommittee: options.FullNodeNonCommittee,
+		DutyRunners:       nil, // set per validator
+		NewDecidedHandler: options.NewDecidedHandler,
+		FullNode:          options.FullNode,
+		Exporter:          options.Exporter,
 	}
 
 	ctrl := controller{
@@ -349,8 +349,9 @@ func (c *controller) ListenToEth1Events(feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
-	if c.validatorOptions.FullNodeNonCommittee {
+	if c.validatorOptions.Exporter {
 		c.setupNonCommitteeValidators()
+		return
 	}
 
 	shares, err := c.getValidators()
@@ -428,7 +429,6 @@ func (c *controller) setupNonCommitteeValidators() {
 		}
 		for _, role := range allRoles {
 			role := role
-			time.Sleep(30 * time.Second)
 			err := c.network.Subscribe(validatorShare.ValidatorPubKey)
 			if err != nil {
 				c.logger.Error("failed to subscribe to network", zap.Error(err))

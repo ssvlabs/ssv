@@ -28,7 +28,7 @@ ssv:
   ValidatorOptions:
     SignatureCollectionTimeout: 5s
     FullNode: true
-    FullNodeNonCommittee: true
+    Exporter: true
 
 GenerateOperatorPrivateKey: true
 

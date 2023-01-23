@@ -83,7 +83,7 @@ func New(cfg *Config) network.P2PNetwork {
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
-	n := &p2pNetwork{
+	return &p2pNetwork{
 		parentCtx:            cfg.Ctx,
 		ctx:                  ctx,
 		cancel:               cancel,
@@ -95,13 +95,6 @@ func New(cfg *Config) network.P2PNetwork {
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 	}
-
-	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(ctx, syncing.New(logger, n), 16, syncing.DefaultTimeouts, nil)
-	go syncer.Run()
-	n.syncer = syncer
-
-	return n
 }
 
 // Host implements HostProvider
@@ -153,6 +146,11 @@ func (n *p2pNetwork) Start() error {
 	if err := n.registerInitialTopics(); err != nil {
 		return err
 	}
+
+	// Create & start ConcurrentSyncer.
+	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n.logger, n), 16, syncing.DefaultTimeouts, nil)
+	go syncer.Run()
+	n.syncer = syncer
 
 	return nil
 }

@@ -173,7 +173,7 @@ spec:
               value: "14007"
             - name: FULLNODE
               value: "true"
-            - name: FULLNODE_NON_COMMITTEE
+            - name: EXPORTER
               value: "true"
             - name: NETWORK_ID
               value: "shifu-stage"

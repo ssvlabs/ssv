@@ -83,65 +83,8 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			EnableOpenMetrics: true,
 		},
 	))
-
-	// Returns the number of key in the database by collection (hex or string prefix).
-	// Empty prefix returns the total number of keys in the database.
-	// Example: /database/count-by-collection?prefix=0x1234
-	//
-	// TODO: re-organize this server and refactor to return proper
-	//       JSON responses (also for errors.)
-	mux.HandleFunc("/database/count-by-collection", func(w http.ResponseWriter, r *http.Request) {
-		var response struct {
-			Count int64 `json:"count"`
-		}
-
-		// Parse prefix from query. Supports both hex and string.
-		var prefix []byte
-		prefixStr := r.URL.Query().Get("prefix")
-		if prefixStr != "" {
-			if strings.HasPrefix(prefixStr, "0x") {
-				var err error
-				prefix, err = hex.DecodeString(prefixStr[2:])
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			} else {
-				prefix = []byte(prefixStr)
-			}
-		}
-
-		n, err := mh.db.CountByCollection(prefix)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		response.Count = n
-
-		if err := json.NewEncoder(w).Encode(&response); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	})
-
-	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
-		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
-			metricsNodeStatus.Set(float64(statusNotHealthy))
-			result := map[string][]string{
-				"errors": errs,
-			}
-			if raw, err := json.Marshal(result); err != nil {
-				http.Error(res, err.Error(), http.StatusInternalServerError)
-			} else {
-				http.Error(res, string(raw), http.StatusInternalServerError)
-			}
-		} else {
-			metricsNodeStatus.Set(float64(statusHealthy))
-			if _, err := fmt.Fprintln(res, ""); err != nil {
-				http.Error(res, err.Error(), http.StatusInternalServerError)
-			}
-		}
-	})
+	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
+	mux.HandleFunc("/health", mh.handleHealth)
 
 	go func() {
 		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
@@ -152,6 +95,62 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	}()
 
 	return nil
+}
+
+// handleCountByCollection responds with the number of key in the database by collection.
+// Prefix can be a string or a 0x-prefixed hex string.
+// Empty prefix returns the total number of keys in the database.
+func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http.Request) {
+	var response struct {
+		Count int64 `json:"count"`
+	}
+
+	// Parse prefix from query. Supports both hex and string.
+	var prefix []byte
+	prefixStr := r.URL.Query().Get("prefix")
+	if prefixStr != "" {
+		if strings.HasPrefix(prefixStr, "0x") {
+			var err error
+			prefix, err = hex.DecodeString(prefixStr[2:])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else {
+			prefix = []byte(prefixStr)
+		}
+	}
+
+	n, err := mh.db.CountByCollection(prefix)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response.Count = n
+
+	if err := json.NewEncoder(w).Encode(&response); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
+	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+		metricsNodeStatus.Set(float64(statusNotHealthy))
+		result := map[string][]string{
+			"errors": errs,
+		}
+		if raw, err := json.Marshal(result); err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+		} else {
+			http.Error(res, string(raw), http.StatusInternalServerError)
+		}
+	} else {
+		metricsNodeStatus.Set(float64(statusHealthy))
+		if _, err := fmt.Fprintln(res, ""); err != nil {
+			http.Error(res, err.Error(), http.StatusInternalServerError)
+		}
+	}
 }
 
 func (mh *metricsHandler) configureProfiling() {

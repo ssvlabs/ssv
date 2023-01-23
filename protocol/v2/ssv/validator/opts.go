@@ -12,15 +12,15 @@ import (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	Network              specqbft.Network
-	Beacon               specssv.BeaconNode
-	Storage              *storage.QBFTStores
-	SSVShare             *types.SSVShare
-	Signer               spectypes.KeyManager
-	DutyRunners          runner.DutyRunners
-	NewDecidedHandler    qbftctrl.NewDecidedHandler
-	FullNode             bool
-	FullNodeNonCommittee bool
+	Network           specqbft.Network
+	Beacon            specssv.BeaconNode
+	Storage           *storage.QBFTStores
+	SSVShare          *types.SSVShare
+	Signer            spectypes.KeyManager
+	DutyRunners       runner.DutyRunners
+	NewDecidedHandler qbftctrl.NewDecidedHandler
+	FullNode          bool
+	Exporter          bool
 }
 
 func (o *Options) defaults() {
