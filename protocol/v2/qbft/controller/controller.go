@@ -54,6 +54,7 @@ func NewController(
 		StoredInstances:     make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
+		fullNode:            fullNode,
 		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())),
 			zap.String("role", msgId.GetRoleType().String())),
 	}
