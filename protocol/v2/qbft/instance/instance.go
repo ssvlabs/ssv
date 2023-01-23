@@ -102,6 +102,9 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+	if msg.Message.Round < i.State.Round {
+		return false, nil, nil, errors.New("past round")
+	}
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
@@ -134,10 +137,6 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "invalid signed message")
-	}
-
-	if msg.Message.Round < i.State.Round {
-		return errors.New("past round")
 	}
 
 	switch msg.Message.MsgType {
