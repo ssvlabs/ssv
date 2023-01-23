@@ -41,8 +41,8 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize      = 25
-	networkMsgsConcurrency = 1024
+	metadataBatchSize        = 25
+	networkRouterConcurrency = 256
 )
 
 // ShareEncryptionKeyProvider is a function that returns the operator private key
@@ -355,7 +355,7 @@ func (c *controller) StartNetworkHandlers() {
 		c.logger.Panic("could not register stream handlers", zap.Error(err))
 	}
 	c.network.UseMessageRouter(c.messageRouter)
-	for i := 0; i < networkMsgsConcurrency; i++ {
+	for i := 0; i < networkRouterConcurrency; i++ {
 		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
