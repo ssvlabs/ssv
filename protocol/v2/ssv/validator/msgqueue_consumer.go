@@ -36,7 +36,7 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			)
 			return
 		}
-		v.logMsg(decodedMsg, "adding to q", zap.Any("type", decodedMsg.SSVMessage.MsgType))
+		//v.logMsg(decodedMsg, "adding to q", zap.Any("type", decodedMsg.SSVMessage.MsgType))
 		q.Q.Push(decodedMsg)
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
@@ -97,9 +97,9 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 			time.Sleep(interval)
 			continue
 		}
-		v.logMsg(msg, "after pop, handling msg", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state))
+		//v.logMsg(msg, "after pop, handling msg", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state))
 		if err := handler(msg); err != nil {
-			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state), zap.Error(err))
+			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
 	logger.Debug("queue consumer is closed")
