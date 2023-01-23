@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -103,28 +102,21 @@ func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHisto
 		return errors.Wrap(err, "could not encode instance")
 	}
 
-	if toHistory {
-		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
-		if err != nil {
-			return errors.Wrap(err, "could not save historical instance")
-		} else {
-			var signers []spectypes.OperatorID
-			if instance.DecidedMessage != nil {
-				signers = instance.DecidedMessage.Signers
-			}
-			i.logger.Debug("Saved historical instance",
-				zap.String("identifier", hex.EncodeToString(instance.State.ID)),
-				zap.Uint64("height", uint64(instance.State.Height)),
-				zap.Any("signers", signers))
-		}
-	}
-
 	if asHighest {
 		i.forkLock.RLock()
 		defer i.forkLock.RUnlock()
 
 		err = i.save(value, highestInstanceKey, instance.State.ID)
-		return errors.Wrap(err, "could not save highest instance")
+		if err != nil {
+			return errors.Wrap(err, "could not save highest instance")
+		}
+	}
+
+	if toHistory {
+		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
+		if err != nil {
+			return errors.Wrap(err, "could not save historical instance")
+		}
 	}
 
 	return nil

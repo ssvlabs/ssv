@@ -56,15 +56,15 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		// Retrieve instance from StoredInstances (in case it was created above)
 		// and save it together with the decided message.
 		if inst := c.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
+			logger := c.logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(c.Height)),
+				zap.Any("signers", msg.Signers),
+			)
 			if err = c.SaveInstance(inst, msg); err != nil {
-				c.logger.Debug("failed to save instance",
-					zap.Uint64("height", uint64(msg.Message.Height)),
-					zap.Error(err))
+				logger.Debug("failed to save instance", zap.Error(err))
 			} else {
-				c.logger.Debug("saved instance upon decided",
-					zap.Uint64("msg_height", uint64(msg.Message.Height)),
-					zap.Uint64("ctrl_height", uint64(c.Height)),
-					zap.Any("signers", msg.Signers))
+				logger.Debug("saved instance upon decided", zap.Error(err))
 			}
 		}
 	}

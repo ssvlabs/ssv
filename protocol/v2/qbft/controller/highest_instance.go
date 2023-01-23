@@ -57,15 +57,10 @@ func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMess
 	if c.fullNode {
 		if highest {
 			return c.config.GetStorage().SaveHighestAndHistoricalInstance(storedInstance)
-		} else {
-			return c.config.GetStorage().SaveInstance(storedInstance)
 		}
+		return c.config.GetStorage().SaveInstance(storedInstance)
 	}
 
 	// Light nodes only save highest instances.
-	if highest {
-		return c.config.GetStorage().SaveHighestInstance(storedInstance)
-	}
-
-	return nil
+	return c.config.GetStorage().SaveHighestInstance(storedInstance)
 }

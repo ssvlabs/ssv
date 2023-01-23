@@ -115,10 +115,15 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
+			logger := b.logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
+				zap.Any("signers", msg.Signers),
+			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				b.logger.Warn("failed to save instance",
-					zap.Uint64("height", uint64(decidedMsg.Message.Height)),
-					zap.Error(err))
+				logger.Debug("failed to save instance", zap.Error(err))
+			} else {
+				logger.Debug("saved instance upon decided")
 			}
 		}
 	}
