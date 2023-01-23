@@ -17,7 +17,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(msg *spectypes.SSVMessage) error
+type MessageHandler func(msg *queue.DecodedSSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -38,6 +38,7 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			)
 			return
 		}
+		//v.logMsg(decodedMsg, "adding to q", zap.Any("type", decodedMsg.SSVMessage.MsgType))
 		q.Q.Push(decodedMsg)
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
@@ -94,29 +95,35 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		// Pop the highest priority message and handle it.
 		msg := q.Q.Pop(queue.NewMessagePrioritizer(&state))
 		if msg == nil {
-			logger.Debug("could not pop message from queue")
+			//logger.Debug("could not pop message from queue")
 			time.Sleep(interval)
 			continue
 		}
-
-		if err := handler(msg.SSVMessage); err != nil {
-			switch msg.SSVMessage.MsgType {
-			case spectypes.SSVConsensusMsgType:
-				sm := msg.Body.(*specqbft.SignedMessage)
-				logger.Debug("could not handle message (consensus)", zap.Error(err),
-					zap.Int64("msg_height", int64(sm.Message.Height)),
-					zap.Int64("msg_round", int64(sm.Message.Round)),
-					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-					zap.Any("signers", sm.Signers))
-			case spectypes.SSVPartialSignatureMsgType:
-				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
-				logger.Debug("could not handle message (partial signature)", zap.Error(err),
-					zap.Int64("signer", int64(psm.Signer)))
-			}
+		//v.logMsg(msg, "after pop, handling msg", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state))
+		if err := handler(msg); err != nil {
+			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
 	logger.Debug("queue consumer is closed")
 	return nil
+}
+
+func (v *Validator) logMsg(msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
+	fields = append([]zap.Field{
+		zap.String("role", msg.MsgID.GetRoleType().String()),
+	}, fields...)
+	switch msg.SSVMessage.MsgType {
+	case spectypes.SSVConsensusMsgType:
+		sm := msg.Body.(*specqbft.SignedMessage)
+		fields = append(append([]zap.Field{}, zap.Int64("msg_height", int64(sm.Message.Height)),
+			zap.Int64("msg_round", int64(sm.Message.Round)),
+			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
+			zap.Any("signers", sm.Signers)), fields...)
+	case spectypes.SSVPartialSignatureMsgType:
+		psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+		fields = append([]zap.Field{zap.Int64("signer", int64(psm.Signer))}, fields...)
+	}
+	v.logger.Debug(logMsg, fields...)
 }
 
 // GetLastHeight returns the last height for the given identifier
