@@ -105,8 +105,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 					zap.Int64("msg_height", int64(sm.Message.Height)),
 					zap.Int64("msg_round", int64(sm.Message.Round)),
 					zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-					zap.Any("signers", sm.Signers),
-					zap.Any("LIOR:state", state))
+					zap.Any("signers", sm.Signers))
 
 			case spectypes.SSVPartialSignatureMsgType:
 				psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
