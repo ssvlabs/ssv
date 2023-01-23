@@ -3,6 +3,7 @@ package spectest
 import (
 	"encoding/hex"
 	"github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"testing"
@@ -42,7 +43,12 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 		lastErr = v.StartDuty(test.Duty)
 	}
 	for _, msg := range test.Messages {
-		err := v.ProcessMessage(msg)
+		dmsg, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(dmsg)
 		if err != nil {
 			lastErr = err
 		}

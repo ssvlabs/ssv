@@ -41,7 +41,8 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize = 25
+	metadataBatchSize        = 25
+	networkRouterConcurrency = 256
 )
 
 // ShareEncryptionKeyProvider is a function that returns the operator private key
@@ -195,10 +196,6 @@ func (c *controller) setupNetworkHandlers() error {
 	c.network.RegisterHandlers(p2pprotocol.WithHandler(
 		p2pprotocol.LastDecidedProtocol,
 		handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-	), p2pprotocol.WithHandler(
-		p2pprotocol.DecidedHistoryProtocol,
-		// TODO: extract maxBatch to config
-		handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
 	))
 	return nil
 }
@@ -236,14 +233,13 @@ func (c *controller) handleRouterMessages() {
 			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
-			pk := msg.GetID().GetPubKey()
-			hexPK := hex.EncodeToString(pk)
-
 			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
 			if msg.MsgType == message.SSVEventMsgType {
 				continue
 			}
 
+			pk := msg.GetID().GetPubKey()
+			hexPK := hex.EncodeToString(pk)
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(&msg)
 			} else {
@@ -359,7 +355,9 @@ func (c *controller) StartNetworkHandlers() {
 		c.logger.Panic("could not register stream handlers", zap.Error(err))
 	}
 	c.network.UseMessageRouter(c.messageRouter)
-	go c.handleRouterMessages()
+	for i := 0; i < networkRouterConcurrency; i++ {
+		go c.handleRouterMessages()
+	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 

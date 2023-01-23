@@ -2,6 +2,7 @@ package spectest
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"testing"
 
@@ -21,7 +22,12 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 
 	lastErr := v.StartDuty(testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
-		err := v.ProcessMessage(msg)
+		dmsg, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(dmsg)
 		if err != nil {
 			lastErr = err
 		}
