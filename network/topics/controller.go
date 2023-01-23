@@ -154,7 +154,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 		defer done()
 
-		err = topic.Publish(ctx, data)
+		err := topic.Publish(ctx, data)
 		if err == nil {
 			metricPubsubOutbound.WithLabelValues(name).Inc()
 		}
