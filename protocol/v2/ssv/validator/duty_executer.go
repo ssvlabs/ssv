@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"encoding/hex"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -16,8 +15,8 @@ func (v *Validator) OnExecuteDuty(msg types.EventMsg) error {
 	if err := v.Start(); err != nil {
 		return errors.Wrap(err, "could not start validator")
 	}
-	logger.Info("starting duty processing", zap.Any("slot", executeDutyData.Duty.Slot),
-		zap.String("type", executeDutyData.Duty.Type.String()), zap.String("publicKey", hex.EncodeToString(executeDutyData.Duty.PubKey[:])))
+	v.logger.Info("starting duty processing", zap.Any("slot", executeDutyData.Duty.Slot),
+		zap.String("type", executeDutyData.Duty.Type.String()))
 	if err := v.StartDuty(executeDutyData.Duty); err != nil {
 		return errors.Wrap(err, "could not start duty")
 	}
