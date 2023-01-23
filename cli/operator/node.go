@@ -133,7 +133,7 @@ var StartNodeCmd = &cobra.Command{
 		operatorNode = operator.New(cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
@@ -310,9 +310,9 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	return cl, el
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, logger, enableProf, operatorNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, logger, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?

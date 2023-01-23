@@ -40,6 +40,7 @@ services:
       SHARE_CONFIG: ./config/share1.yaml
     ports:
       - 16001:16000
+      - 17001:15001
     volumes:
       - ./data/ssv-node-1/data:/data
 
@@ -51,6 +52,7 @@ services:
       SHARE_CONFIG: ./config/share2.yaml
     ports:
       - 16002:16000
+      - 17002:15002
     volumes:
       - ./data/ssv-node-2/data:/data
 
@@ -62,6 +64,7 @@ services:
       SHARE_CONFIG: ./config/share3.yaml
     ports:
       - 16003:16000
+      - 17003:15003
     volumes:
       - ./data/ssv-node-3/data:/data
 
@@ -73,6 +76,7 @@ services:
       SHARE_CONFIG: ./config/share4.yaml
     ports:
       - 16004:16000
+      - 17004:15004
     volumes:
       - ./data/ssv-node-4/data:/data
 
@@ -83,8 +87,9 @@ services:
       CONFIG_PATH: ./config/config.exporter.yaml
     ports:
       - 16005:16000
+      - 17005:15005
 
-# dev services:
+  # dev services:
 
   ssv-node-1-dev:
     <<: *default-dev
@@ -147,7 +152,7 @@ services:
       DEBUG_PORT: 40009
       CONFIG_PATH: ./config/config.exporter.yaml
 
-# monitoring services
+  # monitoring services
 
   prometheus:
     container_name: prometheus

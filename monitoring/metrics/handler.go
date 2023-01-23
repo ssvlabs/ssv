@@ -2,13 +2,16 @@ package metrics
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+	"strings"
 
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -38,22 +41,24 @@ func init() {
 	}
 }
 
-// NewMetricsHandler creates a new instance
-func NewMetricsHandler(ctx context.Context, logger *zap.Logger, enableProf bool, healthChecker HealthCheckAgent) Handler {
+type metricsHandler struct {
+	ctx           context.Context
+	logger        *zap.Logger
+	db            basedb.IDb
+	enableProf    bool
+	healthChecker HealthCheckAgent
+}
+
+// NewMetricsHandler returns a new metrics handler.
+func NewMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
 		ctx:           ctx,
 		logger:        logger.With(zap.String("component", "metrics/handler")),
+		db:            db,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
 	}
 	return &mh
-}
-
-type metricsHandler struct {
-	ctx           context.Context
-	logger        *zap.Logger
-	enableProf    bool
-	healthChecker HealthCheckAgent
 }
 
 func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
@@ -78,6 +83,46 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			EnableOpenMetrics: true,
 		},
 	))
+
+	// Returns the number of key in the database by collection (hex or string prefix).
+	// Empty prefix returns the total number of keys in the database.
+	// Example: /database/count-by-collection?prefix=0x1234
+	//
+	// TODO: re-organize this server and refactor to return proper
+	//       JSON responses (also for errors.)
+	mux.HandleFunc("/database/count-by-collection", func(w http.ResponseWriter, r *http.Request) {
+		var response struct {
+			Count int64 `json:"count"`
+		}
+
+		// Parse prefix from query. Supports both hex and string.
+		var prefix []byte
+		prefixStr := r.URL.Query().Get("prefix")
+		if prefixStr != "" {
+			if strings.HasPrefix(prefixStr, "0x") {
+				var err error
+				prefix, err = hex.DecodeString(prefixStr[2:])
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusBadRequest)
+					return
+				}
+			} else {
+				prefix = []byte(prefixStr)
+			}
+		}
+
+		n, err := mh.db.CountByCollection(prefix)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		response.Count = n
+
+		if err := json.NewEncoder(w).Encode(&response); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
 
 	mux.HandleFunc("/health", func(res http.ResponseWriter, req *http.Request) {
 		if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
