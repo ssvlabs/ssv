@@ -2,6 +2,7 @@ package qbftstorage
 
 import (
 	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
 
