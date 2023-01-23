@@ -40,19 +40,32 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	return i, nil
 }
 
+// SaveInstance saves the given instance to the storage.
 func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+	highest := msg.Message.Height >= c.Height
+	if !highest && !c.fullNode {
+		// Nothing to do.
+		return nil
+	}
+
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,
 	}
-	// TODO: decide if we want light/full behaviour here instead of inside storage.
-	// highest := msg.Message.Height >= c.Height
-	// if c.fullNode {
-	// 	return c.config.GetStorage().SaveInstance(storedInstance, highest)
-	// }
-	// if highest {
-	// 	return c.config.GetStorage().SaveHighestInstance(storedInstance)
-	// }
-	// return nil
-	return c.config.GetStorage().SaveInstance(storedInstance)
+
+	// Full nodes save both highest and historical instances.
+	if c.fullNode {
+		if highest {
+			return c.config.GetStorage().SaveHighestAndHistoricalInstance(storedInstance)
+		} else {
+			return c.config.GetStorage().SaveInstance(storedInstance)
+		}
+	}
+
+	// Light nodes only save highest instances.
+	if highest {
+		return c.config.GetStorage().SaveHighestInstance(storedInstance)
+	}
+
+	return nil
 }

@@ -114,7 +114,7 @@ func (it *IntegrationTest) bootstrap(ctx context.Context) (*scenarioContext, err
 	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
 	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
 	for _, operatorID := range it.OperatorIDs {
-		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", forkVersion, false)
+		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", forkVersion)
 
 		storageMap := qbftstorage.NewStores()
 		storageMap.Add(spectypes.BNRoleAttester, store)

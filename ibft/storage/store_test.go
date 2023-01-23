@@ -22,7 +22,7 @@ func init() {
 
 func TestCleanInstances(t *testing.T) {
 	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion, true)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	generateInstance := func(id spectypes.MessageID, h specqbft.Height) *qbftstorage.StoredInstance {
@@ -55,27 +55,28 @@ func TestCleanInstances(t *testing.T) {
 	}
 
 	msgsCount := 10
-	maxHeight := specqbft.Height(msgsCount) - 1
 	for i := 0; i < msgsCount; i++ {
 		require.NoError(t, storage.SaveInstance(generateInstance(msgID, specqbft.Height(i))))
 	}
+	require.NoError(t, storage.SaveHighestInstance(generateInstance(msgID, specqbft.Height(msgsCount))))
 
 	// add different msgID
 	differMsgID := spectypes.NewMsgID([]byte("differ_pk"), spectypes.BNRoleAttester)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
+	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
 
-	res, err := storage.GetInstancesInRange(msgID[:], 0, maxHeight)
+	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, msgsCount, len(res))
 
 	last, err := storage.GetHighestInstance(msgID[:])
 	require.NoError(t, err)
 	require.NotNil(t, last)
-	require.Equal(t, maxHeight, last.State.Height)
+	require.Equal(t, specqbft.Height(msgsCount), last.State.Height)
 
 	// remove all instances
 	require.NoError(t, storage.CleanAllInstances(msgID[:]))
-	res, err = storage.GetInstancesInRange(msgID[:], 0, maxHeight)
+	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
 
@@ -84,7 +85,7 @@ func TestCleanInstances(t *testing.T) {
 	require.Nil(t, last)
 
 	// check other msgID
-	res, err = storage.GetInstancesInRange(differMsgID[:], 0, maxHeight)
+	res, err = storage.GetInstancesInRange(differMsgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 1, len(res))
 
@@ -114,10 +115,10 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion, false)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
-	require.NoError(t, storage.SaveInstance(instance))
+	require.NoError(t, storage.SaveHighestInstance(instance))
 
 	savedInstance, err := storage.GetHighestInstance(identifier[:])
 	require.NoError(t, err)
@@ -152,7 +153,7 @@ func TestSaveAndFetchState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion, true)
+	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveInstance(instance))
@@ -172,7 +173,7 @@ func TestSaveAndFetchState(t *testing.T) {
 	require.Equal(t, []byte("value"), savedInstance.State.DecidedValue)
 }
 
-func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion, history bool) (qbftstorage.QBFTStore, error) {
+func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
 	db, err := ssvstorage.GetStorageFactory(basedb.Options{
 		Type:      "badger-memory",
 		Logger:    logger.With(zap.String("who", "badger")),
@@ -182,5 +183,5 @@ func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprot
 	if err != nil {
 		return nil, err
 	}
-	return New(db, logger.With(zap.String("who", "ibftStorage")), prefix, forkVersion, history), nil
+	return New(db, logger.With(zap.String("who", "ibftStorage")), prefix, forkVersion), nil
 }

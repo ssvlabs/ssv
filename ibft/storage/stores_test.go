@@ -17,7 +17,7 @@ func init() {
 func TestQBFTStores(t *testing.T) {
 	qbftMap := NewStores()
 
-	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion, false)
+	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 	qbftMap.Add(types.BNRoleAttester, store)
 	qbftMap.Add(types.BNRoleProposer, store)

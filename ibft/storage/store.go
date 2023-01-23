@@ -46,23 +46,17 @@ type ibftStorage struct {
 	logger   *zap.Logger
 	fork     forks.Fork
 	forkLock *sync.RWMutex
-
-	// history is used to determine if we should store history instances.
-	// If false, we will only store the highest instances.
-	history bool
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion, history bool) qbftstorage.QBFTStore {
-	ibft := &ibftStorage{
+func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+	return &ibftStorage{
 		prefix:   []byte(prefix),
 		db:       db,
 		logger:   logger,
 		fork:     forksfactory.NewFork(forkVersion),
 		forkLock: &sync.RWMutex{},
-		history:  history,
 	}
-	return ibft
 }
 
 func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
@@ -91,14 +85,25 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	return ret, nil
 }
 
-// SaveInstance saves historical StoredInstance.
 func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
+	return i.saveInstance(instance, true, false)
+}
+
+func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
+	return i.saveInstance(instance, false, true)
+}
+
+func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.StoredInstance) error {
+	return i.saveInstance(instance, true, true)
+}
+
+func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
 	value, err := instance.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
 
-	if i.history {
+	if toHistory {
 		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
 		if err != nil {
 			return errors.Wrap(err, "could not save historical instance")
@@ -114,20 +119,15 @@ func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 		}
 	}
 
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
+	if asHighest {
+		i.forkLock.RLock()
+		defer i.forkLock.RUnlock()
 
-	// Save as highest instance if it's higher than the current highest instance.
-	highest, err := i.GetHighestInstance(instance.State.ID)
-	if err != nil {
-		return errors.Wrap(err, "could not get highest instance")
-	}
-	if highest != nil && highest.State.Height >= instance.State.Height {
-		return nil
+		err = i.save(value, highestInstanceKey, instance.State.ID)
+		return errors.Wrap(err, "could not save highest instance")
 	}
 
-	err = i.save(value, highestInstanceKey, instance.State.ID)
-	return errors.Wrap(err, "could not save instance")
+	return nil
 }
 
 // GetInstance returns historical StoredInstance for the given identifier and height.
@@ -151,10 +151,6 @@ func (i *ibftStorage) GetInstance(identifier []byte, height specqbft.Height) (*q
 
 // GetInstancesInRange returns historical StoredInstance's in the given range.
 func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
-	if !i.history {
-		return nil, errors.New("history is disabled")
-	}
-
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 

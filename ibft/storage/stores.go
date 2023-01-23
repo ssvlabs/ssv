@@ -14,7 +14,7 @@ func NewStoresFromRoles(db basedb.IDb, logger *zap.Logger, roles ...spectypes.Be
 	stores := NewStores()
 
 	for _, role := range roles {
-		stores.Add(role, New(db, logger, role.String(), forksprotocol.GenesisForkVersion, false))
+		stores.Add(role, New(db, logger, role.String(), forksprotocol.GenesisForkVersion))
 	}
 
 	return stores
