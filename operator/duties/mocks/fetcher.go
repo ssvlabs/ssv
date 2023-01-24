@@ -4,8 +4,6 @@
 // Package mocks is a generated GoMock package.
 package mocks
 
-// TODO(oleg) mock
-
 import (
 	reflect "reflect"
 
