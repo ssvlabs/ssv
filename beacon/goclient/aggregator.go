@@ -74,13 +74,11 @@ func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggreg
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
-	//modulo := uint64(1)
+	modulo := uint64(1)
 	// TODO(oleg) prysm params TargetAggregatorsPerCommittee:  16
-	//if committeeCount/params.BeaconConfig().TargetAggregatorsPerCommittee > 1 {
-	//	modulo = committeeCount / params.BeaconConfig().TargetAggregatorsPerCommittee
-	//}
-
-	modulo := committeeCount / TargetAggregatorsPerCommittee
+	if TargetAggregatorsPerCommittee > 1 {
+		modulo = committeeCount / TargetAggregatorsPerCommittee
+	}
 
 	// TODO(oleg) prysm
 	//b := hash.Hash(slotSig)
