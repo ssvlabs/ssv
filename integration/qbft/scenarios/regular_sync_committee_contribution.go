@@ -79,10 +79,41 @@ func regularSyncCommitteeContributionInstanceValidator(operatorID spectypes.Oper
 			panic(err)
 		}
 
+		expected := &protocolstorage.StoredInstance{
+			State: &specqbft.State{
+				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
+				ID:                identifier[:],
+				Round:             specqbft.FirstRound,
+				Height:            specqbft.FirstHeight,
+				LastPreparedRound: specqbft.FirstRound,
+				LastPreparedValue: encodedConsensusData,
+				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+					MsgType:    specqbft.ProposalMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       proposalData,
+				}),
+				Decided:      true,
+				DecidedValue: encodedConsensusData,
+
+				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
+			},
+			DecidedMessage: &specqbft.SignedMessage{
+				Message: &specqbft.Message{
+					MsgType:    specqbft.CommitMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
+				},
+			},
+		}
+
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound), &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     specqbft.FirstHeight,
 			Round:      specqbft.FirstRound,
@@ -134,37 +165,6 @@ func regularSyncCommitteeContributionInstanceValidator(operatorID spectypes.Oper
 		actual.State.ProposeContainer = nil
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
-
-		expected := &protocolstorage.StoredInstance{
-			State: &specqbft.State{
-				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
-				ID:                identifier[:],
-				Round:             specqbft.FirstRound,
-				Height:            specqbft.FirstHeight,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: encodedConsensusData,
-				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-					MsgType:    specqbft.ProposalMsgType,
-					Height:     specqbft.FirstHeight,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       proposalData,
-				}),
-				Decided:      true,
-				DecidedValue: encodedConsensusData,
-
-				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-			},
-			DecidedMessage: &specqbft.SignedMessage{
-				Message: &specqbft.Message{
-					MsgType:    specqbft.CommitMsgType,
-					Height:     specqbft.FirstHeight,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
-				},
-			},
-		}
 
 		if err := validateByRoot(expected.State, actual.State); err != nil {
 			return err
