@@ -16,7 +16,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(uint64(slot))
+	gc.waitToSlotTwoThirds(slot)
 
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
@@ -80,7 +80,7 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	//	modulo = committeeCount / params.BeaconConfig().TargetAggregatorsPerCommittee
 	//}
 
-	modulo := committeeCount / 16
+	modulo := committeeCount / TargetAggregatorsPerCommittee
 
 	// TODO(oleg) prysm
 	//b := hash.Hash(slotSig)
@@ -116,7 +116,7 @@ func Hash(data []byte) [32]byte {
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitToSlotTwoThirds(slot uint64) {
+func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	oneThird := gc.network.DivideSlotBy(3 /* one third of slot duration */)
 	twoThird := oneThird + oneThird
 	delay := twoThird

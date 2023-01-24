@@ -32,8 +32,8 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	}).AnyTimes()
 
 	mockFetcher := mocks.NewMockDutyFetcher(mockCtrl)
-	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot uint64) ([]spectypes.Duty, error) {
-		return []spectypes.Duty{{Slot: spec.Slot(slot), PubKey: spec.BLSPubKey{}}}, nil
+	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot spec.Slot) ([]spectypes.Duty, error) {
+		return []spectypes.Duty{{Slot: slot, PubKey: spec.BLSPubKey{}}}, nil
 	}).AnyTimes()
 
 	dutyCtrl := &dutyController{

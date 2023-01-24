@@ -9,7 +9,7 @@ import (
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
-	gc.waitOneThirdOrValidBlock(uint64(slot))
+	gc.waitOneThirdOrValidBlock(slot)
 
 	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
@@ -51,7 +51,7 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
+func (gc *goClient) waitOneThirdOrValidBlock(slot spec.Slot) {
 	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)

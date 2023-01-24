@@ -31,7 +31,7 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 
 // GetSyncCommitteeContribution returns
 func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint64) (*altair.SyncCommitteeContribution, error) {
-	gc.waitOneThirdOrValidBlock(uint64(slot))
+	gc.waitOneThirdOrValidBlock(slot)
 
 	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
@@ -41,7 +41,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 		return nil, errors.New("block root is nil")
 	}
 
-	gc.waitToSlotTwoThirds(uint64(slot))
+	gc.waitToSlotTwoThirds(slot)
 
 	contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
 	if err != nil {
