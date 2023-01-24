@@ -28,6 +28,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
+	isFutureDecided := msg.Message.Height > c.Height
 	save := true
 
 	if inst == nil {
@@ -68,15 +69,9 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		}
 	}
 
-	currentHeight := c.Height
-	if currentInstance := c.StoredInstances.FindInstance(c.Height); currentInstance != nil {
-		if decided, _ := currentInstance.IsDecided(); decided {
-			currentHeight = c.Height + 1
-		}
-	}
-	if msg.Message.Height > currentHeight {
+	if isFutureDecided {
 		// sync gap
-		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), currentHeight, msg.Message.Height)
+		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height
 	}
