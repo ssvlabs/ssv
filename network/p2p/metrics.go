@@ -99,7 +99,7 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		}
 	}
 	nodeState := n.idx.State(pid)
-	n.logger.Debug("peer identity",
+	n.logger.Info("peer identity",
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
