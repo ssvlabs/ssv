@@ -16,7 +16,7 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sCtx, err := scenarios.Bootstrap(ctx, []types.OperatorID{1, 2, 3, 4})
+	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4})
 	require.NoError(t, err)
 	defer func() {
 		_ = sCtx.Close()
@@ -47,7 +47,7 @@ func Test_Integration_QBFTScenarios7Committee(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sCtx, err := scenarios.Bootstrap(ctx, []types.OperatorID{1, 2, 3, 4, 5, 6, 7})
+	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4, 5, 6, 7})
 	require.NoError(t, err)
 	defer func() {
 		_ = sCtx.Close()
@@ -65,7 +65,7 @@ func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sCtx, err := scenarios.Bootstrap(ctx, []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
+	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 	require.NoError(t, err)
 	defer func() {
 		_ = sCtx.Close()
