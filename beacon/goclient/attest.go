@@ -16,7 +16,6 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	if err != nil {
 		return nil, err
 	}
-	//TODO(oleg) changed from prysmtime
 	metricsAttestationDataRequest.WithLabelValues().Observe(time.Since(startTime).Seconds())
 
 	return attestationData, nil
@@ -55,7 +54,6 @@ func (gc *goClient) waitOneThirdOrValidBlock(slot phase0.Slot) {
 	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	//TODO(oleg) changed from prysmtime
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return

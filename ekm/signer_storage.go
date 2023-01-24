@@ -259,7 +259,6 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, error) {
 	if !found {
 		return 0, nil
 	}
-	// TODO(oleg) chk how slot 0 effect
 	if obj.Value == nil || len(obj.Value) == 0 {
 		return 0, errors.Wrap(err, "highest proposal value is empty")
 	}

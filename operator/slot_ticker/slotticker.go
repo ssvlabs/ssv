@@ -46,7 +46,6 @@ func NewSlotTicker(genesisTime time.Time, secondsPerSlot uint64) *SlotTicker {
 		c:    make(chan phase0.Slot),
 		done: make(chan struct{}),
 	}
-	//TODO(oleg) changed from prysmtime for since and until
 	ticker.start(genesisTime, secondsPerSlot, time.Since, time.Until, time.After)
 	return ticker
 }

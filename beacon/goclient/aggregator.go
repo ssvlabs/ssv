@@ -72,13 +72,10 @@ func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggreg
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	modulo := uint64(1)
-	// TODO(oleg) prysm params TargetAggregatorsPerCommittee:  16
 	if TargetAggregatorsPerCommittee > 1 {
 		modulo = committeeCount / TargetAggregatorsPerCommittee
 	}
 
-	// TODO(oleg) prysm
-	//b := hash.Hash(slotSig)
 	b := Hash(slotSig)
 	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
 }
@@ -91,7 +88,6 @@ func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
 
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	//TODO(oleg) changed from prysmtime
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
