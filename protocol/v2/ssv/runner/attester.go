@@ -171,7 +171,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 
-		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
+		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 			Observe(time.Since(r.consensusStart).Seconds())
 	}
 	r.GetState().Finished = true

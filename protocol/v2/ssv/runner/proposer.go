@@ -200,7 +200,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		r.logger.Info("successfully proposed block!")
 
-		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
 			Observe(time.Since(r.consensusStart).Seconds())
 	}
 

@@ -30,14 +30,14 @@ Row 2:
 ### Attester Role
 
 Row 1:
-* Attestion data request duration \
+* Attestation data request duration \
 `ssv_beacon_attestation_data_request_duration_seconds{}`
-* Attestion full flow duration (w/o attestation data) \
-`ssv_beacon_attestation_full_flow_duration_seconds{}`
+* Attestation full flow duration (w/o attestation data) \
+`ssv_beacon_duty_full_flow_duration_seconds{role}`
 
 Row 2:
 * Attestation consensus duration \
-`ssv_beacon_attestation_consensus_duration_seconds{}`
+`ssv_beacon_consensus_duration_seconds{role}`
 * Proposal stage duration (seconds) \
 `ssv_qbft_instance_stage_duration_seconds{stage,identifier}`
 
@@ -49,13 +49,27 @@ Row 3:
 
 Row 4:
 * Post-consensus duration (Signature collection duration) (seconds) \
-`ssv_validator_post_consensus_duration_seconds{identifier}`
+`ssv_validator_post_consensus_duration_seconds{role,identifier}`
 * Attestation submission duration (seconds) \
-`ssv_beacon_attestation_submission_duration_seconds{identifier}`
+`ssv_validator_beacon_submission_duration_seconds{role,identifier}`
 
 ### Proposer Role
 
-...
+Row 1:
+* Duty full flow duration \
+  `ssv_beacon_duty_full_flow_duration_seconds{role}`
+* Consensus duration \
+  `ssv_beacon_consensus_duration_seconds{role}`
+
+Row 2:
+* Pre-consensus duration (seconds) \
+  `ssv_validator_pre_consensus_duration_seconds{role,identifier}`
+* Post-consensus duration (seconds) \
+  `ssv_validator_post_consensus_duration_seconds{role,identifier}`
+
+Row 3:
+* Block submission duration (seconds) \
+  `ssv_validator_beacon_submission_duration_seconds{role,identifier}`
 
 ### Aggregator Role
 
