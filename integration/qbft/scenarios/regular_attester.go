@@ -21,7 +21,7 @@ func RegularAttester(f int) *IntegrationTest {
 	instanceValidators := map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{}
 	startDutyErrors := map[spectypes.OperatorID]error{}
 
-	for i := 1; i <= getF3plus1(f); i++ {
+	for i := 1; i <= getCommitteeNum(f); i++ {
 		currentOperatorId := spectypes.OperatorID(i)
 
 		operatorIDs = append(operatorIDs, currentOperatorId)

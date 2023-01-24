@@ -58,7 +58,7 @@ func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sCtx, err := scenarios.Bootstrap(ctx, []types.OperatorID{1, 2, 3, 4, 5, 6, 7})
+	sCtx, err := scenarios.Bootstrap(ctx, []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
 	require.NoError(t, err)
 	defer func() {
 		_ = sCtx.Close()

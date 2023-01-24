@@ -120,15 +120,13 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := &specqbft.SignedMessage{
-			Message: &specqbft.Message{
-				MsgType:    specqbft.ProposalMsgType,
-				Height:     5,
-				Round:      specqbft.FirstRound,
-				Identifier: identifier[:],
-				Data:       proposalData,
-			},
-		}
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     1,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Data:       proposalData,
+		})
 		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
 			return fmt.Errorf("propose msgs not matching: %w", err)
 		}
@@ -139,7 +137,7 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 		expectedPrepareMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.PrepareMsgType,
-				Height:     5,
+				Height:     1,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       prepareData,
@@ -159,7 +157,7 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 		expectedCommitMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
-				Height:     5,
+				Height:     1,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       commitData,
@@ -180,12 +178,12 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
-				Height:            5,
+				Height:            1,
 				LastPreparedRound: specqbft.FirstRound,
 				LastPreparedValue: consensusData,
 				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], 2, &specqbft.Message{
 					MsgType:    specqbft.ProposalMsgType,
-					Height:     5,
+					Height:     1,
 					Round:      specqbft.FirstRound,
 					Identifier: identifier[:],
 					Data:       proposalData,
@@ -197,7 +195,7 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 			DecidedMessage: &specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
-					Height:     5,
+					Height:     1,
 					Round:      specqbft.FirstRound,
 					Identifier: identifier[:],
 					Data:       spectestingutils.PrepareDataBytes(consensusData),
@@ -234,7 +232,7 @@ func f1DecidedNonConsensusInstanceValidator(consensusData []byte, operatorID spe
 		expectedCommitMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
-				Height:     5,
+				Height:     1,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       commitData,
@@ -255,7 +253,7 @@ func f1DecidedNonConsensusInstanceValidator(consensusData []byte, operatorID spe
 				Share:                           testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                              identifier[:],
 				Round:                           specqbft.FirstRound,
-				Height:                          5,
+				Height:                          1,
 				LastPreparedRound:               0,
 				LastPreparedValue:               nil,
 				ProposalAcceptedForCurrentRound: nil,
@@ -266,7 +264,7 @@ func f1DecidedNonConsensusInstanceValidator(consensusData []byte, operatorID spe
 			DecidedMessage: &specqbft.SignedMessage{
 				Message: &specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
-					Height:     5,
+					Height:     1,
 					Round:      specqbft.FirstRound,
 					Identifier: identifier[:],
 					Data:       spectestingutils.PrepareDataBytes(consensusData),

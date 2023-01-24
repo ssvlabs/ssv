@@ -116,9 +116,9 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 4, &specqbft.Message{
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
-			Height:     3,
+			Height:     2,
 			Round:      specqbft.FirstRound,
 			Identifier: identifier[:],
 			Data:       proposalData,
@@ -133,7 +133,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		expectedPrepareMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.PrepareMsgType,
-				Height:     3,
+				Height:     2,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       prepareData,
@@ -153,7 +153,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		expectedCommitMsg := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
-				Height:     3,
+				Height:     2,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       commitData,
@@ -168,26 +168,22 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		actual.State.ProposeContainer = nil
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
-		actual.State.ProposalAcceptedForCurrentRound.Signature = nil
 
 		createPossibleState := func(lastPreparedRound specqbft.Round, lastPreparedValue []byte) *specqbft.State {
 			return &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
 				ID:                identifier[:],
 				Round:             specqbft.FirstRound,
-				Height:            3,
+				Height:            2,
 				LastPreparedRound: lastPreparedRound,
 				LastPreparedValue: lastPreparedValue,
-				ProposalAcceptedForCurrentRound: &specqbft.SignedMessage{
-					Message: &specqbft.Message{
-						MsgType:    specqbft.ProposalMsgType,
-						Height:     3,
-						Round:      specqbft.FirstRound,
-						Identifier: identifier[:],
-						Data:       proposalData,
-					},
-					Signers: []spectypes.OperatorID{4},
-				},
+				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[3], 3, &specqbft.Message{
+					MsgType:    specqbft.ProposalMsgType,
+					Height:     2,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       proposalData,
+				}),
 				Decided:              true,
 				DecidedValue:         consensusData,
 				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
@@ -220,7 +216,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		expectedDecidedMessage := &specqbft.SignedMessage{
 			Message: &specqbft.Message{
 				MsgType:    specqbft.CommitMsgType,
-				Height:     3,
+				Height:     2,
 				Round:      specqbft.FirstRound,
 				Identifier: identifier[:],
 				Data:       spectestingutils.PrepareDataBytes(consensusData),

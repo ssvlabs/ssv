@@ -63,7 +63,7 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
-func (sctx *scenarioContext) resetDBs() error {
+func (sctx *scenarioContext) resetSCTX() error {
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
 	for _, operatorID := range sctx.operatorIDs {
 		db, err := storage.GetStorageFactory(basedb.Options{
@@ -78,6 +78,21 @@ func (sctx *scenarioContext) resetDBs() error {
 		dbs[operatorID] = db
 	}
 
+	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
+	for _, operatorID := range sctx.operatorIDs {
+		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
+
+		storageMap := qbftstorage.NewStores()
+		storageMap.Add(spectypes.BNRoleAttester, store)
+		storageMap.Add(spectypes.BNRoleProposer, store)
+		storageMap.Add(spectypes.BNRoleAggregator, store)
+		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
+		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
+
+		stores[operatorID] = storageMap
+	}
+
+	sctx.stores = stores
 	sctx.dbs = dbs
 	return nil
 }
@@ -178,6 +193,7 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 	}
 
 	if it.InstanceValidators != nil {
+		errMap := make(map[spectypes.OperatorID]error)
 		if bytes.Equal(it.Identifier[:], bytes.Repeat([]byte{0}, len(it.Identifier))) {
 			return fmt.Errorf("indentifier is not set")
 		}
@@ -200,13 +216,16 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 				log.Printf("stored instance %d: %v\n", operatorID, string(jsonInstance))
 
 				if err := instanceValidator(storedInstance); err != nil {
-					return fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
+					errMap[operatorID] = fmt.Errorf("validate instance %d of operator ID %d: %w\n", i, operatorID, err)
 				}
 			}
 		}
+		if len(errMap) > (getCommitteeNum(f) - getQuorumNum(f)) {
+			return fmt.Errorf("errors validating instances, scenario %s:\n%+v", it.Name, errMap)
+		}
 	}
 
-	if err := sCtx.resetDBs(); err != nil {
+	if err := sCtx.resetSCTX(); err != nil {
 		return err
 	}
 	return nil
@@ -449,8 +468,12 @@ func getShareSet(f int) *spectestingutils.TestKeySet {
 	}
 }
 
-func getF3plus1(f int) int {
+func getCommitteeNum(f int) int {
 	return 3*f + 1
+}
+
+func getQuorumNum(f int) int {
+	return 2*f + 1
 }
 
 func loggerFactory(s string) *zap.Logger {
