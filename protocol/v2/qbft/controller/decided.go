@@ -12,8 +12,6 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	c.logger.Debug("TTT UponExistingInstanceMsg", zap.Uint64("ctrl_height", uint64(c.Height)), zap.Uint64("msg_height", uint64(msg.Message.Height)))
-
 	if err := ValidateDecided(
 		c.config,
 		msg,
@@ -30,7 +28,6 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
-	isFutureDecided := msg.Message.Height > c.Height
 	save := true
 
 	if inst == nil {
@@ -71,9 +68,15 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		}
 	}
 
-	if isFutureDecided {
+	currentHeight := c.Height
+	if currentInstance := c.StoredInstances.FindInstance(c.Height); currentInstance != nil {
+		if decided, _ := currentInstance.IsDecided(); decided {
+			currentHeight = c.Height + 1
+		}
+	}
+	if msg.Message.Height > currentHeight {
 		// sync gap
-		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), c.Height, msg.Message.Height)
+		c.GetConfig().GetNetwork().SyncDecidedByRange(spectypes.MessageIDFromBytes(c.Identifier), currentHeight, msg.Message.Height)
 		// bump height
 		c.Height = msg.Message.Height
 	}

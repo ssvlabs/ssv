@@ -100,8 +100,6 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 }
 
 func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	c.logger.Debug("TTT UponExistingInstanceMsg", zap.Uint64("ctrl_height", uint64(c.Height)), zap.Uint64("msg_height", uint64(msg.Message.Height)))
-
 	inst := c.InstanceForHeight(msg.Message.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
