@@ -79,7 +79,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		return nil
 	}
 
-	metricsConsensusDuration.
+	metricsPreConsensusDuration.
 		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
 		Observe(time.Since(r.preConsensusStart).Seconds())
 

@@ -76,7 +76,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 		return nil
 	}
 
-	metricsConsensusDuration.
+	metricsPreConsensusDuration.
 		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
 		Observe(time.Since(r.preConsensusStart).Seconds())
 
