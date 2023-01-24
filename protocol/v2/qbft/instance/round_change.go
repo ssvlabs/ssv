@@ -71,7 +71,7 @@ func (i *Instance) uponRoundChange(
 }
 
 func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanceStartValue []byte) error {
-	i.State.Round = newRound
+	i.BumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)

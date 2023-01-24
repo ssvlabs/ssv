@@ -62,7 +62,7 @@ func NewInstance(
 func (i *Instance) Start(value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.State.Round = specqbft.FirstRound
+		i.BumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.stageStart = time.Now()
 
@@ -226,4 +226,11 @@ func (i *Instance) Encode() ([]byte, error) {
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
+}
+
+// BumpToRound sets round and sends current round metrics.
+func (i *Instance) BumpToRound(round specqbft.Round) {
+	i.State.Round = round
+	messageID := specqbft.ControllerIdToMessageID(i.State.ID)
+	metricsQBFTInstanceRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(round))
 }

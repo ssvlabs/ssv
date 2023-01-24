@@ -33,14 +33,14 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 
 	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
-		i.State.Round = msg.Message.Round
+		i.BumpToRound(msg.Message.Round)
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data
 		i.State.CommitContainer.AddMsg(msg)
 		c.StoredInstances.addNewInstance(i)
 	} else if decided, _ := inst.IsDecided(); !decided {
 		inst.State.Decided = true
-		inst.State.Round = msg.Message.Round
+		inst.BumpToRound(msg.Message.Round)
 		inst.State.DecidedValue = data.Data
 		inst.State.CommitContainer.AddMsg(msg)
 	} else { // decide previously, add if has more signers
