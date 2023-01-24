@@ -22,6 +22,9 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
 
+# ---------
+# | STAGE |
+# ---------
 Build stage Docker image:
   stage: build
   tags:
@@ -70,7 +73,9 @@ Deploy ssv nodes to blox-infra-stage cluster:
   only:
     - stage
 
-#blox-infra-prod
+# ---------
+# | Prod  |
+# ---------
 Build prod Docker image:
   stage: build
   tags:
