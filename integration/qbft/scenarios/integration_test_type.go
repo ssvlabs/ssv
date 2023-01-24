@@ -63,7 +63,7 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
-func (sctx *scenarioContext) resetSCTX() error {
+func (sctx *scenarioContext) Reset() error {
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
 	for _, operatorID := range sctx.operatorIDs {
 		db, err := storage.GetStorageFactory(basedb.Options{
@@ -94,6 +94,7 @@ func (sctx *scenarioContext) resetSCTX() error {
 
 	sctx.stores = stores
 	sctx.dbs = dbs
+
 	return nil
 }
 
@@ -206,7 +207,7 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 					return err
 				}
 				if storedInstance == nil {
-					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
+					return fmt.Errorf("scenario: %s, stored instance is nil, operator ID %v, instance index %v", it.Name, operatorID, i)
 				}
 
 				jsonInstance, err := json.Marshal(storedInstance)
@@ -220,13 +221,9 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 				}
 			}
 		}
-		if len(errMap) > (getCommitteeNum(f) - getQuorumNum(f)) {
+		if len(errMap) > f { // (3F + 1) - (2F + 1) || committeeNum - quorum
 			return fmt.Errorf("errors validating instances, scenario %s:\n%+v", it.Name, errMap)
 		}
-	}
-
-	if err := sCtx.resetSCTX(); err != nil {
-		return err
 	}
 	return nil
 }
@@ -470,10 +467,6 @@ func getShareSet(f int) *spectestingutils.TestKeySet {
 
 func getCommitteeNum(f int) int {
 	return 3*f + 1
-}
-
-func getQuorumNum(f int) int {
-	return 2*f + 1
 }
 
 func loggerFactory(s string) *zap.Logger {

@@ -23,13 +23,20 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 		<-time.After(time.Second)
 	}()
 
-	require.NoError(t, scenarios.RegularAttester(f).Run(f, sCtx))
-	require.NoError(t, scenarios.RegularAggregator().Run(f, sCtx))
-	require.NoError(t, scenarios.RegularProposer().Run(f, sCtx))
-	require.NoError(t, scenarios.RegularSyncCommittee().Run(f, sCtx))
-	require.NoError(t, scenarios.RegularSyncCommitteeContribution().Run(f, sCtx))
-	require.NoError(t, scenarios.RoundChange(types.BNRoleAttester).Run(f, sCtx))
-	require.NoError(t, scenarios.F1Decided(types.BNRoleAttester).Run(f, sCtx))
+	tests := []*scenarios.IntegrationTest{
+		scenarios.RegularAttester(f),
+		scenarios.RegularAggregator(),
+		scenarios.RegularProposer(),
+		scenarios.RegularSyncCommittee(),
+		scenarios.RegularSyncCommitteeContribution(),
+		scenarios.F1Decided(types.BNRoleAttester),
+		scenarios.RoundChange(types.BNRoleAttester),
+	}
+
+	for _, test := range tests {
+		require.NoError(t, test.Run(f, sCtx))
+		require.NoError(t, sCtx.Reset())
+	}
 }
 
 func Test_Integration_QBFTScenarios7Committee(t *testing.T) {
