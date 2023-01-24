@@ -9,6 +9,8 @@ import (
 )
 
 func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("TTT UponFuture", zap.Uint64("ctrl_height", uint64(c.Height)), zap.Uint64("msg_height", uint64(msg.Message.Height)))
+
 	if err := ValidateFutureMsg(c.GetConfig(), msg, c.Share.Committee); err != nil {
 		return nil, errors.Wrap(err, "invalid future msg")
 	}

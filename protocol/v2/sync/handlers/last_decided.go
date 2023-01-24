@@ -38,7 +38,6 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 			if err != nil {
 				logger.Debug("failed to get highest instance", zap.Error(err))
 			} else if instance != nil {
-				logger.Debug("last decided results", zap.Any("res", instance.DecidedMessage), zap.Error(err))
 				sm.UpdateResults(err, instance.DecidedMessage)
 			}
 		}

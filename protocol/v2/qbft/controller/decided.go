@@ -12,6 +12,8 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	c.logger.Debug("TTT UponExistingInstanceMsg", zap.Uint64("ctrl_height", uint64(c.Height)), zap.Uint64("msg_height", uint64(msg.Message.Height)))
+
 	if err := ValidateDecided(
 		c.config,
 		msg,
