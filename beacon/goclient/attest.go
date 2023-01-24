@@ -3,12 +3,12 @@ package goclient
 import (
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
-func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
 	gc.waitOneThirdOrValidBlock(slot)
 
 	startTime := time.Now()
@@ -23,7 +23,7 @@ func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.Commi
 }
 
 // SubmitAttestation implements Beacon interface
-func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
+func (gc *goClient) SubmitAttestation(attestation *phase0.Attestation) error {
 	signingRoot, err := gc.getSigningRoot(attestation.Data)
 	if err != nil {
 		return errors.Wrap(err, "failed to get signing root")
@@ -33,11 +33,11 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 		return errors.Wrap(err, "failed attestation slashing protection check")
 	}
 
-	return gc.client.SubmitAttestations(gc.ctx, []*spec.Attestation{attestation})
+	return gc.client.SubmitAttestations(gc.ctx, []*phase0.Attestation{attestation})
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
+func (gc *goClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
 	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
 	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {
@@ -51,7 +51,7 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitOneThirdOrValidBlock(slot spec.Slot) {
+func (gc *goClient) waitOneThirdOrValidBlock(slot phase0.Slot) {
 	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)

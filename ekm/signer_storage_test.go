@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"testing"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
@@ -219,8 +219,8 @@ func (a *mockAccount) ValidationKeySign(data []byte) ([]byte, error)   { return 
 func (a *mockAccount) GetDepositData() (map[string]interface{}, error) { return nil, nil }
 func (a *mockAccount) SetContext(ctx *core.WalletContext)              {}
 
-func testSlot() spec.Slot {
-	return spec.Slot(1)
+func testSlot() phase0.Slot {
+	return phase0.Slot(1)
 }
 
 func TestSavingProposal(t *testing.T) {
@@ -229,7 +229,7 @@ func TestSavingProposal(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		proposal spec.Slot
+		proposal phase0.Slot
 		account  core.ValidatorAccount
 	}{
 		{
@@ -266,20 +266,20 @@ func TestSavingAttestation(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		att     *spec.AttestationData
+		att     *phase0.AttestationData
 		account core.ValidatorAccount
 	}{
 		{
 			name: "simple save",
-			att: &spec.AttestationData{
+			att: &phase0.AttestationData{
 				Slot:            30,
 				Index:           1,
 				BeaconBlockRoot: [32]byte{},
-				Source: &spec.Checkpoint{
+				Source: &phase0.Checkpoint{
 					Epoch: 1,
 					Root:  [32]byte{},
 				},
-				Target: &spec.Checkpoint{
+				Target: &phase0.Checkpoint{
 					Epoch: 4,
 					Root:  [32]byte{},
 				},
@@ -291,15 +291,15 @@ func TestSavingAttestation(t *testing.T) {
 		},
 		{
 			name: "simple save with no change to latest attestation target",
-			att: &spec.AttestationData{
+			att: &phase0.AttestationData{
 				Slot:            30,
 				Index:           1,
 				BeaconBlockRoot: [32]byte{},
-				Source: &spec.Checkpoint{
+				Source: &phase0.Checkpoint{
 					Epoch: 1,
 					Root:  [32]byte{},
 				},
-				Target: &spec.Checkpoint{
+				Target: &phase0.Checkpoint{
 					Epoch: 3,
 					Root:  [32]byte{},
 				},
@@ -339,20 +339,20 @@ func TestSavingHighestAttestation(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		att     *spec.AttestationData
+		att     *phase0.AttestationData
 		account core.ValidatorAccount
 	}{
 		{
 			name: "simple save",
-			att: &spec.AttestationData{
+			att: &phase0.AttestationData{
 				Slot:            30,
 				Index:           1,
 				BeaconBlockRoot: [32]byte{},
-				Source: &spec.Checkpoint{
+				Source: &phase0.Checkpoint{
 					Epoch: 1,
 					Root:  [32]byte{},
 				},
-				Target: &spec.Checkpoint{
+				Target: &phase0.Checkpoint{
 					Epoch: 4,
 					Root:  [32]byte{},
 				},
@@ -364,15 +364,15 @@ func TestSavingHighestAttestation(t *testing.T) {
 		},
 		{
 			name: "simple save with no change to latest attestation target",
-			att: &spec.AttestationData{
+			att: &phase0.AttestationData{
 				Slot:            30,
 				Index:           1,
 				BeaconBlockRoot: [32]byte{},
-				Source: &spec.Checkpoint{
+				Source: &phase0.Checkpoint{
 					Epoch: 1,
 					Root:  [32]byte{},
 				},
-				Target: &spec.Checkpoint{
+				Target: &phase0.Checkpoint{
 					Epoch: 3,
 					Root:  [32]byte{},
 				},
@@ -412,20 +412,20 @@ func TestRemovingHighestAttestation(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		att     *spec.AttestationData
+		att     *phase0.AttestationData
 		account core.ValidatorAccount
 	}{
 		{
 			name: "remove highest attestation",
-			att: &spec.AttestationData{
+			att: &phase0.AttestationData{
 				Slot:            30,
 				Index:           1,
 				BeaconBlockRoot: [32]byte{},
-				Source: &spec.Checkpoint{
+				Source: &phase0.Checkpoint{
 					Epoch: 1,
 					Root:  [32]byte{},
 				},
-				Target: &spec.Checkpoint{
+				Target: &phase0.Checkpoint{
 					Epoch: 4,
 					Root:  [32]byte{},
 				},
@@ -474,7 +474,7 @@ func TestRemovingHighestProposal(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		proposal spec.Slot
+		proposal phase0.Slot
 		account  core.ValidatorAccount
 	}{
 		{
@@ -509,7 +509,7 @@ func TestRemovingHighestProposal(t *testing.T) {
 			// fetch
 			proposal, err = signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
-			require.Equal(t, spec.Slot(0), proposal)
+			require.Equal(t, phase0.Slot(0), proposal)
 		})
 	}
 }

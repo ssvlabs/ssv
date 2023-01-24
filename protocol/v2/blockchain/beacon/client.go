@@ -2,11 +2,10 @@ package beacon
 
 import (
 	"context"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	phase0spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -19,7 +18,7 @@ import (
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {
 	// GetDuties returns duties for the passed validators indices
-	GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error)
+	GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 }
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
@@ -32,17 +31,17 @@ type beaconSubscriber interface {
 
 type beaconValidator interface {
 	// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
-	GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*eth2apiv1.Validator, error)
+	GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error)
 }
 
 type proposer interface {
 	// SubmitProposalPreparation with fee recipients
-	SubmitProposalPreparation(feeRecipients map[spec.ValidatorIndex]bellatrix.ExecutionAddress) error
+	SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error
 }
 
 // TODO need to handle differently (by spec)
 type signer interface {
-	ComputeSigningRoot(object interface{}, domain phase0spec.Domain) ([32]byte, error)
+	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
 }
 
 // Beacon interface for all beacon duty calls

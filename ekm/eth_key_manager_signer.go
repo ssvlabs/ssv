@@ -2,13 +2,13 @@ package ekm
 
 import (
 	"encoding/hex"
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bbellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager"
@@ -62,8 +62,8 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		}
 	}
 
-	slashingProtector := newSlashingProtection(signerStore)
-	beaconSigner := newBeaconSigner(wallet, slashingProtector, network)
+	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Network)
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
@@ -73,14 +73,6 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		domain:            domain,
 		slashingProtector: slashingProtector,
 	}, nil
-}
-
-func newSlashingProtection(store core.SlashingStore) core.SlashingProtector {
-	return slashingprotection.NewNormalProtection(store)
-}
-
-func newBeaconSigner(wallet core.Wallet, slashingProtection core.SlashingProtector, network beaconprotocol.Network) signer.ValidatorSigner {
-	return signer.NewSimpleSigner(wallet, slashingProtection, network.Network)
 }
 
 func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {

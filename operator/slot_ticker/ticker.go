@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 
@@ -17,7 +17,7 @@ type Ticker interface {
 	// Start ticker process
 	Start()
 	// Subscribe to ticker chan
-	Subscribe(subscription chan spec.Slot) event.Subscription
+	Subscribe(subscription chan phase0.Slot) event.Subscription
 }
 
 type ticker struct {
@@ -49,12 +49,12 @@ func (t *ticker) Start() {
 }
 
 // Subscribe will trigger every slot
-func (t *ticker) Subscribe(subscription chan spec.Slot) event.Subscription {
+func (t *ticker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 	return t.feed.Subscribe(subscription)
 }
 
 // listenToTicker loop over the given slot channel
-func (t *ticker) listenToTicker(slots <-chan spec.Slot) {
+func (t *ticker) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
 		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		if !t.genesisEpochEffective() {

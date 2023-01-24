@@ -1,7 +1,7 @@
 package forksprotocol
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // ForkVersion represents a fork version
@@ -25,6 +25,6 @@ type ForkHandler interface {
 }
 
 // GetCurrentForkVersion returns the current fork version
-func GetCurrentForkVersion(currentEpoch spec.Epoch) ForkVersion {
+func GetCurrentForkVersion(currentEpoch phase0.Epoch) ForkVersion {
 	return GenesisForkVersion
 }

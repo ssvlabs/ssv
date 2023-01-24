@@ -1,7 +1,7 @@
 package runner
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
@@ -12,8 +12,8 @@ import (
 func (b *BaseRunner) signBeaconObject(
 	runner Runner,
 	obj ssz.HashRoot,
-	slot spec.Slot,
-	domainType spec.DomainType,
+	slot phase0.Slot,
+	domainType phase0.DomainType,
 ) (*specssv.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
@@ -48,7 +48,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *specssv.PartialSig
 
 func (b *BaseRunner) validatePartialSigMsg(
 	signedMsg *specssv.SignedPartialSignatureMessage,
-	slot spec.Slot,
+	slot phase0.Slot,
 ) error {
 	if err := signedMsg.Validate(); err != nil {
 		return errors.Wrap(err, "SignedPartialSignatureMessage invalid")

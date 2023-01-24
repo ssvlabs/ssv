@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 	t.Run("handles error", func(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
-		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
@@ -34,11 +34,11 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		beaconDuties := []*spectypes.Duty{
 			{
 				Slot:   893108,
-				PubKey: spec.BLSPubKey{},
+				PubKey: phase0.BLSPubKey{},
 			},
 		}
 		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 
 		duties, err := dm.GetDuties(893108)
@@ -50,15 +50,15 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		fetchedDuties := []*spectypes.Duty{
 			{
 				Slot:   893108,
-				PubKey: spec.BLSPubKey{},
+				PubKey: phase0.BLSPubKey{},
 			},
 			{
 				Slot:   893110,
-				PubKey: spec.BLSPubKey{},
+				PubKey: phase0.BLSPubKey{},
 			},
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{205238})
+		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -76,11 +76,11 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		fetchedDuties := []*spectypes.Duty{
 			{
 				Slot:   893108,
-				PubKey: spec.BLSPubKey{},
+				PubKey: phase0.BLSPubKey{},
 			},
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []spec.ValidatorIndex{})
+		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 		duties, err := dm.GetDuties(893108)
 		require.NoError(t, err)
@@ -95,30 +95,30 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		slot spec.Slot
+		slot phase0.Slot
 	}{
-		{"slot from the middle", spec.Slot(950120)},
-		{"second slot in epoch", spec.Slot(950113)},
-		{"first slot in epoch", spec.Slot(950112)},
-		{"last slot in epoch", spec.Slot(950143)},
+		{"slot from the middle", phase0.Slot(950120)},
+		{"second slot in epoch", phase0.Slot(950113)},
+		{"first slot in epoch", phase0.Slot(950112)},
+		{"last slot in epoch", phase0.Slot(950143)},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			entries := map[spec.Slot]cacheEntry{}
+			entries := map[phase0.Slot]cacheEntry{}
 			entries[test.slot] = cacheEntry{[]spectypes.Duty{}}
 			df.addMissingSlots(entries)
 			// require.Equal(t, len(entries), 32)
-			_, firstExist := entries[spec.Slot(950112)]
+			_, firstExist := entries[phase0.Slot(950112)]
 			require.True(t, firstExist)
-			_, lastExist := entries[spec.Slot(950143)]
+			_, lastExist := entries[phase0.Slot(950143)]
 			require.True(t, lastExist)
 		})
 	}
 }
 
-func createIndexFetcher(ctrl *gomock.Controller, result []spec.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
+func createIndexFetcher(ctrl *gomock.Controller, result []phase0.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
 	indexFetcher := mocks.NewMockvalidatorsIndicesFetcher(ctrl)
 	indexFetcher.EXPECT().GetValidatorsIndices().Return(result).Times(1)
 

@@ -9,7 +9,7 @@ import (
 	"net"
 	"net/http"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -191,6 +191,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
+
+	// TODO(oleg) used from prysm
+	//digest, err := signing.ComputeForkDigest(fVersion, genRoot[:])
 	digest, err := ComputeForkDigest(fVersion, genRoot)
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not compute fork digest")
@@ -239,8 +242,8 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 //	       current_version=current_version,
 //	       genesis_validators_root=genesis_validators_root,
 //	   ))
-func computeForkDataRoot(version spec.Version, root spec.Root) ([32]byte, error) {
-	r, err := (&spec.ForkData{
+func computeForkDataRoot(version phase0.Version, root phase0.Root) ([32]byte, error) {
+	r, err := (&phase0.ForkData{
 		CurrentVersion:        version,
 		GenesisValidatorsRoot: root,
 	}).HashTreeRoot()
@@ -261,7 +264,7 @@ func computeForkDataRoot(version spec.Version, root spec.Root) ([32]byte, error)
 //	   4-bytes suffices for practical separation of forks/chains.
 //	   """
 //	   return ForkDigest(compute_fork_data_root(current_version, genesis_validators_root)[:4])
-func ComputeForkDigest(version spec.Version, genesisValidatorsRoot spec.Root) ([4]byte, error) {
+func ComputeForkDigest(version phase0.Version, genesisValidatorsRoot phase0.Root) ([4]byte, error) {
 	dataRoot, err := computeForkDataRoot(version, genesisValidatorsRoot)
 	if err != nil {
 		return [4]byte{}, err

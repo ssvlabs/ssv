@@ -3,14 +3,14 @@ package ekm
 import (
 	"encoding/json"
 	"fmt"
-	ssz "github.com/ferranbt/fastssz"
 	"sync"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -194,7 +194,7 @@ func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
 
 }
 
-func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *spec.AttestationData) error {
+func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *phase0.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -206,7 +206,7 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *spec.Attest
 	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
-func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*spec.AttestationData, error) {
+func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -223,7 +223,7 @@ func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*spec.AttestationDa
 	}
 
 	// decode
-	ret := &spec.AttestationData{}
+	ret := &phase0.AttestationData{}
 	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
 		return nil, errors.Wrap(err, "could not unmarshal attestation data")
 	}
@@ -237,7 +237,7 @@ func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
 	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
-func (s *storage) SaveHighestProposal(pubKey []byte, slot spec.Slot) error {
+func (s *storage) SaveHighestProposal(pubKey []byte, slot phase0.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -247,7 +247,7 @@ func (s *storage) SaveHighestProposal(pubKey []byte, slot spec.Slot) error {
 	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
-func (s *storage) RetrieveHighestProposal(pubKey []byte) (spec.Slot, error) {
+func (s *storage) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -266,7 +266,7 @@ func (s *storage) RetrieveHighestProposal(pubKey []byte) (spec.Slot, error) {
 
 	// decode
 	slot := ssz.UnmarshallUint64(obj.Value)
-	return spec.Slot(slot), nil
+	return phase0.Slot(slot), nil
 }
 
 func (s *storage) RemoveHighestProposal(pubKey []byte) error {

@@ -1,20 +1,20 @@
 package operator
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 // getForkVersion returns the fork version of the given slot
-func (n *operatorNode) getForkVersion(slot spec.Slot) forksprotocol.ForkVersion {
+func (n *operatorNode) getForkVersion(slot phase0.Slot) forksprotocol.ForkVersion {
 	epoch := n.ethNetwork.EstimatedEpochAtSlot(slot)
 	return forksprotocol.GetCurrentForkVersion(epoch)
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed
-func (n *operatorNode) setFork(slot spec.Slot) {
+func (n *operatorNode) setFork(slot phase0.Slot) {
 	currentVersion := n.getForkVersion(slot)
 	if currentVersion == n.forkVersion {
 		return

@@ -3,13 +3,13 @@ package slot_ticker
 import (
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
 // The TTicker interface defines a type which can expose a
 // receive-only channel firing slot events.
 type TTicker interface {
-	C() <-chan spec.Slot
+	C() <-chan phase0.Slot
 	Done()
 }
 
@@ -20,13 +20,13 @@ type TTicker interface {
 // multiple of the slot duration.
 // In addition, the channel returns the new slot number.
 type SlotTicker struct {
-	c    chan spec.Slot
+	c    chan phase0.Slot
 	done chan struct{}
 }
 
 // C returns the ticker channel. Call Cancel afterwards to ensure
 // that the goroutine exits cleanly.
-func (s *SlotTicker) C() <-chan spec.Slot {
+func (s *SlotTicker) C() <-chan phase0.Slot {
 	return s.c
 }
 
@@ -43,7 +43,7 @@ func NewSlotTicker(genesisTime time.Time, secondsPerSlot uint64) *SlotTicker {
 		panic("zero genesis time")
 	}
 	ticker := &SlotTicker{
-		c:    make(chan spec.Slot),
+		c:    make(chan phase0.Slot),
 		done: make(chan struct{}),
 	}
 	//TODO(oleg) changed from prysmtime for since and until
@@ -63,7 +63,7 @@ func (s *SlotTicker) start(
 		sinceGenesis := since(genesisTime)
 
 		var nextTickTime time.Time
-		var slot spec.Slot
+		var slot phase0.Slot
 		if sinceGenesis < d {
 			// Handle when the current time is before the genesis time.
 			nextTickTime = genesisTime
@@ -71,7 +71,7 @@ func (s *SlotTicker) start(
 		} else {
 			nextTick := sinceGenesis.Truncate(d) + d
 			nextTickTime = genesisTime.Add(nextTick)
-			slot = spec.Slot(nextTick / d)
+			slot = phase0.Slot(nextTick / d)
 		}
 
 		for {

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
@@ -32,8 +32,8 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	}).AnyTimes()
 
 	mockFetcher := mocks.NewMockDutyFetcher(mockCtrl)
-	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot spec.Slot) ([]spectypes.Duty, error) {
-		return []spectypes.Duty{{Slot: slot, PubKey: spec.BLSPubKey{}}}, nil
+	mockFetcher.EXPECT().GetDuties(gomock.Any()).DoAndReturn(func(slot phase0.Slot) ([]spectypes.Duty, error) {
+		return []spectypes.Duty{{Slot: slot, PubKey: phase0.BLSPubKey{}}}, nil
 	}).AnyTimes()
 
 	dutyCtrl := &dutyController{
@@ -42,7 +42,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 		fetcher:  mockFetcher,
 	}
 
-	cn := make(chan spec.Slot)
+	cn := make(chan phase0.Slot)
 
 	secPerSlot = 2
 	defer func() {
@@ -66,9 +66,9 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 	ctrl := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
-	require.True(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot), PubKey: spec.BLSPubKey{}}))
-	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot - 1000), PubKey: spec.BLSPubKey{}}))
-	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: spec.Slot(currentSlot + 1000), PubKey: spec.BLSPubKey{}}))
+	require.True(t, ctrl.shouldExecute(&spectypes.Duty{Slot: phase0.Slot(currentSlot), PubKey: phase0.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: phase0.Slot(currentSlot - 1000), PubKey: phase0.BLSPubKey{}}))
+	require.False(t, ctrl.shouldExecute(&spectypes.Duty{Slot: phase0.Slot(currentSlot + 1000), PubKey: phase0.BLSPubKey{}}))
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {
@@ -82,7 +82,7 @@ func TestDutyController_GetCurrentSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
-	require.Greater(t, slot, spec.Slot(646855))
+	require.Greater(t, slot, phase0.Slot(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {

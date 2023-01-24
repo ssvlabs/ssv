@@ -5,7 +5,7 @@ import (
 	"math"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -22,9 +22,9 @@ type ValidatorMetadataStorage interface {
 
 // ValidatorMetadata represents validator metdata from beacon
 type ValidatorMetadata struct {
-	Balance spec.Gwei           `json:"balance"`
-	Status  v1.ValidatorState   `json:"status"`
-	Index   spec.ValidatorIndex `json:"index"` // pointer in order to support nil
+	Balance phase0.Gwei           `json:"balance"`
+	Status  v1.ValidatorState     `json:"status"`
+	Index   phase0.ValidatorIndex `json:"index"` // pointer in order to support nil
 }
 
 // Equals returns true if the given metadata is equal to current
@@ -101,9 +101,9 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
-	var pubkeys []spec.BLSPubKey
+	var pubkeys []phase0.BLSPubKey
 	for _, pk := range pubKeys {
-		blsPubKey := spec.BLSPubKey{}
+		blsPubKey := phase0.BLSPubKey{}
 		copy(blsPubKey[:], pk)
 		pubkeys = append(pubkeys, blsPubKey)
 	}

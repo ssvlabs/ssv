@@ -3,7 +3,7 @@ package beacon
 import (
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 )
 
@@ -19,7 +19,7 @@ func NewNetwork(network core.Network, minGenesisTime uint64) Network {
 }
 
 // GetSlotStartTime returns the start time for the given slot
-func (n Network) GetSlotStartTime(slot spec.Slot) time.Time {
+func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
@@ -34,28 +34,28 @@ func (n Network) MinGenesisTime() uint64 {
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
-func (n Network) EstimatedCurrentSlot() spec.Slot {
+func (n Network) EstimatedCurrentSlot() phase0.Slot {
 	return n.EstimatedSlotAtTime(time.Now().Unix())
 }
 
 // EstimatedSlotAtTime estimates slot at the given time
-func (n Network) EstimatedSlotAtTime(time int64) spec.Slot {
+func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	genesis := int64(n.MinGenesisTime())
 	if time < genesis {
 		return 0
 	}
-	return spec.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch
 // https://github.com/ethereum/eth2.0-specs/blob/dev/specs/phase0/beacon-chain.md#compute_start_slot_at_epoch
-func (n Network) EstimatedCurrentEpoch() spec.Epoch {
+func (n Network) EstimatedCurrentEpoch() phase0.Epoch {
 	return n.EstimatedEpochAtSlot(n.EstimatedCurrentSlot())
 }
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
-func (n Network) EstimatedEpochAtSlot(slot spec.Slot) spec.Epoch {
-	return spec.Epoch(slot / spec.Slot(n.SlotsPerEpoch()))
+func (n Network) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
+	return phase0.Epoch(slot / phase0.Slot(n.SlotsPerEpoch()))
 }
 
 // DivideSlotBy divides the slots per epoch
