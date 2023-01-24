@@ -118,12 +118,12 @@ func (ec *eth1Client) HealthCheck() []string {
 	}
 	if sp != nil {
 		reportNodeStatus(statusSyncing)
+		metricsEth1LastSyncedBlock.Set(float64(sp.CurrentBlock))
 		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
 			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
 	reportNodeStatus(statusOK)
-	metricsEth1LastSyncedBlock.Set(float64(sp.CurrentBlock))
 
 	return []string{}
 }
