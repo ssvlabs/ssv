@@ -25,8 +25,8 @@ type AggregatorRunner struct {
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
 
-	consensusStart     time.Time
 	preConsensusStart  time.Time
+	consensusStart     time.Time
 	postConsensusStart time.Time
 }
 
@@ -76,6 +76,12 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 		return nil
 	}
 
+	metricsConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		Observe(time.Since(r.preConsensusStart).Seconds())
+
+	r.consensusStart = time.Now()
+
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
@@ -114,6 +120,12 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 	if !decided {
 		return nil
 	}
+
+	metricsConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		Observe(time.Since(r.consensusStart).Seconds())
+
+	r.postConsensusStart = time.Now()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
@@ -157,6 +169,10 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		return nil
 	}
 
+	metricsPostConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		Observe(time.Since(r.postConsensusStart).Seconds())
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -169,10 +185,20 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 			Message:   r.GetState().DecidedValue.AggregateAndProof,
 			Signature: specSig,
 		}
+
+		proofSubmissionStart := time.Now()
+
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
+
+		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+			Observe(time.Since(proofSubmissionStart).Seconds())
+
 		r.logger.Debug("successful submitted aggregate")
+
+		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+			Observe(time.Since(r.consensusStart).Seconds())
 	}
 	r.GetState().Finished = true
 
@@ -195,6 +221,8 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
+	r.preConsensusStart = time.Now()
+
 	// sign selection proof
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(duty.Slot), duty.Slot, spectypes.DomainSelectionProof)
 	if err != nil {

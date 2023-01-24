@@ -73,5 +73,20 @@ Row 3:
 
 ### Aggregator Role
 
-...
+Row 1:
+* Duty full flow duration \
+  `ssv_beacon_duty_full_flow_duration_seconds{role}`
+* Consensus duration \
+  `ssv_beacon_consensus_duration_seconds{role}`
+
+Row 2:
+* Pre-consensus duration (seconds) \
+  `ssv_validator_pre_consensus_duration_seconds{role,identifier}`
+* Post-consensus duration (seconds) \
+  `ssv_validator_post_consensus_duration_seconds{role,identifier}`
+
+Row 3:
+* Proof submission duration (seconds) \
+  `ssv_validator_beacon_submission_duration_seconds{role,identifier}`
+
 
