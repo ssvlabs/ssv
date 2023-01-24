@@ -21,6 +21,10 @@ var (
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected eth1 node",
 	})
+	metricsEth1LastSyncedBlock = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_eth1_last_synced_block",
+		Help: "ETH1 last synced block",
+	})
 	statusUnknown eth1NodeStatus = 0
 	statusSyncing eth1NodeStatus = 1
 	statusOK      eth1NodeStatus = 2
@@ -28,6 +32,9 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsEth1NodeStatus); err != nil {
+		log.Println("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricsEth1LastSyncedBlock); err != nil {
 		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricSyncEventsCountSuccess); err != nil {

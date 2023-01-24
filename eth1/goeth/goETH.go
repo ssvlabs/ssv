@@ -123,6 +123,8 @@ func (ec *eth1Client) HealthCheck() []string {
 	}
 	// eth1 node is connected and synced
 	reportNodeStatus(statusOK)
+	metricsEth1LastSyncedBlock.Set(float64(sp.CurrentBlock))
+
 	return []string{}
 }
 

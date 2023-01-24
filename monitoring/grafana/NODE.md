@@ -26,7 +26,7 @@ Row 1:
 
 Row 2:
 * ETH1 last synced block (gauge) \
-  `ssv_eth1_last_synced_blocked{} = <block_number>`
+  `ssv_eth1_last_synced_block{} = <block_number>`
 * ETH1 registry events (gauge bar with counters) \
   `ssv_eth1_registry_event{name=<event_name>} = <counter>`
 
