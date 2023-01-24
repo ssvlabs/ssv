@@ -140,14 +140,12 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 		result := map[string][]string{
 			"errors": errs,
 		}
-		mh.logger.Info("node is NOT healthy", zap.String("error", strings.Join(errs, ";")))
 		if raw, err := json.Marshal(result); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		} else {
 			http.Error(res, string(raw), http.StatusInternalServerError)
 		}
 	} else {
-		mh.logger.Info("node is healthy")
 		metricsNodeStatus.Set(float64(statusHealthy))
 		if _, err := fmt.Fprintln(res, ""); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
