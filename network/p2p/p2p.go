@@ -3,6 +3,10 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -11,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -21,9 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // network states
@@ -70,6 +72,7 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+	syncer           syncing.Syncer
 }
 
 // New creates a new p2p network
@@ -143,6 +146,11 @@ func (n *p2pNetwork) Start() error {
 	if err := n.registerInitialTopics(); err != nil {
 		return err
 	}
+
+	// Create & start ConcurrentSyncer.
+	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n.logger, n), 16, syncing.DefaultTimeouts, nil)
+	go syncer.Run()
+	n.syncer = syncer
 
 	return nil
 }

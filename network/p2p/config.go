@@ -73,6 +73,10 @@ type Config struct {
 	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
 	PubsubValidateThrottle    int           `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
 
+	// FullNode determines whether the network should sync decided history from peers.
+	// If false, SyncDecidedByRange becomes a no-op.
+	FullNode bool
+
 	GetValidatorStats network.GetValidatorStats
 }
 

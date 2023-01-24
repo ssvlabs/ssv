@@ -1,12 +1,13 @@
 package storage
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/types"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 func init() {

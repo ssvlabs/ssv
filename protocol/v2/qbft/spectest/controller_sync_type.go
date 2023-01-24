@@ -2,8 +2,9 @@ package qbft
 
 import (
 	"encoding/hex"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"testing"
+
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -18,6 +19,7 @@ func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,
+		false,
 	)
 
 	err := contr.StartNewInstance([]byte{1, 2, 3, 4})

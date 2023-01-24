@@ -55,6 +55,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		identifier[:],
 		share,
 		config,
+		false,
 	)
 
 	switch role {

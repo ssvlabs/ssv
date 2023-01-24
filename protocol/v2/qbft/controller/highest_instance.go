@@ -17,9 +17,8 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 		return nil
 	}
 	c.Height = highestInstance.GetHeight()
-	c.StoredInstances = InstanceContainer{
-		0: highestInstance,
-	}
+	c.StoredInstances.reset()
+	c.StoredInstances.addNewInstance(highestInstance)
 	return nil
 }
 
@@ -41,10 +40,26 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	return i, nil
 }
 
-func (c *Controller) SaveHighestInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+// SaveInstance saves the given instance to the storage.
+func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,
 	}
-	return c.config.GetStorage().SaveHighestInstance(storedInstance)
+	isHighest := msg.Message.Height >= c.Height
+
+	// Full nodes save both highest and historical instances.
+	if c.fullNode {
+		if isHighest {
+			return c.config.GetStorage().SaveHighestAndHistoricalInstance(storedInstance)
+		}
+		return c.config.GetStorage().SaveInstance(storedInstance)
+	}
+
+	// Light nodes only save highest instances.
+	if isHighest {
+		return c.config.GetStorage().SaveHighestInstance(storedInstance)
+	}
+
+	return nil
 }

@@ -2,13 +2,14 @@ package topics
 
 import (
 	"context"
+	"io"
+	"time"
+
 	"github.com/bloxapp/ssv/network/forks"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"io"
-	"time"
 )
 
 var (
@@ -128,8 +129,8 @@ func (ctrl *topicsCtrl) Topics() []string {
 func (ctrl *topicsCtrl) Subscribe(name string) error {
 	name = ctrl.fork.GetTopicFullName(name)
 	ctrl.subFilter.(Whitelist).Register(name)
-	ctrl.logger.Debug("subscribing to topic", zap.String("topic", name))
 	sub, err := ctrl.container.Subscribe(name)
+	defer ctrl.logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
 	if err != nil {
 		return err
 	}

@@ -172,7 +172,7 @@ func (it *IntegrationTest) Run() error {
 	for operatorID, instances := range it.InitialInstances {
 		for _, instance := range instances {
 			mid := spectypes.MessageIDFromBytes(instance.State.ID)
-			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveHighestInstance(instance); err != nil {
+			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveInstance(instance); err != nil {
 				return err
 			}
 		}

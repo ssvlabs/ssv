@@ -3,12 +3,12 @@ name: Integration tests
 on:
   push:
     branches:
-      - 'main'
-      - 'stage'
+      - "main"
+      - "stage"
   pull_request:
     branches:
-      - 'main'
-      - 'stage'
+      - "main"
+      - "stage"
 
   workflow_dispatch:
 
@@ -21,6 +21,11 @@ jobs:
 
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
+
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
 
       - name: Run tests
         run: make integration-test

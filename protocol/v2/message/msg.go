@@ -29,3 +29,22 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return fmt.Sprintf("unknown - %d", mt)
 	}
 }
+
+// BeaconRoleFromString returns BeaconRole from string
+func BeaconRoleFromString(s string) spectypes.BeaconRole {
+	switch s {
+	case "ATTESTER":
+		return spectypes.BNRoleAttester
+	case "AGGREGATOR":
+		return spectypes.BNRoleAggregator
+	case "PROPOSER":
+		return spectypes.BNRoleProposer
+	case "SYNC_COMMITTEE":
+		return spectypes.BNRoleSyncCommittee
+	case "SYNC_COMMITTEE_CONTRIBUTION":
+		return spectypes.BNRoleSyncCommitteeContribution
+	default:
+		// TODO(nkryuchkov): don't panic
+		panic("unknown role")
+	}
+}

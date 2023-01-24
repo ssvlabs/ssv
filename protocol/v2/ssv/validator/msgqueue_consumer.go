@@ -3,15 +3,17 @@ package validator
 import (
 	"context"
 	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
+	"time"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 )
 
 // MessageHandler process the msg. return error if exist
