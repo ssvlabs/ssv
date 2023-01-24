@@ -3,7 +3,9 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -16,6 +18,10 @@ import (
 
 var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
 
+// NewDecidedHandler handles newly saved decided messages.
+// it will be called in a new goroutine to avoid concurrency issues
+type NewDecidedHandler func(msg *specqbft.SignedMessage)
+
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
 	Identifier []byte
@@ -26,7 +32,9 @@ type Controller struct {
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
 	Share               *spectypes.Share
+	NewDecidedHandler   NewDecidedHandler `json:"-"`
 	config              qbft.IConfig
+	fullNode            bool
 	logger              *zap.Logger
 }
 
@@ -35,16 +43,20 @@ func NewController(
 	share *spectypes.Share,
 	domain spectypes.DomainType,
 	config qbft.IConfig,
+	fullNode bool,
 ) *Controller {
+	msgId := spectypes.MessageIDFromBytes(identifier)
 	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
 		Domain:              domain,
 		Share:               share,
-		StoredInstances:     InstanceContainer{},
+		StoredInstances:     make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
-		logger:              logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String())),
+		fullNode:            fullNode,
+		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())),
+			zap.String("role", msgId.GetRoleType().String())),
 	}
 }
 
@@ -100,13 +112,14 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, errors.Wrap(err, "could not process msg")
 	}
 
-	// if previously Decided we do not return Decided true again
-	if prevDecided {
-		return nil, err
-	}
-
 	// save the highest Decided
 	if !decided {
+		return nil, nil
+	}
+
+	if decidedMsg == nil || decidedMsg.Message == nil {
+		// TODO: remove this log after it stopped happening.
+		c.logger.Debug("was gonna send decided msg but decided msg is nil")
 		return nil, nil
 	}
 
@@ -114,7 +127,12 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		// no need to fail processing instance deciding if failed to save/ broadcast
 		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
-	return msg, nil
+
+	if prevDecided {
+		return nil, err
+	}
+
+	return decidedMsg, nil
 }
 
 // BaseMsgValidation returns error if msg is invalid (base validation)
@@ -128,7 +146,29 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 }
 
 func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instance {
-	return c.StoredInstances.FindInstance(height)
+	// Search in memory.
+	if inst := c.StoredInstances.FindInstance(height); inst != nil {
+		return inst
+	}
+
+	// Search in storage, if full node.
+	if !c.fullNode {
+		return nil
+	}
+	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
+	if err != nil {
+		c.logger.Debug("could not load instance from storage",
+			zap.Uint64("height", uint64(height)),
+			zap.Uint64("ctrl_height", uint64(c.Height)),
+			zap.Error(err))
+		return nil
+	}
+	if storedInst == nil {
+		return nil
+	}
+	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst.State = storedInst.State
+	return inst
 }
 
 func (c *Controller) bumpHeight() {

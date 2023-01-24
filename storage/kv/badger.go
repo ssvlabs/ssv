@@ -54,7 +54,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		async.RunEvery(options.Ctx, 1*time.Minute, _db.report)
 	}
 
-	options.Logger.Info("Badger db initialized")
+	options.Logger.Info("badger db initialized")
 	return &_db, nil
 }
 

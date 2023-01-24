@@ -6,13 +6,14 @@ import (
 	"reflect"
 	"testing"
 
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +25,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,
+		false,
 	)
 
 	var lastErr error

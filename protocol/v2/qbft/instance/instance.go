@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ func NewInstance(
 	identifier []byte,
 	height specqbft.Height,
 ) *Instance {
+	msgId := spectypes.MessageIDFromBytes(identifier)
 	return &Instance{
 		State: &specqbft.State{
 			Share:                share,
@@ -51,7 +53,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		logger: logger.With(zap.String("identifier", spectypes.MessageIDFromBytes(identifier).String()),
+		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
 			zap.Uint64("height", uint64(height))),
 	}
 }

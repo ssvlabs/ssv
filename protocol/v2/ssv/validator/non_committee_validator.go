@@ -27,7 +27,8 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 		Storage: opts.Storage.Get(identifier.GetRoleType()),
 		Network: opts.Network,
 	}
-	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config)
+	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
+	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		logger.Debug("failed to load highest instance", zap.Error(err))
 	}
@@ -54,6 +55,10 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 			logger.Debug("failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
+		if signedMsg == nil || signedMsg.Message == nil {
+			logger.Debug("got empty message")
+			return
+		}
 		// only supports decided msg's
 		if signedMsg.Message.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.Signers)) {
 			return
@@ -63,8 +68,15 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 			logger.Debug("failed to process message", zap.Error(err))
 		} else if decided != nil {
 			if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
-				if err = ncv.qbftController.SaveHighestInstance(inst, signedMsg); err != nil {
-					ncv.logger.Debug("failed to save instance", zap.Error(err))
+				logger := logger.With(
+					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+					zap.Uint64("ctrl_height", uint64(ncv.qbftController.Height)),
+					zap.Any("signers", signedMsg.Signers),
+				)
+				if err = ncv.qbftController.SaveInstance(inst, signedMsg); err != nil {
+					logger.Debug("failed to save instance", zap.Error(err))
+				} else {
+					logger.Debug("saved instance")
 				}
 			}
 		}

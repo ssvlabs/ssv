@@ -43,7 +43,6 @@ type IntegrationTest struct {
 	ValidatorDelays    map[spectypes.OperatorID]time.Duration
 	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties             map[spectypes.OperatorID][]scheduledDuty
-	ExpectedInstances  map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
 	StartDutyErrors    map[spectypes.OperatorID]error
 }
@@ -173,7 +172,7 @@ func (it *IntegrationTest) Run() error {
 	for operatorID, instances := range it.InitialInstances {
 		for _, instance := range instances {
 			mid := spectypes.MessageIDFromBytes(instance.State.ID)
-			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveHighestInstance(instance); err != nil {
+			if err := sCtx.stores[operatorID].Get(mid.GetRoleType()).SaveInstance(instance); err != nil {
 				return err
 			}
 		}
@@ -240,26 +239,6 @@ func (it *IntegrationTest) Run() error {
 			}
 			if !errors.Is(aerr, expectedErr) {
 				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
-			}
-		}
-	}
-
-	if it.ExpectedInstances != nil {
-		for expectedOperatorID, expectedInstances := range it.ExpectedInstances {
-			for i, expectedInstance := range expectedInstances {
-				mid := spectypes.MessageIDFromBytes(expectedInstance.State.ID)
-				storedInstance, err := sCtx.stores[expectedOperatorID].Get(mid.GetRoleType()).
-					GetHighestInstance(expectedInstance.State.ID)
-				if err != nil {
-					return err
-				}
-				if storedInstance == nil {
-					return fmt.Errorf("stored instance is nil")
-				}
-
-				if err := assertInstance(storedInstance, expectedInstance); err != nil {
-					return fmt.Errorf("assert instance (oid %v, idx %v): %w", expectedOperatorID, i, err)
-				}
 			}
 		}
 	}
@@ -372,14 +351,15 @@ func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectyp
 	}
 
 	return &spectypes.Duty{
-		Type:                    role,
-		PubKey:                  pkBytes,
-		Slot:                    slot,
-		ValidatorIndex:          idx,
-		CommitteeIndex:          testingDuty.CommitteeIndex,
-		CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
-		CommitteeLength:         testingDuty.CommitteeLength,
-		ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
+		Type:                          role,
+		PubKey:                        pkBytes,
+		Slot:                          slot,
+		ValidatorIndex:                idx,
+		CommitteeIndex:                testingDuty.CommitteeIndex,
+		CommitteesAtSlot:              testingDuty.CommitteesAtSlot,
+		CommitteeLength:               testingDuty.CommitteeLength,
+		ValidatorCommitteeIndex:       testingDuty.ValidatorCommitteeIndex,
+		ValidatorSyncCommitteeIndices: testingDuty.ValidatorSyncCommitteeIndices,
 	}
 }
 
@@ -388,196 +368,6 @@ func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, rol
 		Duty:  createDuty(pk, slot, idx, role),
 		Delay: delay,
 	}
-}
-
-func createDuties(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, roles ...spectypes.BeaconRole) []*spectypes.Duty {
-	var pkBytes [48]byte
-	copy(pkBytes[:], pk)
-
-	duties := make([]*spectypes.Duty, 0, len(roles))
-	for _, role := range roles {
-		var testingDuty *spectypes.Duty
-		switch role {
-		case spectypes.BNRoleAttester:
-			testingDuty = spectestingutils.TestingAttesterDuty
-		case spectypes.BNRoleAggregator:
-			testingDuty = spectestingutils.TestingAggregatorDuty
-		case spectypes.BNRoleProposer:
-			testingDuty = spectestingutils.TestingProposerDuty
-		case spectypes.BNRoleSyncCommittee:
-			testingDuty = spectestingutils.TestingSyncCommitteeDuty
-		case spectypes.BNRoleSyncCommitteeContribution:
-			testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
-		}
-
-		duties = append(duties, &spectypes.Duty{
-			Type:                    role,
-			PubKey:                  pkBytes,
-			Slot:                    slot,
-			ValidatorIndex:          idx,
-			CommitteeIndex:          testingDuty.CommitteeIndex,
-			CommitteesAtSlot:        testingDuty.CommitteesAtSlot,
-			CommitteeLength:         testingDuty.CommitteeLength,
-			ValidatorCommitteeIndex: testingDuty.ValidatorCommitteeIndex,
-		})
-	}
-
-	return duties
-}
-
-func assertInstance(actual *protocolstorage.StoredInstance, expected *protocolstorage.StoredInstance) error {
-	if actual == nil && expected == nil {
-		return nil
-	}
-
-	if actual != nil && expected == nil {
-		return fmt.Errorf("expected nil instance")
-	}
-
-	if actual == nil && expected != nil {
-		return fmt.Errorf("expected non-nil instance")
-	}
-
-	if err := assertDecided(actual.DecidedMessage, expected.DecidedMessage); err != nil {
-		return fmt.Errorf("decided: %w", err)
-	}
-
-	if err := assertState(actual.State, expected.State); err != nil {
-		return fmt.Errorf("state: %w", err)
-	}
-
-	return nil
-}
-
-func assertDecided(actual *specqbft.SignedMessage, expected *specqbft.SignedMessage) error {
-	if actual == nil && expected == nil {
-		return fmt.Errorf("expected nil")
-	}
-
-	if actual == nil && expected != nil {
-		return fmt.Errorf("expected non-nil")
-	}
-
-	actualRoot, err := actual.GetRoot()
-	if err != nil {
-		return fmt.Errorf("actual root: %w", err)
-	}
-
-	expectedRoot, err := expected.GetRoot()
-	if err != nil {
-		return fmt.Errorf("expected root: %w", err)
-	}
-
-	if !bytes.Equal(actualRoot, expectedRoot) {
-		return fmt.Errorf("roots differ")
-	}
-
-	return nil
-}
-
-func assertState(actual *specqbft.State, expected *specqbft.State) error {
-	if actual == nil && expected == nil {
-		return fmt.Errorf("expected nil")
-	}
-
-	if actual == nil && expected != nil {
-		return fmt.Errorf("expected non-nil")
-	}
-
-	actualCopy, expectedCopy := *actual, *expected
-
-	// TODO: message checks became broken after https://github.com/bloxapp/ssv/pull/791, they need to be fixed after using validation functions
-	//if want, got := len(expectedCopy.PrepareContainer.Msgs), len(actualCopy.PrepareContainer.Msgs); want != got {
-	//	return fmt.Errorf("wrong prepare message count, want %d, got %d", want, got)
-	//}
-	//
-	//for round, messages := range expectedCopy.PrepareContainer.Msgs {
-	//	for i, message := range messages {
-	//		expectedRoot, err := message.GetRoot()
-	//		if err != nil {
-	//			return fmt.Errorf("get expected prepare message root: %w", err)
-	//		}
-	//
-	//		actualRoot, err := actualCopy.PrepareContainer.Msgs[round][i].GetRoot()
-	//		if err != nil {
-	//			return fmt.Errorf("get actual prepare message root: %w", err)
-	//		}
-	//
-	//		if !bytes.Equal(expectedRoot, actualRoot) {
-	//			return fmt.Errorf("expected and actual prepare roots differ")
-	//		}
-	//	}
-	//}
-	//
-	//actualCopy.PrepareContainer = nil
-	//expectedCopy.PrepareContainer = nil
-	//
-	// Since the signers are not deterministic, we need to do a simple assertion instead of checking the root of whole state.
-	//if expected.Decided {
-	//	if want, got := len(expectedCopy.CommitContainer.Msgs), len(actualCopy.CommitContainer.Msgs); want != got {
-	//		return fmt.Errorf("wrong commit message count, want %d, got %d", want, got)
-	//	}
-	//
-	//	for round, messages := range expectedCopy.CommitContainer.Msgs {
-	//		for i, message := range messages {
-	//			expectedRoot, err := message.GetRoot()
-	//			if err != nil {
-	//				return fmt.Errorf("get expected commit message root: %w", err)
-	//			}
-	//
-	//			actualRoot, err := actualCopy.CommitContainer.Msgs[round][i].GetRoot()
-	//			if err != nil {
-	//				return fmt.Errorf("get actual commit message root: %w", err)
-	//			}
-	//
-	//			if !bytes.Equal(expectedRoot, actualRoot) {
-	//				return fmt.Errorf("expected and actual commit roots differ")
-	//			}
-	//		}
-	//	}
-	//
-	//	actualCopy.CommitContainer = nil
-	//	expectedCopy.CommitContainer = nil
-	//}
-
-	actualCopy.ProposeContainer = nil
-	expectedCopy.ProposeContainer = nil
-	actualCopy.PrepareContainer = nil
-	expectedCopy.PrepareContainer = nil
-	actualCopy.CommitContainer = nil
-	expectedCopy.CommitContainer = nil
-	actualCopy.RoundChangeContainer = nil
-	expectedCopy.RoundChangeContainer = nil
-
-	actualRoot, err := actualCopy.GetRoot()
-	if err != nil {
-		return fmt.Errorf("actual root: %w", err)
-	}
-
-	expectedRoot, err := expectedCopy.GetRoot()
-	if err != nil {
-		return fmt.Errorf("expected root: %w", err)
-	}
-
-	if !bytes.Equal(actualRoot, expectedRoot) {
-		actualStateJSON, err := json.Marshal(actualCopy)
-		if err != nil {
-			return fmt.Errorf("marshal actual state")
-		}
-
-		expectedStateJSON, err := json.Marshal(expectedCopy)
-		if err != nil {
-			return fmt.Errorf("marshal expected state")
-		}
-
-		log.Printf("state: roots differ")
-		log.Printf("actual state: %v", string(actualStateJSON))
-		log.Printf("expected state: %v", string(expectedStateJSON))
-
-		return fmt.Errorf("roots differ")
-	}
-
-	return nil
 }
 
 type msgRouter struct {

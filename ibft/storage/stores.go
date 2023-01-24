@@ -1,12 +1,13 @@
 package storage
 
 import (
+	"sync"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"go.uber.org/zap"
-	"sync"
 )
 
 func NewStoresFromRoles(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) *QBFTStores {

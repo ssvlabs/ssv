@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"strings"
@@ -27,6 +28,7 @@ const (
 
 // Config holds the configuration options for p2p network
 type Config struct {
+	Ctx context.Context
 	// prod enr
 	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-Li4QO2k62g1tiwitaoFVMT8zN-sSNPp8cg8Kv-5lg6_6VLjVZREhxVMSmerOTptlKbBaO2iszi7rvKBYzbGf38HpcSGAYLoed50h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdWuKJc2VjcDI1NmsxoQITQ1OchoBl5XW9RfBembdN9Er1qNEOIc5ohrQ0rT9B-YN0Y3CCE4iDdWRwgg-g;enr:-Li4QAxqhjjQN2zMAAEtOF5wlcr2SFnPKINvvlwMXztJhClrfRYLrqNy2a_dMUwDPKcvM7bebq3uptRoGSV0LpYEJuyGAYRZG5n5h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQLbXMJi_Pq3imTq11EwH8MbxmXlHYvH2Drz_rsqP1rNyoN0Y3CCE4iDdWRwgg-g"`
 	Discovery string `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery system to use" env-default:"discv5"`
@@ -70,6 +72,10 @@ type Config struct {
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
 	PubsubValidationQueueSize int           `yaml:"PubsubValidationQueueSize" env:"PUBSUB_VAL_Q_SIZE" env-description:"The size that we assign to the pubsub validation queue"`
 	PubsubValidateThrottle    int           `yaml:"PubsubPubsubValidateThrottle" env:"PUBSUB_VAL_THROTTLE" env-description:"The amount of goroutines used for pubsub msg validation"`
+
+	// FullNode determines whether the network should sync decided history from peers.
+	// If false, SyncDecidedByRange becomes a no-op.
+	FullNode bool
 
 	GetValidatorStats network.GetValidatorStats
 }

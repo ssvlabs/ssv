@@ -2,16 +2,17 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"io"
 	"net/http"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"

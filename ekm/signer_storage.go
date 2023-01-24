@@ -3,16 +3,20 @@ package ekm
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
-	"sync"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const (
@@ -25,36 +29,52 @@ const (
 	highestProposalPrefix = prefix + "highest_prop-"
 )
 
-type signerStorage struct {
+// Storage represents the interface for ssv node storage
+type Storage interface {
+	registry.RegistryStore
+	core.Storage
+	core.SlashingStore
+
+	RemoveHighestAttestation(pubKey []byte) error
+	RemoveHighestProposal(pubKey []byte) error
+}
+
+type storage struct {
 	db      basedb.IDb
 	network beacon.Network
+	logger  *zap.Logger
 	lock    sync.RWMutex
 }
 
-func newSignerStorage(db basedb.IDb, network beacon.Network) *signerStorage {
-	return &signerStorage{
+func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger) Storage {
+	return &storage{
 		db:      db,
 		network: network,
+		logger:  logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
 		lock:    sync.RWMutex{},
 	}
 }
 
-func (s *signerStorage) objPrefix(obj string) []byte {
+func (s *storage) CleanRegistryData() error {
+	return s.db.RemoveAllByCollection(s.objPrefix(accountsPrefix))
+}
+
+func (s *storage) objPrefix(obj string) []byte {
 	return []byte(string(s.network.Network) + obj)
 }
 
 // Name returns storage name.
-func (s *signerStorage) Name() string {
+func (s *storage) Name() string {
 	return "SSV Storage"
 }
 
 // Network returns the network storage is related to.
-func (s *signerStorage) Network() core.Network {
+func (s *storage) Network() core.Network {
 	return s.network.Network
 }
 
 // SaveWallet stores the given wallet.
-func (s *signerStorage) SaveWallet(wallet core.Wallet) error {
+func (s *storage) SaveWallet(wallet core.Wallet) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -67,7 +87,7 @@ func (s *signerStorage) SaveWallet(wallet core.Wallet) error {
 }
 
 // OpenWallet returns nil,err if no wallet was found
-func (s *signerStorage) OpenWallet() (core.Wallet, error) {
+func (s *storage) OpenWallet() (core.Wallet, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -93,7 +113,7 @@ func (s *signerStorage) OpenWallet() (core.Wallet, error) {
 }
 
 // ListAccounts returns an empty array for no accounts
-func (s *signerStorage) ListAccounts() ([]core.ValidatorAccount, error) {
+func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -112,7 +132,7 @@ func (s *signerStorage) ListAccounts() ([]core.ValidatorAccount, error) {
 }
 
 // SaveAccount saves the given account
-func (s *signerStorage) SaveAccount(account core.ValidatorAccount) error {
+func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -127,7 +147,7 @@ func (s *signerStorage) SaveAccount(account core.ValidatorAccount) error {
 }
 
 // DeleteAccount deletes account by uuid
-func (s *signerStorage) DeleteAccount(accountID uuid.UUID) error {
+func (s *storage) DeleteAccount(accountID uuid.UUID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -136,7 +156,7 @@ func (s *signerStorage) DeleteAccount(accountID uuid.UUID) error {
 }
 
 // OpenAccount returns nil,nil if no account was found
-func (s *signerStorage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error) {
+func (s *storage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -153,7 +173,7 @@ func (s *signerStorage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount,
 	return s.decodeAccount(obj.Value)
 }
 
-func (s *signerStorage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
+func (s *storage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
 	if len(byts) == 0 {
 		return nil, errors.New("bytes are empty")
 	}
@@ -169,11 +189,11 @@ func (s *signerStorage) decodeAccount(byts []byte) (core.ValidatorAccount, error
 }
 
 // SetEncryptor sets the given encryptor to the wallet.
-func (s *signerStorage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
+func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
 
 }
 
-func (s *signerStorage) SaveHighestAttestation(pubKey []byte, attestation *eth.AttestationData) error {
+func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *eth.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -185,19 +205,21 @@ func (s *signerStorage) SaveHighestAttestation(pubKey []byte, attestation *eth.A
 	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
-func (s *signerStorage) RetrieveHighestAttestation(pubKey []byte) *eth.AttestationData {
+func (s *storage) RetrieveHighestAttestation(pubKey []byte) *eth.AttestationData {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
+	if err != nil {
+		s.logger.Warn("could not get highest attestation from db")
+		return nil
+	}
 	if !found {
 		return nil
 	}
-	if err != nil {
-		return nil
-	}
 	if obj.Value == nil || len(obj.Value) == 0 {
+		s.logger.Warn("highest attestation value is empty")
 		return nil
 	}
 
@@ -209,7 +231,14 @@ func (s *signerStorage) RetrieveHighestAttestation(pubKey []byte) *eth.Attestati
 	return ret
 }
 
-func (s *signerStorage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBlock) error {
+func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
+}
+
+func (s *storage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBlock) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -221,19 +250,21 @@ func (s *signerStorage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBloc
 	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
-func (s *signerStorage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock {
+func (s *storage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
+	if err != nil {
+		s.logger.Warn("could not get highest proposal from db")
+		return nil
+	}
 	if !found {
 		return nil
 	}
-	if err != nil {
-		return nil
-	}
 	if obj.Value == nil || len(obj.Value) == 0 {
+		s.logger.Warn("highest proposal value is empty")
 		return nil
 	}
 
@@ -243,4 +274,11 @@ func (s *signerStorage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock 
 		return nil
 	}
 	return ret
+}
+
+func (s *storage) RemoveHighestProposal(pubKey []byte) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
 }

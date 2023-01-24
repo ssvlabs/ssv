@@ -18,7 +18,7 @@ p2p:
 #  HostAddress: example.ip
 #  TcpPort:
 #  UdpPort:
-  # mdns for local network setup
+# mdns for local network setup
 #  Discovery: mdns
 
 ssv:

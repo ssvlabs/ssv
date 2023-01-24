@@ -37,7 +37,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, n
 		return
 	}
 
-	msgID := spectypes.NewMsgID(pkRaw, message.RoleTypeFromString(string(nm.Msg.Filter.Role)))
+	msgID := spectypes.NewMsgID(pkRaw, message.BeaconRoleFromString(string(nm.Msg.Filter.Role)))
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
 	instances, err := qbftStorage.GetInstancesInRange(msgID[:], from, to)

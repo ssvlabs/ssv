@@ -1,14 +1,16 @@
 package runner
 
 import (
+	logging "github.com/ipfs/go-log"
+	"go.uber.org/zap"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
-	logging "github.com/ipfs/go-log"
+
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -56,6 +58,12 @@ type BaseRunner struct {
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
+}
+
+func NewBaseRunner(logger *zap.Logger) *BaseRunner {
+	return &BaseRunner{
+		logger: logger,
+	}
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -107,10 +115,15 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			if err = b.QBFTController.SaveHighestInstance(inst, decidedMsg); err != nil {
-				b.logger.Warn("failed to save instance",
-					zap.Uint64("height", uint64(decidedMsg.Message.Height)),
-					zap.Error(err))
+			logger := b.logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
+				zap.Any("signers", msg.Signers),
+			)
+			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
+				logger.Debug("failed to save instance", zap.Error(err))
+			} else {
+				logger.Debug("saved instance upon decided")
 			}
 		}
 	}

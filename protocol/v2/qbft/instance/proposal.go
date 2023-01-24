@@ -46,7 +46,8 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 
 	i.logger.Debug("got proposal, broadcasting prepare message",
 		zap.Uint64("round", uint64(i.State.Round)),
-		zap.Any("signers", prepare.Signers))
+		zap.Any("proposal-signers", signedProposal.Signers),
+		zap.Any("prepare-signers", prepare.Signers))
 
 	if err := i.Broadcast(prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")

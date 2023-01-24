@@ -67,6 +67,13 @@ docker-spec-test:
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make spec-test
 
+#Test
+.PHONY: docker-unit-test
+docker-unit-test:
+	@echo "Running unit tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make unit-test
+
 #Build
 .PHONY: build
 build:

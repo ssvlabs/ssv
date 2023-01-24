@@ -1,6 +1,9 @@
 package message
 
-import spectypes "github.com/bloxapp/ssv-spec/types"
+import (
+	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+)
 
 const (
 	// SSVSyncMsgType extends spec msg type
@@ -20,7 +23,28 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 		return "dkg"
 	case SSVSyncMsgType:
 		return "sync"
+	case SSVEventMsgType:
+		return "event"
 	default:
-		return ""
+		return fmt.Sprintf("unknown - %d", mt)
+	}
+}
+
+// BeaconRoleFromString returns BeaconRole from string
+func BeaconRoleFromString(s string) spectypes.BeaconRole {
+	switch s {
+	case "ATTESTER":
+		return spectypes.BNRoleAttester
+	case "AGGREGATOR":
+		return spectypes.BNRoleAggregator
+	case "PROPOSER":
+		return spectypes.BNRoleProposer
+	case "SYNC_COMMITTEE":
+		return spectypes.BNRoleSyncCommittee
+	case "SYNC_COMMITTEE_CONTRIBUTION":
+		return spectypes.BNRoleSyncCommitteeContribution
+	default:
+		// TODO(nkryuchkov): don't panic
+		panic("unknown role")
 	}
 }

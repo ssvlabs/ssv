@@ -127,7 +127,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			return err
 		}
 
-		// sometimes there may be no prepare quorum
+		// sometimes there may be no prepare quorum TODO add quorum check after fixes
 		_, prepareMessages := actual.State.PrepareContainer.LongestUniqueSignersForRoundAndValue(specqbft.FirstRound, prepareData)
 
 		expectedPrepareMsg := &specqbft.SignedMessage{
@@ -169,7 +169,6 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
 
-		// TODO: check each field in state
 		createPossibleState := func(lastPreparedRound specqbft.Round, lastPreparedValue []byte) *specqbft.State {
 			return &specqbft.State{
 				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
@@ -230,56 +229,4 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 
 		return nil
 	}
-}
-
-func messageDataForSlot(role spectypes.BeaconRole, pk []byte, slot spec.Slot) (consensusData, proposalData, prepareData, commitData, roundChangeData []byte, err error) {
-	data := &spectypes.ConsensusData{
-		Duty:                      createDuty(pk, slot, 1, role),
-		AttestationData:           spectestingutils.TestingAttestationData,
-		BlockData:                 nil,
-		AggregateAndProof:         nil,
-		SyncCommitteeBlockRoot:    spec.Root{},
-		SyncCommitteeContribution: map[spec.BLSSignature]*altair.SyncCommitteeContribution{},
-	}
-
-	data.AttestationData.Slot = slot
-
-	consensusData, err = data.Encode()
-	if err != nil {
-		return
-	}
-
-	proposalData, err = (&specqbft.ProposalData{
-		Data:                     consensusData,
-		RoundChangeJustification: nil,
-		PrepareJustification:     nil,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	prepareData, err = (&specqbft.PrepareData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	commitData, err = (&specqbft.CommitData{
-		Data: consensusData,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	roundChangeData, err = (&specqbft.RoundChangeData{
-		PreparedRound:            0,
-		PreparedValue:            nil,
-		RoundChangeJustification: nil,
-	}).Encode()
-	if err != nil {
-		return
-	}
-
-	return consensusData, proposalData, prepareData, commitData, roundChangeData, nil
 }

@@ -29,6 +29,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 	inst := c.InstanceForHeight(msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.Message.Height > c.Height
+	save := true
 
 	if inst == nil {
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
@@ -46,6 +47,25 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
 		if len(msg.Signers) > len(signers) {
 			inst.State.CommitContainer.AddMsg(msg)
+		} else {
+			save = false
+		}
+	}
+
+	if save {
+		// Retrieve instance from StoredInstances (in case it was created above)
+		// and save it together with the decided message.
+		if inst := c.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
+			logger := c.logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(c.Height)),
+				zap.Any("signers", msg.Signers),
+			)
+			if err = c.SaveInstance(inst, msg); err != nil {
+				logger.Debug("failed to save instance", zap.Error(err))
+			} else {
+				logger.Debug("saved instance upon decided", zap.Error(err))
+			}
 		}
 	}
 
@@ -55,17 +75,10 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		// bump height
 		c.Height = msg.Message.Height
 	}
-
+	if c.NewDecidedHandler != nil {
+		c.NewDecidedHandler(msg)
+	}
 	if !prevDecided {
-		if futureInstance := c.StoredInstances.FindInstance(msg.Message.Height); futureInstance != nil {
-			if err = c.SaveHighestInstance(futureInstance, msg); err != nil {
-				c.logger.Debug("failed to save instance",
-					zap.Uint64("height", uint64(msg.Message.Height)),
-					zap.Error(err))
-			} else {
-				c.logger.Debug("saved instance upon decided", zap.Uint64("height", uint64(msg.Message.Height)))
-			}
-		}
 		return msg, nil
 	}
 	return nil, nil
