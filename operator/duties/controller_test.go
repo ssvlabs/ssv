@@ -7,13 +7,11 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
-	types "github.com/prysmaticlabs/eth2-types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/eth2-key-manager/core"
 
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -44,7 +42,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 		fetcher:  mockFetcher,
 	}
 
-	cn := make(chan types.Slot)
+	cn := make(chan spec.Slot)
 
 	secPerSlot = 2
 	defer func() {
@@ -84,7 +82,7 @@ func TestDutyController_GetCurrentSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
-	require.Greater(t, slot, types.Slot(646855))
+	require.Greater(t, slot, spec.Slot(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {

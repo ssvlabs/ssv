@@ -4,6 +4,8 @@
 // Package mocks is a generated GoMock package.
 package mocks
 
+// TODO(oleg) mock
+
 import (
 	reflect "reflect"
 
@@ -73,7 +75,7 @@ func (m *MockDutyFetcher) EXPECT() *MockDutyFetcherMockRecorder {
 }
 
 // GetDuties mocks base method.
-func (m *MockDutyFetcher) GetDuties(slot uint64) ([]types.Duty, error) {
+func (m *MockDutyFetcher) GetDuties(slot phase0.Slot) ([]types.Duty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDuties", slot)
 	ret0, _ := ret[0].([]types.Duty)

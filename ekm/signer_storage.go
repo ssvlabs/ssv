@@ -3,15 +3,16 @@ package ekm
 import (
 	"encoding/json"
 	"fmt"
+	ssz "github.com/ferranbt/fastssz"
 	"sync"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
-	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -193,7 +194,7 @@ func (s *storage) SetEncryptor(encryptor encryptor.Encryptor, password []byte) {
 
 }
 
-func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *eth.AttestationData) error {
+func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *spec.AttestationData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -205,30 +206,28 @@ func (s *storage) SaveHighestAttestation(pubKey []byte, attestation *eth.Attesta
 	return s.db.Set(s.objPrefix(highestAttPrefix), pubKey, data)
 }
 
-func (s *storage) RetrieveHighestAttestation(pubKey []byte) *eth.AttestationData {
+func (s *storage) RetrieveHighestAttestation(pubKey []byte) (*spec.AttestationData, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestAttPrefix), pubKey)
 	if err != nil {
-		s.logger.Warn("could not get highest attestation from db")
-		return nil
+		return nil, errors.Wrap(err, "could not get highest attestation from db")
 	}
 	if !found {
-		return nil
+		return nil, nil
 	}
 	if obj.Value == nil || len(obj.Value) == 0 {
-		s.logger.Warn("highest attestation value is empty")
-		return nil
+		return nil, errors.Wrap(err, "highest attestation value is empty")
 	}
 
 	// decode
-	ret := &eth.AttestationData{}
+	ret := &spec.AttestationData{}
 	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
-		return nil
+		return nil, errors.Wrap(err, "could not unmarshal attestation data")
 	}
-	return ret
+	return ret, nil
 }
 
 func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
@@ -238,42 +237,36 @@ func (s *storage) RemoveHighestAttestation(pubKey []byte) error {
 	return s.db.Delete(s.objPrefix(highestAttPrefix), pubKey)
 }
 
-func (s *storage) SaveHighestProposal(pubKey []byte, block *eth.BeaconBlock) error {
+func (s *storage) SaveHighestProposal(pubKey []byte, slot spec.Slot) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	data, err := block.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal beacon block")
-	}
+	var data []byte
+	data = ssz.MarshalUint64(data, uint64(slot))
 
 	return s.db.Set(s.objPrefix(highestProposalPrefix), pubKey, data)
 }
 
-func (s *storage) RetrieveHighestProposal(pubKey []byte) *eth.BeaconBlock {
+func (s *storage) RetrieveHighestProposal(pubKey []byte) (spec.Slot, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(highestProposalPrefix), pubKey)
 	if err != nil {
-		s.logger.Warn("could not get highest proposal from db")
-		return nil
+		return 0, errors.Wrap(err, "could not get highest proposal from db")
 	}
 	if !found {
-		return nil
+		return 0, nil
 	}
+	// TODO(oleg) chk how slot 0 effect
 	if obj.Value == nil || len(obj.Value) == 0 {
-		s.logger.Warn("highest proposal value is empty")
-		return nil
+		return 0, errors.Wrap(err, "highest proposal value is empty")
 	}
 
 	// decode
-	ret := &eth.BeaconBlock{}
-	if err := ret.UnmarshalSSZ(obj.Value); err != nil {
-		return nil
-	}
-	return ret
+	slot := ssz.UnmarshallUint64(obj.Value)
+	return spec.Slot(slot), nil
 }
 
 func (s *storage) RemoveHighestProposal(pubKey []byte) error {

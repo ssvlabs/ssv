@@ -1,25 +1,23 @@
 package goclient
 
 import (
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-	prysmtime "github.com/prysmaticlabs/prysm/time"
-	"github.com/prysmaticlabs/prysm/time/slots"
-	"time"
 )
 
 func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
 	gc.waitOneThirdOrValidBlock(uint64(slot))
 
-	startTime := prysmtime.Now()
+	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
 	}
-	metricsAttestationDataRequest.WithLabelValues().
-		Observe(prysmtime.Since(startTime).Seconds())
+	//TODO(oleg) changed from prysmtime
+	metricsAttestationDataRequest.WithLabelValues().Observe(time.Since(startTime).Seconds())
 
 	return attestationData, nil
 }
@@ -40,8 +38,8 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 
 // getSigningRoot returns signing root
 func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(prysmtypes.Slot(data.Slot))
-	domain, err := gc.DomainData(spec.Epoch(epoch), spectypes.DomainAttester)
+	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
+	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -54,10 +52,11 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
+	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := prysmtime.Until(finalTime)
+	//TODO(oleg) changed from prysmtime
+	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

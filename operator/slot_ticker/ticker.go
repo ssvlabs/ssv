@@ -2,12 +2,13 @@ package slot_ticker
 
 import (
 	"context"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	types "github.com/prysmaticlabs/eth2-types"
-	"github.com/prysmaticlabs/prysm/async/event"
-	"github.com/prysmaticlabs/prysm/time/slots"
-	"go.uber.org/zap"
 	"time"
+
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"go.uber.org/zap"
+
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/ticker.go -source=./ticker.go
@@ -16,7 +17,7 @@ type Ticker interface {
 	// Start ticker process
 	Start()
 	// Subscribe to ticker chan
-	Subscribe(subscription chan types.Slot) event.Subscription
+	Subscribe(subscription chan spec.Slot) event.Subscription
 }
 
 type ticker struct {
@@ -43,17 +44,17 @@ func NewTicker(ctx context.Context, logger *zap.Logger, ethNetwork beaconprotoco
 // Start slot ticker
 func (t *ticker) Start() {
 	genesisTime := time.Unix(int64(t.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := slots.NewSlotTicker(genesisTime, uint64(t.ethNetwork.SlotDurationSec().Seconds()))
+	slotTicker := NewSlotTicker(genesisTime, uint64(t.ethNetwork.SlotDurationSec().Seconds()))
 	t.listenToTicker(slotTicker.C())
 }
 
 // Subscribe will trigger every slot
-func (t *ticker) Subscribe(subscription chan types.Slot) event.Subscription {
+func (t *ticker) Subscribe(subscription chan spec.Slot) event.Subscription {
 	return t.feed.Subscribe(subscription)
 }
 
 // listenToTicker loop over the given slot channel
-func (t *ticker) listenToTicker(slots <-chan types.Slot) {
+func (t *ticker) listenToTicker(slots <-chan spec.Slot) {
 	for currentSlot := range slots {
 		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
 		if !t.genesisEpochEffective() {

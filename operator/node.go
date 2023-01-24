@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
-	slot_ticker "github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -169,7 +169,7 @@ func (n *operatorNode) Start() error {
 
 // listenForCurrentSlot listens to current slot and trigger relevant components if needed
 func (n *operatorNode) listenForCurrentSlot() {
-	tickerChan := make(chan types.Slot, 32)
+	tickerChan := make(chan spec.Slot, 32)
 	n.ticker.Subscribe(tickerChan)
 	for slot := range tickerChan {
 		n.setFork(slot)

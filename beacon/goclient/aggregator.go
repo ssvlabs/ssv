@@ -2,14 +2,13 @@ package goclient
 
 import (
 	"encoding/binary"
+	"hash"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/minio/sha256-simd"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/config/params"
-	"github.com/prysmaticlabs/prysm/crypto/hash"
-	prysmtime "github.com/prysmaticlabs/prysm/time"
-	"github.com/prysmaticlabs/prysm/time/slots"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -22,10 +21,10 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not get aggregator status")
+		return nil, errors.Wrap(err, "could not get aggregator status")
 	}
 	if !isAggregator {
-		return nil, errors.New("Validator is not an aggregator")
+		return nil, errors.New("validator is not an aggregator")
 	}
 
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
@@ -75,24 +74,57 @@ func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggreg
 //	 modulo = max(1, len(committee) // TARGET_AGGREGATORS_PER_COMMITTEE)
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
-	modulo := uint64(1)
-	if committeeCount/params.BeaconConfig().TargetAggregatorsPerCommittee > 1 {
-		modulo = committeeCount / params.BeaconConfig().TargetAggregatorsPerCommittee
-	}
+	//modulo := uint64(1)
+	// TODO(oleg) prysm params TargetAggregatorsPerCommittee:  16
+	//if committeeCount/params.BeaconConfig().TargetAggregatorsPerCommittee > 1 {
+	//	modulo = committeeCount / params.BeaconConfig().TargetAggregatorsPerCommittee
+	//}
 
-	b := hash.Hash(slotSig)
+	modulo := committeeCount / 16
+
+	// TODO(oleg) prysm
+	//b := hash.Hash(slotSig)
+	b := Hash(slotSig)
 	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
+}
+
+var sha256Pool = sync.Pool{New: func() interface{} {
+	return sha256.New()
+}}
+
+// Hash defines a function that returns the sha256 checksum of the data passed in.
+// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/core/0_beacon-chain.md#hash
+func Hash(data []byte) [32]byte {
+	h, ok := sha256Pool.Get().(hash.Hash)
+	if !ok {
+		h = sha256.New()
+	}
+	defer sha256Pool.Put(h)
+	h.Reset()
+
+	var b [32]byte
+
+	// The hash interface never returns an error, for that reason
+	// we are not handling the error below. For reference, it is
+	// stated here https://golang.org/pkg/hash/#Hash
+
+	// #nosec G104
+	h.Write(data)
+	h.Sum(b[:0])
+
+	return b
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitToSlotTwoThirds(slot uint64) {
-	oneThird := slots.DivideSlotBy(3 /* one third of slot duration */)
+	oneThird := gc.network.DivideSlotBy(3 /* one third of slot duration */)
 	twoThird := oneThird + oneThird
 	delay := twoThird
 
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := prysmtime.Until(finalTime)
+	//TODO(oleg) changed from prysmtime
+	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

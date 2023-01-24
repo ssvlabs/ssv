@@ -4,22 +4,22 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
-	"github.com/prysmaticlabs/prysm/config/params"
-	"github.com/prysmaticlabs/prysm/network"
-	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"io"
 	"log"
 	"net"
 	"net/http"
 
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/prysmaticlabs/prysm/network"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils"
 )
 
 // Options contains options to create the node
@@ -27,6 +27,7 @@ type Options struct {
 	Logger     *zap.Logger
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 }
 
 // Node represents the behavior of boot node
@@ -42,6 +43,7 @@ type bootNode struct {
 	discv5port  int
 	forkVersion []byte
 	externalIP  string
+	network     core.Network
 }
 
 // New is the constructor of ssvNode
@@ -52,6 +54,7 @@ func New(opts Options) Node {
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
 		externalIP:  opts.ExternalIP,
+		network:     core.NetworkFromString(opts.Network),
 	}
 }
 
@@ -164,8 +167,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
+	// TODO(oleg) prysm params params.BeaconConfig().GenesisForkVersion
 	// fVersion := params.BeaconConfig().GenesisForkVersion
-	fVersion := params.BeaconConfig().GenesisForkVersion
+	fVersion := n.network.ForkVersion()
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
@@ -187,15 +191,17 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
-	digest, err := signing.ComputeForkDigest(fVersion, genRoot[:])
+	digest, err := ComputeForkDigest(fVersion, genRoot)
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not compute fork digest")
 	}
 
-	forkID := &eth.ENRForkID{
+	forkID := &ENRForkID{
 		CurrentForkDigest: digest[:],
-		NextForkVersion:   fVersion,
-		NextForkEpoch:     params.BeaconConfig().FarFutureEpoch,
+		NextForkVersion:   fVersion[:],
+		// TODO(oleg) prysm params minimalConfig.FarFutureEpoch = 1<<64 - 1
+		//NextForkEpoch:     params.BeaconConfig().FarFutureEpoch,
+		NextForkEpoch: 1<<64 - 1,
 	}
 	forkEntry, err := forkID.MarshalSSZ()
 	if err != nil {
@@ -217,4 +223,57 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	localNode.Set(tcpEntry)
 
 	return localNode, nil
+}
+
+// this returns the 32byte fork data root for the “current_version“ and “genesis_validators_root“.
+// This is used primarily in signature domains to avoid collisions across forks/chains.
+//
+// Spec pseudocode definition:
+//
+//		def compute_fork_data_root(current_version: Version, genesis_validators_root: Root) -> Root:
+//	   """
+//	   Return the 32-byte fork data root for the ``current_version`` and ``genesis_validators_root``.
+//	   This is used primarily in signature domains to avoid collisions across forks/chains.
+//	   """
+//	   return hash_tree_root(ForkData(
+//	       current_version=current_version,
+//	       genesis_validators_root=genesis_validators_root,
+//	   ))
+func computeForkDataRoot(version spec.Version, root spec.Root) ([32]byte, error) {
+	r, err := (&spec.ForkData{
+		CurrentVersion:        version,
+		GenesisValidatorsRoot: root,
+	}).HashTreeRoot()
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return r, nil
+}
+
+// ComputeForkDigest returns the fork for the current version and genesis validator root
+//
+// Spec pseudocode definition:
+//
+//		def compute_fork_digest(current_version: Version, genesis_validators_root: Root) -> ForkDigest:
+//	   """
+//	   Return the 4-byte fork digest for the ``current_version`` and ``genesis_validators_root``.
+//	   This is a digest primarily used for domain separation on the p2p layer.
+//	   4-bytes suffices for practical separation of forks/chains.
+//	   """
+//	   return ForkDigest(compute_fork_data_root(current_version, genesis_validators_root)[:4])
+func ComputeForkDigest(version spec.Version, genesisValidatorsRoot spec.Root) ([4]byte, error) {
+	dataRoot, err := computeForkDataRoot(version, genesisValidatorsRoot)
+	if err != nil {
+		return [4]byte{}, err
+	}
+	return ToBytes4(dataRoot[:]), nil
+}
+
+// ToBytes4 is a convenience method for converting a byte slice to a fix
+// sized 4 byte array. This method will truncate the input if it is larger
+// than 4 bytes.
+func ToBytes4(x []byte) [4]byte {
+	var y [4]byte
+	copy(y[:], x)
+	return y
 }

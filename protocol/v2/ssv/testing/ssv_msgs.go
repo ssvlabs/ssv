@@ -32,6 +32,10 @@ var SyncCommitteeContributionMsgID = func() []byte {
 	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution)
 	return ret[:]
 }()
+var ValidatorRegistrationMsgID = func() []byte {
+	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration)
+	return ret[:]
+}()
 
 var TestAttesterConsensusData = &spectypes.ConsensusData{
 	Duty:            testingutils.TestingAttesterDuty,
@@ -50,6 +54,12 @@ var TestProposerConsensusData = &spectypes.ConsensusData{
 	BlockData: testingutils.TestingBeaconBlock,
 }
 var TestProposerConsensusDataByts, _ = TestProposerConsensusData.Encode()
+
+var TestProposerBlindedBlockConsensusData = &spectypes.ConsensusData{
+	Duty:             testingutils.TestingProposerDuty,
+	BlindedBlockData: testingutils.TestingBlindedBeaconBlock,
+}
+var TestProposerBlindedBlockConsensusDataByts, _ = TestProposerBlindedBlockConsensusData.Encode()
 
 var TestSyncCommitteeConsensusData = &spectypes.ConsensusData{
 	Duty:                   testingutils.TestingSyncCommitteeDuty,
@@ -101,6 +111,10 @@ var SSVMsgSyncCommittee = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *s
 
 var SSVMsgSyncCommitteeContribution = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *specssv.SignedPartialSignatureMessage) *spectypes.SSVMessage {
 	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution))
+}
+
+var SSVMsgValidatorRegistration = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *specssv.SignedPartialSignatureMessage) *spectypes.SSVMessage {
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration))
 }
 
 var ssvMsg = func(qbftMsg *specqbft.SignedMessage, postMsg *specssv.SignedPartialSignatureMessage, msgID spectypes.MessageID) *spectypes.SSVMessage {

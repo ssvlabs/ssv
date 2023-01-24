@@ -2,17 +2,25 @@ package beacon
 
 import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	fssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/go-ssz"
 )
 
 // TODO need to use mockgen instead
 type beaconMock struct {
+}
+
+func (b beaconMock) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {
+	return nil, nil
+}
+
+func (b beaconMock) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {
+	return nil
 }
 
 func NewBeaconMock() Beacon {
@@ -34,7 +42,7 @@ func (b beaconMock) SubmitAttestation(attestation *phase0.Attestation) error {
 	panic("implement me")
 }
 
-func (b beaconMock) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
+func (b beaconMock) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -121,7 +129,7 @@ func (b beaconMock) ComputeSigningRoot(object interface{}, domain phase0.Domain)
 		if v, ok := object.(fssz.HashRoot); ok {
 			return v.HashTreeRoot()
 		}
-		return ssz.HashTreeRoot(object)
+		return [32]byte{}, errors.New("cannot compute signing root")
 	}, domain[:])
 }
 

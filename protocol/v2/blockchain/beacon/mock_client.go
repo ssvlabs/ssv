@@ -4,10 +4,13 @@
 // Package beacon is a generated GoMock package.
 package beacon
 
+// TODO(oleg) mock
+
 import (
 	reflect "reflect"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
 	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -223,6 +226,14 @@ type MockBeacon struct {
 	recorder *MockBeaconMockRecorder
 }
 
+func (m *MockBeacon) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {
+	return nil, nil
+}
+
+func (m *MockBeacon) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {
+	return nil
+}
+
 // MockBeaconMockRecorder is the mock recorder for MockBeacon.
 type MockBeaconMockRecorder struct {
 	mock *MockBeacon
@@ -286,18 +297,18 @@ func (mr *MockBeaconMockRecorder) GetAttestationData(slot, committeeIndex interf
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
+func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, graffiti, randao)
+	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, committeeIndex, graffiti, randao)
 	ret0, _ := ret[0].(*bellatrix.BeaconBlock)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetBeaconBlock indicates an expected call of GetBeaconBlock.
-func (mr *MockBeaconMockRecorder) GetBeaconBlock(slot, graffiti, randao interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) GetBeaconBlock(slot, committeeIndex, graffiti, randao interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBeaconBlock), slot, graffiti, randao)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBeaconBlock), slot, committeeIndex, graffiti, randao)
 }
 
 // GetBeaconNetwork mocks base method.
