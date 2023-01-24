@@ -22,9 +22,9 @@ var (
 		Help:    "Post-consensus duration (seconds)",
 		Buckets: []float64{0.5, 1, 2, 3, 4, 10},
 	}, []string{"pubKey", "role"})
-	metricsAttestationSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_validator_attestation_submission_duration_seconds",
-		Help:    "Attestation duration (seconds)",
+	metricsBeaconSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_beacon_submission_duration_seconds",
+		Help:    "Submission to beacon node duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"pubKey", "role"})
 	metricsAttestationFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -39,7 +39,7 @@ func init() {
 		metricsConsensusDuration,
 		metricsPreConsensusDuration,
 		metricsPostConsensusDuration,
-		metricsAttestationSubmissionDuration,
+		metricsBeaconSubmissionDuration,
 		metricsAttestationFullFlowDuration,
 	}
 

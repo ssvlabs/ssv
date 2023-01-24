@@ -188,9 +188,15 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			Message:   r.GetState().DecidedValue.BlockData,
 			Signature: specSig,
 		}
+
+		blockSubmissionStart := time.Now()
+
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
+
+		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+			Observe(time.Since(blockSubmissionStart).Seconds())
 
 		r.logger.Info("successfully proposed block!")
 
