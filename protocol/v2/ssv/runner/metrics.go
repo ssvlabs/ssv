@@ -49,6 +49,8 @@ func init() {
 		metricsPostConsensusDuration,
 		metricsBeaconSubmissionDuration,
 		metricsDutyFullFlowDuration,
+		metricsRolesSubmitted,
+		metricsRolesSubmissionFailures,
 	}
 
 	for _, metric := range metricsList {
