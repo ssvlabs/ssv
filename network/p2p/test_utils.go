@@ -83,7 +83,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*15)
+				ctx, cancel := context.WithTimeout(pctx, time.Minute)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {

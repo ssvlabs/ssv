@@ -383,7 +383,7 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	return nil
 }
 
-func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenarioContext, error) {
+func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (*scenarioContext, error) {
 	logger := loggerFactory("Bootstrap")
 	logger.Info("creating resources")
 
@@ -403,7 +403,7 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 		dbs[operatorID] = db
 	}
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, len(operatorIDs), len(operatorIDs)-1, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, getCommitteeNum(f), getQuorum(f), false)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +467,10 @@ func getShareSet(f int) *spectestingutils.TestKeySet {
 
 func getCommitteeNum(f int) int {
 	return 3*f + 1
+}
+
+func getQuorum(f int) int {
+	return 2*f + 1
 }
 
 func loggerFactory(s string) *zap.Logger {
