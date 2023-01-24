@@ -34,6 +34,23 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 	if !n.cfg.FullNode {
 		return
 	}
+	if to > from {
+		n.logger.Warn("failed to sync decided by range: to is higher than from",
+			zap.Uint64("from", uint64(from)),
+			zap.Uint64("to", uint64(to)))
+		return
+	}
+
+	// TODO: this is a temporary solution to prevent syncing already decided heights.
+	// Example: Say we received a decided at height 99, and right after we received a decided at height 100
+	// before we could advance the controller's height. This would cause the controller to call SyncDecidedByRange.
+	// However, height 99 is already synced, so temporarily we reject such requests here.
+	// Note: This isn't ideal because sometimes you do want to sync gaps of 1.
+	const minGap = 2
+	if to-from < minGap {
+		return
+	}
+
 	err := n.syncer.SyncDecidedByRange(context.Background(), mid, from, to, func(msg spectypes.SSVMessage) {
 		n.msgRouter.Route(msg)
 	})
