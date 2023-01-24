@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -54,28 +53,10 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	vpk := msg.GetID().GetPubKey()
 	topics := n.fork.ValidatorTopicID(vpk)
-	// for decided message, send on decided channel first
-	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
-
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := specqbft.SignedMessage{}
-		if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
-			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-				zap.Any("signers", sm.GetSigners()))
-
-			// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
-			if sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
-				if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-					topics = append([]string{decidedTopic}, topics...)
-				}
-			}
-		}
-	}
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			logger.Debug("could not broadcast msg", zap.Error(err))
+			n.logger.Debug("could not broadcast msg", zap.String("pk", hex.EncodeToString(vpk)), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}

@@ -23,7 +23,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -143,7 +142,7 @@ func (n *p2pNetwork) Start() error {
 
 	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics)
 
-	if err := n.registerInitialTopics(); err != nil {
+	if err := n.subscribeToSubnets(); err != nil {
 		return err
 	}
 
@@ -169,27 +168,6 @@ func (n *p2pNetwork) peersBalancing() {
 	mySubnets := records.Subnets(n.subnets).Clone()
 	connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 	connMgr.TrimPeers(ctx, n.host.Network())
-}
-
-func (n *p2pNetwork) registerInitialTopics() error {
-	decidedTopic := n.fork.DecidedTopic()
-	if len(decidedTopic) == 0 {
-		return nil
-	}
-	// start listening to decided topic
-	err := tasks.RetryWithContext(n.ctx, func() error {
-		if err := n.topicsCtrl.Subscribe(decidedTopic); err != nil {
-			n.logger.Warn("could not register to decided topic", zap.Error(err))
-			return err
-		}
-		return nil
-	}, 3)
-	if err != nil {
-		return errors.Wrap(err, "could not register to decided topic")
-	}
-	_ = n.subscribeToSubnets()
-
-	return nil
 }
 
 // startDiscovery starts the required services
@@ -276,10 +254,6 @@ func (n *p2pNetwork) UpdateSubnets() {
 func (n *p2pNetwork) getMaxPeers(topic string) int {
 	if len(topic) == 0 {
 		return n.cfg.MaxPeers
-	}
-	baseName := n.fork.GetTopicBaseName(topic)
-	if baseName == n.fork.DecidedTopic() { // allow more peers for decided topic
-		return n.cfg.TopicMaxPeers * 2
 	}
 	return n.cfg.TopicMaxPeers
 }
