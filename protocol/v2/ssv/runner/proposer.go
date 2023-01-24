@@ -27,8 +27,8 @@ type ProposerRunner struct {
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
 
-	consensusStart     time.Time
 	preConsensusStart  time.Time
+	consensusStart     time.Time
 	postConsensusStart time.Time
 }
 
@@ -79,6 +79,12 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		return nil
 	}
 
+	metricsConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		Observe(time.Since(r.preConsensusStart).Seconds())
+
+	r.consensusStart = time.Now()
+
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	// randao is relevant only for block proposals, no need to check type
@@ -117,6 +123,12 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if !decided {
 		return nil
 	}
+
+	metricsConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		Observe(time.Since(r.consensusStart).Seconds())
+
+	r.postConsensusStart = time.Now()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.BlockData, decidedValue.Duty.Slot, spectypes.DomainProposer)
@@ -160,6 +172,10 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	metricsPostConsensusDuration.
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		Observe(time.Since(r.postConsensusStart).Seconds())
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -175,8 +191,13 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
+
 		r.logger.Info("successfully proposed block!")
+
+		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+			Observe(time.Since(r.consensusStart).Seconds())
 	}
+
 	r.GetState().Finished = true
 
 	return nil
@@ -199,6 +220,8 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
+	r.preConsensusStart = time.Now()
+
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
 

@@ -29,7 +29,6 @@ type AttesterRunner struct {
 
 	consensusStart     time.Time
 	postConsensusStart time.Time
-	instanceStart      time.Time
 }
 
 func NewAttesterRunnner(
