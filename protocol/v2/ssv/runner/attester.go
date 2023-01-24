@@ -85,7 +85,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	}
 
 	metricsConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 		Observe(time.Since(r.consensusStart).Seconds())
 
 	r.postConsensusStart = time.Now()
@@ -133,7 +133,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	}
 
 	metricsPostConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 		Observe(time.Since(r.postConsensusStart).Seconds())
 
 	for _, root := range roots {
@@ -167,12 +167,12 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		metricsAttestationSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		metricsAttestationSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 			Observe(time.Since(attestationSubmissionStart).Seconds())
 
 		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 
-		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey)).
+		metricsAttestationFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 			Observe(time.Since(r.consensusStart).Seconds())
 	}
 	r.GetState().Finished = true
