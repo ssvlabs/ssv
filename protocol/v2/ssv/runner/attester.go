@@ -161,6 +161,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
+			metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).Inc()
 			r.logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
@@ -168,11 +169,11 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 			Observe(time.Since(attestationSubmissionStart).Seconds())
-
-		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
-
 		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
 			Observe(time.Since(r.consensusStart).Seconds())
+		metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).Inc()
+
+		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
 	r.GetState().Finished = true
 

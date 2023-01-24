@@ -32,6 +32,14 @@ var (
 		Help:    "Duty full flow duration (seconds)",
 		Buckets: []float64{0.5, 1, 2, 3, 4, 10},
 	}, []string{"pubKey", "role"})
+	metricsRolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_validator_roles_submitted",
+		Help: "Submitted roles",
+	}, []string{"pubKey", "role"})
+	metricsRolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_validator_roles_failed",
+		Help: "Submitted roles",
+	}, []string{"pubKey", "role"})
 )
 
 func init() {

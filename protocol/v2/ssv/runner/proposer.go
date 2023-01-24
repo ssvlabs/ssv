@@ -192,16 +192,17 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		blockSubmissionStart := time.Now()
 
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
+			metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).Inc()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
 
 		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
 			Observe(time.Since(blockSubmissionStart).Seconds())
-
-		r.logger.Info("successfully proposed block!")
-
 		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
 			Observe(time.Since(r.consensusStart).Seconds())
+		metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).Inc()
+
+		r.logger.Info("successfully proposed block!")
 	}
 
 	r.GetState().Finished = true
