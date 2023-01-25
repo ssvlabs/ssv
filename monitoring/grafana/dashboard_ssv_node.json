@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1674586771126,
+  "iteration": 1674671400984,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -2037,215 +2037,12 @@
       "type": "table"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "auto",
-            "displayMode": "auto",
-            "filterable": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "dark-green",
-                "value": 1000
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Peers Count"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "basic"
-              },
-              {
-                "id": "unit"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 76
-      },
-      "id": 38,
-      "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": true
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:network:peers_identity{instance=~\"ssv-exporter.*\"}",
-          "format": "table",
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "title": "Version Distribution",
-      "transformations": [
-        {
-          "id": "filterByValue",
-          "options": {
-            "filters": [
-              {
-                "config": {
-                  "id": "notEqual",
-                  "options": {
-                    "value": ""
-                  }
-                },
-                "fieldName": "pid"
-              },
-              {
-                "config": {
-                  "id": "notEqual",
-                  "options": {
-                    "value": ""
-                  }
-                },
-                "fieldName": "__name__"
-              },
-              {
-                "config": {
-                  "id": "notEqual",
-                  "options": {
-                    "value": ""
-                  }
-                },
-                "fieldName": "v"
-              }
-            ],
-            "match": "all",
-            "type": "include"
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value": {
-                "aggregations": [
-                  "mean"
-                ],
-                "operation": "aggregate"
-              },
-              "pid": {
-                "aggregations": []
-              },
-              "pubKey": {
-                "aggregations": [],
-                "operation": "groupby"
-              },
-              "v": {
-                "aggregations": [
-                  "lastNotNull"
-                ],
-                "operation": "aggregate"
-              }
-            }
-          }
-        },
-        {
-          "id": "groupBy",
-          "options": {
-            "fields": {
-              "Value": {
-                "aggregations": [
-                  "sum"
-                ],
-                "operation": "aggregate"
-              },
-              "Value (mean)": {
-                "aggregations": [
-                  "sum"
-                ],
-                "operation": "aggregate"
-              },
-              "pubKey": {
-                "aggregations": []
-              },
-              "v": {
-                "aggregations": [],
-                "operation": "groupby"
-              },
-              "v (lastNotNull)": {
-                "aggregations": [],
-                "operation": "groupby"
-              }
-            }
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "indexByName": {},
-            "renameByName": {
-              "Value (mean) (sum)": "Peers Count",
-              "Value (sum)": "Peers",
-              "v": "Version",
-              "v (lastNotNull)": "Version"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "desc": true,
-                "field": "Peers Count"
-              }
-            ]
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 76
       },
       "id": 2,
       "panels": [],
@@ -2312,7 +2109,7 @@
         "h": 12,
         "w": 8,
         "x": 0,
-        "y": 89
+        "y": 77
       },
       "id": 32,
       "options": {
@@ -2418,7 +2215,7 @@
         "h": 12,
         "w": 8,
         "x": 8,
-        "y": 89
+        "y": 77
       },
       "id": 36,
       "options": {
@@ -2512,7 +2309,7 @@
         "h": 12,
         "w": 8,
         "x": 16,
-        "y": 89
+        "y": 77
       },
       "id": 34,
       "options": {
@@ -2601,7 +2398,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 101
+        "y": 89
       },
       "id": 61,
       "options": {
@@ -2770,7 +2567,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 101
+        "y": 89
       },
       "id": 63,
       "options": {
@@ -2996,6 +2793,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 21,
+  "version": 24,
   "weekStart": ""
 }
