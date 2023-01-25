@@ -27,9 +27,6 @@ Build stage Docker image:
   tags:
     - blox-infra-stage
   script:
-    - echo $CI_BUILD_TAG
-    - echo $CI_BUILD_REF
-    - echo $CI_BUILD_REF_NAME
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
