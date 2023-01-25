@@ -117,6 +117,11 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
+			} else if i.State.Decided {
+				i.logger.Debug("mismtaching decided", zap.Any("instance", i.State), zap.Any("msg", msg),
+					zap.Any("uponcommit_decided", aggregatedCommit),
+					zap.Any("uponcommit_decided_value", decidedValue),
+					zap.Any("uponcommit_decided", decided))
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
