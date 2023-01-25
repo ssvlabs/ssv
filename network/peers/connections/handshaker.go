@@ -142,10 +142,6 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 }
 
 func (h *handshaker) processIncomingNodeInfo(pid peer.ID, ni records.NodeInfo) error {
-	h.logger.Info("peer info",
-		zap.Any("info", ni),
-		zap.String("pid", pid.String()),
-	)
 	h.updateNodeSubnets(pid, &ni)
 	if !h.applyFilters(&ni) {
 		return errPeerWasFiltered
@@ -287,9 +283,6 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 		h.logger.Debug("user agent is unknown", zap.String("ua", ua))
 		return nil, errUnknownUserAgent
 	}
-
-	h.logger.Info("[version] nodeInfoFromUserAgent",
-		zap.String("version", parts[1]))
 
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.GenesisForkVersion, h.nodeInfoIdx.Self().NetworkID)

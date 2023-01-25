@@ -159,10 +159,6 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return err
 	}
 
-	n.logger.Info("[version] setupPeerServices",
-		zap.String("version", commons.GetNodeVersion()),
-		zap.String("subnets", records.Subnets(n.subnets).String()))
-
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,

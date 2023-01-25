@@ -174,8 +174,6 @@ func init() {
 }
 
 func setupGlobal(cmd *cobra.Command) *zap.Logger {
-	log.Println("version:", cmd.Version)
-	log.Println("parent version:", cmd.Parent().Version)
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
 	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {

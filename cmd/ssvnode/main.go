@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/bloxapp/ssv/cli"
-	"log"
 )
 
 var (
@@ -14,6 +13,5 @@ var (
 )
 
 func main() {
-	log.Println("app version:", Version)
 	cli.Execute(AppName, Version)
 }
