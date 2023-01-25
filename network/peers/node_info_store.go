@@ -46,6 +46,10 @@ func (pi *nodeInfoStore) Get(pid peer.ID) (*records.NodeInfo, error) {
 	if raw == nil {
 		return nil, nil
 	}
+	pi.logger.Info("peer info",
+		zap.String("info", string(raw.([]byte))),
+		zap.String("pid", pid.String()),
+	)
 	var ni records.NodeInfo
 	err = ni.UnmarshalRecord(raw.([]byte))
 	if err != nil {
