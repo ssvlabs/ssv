@@ -136,7 +136,7 @@ spec:
         - name: DISCOVERY_TRACE
           value: 'true'
         - name: PUBSUB_TRACE
-          value: 'true'
+          value: 'false'
         - name: NETWORK_ID
           value: "shifu-stage"
         - name: P2P_LOG
