@@ -12,17 +12,17 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	f := 1
 
 	tests := []*scenarios.IntegrationTest{
+		scenarios.RoundChange(types.BNRoleAttester),
 		scenarios.RegularAttester(f),
 		scenarios.RegularAggregator(),
 		scenarios.RegularSyncCommittee(),
 		scenarios.RegularSyncCommitteeContribution(),
 		scenarios.RegularProposer(),
 		scenarios.F1Decided(types.BNRoleAttester),
-		scenarios.RoundChange(types.BNRoleAttester),
 	}
 
 	for _, test := range tests {
-		t.Run(t.Name(), func(t *testing.T) {
+		t.Run(test.Name, func(t *testing.T) {
 			require.NoError(t, test.Run(f, []types.OperatorID{1, 2, 3, 4}))
 		})
 	}
