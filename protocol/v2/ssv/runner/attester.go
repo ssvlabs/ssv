@@ -124,6 +124,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	}
 
 	for _, root := range roots {
+		start := time.Now()
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
 			return errors.Wrap(err, "could not reconstruct post consensus signature")
@@ -135,7 +136,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		r.logger.Debug("reconstructed partial signatures",
 			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
-			zap.Int64("slot", int64(duty.Slot)))
+			zap.Int64("slot", int64(duty.Slot)),
+			zap.Duration("duration", time.Since(start)))
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -146,13 +148,16 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		}
 
 		// Submit it to the BN.
+		start = time.Now()
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
+		r.logger.Debug("successfully submitted attestation",
+			zap.Int64("slot", int64(duty.Slot)),
+			zap.Duration("duration", time.Since(start)))
 	}
 	r.GetState().Finished = true
 
