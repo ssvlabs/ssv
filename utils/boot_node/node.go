@@ -198,7 +198,7 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	forkID := &ENRForkID{
 		CurrentForkDigest: digest[:],
 		NextForkVersion:   fVersion[:],
-		NextForkEpoch:     1<<64 - 1, // FarFutureEpoch
+		NextForkEpoch:     goclient.FarFutureEpoch,
 	}
 	forkEntry, err := forkID.MarshalSSZ()
 	if err != nil {
