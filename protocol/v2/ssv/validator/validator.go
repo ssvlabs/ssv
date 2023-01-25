@@ -97,10 +97,10 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	var signers []spectypes.OperatorID
 	defer func() {
 		v.logger.Debug(
-			fmt.Sprintf("got %s message", msgType),
+			fmt.Sprintf("done processing %s message", msgType),
 			zap.String("role", msg.MsgID.GetRoleType().String()),
 			zap.Any("signers", signers),
-			zap.Duration("processing_took", time.Since(start)),
+			zap.Duration("took", time.Since(start)),
 		)
 	}()
 
