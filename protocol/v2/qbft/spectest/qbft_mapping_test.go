@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
+	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
+	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zapcore"
 

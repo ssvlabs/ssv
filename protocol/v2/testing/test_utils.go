@@ -2,10 +2,8 @@ package testing
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,11 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+)
+
+var (
+	specModule   = "github.com/bloxapp/ssv-spec"
+	specTestPath = "spectest/generate/tests.json"
 )
 
 // TODO: add missing tests
@@ -162,61 +166,93 @@ func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
-	fileName := "tests.json"
-	filePath := path + "/" + fileName
-	rootPath := path
-	for {
-		if _, err := os.Stat(filepath.Join(rootPath, "go.mod")); err == nil {
+	goModFile, err := getGoModFile(path)
+	if err != nil {
+		return nil, errors.New("could not get go.mod file")
+	}
+
+	// check if there is a replace
+	var modPath, modVersion string
+	var replace *modfile.Replace
+	for _, r := range goModFile.Replace {
+		if strings.EqualFold(specModule, r.Old.Path) {
+			replace = r
 			break
 		}
-		rootPath = filepath.Dir(rootPath)
 	}
-	buf, err := os.ReadFile(fmt.Sprintf("%s/go.mod", rootPath))
+
+	if replace != nil {
+		modPath = replace.New.Path
+		modVersion = replace.New.Version
+	} else {
+		// get from require
+		var req *modfile.Require
+		for _, r := range goModFile.Require {
+			if strings.EqualFold(specModule, r.Mod.Path) {
+				req = r
+				break
+			}
+		}
+		if req == nil {
+			return nil, errors.Errorf("could not find %s module", specModule)
+		}
+		modPath = req.Mod.Path
+		modVersion = req.Mod.Version
+	}
+
+	// get module path
+	p, err := GetModulePath(modPath, modVersion)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get module path")
+	}
+
+	if _, err := os.Stat(p); os.IsNotExist(err) {
+		return nil, errors.Wrapf(err, "you don't have this module-%s/version-%s installed", modPath, modVersion)
+	}
+
+	return os.ReadFile(filepath.Join(filepath.Clean(p), filepath.Clean(module), filepath.Clean(specTestPath)))
+}
+
+func GetModulePath(name, version string) (string, error) {
+	// first we need GOMODCACHE
+	cache, ok := os.LookupEnv("GOMODCACHE")
+	if !ok {
+		cache = path.Join(os.Getenv("GOPATH"), "pkg", "mod")
+	}
+
+	// then we need to escape path
+	escapedPath, err := module.EscapePath(name)
+	if err != nil {
+		return "", err
+	}
+
+	// version also
+	escapedVersion, err := module.EscapeVersion(version)
+	if err != nil {
+		return "", err
+	}
+
+	return path.Join(cache, escapedPath+"@"+escapedVersion), nil
+}
+
+func getGoModFile(path string) (*modfile.File, error) {
+	// find project root path
+	for {
+		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+			break
+		}
+		path = filepath.Dir(path)
+		if path == "/" {
+			return nil, errors.New("could not find go.mod file")
+		}
+	}
+
+	// read go.mod
+	buf, err := os.ReadFile(filepath.Join(filepath.Clean(path), "go.mod"))
 	if err != nil {
 		return nil, errors.New("could not read go.mod")
 	}
-	goModFile, err := modfile.Parse("go.mod", buf, nil)
-	if err != nil {
-		return nil, errors.New("could not parse go.mod")
-	}
-	var req *modfile.Require
-	for _, r := range goModFile.Require {
-		if strings.EqualFold("github.com/bloxapp/ssv-spec", r.Mod.Path) {
-			req = r
-			break
-		}
-	}
-	if req == nil {
-		return nil, errors.New("could not find ssv-spec module")
-	}
-	var version string
-	splitModVersion := strings.Split(req.Mod.Version, "-")
-	if len(splitModVersion) > 1 {
-		version = splitModVersion[len(splitModVersion)-1]
-	} else {
-		version = splitModVersion[0]
-	}
 
-	resp, err := http.Get(fmt.Sprintf("https://raw.githubusercontent.com/bloxapp/ssv-spec/%s/%s/spectest/generate/tests.json", version, module))
-	if err != nil {
-		return nil, errors.New("could not get tests.json")
-	}
-
-	defer func() {
-		err := resp.Body.Close()
-		if err != nil {
-			return
-		}
-	}()
-
-	jsonTests, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	err = os.WriteFile(filePath, jsonTests, 0600)
-	if err != nil {
-		return nil, err
-	}
-	return jsonTests, nil
+	// parse go.mod
+	return modfile.Parse("go.mod", buf, nil)
 }
