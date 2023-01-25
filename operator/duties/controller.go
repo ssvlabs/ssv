@@ -151,6 +151,9 @@ func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
 	for currentSlot := range slots {
 		// execute duties
+		if !dc.genesisEpochEffective() {
+			continue
+		}
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
@@ -175,15 +178,19 @@ func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 	logger.Warn("slot is irrelevant, ignoring duty")
 }
 
-func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
-	if uint64(duty.Slot) < dc.getEpochFirstSlot(dc.genesisEpoch) {
+func (dc *dutyController) genesisEpochEffective() bool {
+	if dc.ethNetwork.EstimatedCurrentEpoch() < prysmtypes.Epoch(dc.genesisEpoch) {
 		// wait until genesis epoch starts
 		dc.logger.Debug("skipping slot, lower than genesis",
 			zap.Uint64("genesis_slot", dc.getEpochFirstSlot(dc.genesisEpoch)),
-			zap.Uint64("slot", uint64(duty.Slot)))
+			zap.Uint64("current_slot", uint64(dc.ethNetwork.EstimatedCurrentSlot())))
 		return false
 	}
 
+	return true
+}
+
+func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {

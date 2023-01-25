@@ -10,7 +10,8 @@ var (
 	// ShifuTestnet is the domain for shifu testnet
 	// NOTE: do not use directly unless you want to check domain,
 	//       i.e. use GetDefaultDomain() to get the current domain.
-	ShifuTestnet = spectypes.DomainType("shifu")
+	ShifuTestnet   = spectypes.DomainType("shifu")
+	ShifuTestnetV2 = spectypes.DomainType("shifuV2")
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 func GetDefaultDomain() spectypes.DomainType {
 	once.Do(func() {
 		if len(domain) == 0 {
-			domain = ShifuTestnet
+			domain = ShifuTestnetV2
 		}
 	})
 	return domain
