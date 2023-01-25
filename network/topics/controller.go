@@ -151,15 +151,13 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 		return err
 	}
 
-	go func() {
-		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
-		defer done()
+	ctx, done := context.WithTimeout(ctrl.ctx, timeout)
+	defer done()
 
-		err := topic.Publish(ctx, data)
-		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
-		}
-	}()
+	err = topic.Publish(ctx, data)
+	if err == nil {
+		metricPubsubOutbound.WithLabelValues(name).Inc()
+	}
 
 	return err
 }
