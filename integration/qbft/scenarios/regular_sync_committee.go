@@ -40,6 +40,12 @@ func RegularSyncCommittee() *IntegrationTest {
 				regularSyncCommitteeInstanceValidator(4, identifier),
 			},
 		},
+		StartDutyErrors: map[spectypes.OperatorID]error{
+			1: nil,
+			2: nil,
+			3: nil,
+			4: nil,
+		},
 	}
 }
 

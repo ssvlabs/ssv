@@ -19,6 +19,7 @@ func RegularAttester(f int) *IntegrationTest {
 	operatorIDs := []spectypes.OperatorID{}
 	duties := map[spectypes.OperatorID][]scheduledDuty{}
 	instanceValidators := map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{}
+	startDutyErrors := map[spectypes.OperatorID]error{}
 
 	for i := 1; i <= getCommitteeNum(f); i++ {
 		currentOperatorId := spectypes.OperatorID(i)
@@ -26,6 +27,7 @@ func RegularAttester(f int) *IntegrationTest {
 		operatorIDs = append(operatorIDs, currentOperatorId)
 		duties[currentOperatorId] = []scheduledDuty{{Duty: createDuty(sharesSet.ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}}
 		instanceValidators[currentOperatorId] = []func(*protocolstorage.StoredInstance) error{regularAttesterInstanceValidator(currentOperatorId, identifier, sharesSet)}
+		startDutyErrors[currentOperatorId] = nil
 	}
 
 	return &IntegrationTest{
@@ -35,6 +37,7 @@ func RegularAttester(f int) *IntegrationTest {
 		InitialInstances:   nil,
 		Duties:             duties,
 		InstanceValidators: instanceValidators,
+		StartDutyErrors:    startDutyErrors,
 	}
 }
 

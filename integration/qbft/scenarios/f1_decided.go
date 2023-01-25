@@ -83,6 +83,12 @@ func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 				f1DecidedNonConsensusInstanceValidator(consensusData, 4, identifier),
 			},
 		},
+		StartDutyErrors: map[spectypes.OperatorID]error{
+			1: nil,
+			2: nil,
+			3: nil,
+			4: nil,
+		},
 	}
 }
 

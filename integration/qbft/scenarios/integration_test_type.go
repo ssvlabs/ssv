@@ -8,6 +8,7 @@ import (
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/storage"
+	"github.com/pkg/errors"
 	"log"
 	"sync"
 	"time"
@@ -43,6 +44,7 @@ type IntegrationTest struct {
 	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties             map[spectypes.OperatorID][]scheduledDuty
 	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
+	StartDutyErrors    map[spectypes.OperatorID]error
 }
 
 type scheduledDuty struct {
@@ -61,62 +63,6 @@ type scenarioContext struct {
 	keyManagers map[spectypes.OperatorID]spectypes.KeyManager    // 1 per operator, pass same to each instance
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
-
-//func (sctx *scenarioContext) Reset() error { //todo reset also round
-//	dbs := make(map[spectypes.OperatorID]basedb.IDb)
-//	for _, operatorID := range sctx.operatorIDs {
-//		db, err := storage.GetStorageFactory(basedb.Options{
-//			Type:   "badger-memory",
-//			Path:   "",
-//			Logger: zap.L(),
-//		})
-//		if err != nil {
-//			return err
-//		}
-//
-//		dbs[operatorID] = db
-//	}
-//
-//	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
-//	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
-//
-//	for i, operatorID := range sctx.operatorIDs {
-//		nodes[operatorID] = sctx.ln.Nodes[i]
-//		nodeKeys[operatorID] = sctx.ln.NodeKeys[i]
-//	}
-//
-//	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
-//	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
-//	for _, operatorID := range sctx.operatorIDs {
-//		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
-//
-//		storageMap := qbftstorage.NewStores()
-//		storageMap.Add(spectypes.BNRoleAttester, store)
-//		storageMap.Add(spectypes.BNRoleProposer, store)
-//		storageMap.Add(spectypes.BNRoleAggregator, store)
-//		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
-//		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
-//
-//		stores[operatorID] = storageMap
-//		km := spectestingutils.NewTestingKeyManager()
-//		kms[operatorID] = km
-//		nodes[operatorID].RegisterHandlers(protocolp2p.WithHandler(
-//			protocolp2p.LastDecidedProtocol,
-//			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", operatorID)), storageMap, nodes[operatorID]),
-//		), protocolp2p.WithHandler(
-//			protocolp2p.DecidedHistoryProtocol,
-//			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", operatorID)), storageMap, nodes[operatorID], 25),
-//		))
-//	}
-//
-//	sctx.nodes = nodes
-//	sctx.nodeKeys = nodeKeys
-//	sctx.stores = stores
-//	sctx.keyManagers = kms
-//	sctx.dbs = dbs
-//
-//	return nil
-//}
 
 func (sctx *scenarioContext) Close() error {
 	for _, n := range sctx.nodes {
@@ -209,17 +155,20 @@ func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error 
 
 	<-time.After(lastDutyTime + (4 * time.Second))
 
-	err = nil
-	validateErr := func(k, v any) bool {
-		if v != nil {
-			err = fmt.Errorf("error start duty: %s", v)
-			return false //it means stop iterating, look to sync.Map.Range() documentation
+	for operatorID, expectedErr := range it.StartDutyErrors {
+		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
+			if expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+		} else {
+			aerr, ok := actualErr.(error)
+			if !ok && expectedErr != nil {
+				return fmt.Errorf("expected an error")
+			}
+			if !errors.Is(aerr, expectedErr) {
+				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
+			}
 		}
-		return true
-	}
-	actualErrMap.Range(validateErr)
-	if err != nil {
-		return err
 	}
 
 	if it.InstanceValidators != nil {
@@ -256,14 +205,14 @@ func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error 
 
 				if err := instanceValidator(storedInstance); err != nil {
 					if _, ok := errMap[operatorID]; !ok {
-						errMap[operatorID] = fmt.Errorf("validate instance %d of operator ID %d: %w\n", i, operatorID, err)
+						errMap[operatorID] = fmt.Errorf("validate instance %d of operator ID %d: %w", i, operatorID, err)
 					}
 					continue
 				}
 			}
 		}
 		if len(errMap) > f { // (3F + 1) - (2F + 1) || committeeNum - quorum
-			return fmt.Errorf("errors validating instances:\n%+v", errMap)
+			return fmt.Errorf("errors validating instances: %+v", errMap)
 		}
 	}
 	return nil
