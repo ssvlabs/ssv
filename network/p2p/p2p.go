@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"github.com/bloxapp/ssv/utils/commons"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -257,6 +258,10 @@ func (n *p2pNetwork) UpdateSubnets() {
 	if len(subnetsToAdd) == 0 {
 		return
 	}
+
+	n.logger.Info("[version] UpdateSubnets",
+		zap.String("version", commons.GetNodeVersion()),
+		zap.String("subnets", records.Subnets(n.subnets).String()))
 
 	self := n.idx.Self()
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
