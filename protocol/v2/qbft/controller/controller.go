@@ -119,7 +119,9 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 
 	if decidedMsg == nil || decidedMsg.Message == nil {
 		// TODO: remove this log after it stopped happening.
-		c.logger.Debug("was gonna send decided msg but decided msg is nil")
+		c.logger.Debug("was gonna send decided msg but decided msg is nil",
+			zap.Any("msg", decidedMsg),
+			zap.Stack("stack"))
 		return nil, nil
 	}
 
