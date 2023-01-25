@@ -26,15 +26,17 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	tests := []*scenarios.IntegrationTest{
 		scenarios.RegularAttester(f),
 		scenarios.RegularAggregator(),
-		scenarios.RegularProposer(),
 		scenarios.RegularSyncCommittee(),
 		scenarios.RegularSyncCommitteeContribution(),
+		scenarios.RegularProposer(),
 		scenarios.F1Decided(types.BNRoleAttester),
 		scenarios.RoundChange(types.BNRoleAttester),
 	}
 
 	for _, test := range tests {
-		require.NoError(t, test.Run(f, sCtx))
+		if err := test.Run(f, sCtx); err != nil {
+			require.Fail(t, "fail during "+test.Name+" scenario", err.Error())
+		}
 		require.NoError(t, sCtx.Reset())
 	}
 }

@@ -67,6 +67,12 @@ docker-spec-test:
 	@docker build -t ssv_tests -f tests.Dockerfile .
 	@docker run --rm ssv_tests make spec-test
 
+.PHONY: docker-integration-test
+docker-integration-test:
+	@echo "Running integration tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make integration-test
+
 #Build
 .PHONY: build
 build:

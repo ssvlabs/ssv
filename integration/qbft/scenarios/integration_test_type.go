@@ -63,7 +63,7 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
-func (sctx *scenarioContext) Reset() error {
+func (sctx *scenarioContext) Reset() error { //todo reset also round
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
 	for _, operatorID := range sctx.operatorIDs {
 		db, err := storage.GetStorageFactory(basedb.Options{
@@ -207,7 +207,7 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 					return err
 				}
 				if storedInstance == nil {
-					return fmt.Errorf("scenario: %s, stored instance is nil, operator ID %v, instance index %v", it.Name, operatorID, i)
+					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
 				}
 
 				jsonInstance, err := json.Marshal(storedInstance)
@@ -222,7 +222,7 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 			}
 		}
 		if len(errMap) > f { // (3F + 1) - (2F + 1) || committeeNum - quorum
-			return fmt.Errorf("errors validating instances, scenario %s:\n%+v", it.Name, errMap)
+			return fmt.Errorf("errors validating instances:\n%+v", errMap)
 		}
 	}
 	return nil
