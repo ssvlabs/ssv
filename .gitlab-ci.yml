@@ -27,6 +27,7 @@ Build stage Docker image:
   tags:
     - blox-infra-stage
   script:
+    - apk update
     - apk add git
     - echo `git describe --tags $(git rev-list --tags --max-count=1)`
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
