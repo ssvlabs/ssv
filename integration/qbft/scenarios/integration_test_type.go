@@ -188,7 +188,7 @@ func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error 
 
 	var lastDutyTime time.Duration
 
-	errMap := make(map[spectypes.OperatorID]error)
+	actualErrMap := sync.Map{}
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
@@ -201,19 +201,32 @@ func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error 
 
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
-				if startDutyErr := val.StartDuty(scheduledDuty.Duty); startDutyErr != nil {
-					errMap[val.Share.OperatorID] = startDutyErr
-				}
+				startDutyErr := val.StartDuty(scheduledDuty.Duty)
+				actualErrMap.Store(val.Share.OperatorID, startDutyErr)
 			})
 		}
 	}
 
 	<-time.After(lastDutyTime + (4 * time.Second))
 
+	err = nil
+	validateErr := func(k, v any) bool {
+		if v != nil {
+			err = fmt.Errorf("error start duty: %s", v)
+			return false //it means stop iterating, look to sync.Map.Range() documentation
+		}
+		return true
+	}
+	actualErrMap.Range(validateErr)
+	if err != nil {
+		return err
+	}
+
 	if it.InstanceValidators != nil {
 		if bytes.Equal(it.Identifier[:], bytes.Repeat([]byte{0}, len(it.Identifier))) {
 			return fmt.Errorf("indentifier is not set")
 		}
+		errMap := make(map[spectypes.OperatorID]error)
 		for operatorID, instanceValidators := range it.InstanceValidators {
 			for i, instanceValidator := range instanceValidators {
 				mid := spectypes.MessageIDFromBytes(it.Identifier[:])

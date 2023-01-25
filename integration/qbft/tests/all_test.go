@@ -22,9 +22,9 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if err := test.Run(f, []types.OperatorID{1, 2, 3, 4}); err != nil {
-			require.Fail(t, "fail during "+test.Name+" scenario", err.Error())
-		}
+		t.Run(t.Name(), func(t *testing.T) {
+			require.NoError(t, test.Run(f, []types.OperatorID{1, 2, 3, 4}))
+		})
 	}
 }
 
