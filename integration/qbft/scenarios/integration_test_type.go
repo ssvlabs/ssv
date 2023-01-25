@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -44,7 +43,6 @@ type IntegrationTest struct {
 	InitialInstances   map[spectypes.OperatorID][]*protocolstorage.StoredInstance
 	Duties             map[spectypes.OperatorID][]scheduledDuty
 	InstanceValidators map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error
-	StartDutyErrors    map[spectypes.OperatorID]error
 }
 
 type scheduledDuty struct {
@@ -55,6 +53,7 @@ type scheduledDuty struct {
 type scenarioContext struct {
 	ctx         context.Context
 	logger      *zap.Logger
+	ln          *p2pv1.LocalNet
 	operatorIDs []spectypes.OperatorID
 	nodes       map[spectypes.OperatorID]network.P2PNetwork      // 1 per operator, pass same to each instance
 	nodeKeys    map[spectypes.OperatorID]testing.NodeKeys        // 1 per operator, pass same to each instance
@@ -63,40 +62,61 @@ type scenarioContext struct {
 	dbs         map[spectypes.OperatorID]basedb.IDb              // 1 per operator, pass same to each instance
 }
 
-func (sctx *scenarioContext) Reset() error { //todo reset also round
-	dbs := make(map[spectypes.OperatorID]basedb.IDb)
-	for _, operatorID := range sctx.operatorIDs {
-		db, err := storage.GetStorageFactory(basedb.Options{
-			Type:   "badger-memory",
-			Path:   "",
-			Logger: zap.L(),
-		})
-		if err != nil {
-			return err
-		}
-
-		dbs[operatorID] = db
-	}
-
-	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
-	for _, operatorID := range sctx.operatorIDs {
-		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
-
-		storageMap := qbftstorage.NewStores()
-		storageMap.Add(spectypes.BNRoleAttester, store)
-		storageMap.Add(spectypes.BNRoleProposer, store)
-		storageMap.Add(spectypes.BNRoleAggregator, store)
-		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
-		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
-
-		stores[operatorID] = storageMap
-	}
-
-	sctx.stores = stores
-	sctx.dbs = dbs
-
-	return nil
-}
+//func (sctx *scenarioContext) Reset() error { //todo reset also round
+//	dbs := make(map[spectypes.OperatorID]basedb.IDb)
+//	for _, operatorID := range sctx.operatorIDs {
+//		db, err := storage.GetStorageFactory(basedb.Options{
+//			Type:   "badger-memory",
+//			Path:   "",
+//			Logger: zap.L(),
+//		})
+//		if err != nil {
+//			return err
+//		}
+//
+//		dbs[operatorID] = db
+//	}
+//
+//	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
+//	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
+//
+//	for i, operatorID := range sctx.operatorIDs {
+//		nodes[operatorID] = sctx.ln.Nodes[i]
+//		nodeKeys[operatorID] = sctx.ln.NodeKeys[i]
+//	}
+//
+//	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
+//	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
+//	for _, operatorID := range sctx.operatorIDs {
+//		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
+//
+//		storageMap := qbftstorage.NewStores()
+//		storageMap.Add(spectypes.BNRoleAttester, store)
+//		storageMap.Add(spectypes.BNRoleProposer, store)
+//		storageMap.Add(spectypes.BNRoleAggregator, store)
+//		storageMap.Add(spectypes.BNRoleSyncCommittee, store)
+//		storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, store)
+//
+//		stores[operatorID] = storageMap
+//		km := spectestingutils.NewTestingKeyManager()
+//		kms[operatorID] = km
+//		nodes[operatorID].RegisterHandlers(protocolp2p.WithHandler(
+//			protocolp2p.LastDecidedProtocol,
+//			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", operatorID)), storageMap, nodes[operatorID]),
+//		), protocolp2p.WithHandler(
+//			protocolp2p.DecidedHistoryProtocol,
+//			handlers.HistoryHandler(loggerFactory(fmt.Sprintf("history-handler-%d", operatorID)), storageMap, nodes[operatorID], 25),
+//		))
+//	}
+//
+//	sctx.nodes = nodes
+//	sctx.nodeKeys = nodeKeys
+//	sctx.stores = stores
+//	sctx.keyManagers = kms
+//	sctx.dbs = dbs
+//
+//	return nil
+//}
 
 func (sctx *scenarioContext) Close() error {
 	for _, n := range sctx.nodes {
@@ -108,8 +128,20 @@ func (sctx *scenarioContext) Close() error {
 	return nil
 }
 
-func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
+func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	sharesSet := getShareSet(f)
+
+	sCtx, err := Bootstrap(ctx, f, operatorIDs)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = sCtx.Close()
+		<-time.After(time.Second)
+	}()
+
 	validators, err := it.createValidators(sCtx, sharesSet)
 	if err != nil {
 		return fmt.Errorf("could not create share: %w", err)
@@ -156,7 +188,7 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 
 	var lastDutyTime time.Duration
 
-	actualErrMap := sync.Map{}
+	errMap := make(map[spectypes.OperatorID]error)
 	for _, val := range validators {
 		for _, scheduledDuty := range it.Duties[val.Share.OperatorID] {
 			val, scheduledDuty := val, scheduledDuty
@@ -169,32 +201,16 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 
 			time.AfterFunc(scheduledDuty.Delay, func() {
 				sCtx.logger.Info("starting duty")
-				startDutyErr := val.StartDuty(scheduledDuty.Duty)
-				actualErrMap.Store(val.Share.OperatorID, startDutyErr)
+				if startDutyErr := val.StartDuty(scheduledDuty.Duty); startDutyErr != nil {
+					errMap[val.Share.OperatorID] = startDutyErr
+				}
 			})
 		}
 	}
 
 	<-time.After(lastDutyTime + (4 * time.Second))
 
-	for operatorID, expectedErr := range it.StartDutyErrors {
-		if actualErr, ok := actualErrMap.Load(operatorID); !ok {
-			if expectedErr != nil {
-				return fmt.Errorf("expected an error")
-			}
-		} else {
-			aerr, ok := actualErr.(error)
-			if !ok && expectedErr != nil {
-				return fmt.Errorf("expected an error")
-			}
-			if !errors.Is(aerr, expectedErr) {
-				return fmt.Errorf("got error different from expected (expected %v): %w", expectedErr, actualErr.(error))
-			}
-		}
-	}
-
 	if it.InstanceValidators != nil {
-		errMap := make(map[spectypes.OperatorID]error)
 		if bytes.Equal(it.Identifier[:], bytes.Repeat([]byte{0}, len(it.Identifier))) {
 			return fmt.Errorf("indentifier is not set")
 		}
@@ -204,20 +220,32 @@ func (it *IntegrationTest) Run(f int, sCtx *scenarioContext) error {
 				storedInstance, err := sCtx.stores[operatorID].Get(mid.GetRoleType()).
 					GetHighestInstance(it.Identifier[:])
 				if err != nil {
-					return err
+					if _, ok := errMap[operatorID]; !ok {
+						errMap[operatorID] = err
+					}
+					continue
 				}
 				if storedInstance == nil {
-					return fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
+					if _, ok := errMap[operatorID]; !ok {
+						errMap[operatorID] = fmt.Errorf("stored instance is nil, operator ID %v, instance index %v", operatorID, i)
+					}
+					continue
 				}
 
 				jsonInstance, err := json.Marshal(storedInstance)
 				if err != nil {
-					return fmt.Errorf("encode stored instance: %w", err)
+					if _, ok := errMap[operatorID]; !ok {
+						errMap[operatorID] = fmt.Errorf("encode stored instance: %w", err)
+					}
+					continue
 				}
 				log.Printf("stored instance %d: %v\n", operatorID, string(jsonInstance))
 
 				if err := instanceValidator(storedInstance); err != nil {
-					errMap[operatorID] = fmt.Errorf("validate instance %d of operator ID %d: %w\n", i, operatorID, err)
+					if _, ok := errMap[operatorID]; !ok {
+						errMap[operatorID] = fmt.Errorf("validate instance %d of operator ID %d: %w\n", i, operatorID, err)
+					}
+					continue
 				}
 			}
 		}
@@ -443,6 +471,7 @@ func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (
 	return &scenarioContext{
 		ctx:         ctx,
 		logger:      logger,
+		ln:          ln,
 		operatorIDs: operatorIDs,
 		nodes:       nodes,
 		nodeKeys:    nodeKeys,

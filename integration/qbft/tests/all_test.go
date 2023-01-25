@@ -1,27 +1,15 @@
 package tests
 
 import (
-	"context"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
 	"github.com/stretchr/testify/require"
 	"testing"
-	"time"
 )
 
 func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
 	f := 1
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4})
-	require.NoError(t, err)
-	defer func() {
-		_ = sCtx.Close()
-		<-time.After(time.Second)
-	}()
 
 	tests := []*scenarios.IntegrationTest{
 		scenarios.RegularAttester(f),
@@ -34,10 +22,9 @@ func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if err := test.Run(f, sCtx); err != nil {
+		if err := test.Run(f, []types.OperatorID{1, 2, 3, 4}); err != nil {
 			require.Fail(t, "fail during "+test.Name+" scenario", err.Error())
 		}
-		require.NoError(t, sCtx.Reset())
 	}
 }
 
@@ -46,17 +33,9 @@ func Test_Integration_QBFTScenarios7Committee(t *testing.T) {
 
 	f := 2
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7}
 
-	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4, 5, 6, 7})
-	require.NoError(t, err)
-	defer func() {
-		_ = sCtx.Close()
-		<-time.After(time.Second)
-	}()
-
-	require.NoError(t, scenarios.RegularAttester(f).Run(f, sCtx))
+	require.NoError(t, scenarios.RegularAttester(f).Run(f, operatorIDs))
 }
 
 func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
@@ -64,15 +43,7 @@ func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
 
 	f := 3
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-	sCtx, err := scenarios.Bootstrap(ctx, f, []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10})
-	require.NoError(t, err)
-	defer func() {
-		_ = sCtx.Close()
-		<-time.After(time.Second)
-	}()
-
-	require.NoError(t, scenarios.RegularAttester(f).Run(f, sCtx))
+	require.NoError(t, scenarios.RegularAttester(f).Run(f, operatorIDs))
 }
