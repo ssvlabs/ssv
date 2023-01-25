@@ -49,14 +49,13 @@ type ibftStorage struct {
 
 // New create new ibft storage
 func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
-	ibft := &ibftStorage{
+	return &ibftStorage{
 		prefix:   []byte(prefix),
 		db:       db,
 		logger:   logger,
 		fork:     forksfactory.NewFork(forkVersion),
 		forkLock: &sync.RWMutex{},
 	}
-	return ibft
 }
 
 func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
@@ -67,15 +66,6 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	logger.Info("forking ibft storage")
 	i.fork = forksfactory.NewFork(forkVersion)
 	return nil
-}
-
-// SaveHighestInstance saves the StoredInstance for the highest instance.
-func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
-	value, err := instance.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode instance")
-	}
-	return i.save(value, highestInstanceKey, instance.State.ID)
 }
 
 // GetHighestInstance returns the StoredInstance for the highest instance.
@@ -94,17 +84,61 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	return ret, nil
 }
 
-// SaveInstance saves historical StoredInstance.
 func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
+	return i.saveInstance(instance, true, false)
+}
 
+func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
+	return i.saveInstance(instance, false, true)
+}
+
+func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.StoredInstance) error {
+	return i.saveInstance(instance, true, true)
+}
+
+func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
 	value, err := instance.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
 
-	return i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
+	if asHighest {
+		i.forkLock.RLock()
+		defer i.forkLock.RUnlock()
+
+		err = i.save(value, highestInstanceKey, instance.State.ID)
+		if err != nil {
+			return errors.Wrap(err, "could not save highest instance")
+		}
+	}
+
+	if toHistory {
+		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
+		if err != nil {
+			return errors.Wrap(err, "could not save historical instance")
+		}
+	}
+
+	return nil
+}
+
+// GetInstance returns historical StoredInstance for the given identifier and height.
+func (i *ibftStorage) GetInstance(identifier []byte, height specqbft.Height) (*qbftstorage.StoredInstance, error) {
+	i.forkLock.RLock()
+	defer i.forkLock.RUnlock()
+
+	val, found, err := i.get(instanceKey, identifier[:], uInt64ToByteSlice(uint64(height)))
+	if !found {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ret := &qbftstorage.StoredInstance{}
+	if err := ret.Decode(val); err != nil {
+		return nil, errors.Wrap(err, "could not decode instance")
+	}
+	return ret, nil
 }
 
 // GetInstancesInRange returns historical StoredInstance's in the given range.
@@ -115,18 +149,12 @@ func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Heigh
 	instances := make([]*qbftstorage.StoredInstance, 0)
 
 	for seq := from; seq <= to; seq++ {
-		val, found, err := i.get(instanceKey, identifier[:], uInt64ToByteSlice(uint64(seq)))
+		instance, err := i.GetInstance(identifier, seq)
 		if err != nil {
-			return instances, err
+			return nil, errors.Wrap(err, "failed to get instance")
 		}
-		if found {
-			instance := &qbftstorage.StoredInstance{}
-			if err := instance.Decode(val); err != nil {
-				return instances, errors.Wrap(err, "could not decode instance")
-			}
-
+		if instance != nil {
 			instances = append(instances, instance)
-			continue
 		}
 	}
 

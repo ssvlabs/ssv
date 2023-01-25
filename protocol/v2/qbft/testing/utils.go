@@ -2,6 +2,7 @@ package testing
 
 import (
 	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
@@ -75,11 +76,15 @@ func NewTestingQBFTController(
 	identifier []byte,
 	share *types.Share,
 	config qbft.IConfig,
+	fullNode bool,
 ) *controller.Controller {
-	return controller.NewController(
+	ctrl := controller.NewController(
 		identifier,
 		share,
 		types.PrimusTestnet,
 		config,
+		fullNode,
 	)
+	ctrl.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
+	return ctrl
 }

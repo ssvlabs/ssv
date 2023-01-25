@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/fee_recipient"

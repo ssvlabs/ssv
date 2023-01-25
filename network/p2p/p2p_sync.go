@@ -1,10 +1,13 @@
 package p2pv1
 
 import (
+	"context"
 	"encoding/hex"
-	"github.com/multiformats/go-multistream"
 	"math/rand"
 
+	"github.com/multiformats/go-multistream"
+
+	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -17,39 +20,43 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
-func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	go func() {
-		logger := n.logger.With(zap.String("publicKey", hex.EncodeToString(mid.GetPubKey())), zap.String("role", mid.GetRoleType().String()))
-		lastDecided, err := n.LastDecided(mid)
-		if err != nil {
-			logger.Debug("highest decided: sync failed", zap.Error(err))
-			return
-		}
-		if len(lastDecided) == 0 {
-			logger.Debug("highest decided: no messages were synced")
-			return
-		}
-		results := p2pprotocol.SyncResults(lastDecided)
-		results.ForEachSignedMessage(func(m *specqbft.SignedMessage) {
-			raw, err := m.Encode()
-			if err != nil {
-				logger.Warn("could not encode signed message")
-				return
-			}
-			n.msgRouter.Route(spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   mid,
-				Data:    raw,
-			})
-		})
-	}()
+// extremeLowPeerCount is the maximum number of peers considered as too low
+// when trying to get a subset of peers for a specific subnet.
+const extremelyLowPeerCount = 32
 
-	return nil
+func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
+	return n.syncer.SyncHighestDecided(context.Background(), mid, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(msg)
+	})
 }
 
-func (n *p2pNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, from specqbft.Height) {
-	//TODO implement me
-	//panic("implement me")
+func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.Height) {
+	if !n.cfg.FullNode {
+		return
+	}
+	if to > from {
+		n.logger.Warn("failed to sync decided by range: to is higher than from",
+			zap.Uint64("from", uint64(from)),
+			zap.Uint64("to", uint64(to)))
+		return
+	}
+
+	// TODO: this is a temporary solution to prevent syncing already decided heights.
+	// Example: Say we received a decided at height 99, and right after we received a decided at height 100
+	// before we could advance the controller's height. This would cause the controller to call SyncDecidedByRange.
+	// However, height 99 is already synced, so temporarily we reject such requests here.
+	// Note: This isn't ideal because sometimes you do want to sync gaps of 1.
+	const minGap = 2
+	if to-from < minGap {
+		return
+	}
+
+	err := n.syncer.SyncDecidedByRange(context.Background(), mid, from, to, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(msg)
+	})
+	if err != nil {
+		n.logger.Error("failed to sync decided by range", zap.Error(err))
+	}
 }
 
 // LastDecided fetches last decided from a random set of peers
@@ -195,8 +202,21 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
-		n.logger.Debug("could not find peers", zap.Any("topics", topics))
-		return nil, nil
+		// Pubsub's topic/peers association is unreliable when there are few peers.
+		// So if we have few peers, we should just filter all of them (regardless of topic.)
+		allPeers := n.host.Network().Peers()
+		if len(allPeers) <= extremelyLowPeerCount {
+			for _, peer := range allPeers {
+				if filter(peer) {
+					peers = append(peers, peer)
+				}
+			}
+		}
+
+		if len(peers) == 0 {
+			n.logger.Debug("could not find peers", zap.Any("topics", topics))
+			return nil, nil
+		}
 	}
 	if peerCount > len(peers) {
 		peerCount = len(peers)
@@ -221,11 +241,11 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 	if err != nil {
 		return nil, err
 	}
-	plogger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	logger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
 	msgID := n.fork.MsgID()
-	distinct := make(map[string]bool)
+	distinct := make(map[string]struct{})
 	for _, pid := range peers {
-		logger := plogger.With(zap.String("peer", pid.String()))
+		logger := logger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
 			if err != multistream.ErrNotSupported {
@@ -234,10 +254,10 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 			continue
 		}
 		mid := msgID(raw)
-		if distinct[mid] {
+		if _, ok := distinct[mid]; ok {
 			continue
 		}
-		distinct[mid] = true
+		distinct[mid] = struct{}{}
 		res, err := n.fork.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))

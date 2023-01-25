@@ -1,5 +1,6 @@
 global:
-  LogLevel: info
+  LogLevel: debug
+  DebugServices: ".*"
 
 db:
   Path: ./data/db
@@ -26,11 +27,14 @@ ssv:
   DutyLimit: 32
   ValidatorOptions:
     SignatureCollectionTimeout: 5s
+    FullNode: true
+    Exporter: true
 
-OperatorPrivateKey:
+GenerateOperatorPrivateKey: true
 
 bootnode:
   ExternalIP:
   PrivateKey:
 
 LocalEventsPath: # path to local events. used for running the node with custom local events
+WebSocketAPIPort: 16000
