@@ -95,14 +95,6 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	start := time.Now()
 	msgType := "<unknown>"
 	var signers []spectypes.OperatorID
-	defer func() {
-		v.logger.Debug(
-			fmt.Sprintf("done processing %s message", msgType),
-			zap.String("role", msg.MsgID.GetRoleType().String()),
-			zap.Any("signers", signers),
-			zap.Duration("took", time.Since(start)),
-		)
-	}()
 
 	msgTag := func() string {
 		signersStr := ""
@@ -112,21 +104,17 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 			}
 			signersStr += fmt.Sprint(signer)
 		}
-		return fmt.Sprintf("%s-%s", msgType, signersStr)
+		return fmt.Sprintf("%s-%s-%s", msg.MsgID.GetRoleType().String(), msgType, signersStr)
 	}
 	logStart := func() {
 		v.logger.Debug(
 			fmt.Sprintf("started processing %s message", msgType),
-			zap.String("role", msg.MsgID.GetRoleType().String()),
-			zap.Any("signers", signers),
 			zap.String("tag", msgTag()),
 		)
 	}
 	logEnd := func() {
 		v.logger.Debug(
 			fmt.Sprintf("done processing %s message", msgType),
-			zap.String("role", msg.MsgID.GetRoleType().String()),
-			zap.Any("signers", signers),
 			zap.String("tag", msgTag()),
 			zap.Duration("took", time.Since(start)),
 		)
@@ -157,6 +145,8 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 			msgType = "proposal"
 		case specqbft.RoundChangeMsgType:
 			msgType = "round-change"
+		default:
+			msgType = fmt.Sprintf("<unknown-%d>", signedMsg.Message.MsgType)
 		}
 		logStart()
 		defer logEnd()
