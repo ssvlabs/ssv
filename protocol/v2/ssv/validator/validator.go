@@ -3,6 +3,9 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
+	"time"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -89,6 +92,18 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
+	start := time.Now()
+	msgType := "<unknown>"
+	var signers []spectypes.OperatorID
+	defer func() {
+		v.logger.Debug(
+			fmt.Sprintf("got %s message", msgType),
+			zap.String("role", msg.MsgID.GetRoleType().String()),
+			zap.Any("signers", signers),
+			zap.Duration("processing_took", time.Since(start)),
+		)
+	}()
+
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
@@ -104,15 +119,29 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+		signers = signedMsg.Signers
+		switch signedMsg.Message.MsgType {
+		case specqbft.PrepareMsgType:
+			msgType = "prepare"
+		case specqbft.CommitMsgType:
+			msgType = "commit"
+		case specqbft.ProposalMsgType:
+			msgType = "proposal"
+		case specqbft.RoundChangeMsgType:
+			msgType = "round-change"
+		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+		signers = signedMsg.GetSigners()
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
+			msgType = "post-consensus"
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
+		msgType = "pre-consensus"
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(msg, dutyRunner)
