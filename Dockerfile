@@ -35,7 +35,8 @@ RUN go get -d -v ./...
 
 ARG APP_VERSION
 
-RUN echo "${APP_VERSION}"
+RUN echo "'${APP_VERSION}'"
+RUN echo `git rev-list --tags --max-count=1`
 RUN echo `git describe --tags $(git rev-list --tags --max-count=1)`
 
 RUN CGO_ENABLED=1 GOOS=linux go install -tags="blst_enabled,jemalloc,allocator" -ldflags "-X main.Version=`if [ ! -z "${APP_VERSION}" ]; then echo $APP_VERSION; else git describe --tags $(git rev-list --tags --max-count=1); fi` -linkmode external -extldflags \"-static -lm\"" ./cmd/ssvnode
