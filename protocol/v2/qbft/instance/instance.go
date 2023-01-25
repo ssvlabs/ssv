@@ -3,8 +3,6 @@ package instance
 import (
 	"encoding/hex"
 	"encoding/json"
-	"math"
-	"math/rand"
 	"sync"
 
 	logging "github.com/ipfs/go-log"
@@ -108,29 +106,32 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
 
-	i.logger.Debug("Instance.ProcessMessage", zap.Int("msg_type", int(msg.Message.MsgType)), zap.Int("rand", rand.Intn(math.MaxInt)), zap.Any("msg", msg))
-
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			i.logger.Debug("UponCommit:ProposalMsgType", zap.Bool("inst_decided", i.State.Decided), zap.Any("msg", msg))
+			i.logger.Debug("got proposal message",
+				zap.Uint64("round", uint64(i.State.Round)),
+				zap.Any("signer", msg.Signers))
 			return i.uponProposal(msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			i.logger.Debug("UponCommit:PrepareMsgType", zap.Bool("inst_decided", i.State.Decided), zap.Any("msg", msg))
+			i.logger.Debug("got prepare message",
+				zap.Uint64("round", uint64(i.State.Round)),
+				zap.Any("signer", msg.Signers))
 			return i.uponPrepare(msg, i.State.PrepareContainer, i.State.CommitContainer)
 		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(msg, i.State.CommitContainer)
-			i.logger.Debug("UponCommit:CommitMsgType", zap.Bool("inst_decided", i.State.Decided),
-				zap.Bool("ret_decided", decided), zap.Any("ret_decided_value", decidedValue),
-				zap.Any("ret_aggregated_commit", aggregatedCommit),
-				zap.Any("msg", msg))
+			i.logger.Debug("got commit message",
+				zap.Uint64("round", uint64(i.State.Round)),
+				zap.Any("signer", msg.Signers))
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			i.logger.Debug("UponCommit:RoundChangeMsgType", zap.Bool("inst_decided", i.State.Decided), zap.Any("msg", msg))
+			i.logger.Debug("got change round message",
+				zap.Uint64("round", uint64(i.State.Round)),
+				zap.Any("signer", msg.Signers))
 			return i.uponRoundChange(i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")

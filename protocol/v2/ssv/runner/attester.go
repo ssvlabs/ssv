@@ -118,6 +118,9 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+	r.logger.Debug("got partial signatures",
+		zap.Any("signer", signedMsg.Signer),
+		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
 
 	if !quorum {
 		return nil

@@ -37,7 +37,10 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
 
-		i.logger.Debug("got commit quorum", zap.Any("signers", agg.Signers))
+		i.logger.Debug("got commit quorum",
+			zap.Uint64("round", uint64(i.State.Round)),
+			zap.Any("commit-signers", signedCommit.Signers),
+			zap.Any("agg-signers", agg.Signers))
 
 		return true, msgCommitData.Data, agg, nil
 	}
