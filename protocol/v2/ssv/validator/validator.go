@@ -104,6 +104,34 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		)
 	}()
 
+	msgTag := func() string {
+		signersStr := ""
+		for i, signer := range signers {
+			if i != 0 {
+				signersStr += "_"
+			}
+			signersStr += fmt.Sprint(signer)
+		}
+		return fmt.Sprintf("%s-%s", msgType, signersStr)
+	}
+	logStart := func() {
+		v.logger.Debug(
+			fmt.Sprintf("started processing %s message", msgType),
+			zap.String("role", msg.MsgID.GetRoleType().String()),
+			zap.Any("signers", signers),
+			zap.String("tag", msgTag()),
+		)
+	}
+	logEnd := func() {
+		v.logger.Debug(
+			fmt.Sprintf("done processing %s message", msgType),
+			zap.String("role", msg.MsgID.GetRoleType().String()),
+			zap.Any("signers", signers),
+			zap.String("tag", msgTag()),
+			zap.Duration("took", time.Since(start)),
+		)
+	}
+
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
@@ -130,6 +158,8 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		case specqbft.RoundChangeMsgType:
 			msgType = "round-change"
 		}
+		logStart()
+		defer logEnd()
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
@@ -142,6 +172,8 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 			return dutyRunner.ProcessPostConsensus(signedMsg)
 		}
 		msgType = "pre-consensus"
+		logStart()
+		defer logEnd()
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(msg, dutyRunner)
