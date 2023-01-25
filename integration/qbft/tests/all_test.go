@@ -35,7 +35,15 @@ func Test_Integration_QBFTScenarios7Committee(t *testing.T) {
 
 	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7}
 
-	require.NoError(t, scenarios.RegularAttester(f).Run(f, operatorIDs))
+	tests := []*scenarios.IntegrationTest{
+		scenarios.RegularAttester(f),
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			require.NoError(t, test.Run(f, operatorIDs))
+		})
+	}
 }
 
 func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
@@ -45,5 +53,13 @@ func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
 
 	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 
-	require.NoError(t, scenarios.RegularAttester(f).Run(f, operatorIDs))
+	tests := []*scenarios.IntegrationTest{
+		scenarios.RegularAttester(f),
+	}
+
+	for _, test := range tests {
+		t.Run(test.Name, func(t *testing.T) {
+			require.NoError(t, test.Run(f, operatorIDs))
+		})
+	}
 }
