@@ -7,59 +7,24 @@ import (
 	"testing"
 )
 
-func Test_Integration_QBFTScenarios4Committee(t *testing.T) {
+func Test_Integration_QBFTScenarios(t *testing.T) {
 	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
-	f := 1
 
 	tests := []*scenarios.IntegrationTest{
-		scenarios.RoundChange(types.BNRoleAttester),
-		scenarios.RegularAttester(f),
 		scenarios.RegularAggregator(),
 		scenarios.RegularSyncCommittee(),
+		scenarios.RoundChange(types.BNRoleAttester),
+		scenarios.RegularAttester(1),
+		scenarios.RegularAttester(2),
+		scenarios.RegularAttester(3),
 		scenarios.RegularSyncCommitteeContribution(),
-		scenarios.RegularProposer(),
 		scenarios.F1Decided(types.BNRoleAttester),
+		scenarios.RegularProposer(),
 	}
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			require.NoError(t, test.Run(f, []types.OperatorID{1, 2, 3, 4}))
-		})
-	}
-}
-
-func Test_Integration_QBFTScenarios7Committee(t *testing.T) {
-	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
-
-	f := 2
-
-	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7}
-
-	tests := []*scenarios.IntegrationTest{
-		scenarios.RegularAttester(f),
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			require.NoError(t, test.Run(f, operatorIDs))
-		})
-	}
-}
-
-func Test_Integration_QBFTScenarios10Committee(t *testing.T) {
-	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
-
-	f := 3
-
-	operatorIDs := []types.OperatorID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
-
-	tests := []*scenarios.IntegrationTest{
-		scenarios.RegularAttester(f),
-	}
-
-	for _, test := range tests {
-		t.Run(test.Name, func(t *testing.T) {
-			require.NoError(t, test.Run(f, operatorIDs))
+			require.NoError(t, test.Run())
 		})
 	}
 }

@@ -13,7 +13,7 @@ import (
 // RegularAttester integration test.
 // TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
 func RegularAttester(f int) *IntegrationTest {
-	sharesSet := getShareSet(f)
+	sharesSet := getShareSetFromCommittee(getCommitteeNumFromF(f))
 	identifier := spectypes.NewMsgID(sharesSet.ValidatorPK.Serialize(), spectypes.BNRoleAttester)
 
 	operatorIDs := []spectypes.OperatorID{}
@@ -21,7 +21,7 @@ func RegularAttester(f int) *IntegrationTest {
 	instanceValidators := map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{}
 	startDutyErrors := map[spectypes.OperatorID]error{}
 
-	for i := 1; i <= getCommitteeNum(f); i++ {
+	for i := 1; i <= getCommitteeNumFromF(f); i++ {
 		currentOperatorId := spectypes.OperatorID(i)
 
 		operatorIDs = append(operatorIDs, currentOperatorId)
@@ -31,7 +31,7 @@ func RegularAttester(f int) *IntegrationTest {
 	}
 
 	return &IntegrationTest{
-		Name:               "regular attester",
+		Name:               fmt.Sprintf("regular attester %d committee", getCommitteeNumFromF(f)),
 		OperatorIDs:        operatorIDs,
 		Identifier:         identifier,
 		InitialInstances:   nil,

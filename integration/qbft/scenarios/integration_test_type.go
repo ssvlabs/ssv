@@ -74,12 +74,12 @@ func (sctx *scenarioContext) Close() error {
 	return nil
 }
 
-func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error {
+func (it *IntegrationTest) Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	sharesSet := getShareSet(f)
+	sharesSet := getShareSetFromCommittee(len(it.OperatorIDs))
 
-	sCtx, err := Bootstrap(ctx, f, operatorIDs)
+	sCtx, err := Bootstrap(ctx, it.OperatorIDs)
 	if err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (it *IntegrationTest) Run(f int, operatorIDs []spectypes.OperatorID) error 
 				}
 			}
 		}
-		if len(errMap) > f { // (3F + 1) - (2F + 1) || committeeNum - quorum
+		if len(errMap) > (len(it.OperatorIDs) / 3) { // (len(it.OperatorIDs) / 3) equals F equals (3F + 1) - (2F + 1) equals committeeNum - quorum
 			return fmt.Errorf("errors validating instances: %+v", errMap)
 		}
 	}
@@ -373,7 +373,7 @@ func validateSignedMessage(expected, actual *specqbft.SignedMessage) error {
 	return nil
 }
 
-func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (*scenarioContext, error) {
+func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenarioContext, error) {
 	logger := loggerFactory("Bootstrap")
 	logger.Info("creating resources")
 
@@ -393,17 +393,25 @@ func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (
 		dbs[operatorID] = db
 	}
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, getCommitteeNum(f), getQuorum(f), false)
-	if err != nil {
-		return nil, err
+	var localNet *p2pv1.LocalNet
+	for {
+		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, len(operatorIDs), getQuorumFromCommittee(len(operatorIDs)), false)
+		if err == p2pv1.CouldNotFindEnoughPeersErr {
+			continue
+		}
+		if err != p2pv1.CouldNotFindEnoughPeersErr && err != nil {
+			return nil, err
+		}
+		localNet = ln
+		break
 	}
 
 	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
 	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
 
 	for i, operatorID := range operatorIDs {
-		nodes[operatorID] = ln.Nodes[i]
-		nodeKeys[operatorID] = ln.NodeKeys[i]
+		nodes[operatorID] = localNet.Nodes[i]
+		nodeKeys[operatorID] = localNet.NodeKeys[i]
 	}
 
 	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
@@ -433,7 +441,7 @@ func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (
 	return &scenarioContext{
 		ctx:         ctx,
 		logger:      logger,
-		ln:          ln,
+		ln:          localNet,
 		operatorIDs: operatorIDs,
 		nodes:       nodes,
 		nodeKeys:    nodeKeys,
@@ -443,25 +451,25 @@ func Bootstrap(ctx context.Context, f int, operatorIDs []spectypes.OperatorID) (
 	}, nil
 }
 
-func getShareSet(f int) *spectestingutils.TestKeySet {
-	switch f {
-	case 1:
+func getShareSetFromCommittee(committee int) *spectestingutils.TestKeySet {
+	switch committee {
+	case 4:
 		return spectestingutils.Testing4SharesSet()
-	case 2:
+	case 7:
 		return spectestingutils.Testing7SharesSet()
-	case 3:
+	case 10:
 		return spectestingutils.Testing10SharesSet()
 	default:
-		panic("unsupported f")
+		panic("unsupported committee num")
 	}
 }
 
-func getCommitteeNum(f int) int {
+func getCommitteeNumFromF(f int) int {
 	return 3*f + 1
 }
 
-func getQuorum(f int) int {
-	return 2*f + 1
+func getQuorumFromCommittee(committee int) int {
+	return committee - (committee / 3)
 }
 
 func loggerFactory(s string) *zap.Logger {
