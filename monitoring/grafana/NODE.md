@@ -14,79 +14,55 @@ The dashboard consists of the following sections:
 
 ### Node Health
 
-Row 1:
-* Health Status (gauge bar, ssv+eth1+beacon) \
-  `ssv_node_status{}`, `ssv_eth1_status{}` and `ssv_beacon_status{}`
-* Execution client health (time-series, ok|syncing|disconnected) \
-  `ssv_eth1_status{}`
-* Consensus client health (time-series, ok|syncing|disconnected) \
-  `ssv_beacon_status{}`
-* SSV node health (time-series, up|error|down) \
-  `ssv_node_status{}`
+**Row 1:**
+* Health status for the ssv node: `ssv_node_status{}` (gauge)
+* Health status for eth1: `ssv_eth1_status{}` (gauge)
+* Health status for the beacon node: `ssv_beacon_status{}` (gauge)
 
-Row 2:
-* ETH1 last synced block (gauge) \
-  `ssv_eth1_last_synced_block{} = <block_number>`
-* ETH1 registry events (gauge bar with counters) \
-  `ssv_eth1_registry_event{name=<event_name>} = <counter>`
+
+* Health of the execution client: `ssv_eth1_status{}` (time-series)
+* Health of the consensus client: `ssv_beacon_status{}` (time-series)
+* Health of the SSV node: `ssv_node_status{}` (time-series)
+
+**Row 2:**
+* Last ETH1 synced block: `ssv_eth1_last_synced_block{} = <block_number>` (gauge)
+* ETH1 registry events: `ssv_eth1_registry_event{name=<event_name>} = <counter>` (gauge bar with counters)
 
 ### Process Health
 
-**NOTE:** K8S metrics should be exposed in order to show some panels in this section
+**Row 1:**
+* Go memory (stack and heap, in use / idle): `go_memstats_sys_bytes{}`, `go_memstats_heap_idle_bytes{}`, `go_memstats_heap_inuse_bytes{}`, `go_memstats_stack_inuse_bytes{}` (time-series)
+* Kubernetes memory usage (Ram): `container_memory_working_set_bytes{}` (time-series)
 
-Row 1:
-* Memory (golang) (time-series, GB scale, released|idle|in-use|heap-sys-bytes) \
-  `go_memstats_sys_bytes{}`, `go_memstats_heap_idle_bytes{}`, `go_memstats_heap_inuse_bytes{}`
-  and `go_memstats_stack_inuse_bytes{}`
-* Memory (k8s) (time-series, GB scale) \
-  `container_memory_working_set_bytes{}`
+**Row 2:**
+* Amount of running go routines: `go_goroutines{}` (time-series)
+* Kubernetes cpu usage: `container_cpu_usage_seconds_total{}` (time-series)
 
-Row 2:
-* Goroutines (time-series) \
-  `go_goroutines{}`
-* CPU (k8s) (time-series) \
-  `container_cpu_usage_seconds_total{}`
-
-Row 3:
-* Disk (k8s) (time-series, MB scale) \
-  `kubelet_volume_stats_used_bytes{}`
-* Network I/O (k8s) (time-series, rate) \
-  `container_network_receive_bytes_total{}` and `container_network_transmit_bytes_total{}`
+**Row 3:**
+* Kubernetes disk usage (HDD): `kubelet_volume_stats_used_bytes{}` (time-series)
+* Kubernetes network I/O usage: `container_network_receive_bytes_total{}`, `container_network_transmit_bytes_total{}` (time-series)
 
 ### Network Discovery
 
-Row 1:
-* Connected peers (time-series) \
-  `ssv_p2p_connected_peers{} = <gauge>`
-* Topic peers distribution (pubsub) (time-series) \
-  `ssv_p2p_pubsub_topic_peers{topic} = <gauge>`
+**Row 1:**
+* Amount of connected peers: `ssv_p2p_connected_peers{} = <gauge>` (time-series)
+* Distriubution of the topic peers (pubsub): `ssv_p2p_pubsub_topic_peers{topic} = <gauge>` (time-series)
 
-Row 2:
-* Subnet peers distribution (dht) (table) \
-  `ssv_p2p_dht_subnet_peers{topic} = <gauge>`
-* Peers discovery status (time-series) \
-  `ssv_p2p_dht_peers_found{} = <counter>` and `ssv_p2p_dht_peers_rejected{} = <counter>`
+**Row 2:**
+* Subnet peers count: `ssv_p2p_dht_subnet_peers{topic} = <gauge>` (table - subnet, subscribed, known peers, connected peers)
+* Peers discovery rates: `ssv_p2p_dht_peers_found{} = <counter>`, `ssv_p2p_dht_peers_rejected{} = <counter>` (time-series)
 
-Row 3:
-* Node info (table, version + operator-id + peer-id) \
-  **TODO** `ssv_p2p_node_info`
-* Version distribution (time-series, version + operator-id) \
-  **TODO** `ssv_p2p_node_info`
+**Row 3:**
+* Node info: `ssv_p2p_node_info` (table - index, name, node type, public key, peer id)
 
 ### Network Messaging
 
-Row 1:
-* Pubsub messages (time-series, rate, in|out|invalid) \
-  `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, and `ssv_p2p_pubsub_msg_invalid{topic}`
-* Outgoing pubsub messages (time-series, rate, labeled by topic) \
-  `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>`
-* Incoming pubsub messages (time-series, rate, labeled by topic) \
-  `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>`
+**Row 1:**
+* Amount of pubsub messages (in / out): `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, `ssv_p2p_pubsub_msg_invalid{topic}` (time-series)
+* Rate of outgoing topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>` (time-series)
+* Rate of incoming topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>` (time-series)
 
-Row 2:
-* Stream messages (time-series, in|out) \
-  `ssv_p2p_stream_msg{dir=out|in,protocol=*}`
-* Outgoing stream messages (time-series, rate, labeled by protocol) \
-  `ssv_p2p_stream_msg{dir=out,protocol=<protocol_name>} = <counter>`
-* Incoming stream messages (time-series, rate, labeled by protocol) \
-  `ssv_p2p_stream_msg{dir=in,protocol=<protocol_name>} = <counter>`
+**Row 2:**
+* **TO DO** Stream messages: `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (time-series)
+* **TO DO** Incoming stream messages: `ssv_p2p_stream_msg{dir=out,protocol=<protocol_name>} = <counter>` (time-series)
+* **TO DO** Outgoing stream messages: `ssv_p2p_stream_msg{dir=in,protocol=<protocol_name>} = <counter>` (time-series)
