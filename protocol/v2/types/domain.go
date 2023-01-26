@@ -11,7 +11,7 @@ var (
 	// NOTE: do not use directly unless you want to check domain,
 	//       i.e. use GetDefaultDomain() to get the current domain.
 	ShifuTestnet   = spectypes.DomainType("shifu")
-	ShifuTestnetV2 = spectypes.DomainType("shifuV2")
+	ShifuTestnetV2 = spectypes.DomainType("shifu-v2")
 )
 
 var (

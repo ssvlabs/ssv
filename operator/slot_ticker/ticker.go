@@ -55,6 +55,6 @@ func (t *ticker) listenToTicker(slots <-chan types.Slot) {
 	for currentSlot := range slots {
 		// notify current slot to channel
 		count := t.feed.Send(currentSlot)
-		t.logger.Info("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Int("subscribers", count))
+		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Int("subscribers", count))
 	}
 }

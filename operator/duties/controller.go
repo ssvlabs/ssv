@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -182,11 +183,14 @@ func (dc *dutyController) genesisEpochEffective() bool {
 	curSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	genSlot := dc.getEpochFirstSlot(dc.genesisEpoch)
 	if curSlot < genSlot {
-		if curSlot%dc.ethNetwork.SlotsPerEpoch() == 0 {
+		if dc.ethNetwork.IsFirstSlotOfEpoch(prysmtypes.Slot(curSlot)) {
 			// wait until genesis epoch starts
-			dc.logger.Debug("skipping epoch, lower than genesis",
+			curEpoch := uint64(dc.ethNetwork.EstimatedCurrentEpoch())
+			gnsTime := dc.ethNetwork.GetSlotStartTime(genSlot)
+			dc.logger.Info("duties paused, will resume duties on genesis epoch",
 				zap.Uint64("genesis_epoch", dc.genesisEpoch),
-				zap.Uint64("current_epoch", uint64(dc.ethNetwork.EstimatedCurrentEpoch())))
+				zap.Uint64("current_epoch", curEpoch),
+				zap.String("genesis_time", gnsTime.Format(time.UnixDate)))
 		}
 		return false
 	}
