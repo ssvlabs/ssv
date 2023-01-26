@@ -12,44 +12,36 @@ import (
 
 // RegularAttester integration test.
 // TODO: consider accepting scenario context - initialize if not passed - for scenario with multiple nodes on same network
-func RegularAttester() *IntegrationTest {
-	identifier := spectypes.NewMsgID(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectypes.BNRoleAttester)
+func RegularAttester(f int) *IntegrationTest {
+	sharesSet := getShareSetFromCommittee(getCommitteeNumFromF(f))
+	identifier := spectypes.NewMsgID(sharesSet.ValidatorPK.Serialize(), spectypes.BNRoleAttester)
+
+	operatorIDs := []spectypes.OperatorID{}
+	duties := map[spectypes.OperatorID][]scheduledDuty{}
+	instanceValidators := map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{}
+	startDutyErrors := map[spectypes.OperatorID]error{}
+
+	for i := 1; i <= getCommitteeNumFromF(f); i++ {
+		currentOperatorId := spectypes.OperatorID(i)
+
+		operatorIDs = append(operatorIDs, currentOperatorId)
+		duties[currentOperatorId] = []scheduledDuty{{Duty: createDuty(sharesSet.ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}}
+		instanceValidators[currentOperatorId] = []func(*protocolstorage.StoredInstance) error{regularAttesterInstanceValidator(currentOperatorId, identifier, sharesSet)}
+		startDutyErrors[currentOperatorId] = nil
+	}
 
 	return &IntegrationTest{
-		Name:             "regular attester",
-		OperatorIDs:      []spectypes.OperatorID{1, 2, 3, 4},
-		Identifier:       identifier,
-		InitialInstances: nil,
-		Duties: map[spectypes.OperatorID][]scheduledDuty{
-			1: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}},
-			2: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}},
-			3: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}},
-			4: {scheduledDuty{Duty: createDuty(spectestingutils.Testing4SharesSet().ValidatorPK.Serialize(), spectestingutils.TestingDutySlot, 1, spectypes.BNRoleAttester)}},
-		},
-		InstanceValidators: map[spectypes.OperatorID][]func(*protocolstorage.StoredInstance) error{
-			1: {
-				regularAttesterInstanceValidator(1, identifier),
-			},
-			2: {
-				regularAttesterInstanceValidator(2, identifier),
-			},
-			3: {
-				regularAttesterInstanceValidator(3, identifier),
-			},
-			4: {
-				regularAttesterInstanceValidator(4, identifier),
-			},
-		},
-		StartDutyErrors: map[spectypes.OperatorID]error{
-			1: nil,
-			2: nil,
-			3: nil,
-			4: nil,
-		},
+		Name:               fmt.Sprintf("regular attester %d committee", getCommitteeNumFromF(f)),
+		OperatorIDs:        operatorIDs,
+		Identifier:         identifier,
+		InitialInstances:   nil,
+		Duties:             duties,
+		InstanceValidators: instanceValidators,
+		StartDutyErrors:    startDutyErrors,
 	}
 }
 
-func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID) func(actual *protocolstorage.StoredInstance) error {
+func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifier spectypes.MessageID, sharesSet *spectestingutils.TestKeySet) func(actual *protocolstorage.StoredInstance) error {
 	return func(actual *protocolstorage.StoredInstance) error {
 		encodedConsensusData, err := spectestingutils.TestAttesterConsensusData.Encode()
 		if err != nil {
@@ -79,10 +71,42 @@ func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifie
 			return fmt.Errorf("encode commit data: %w", err)
 		}
 
+		expected := &protocolstorage.StoredInstance{
+			State: &specqbft.State{
+				Share:             testingShare(sharesSet, operatorID),
+				ID:                identifier[:],
+				Round:             specqbft.FirstRound,
+				Height:            specqbft.FirstHeight,
+				LastPreparedRound: specqbft.FirstRound,
+				LastPreparedValue: encodedConsensusData,
+				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(sharesSet.Shares[1], 1, &specqbft.Message{
+					MsgType:    specqbft.ProposalMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       proposalData,
+				}),
+				Decided:      true,
+				DecidedValue: encodedConsensusData,
+
+				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
+			},
+			DecidedMessage: &specqbft.SignedMessage{
+				Message: &specqbft.Message{
+					MsgType:    specqbft.CommitMsgType,
+					Height:     specqbft.FirstHeight,
+					Round:      specqbft.FirstRound,
+					Identifier: identifier[:],
+					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
+				},
+			},
+		}
+
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
+		signerID := specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound)
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(sharesSet.Shares[signerID], signerID, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     specqbft.FirstHeight,
 			Round:      specqbft.FirstRound,
@@ -134,37 +158,6 @@ func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifie
 		actual.State.ProposeContainer = nil
 		actual.State.PrepareContainer = nil
 		actual.State.CommitContainer = nil
-
-		expected := &protocolstorage.StoredInstance{
-			State: &specqbft.State{
-				Share:             testingShare(spectestingutils.Testing4SharesSet(), operatorID),
-				ID:                identifier[:],
-				Round:             specqbft.FirstRound,
-				Height:            specqbft.FirstHeight,
-				LastPreparedRound: specqbft.FirstRound,
-				LastPreparedValue: encodedConsensusData,
-				ProposalAcceptedForCurrentRound: spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], 1, &specqbft.Message{
-					MsgType:    specqbft.ProposalMsgType,
-					Height:     specqbft.FirstHeight,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       proposalData,
-				}),
-				Decided:      true,
-				DecidedValue: encodedConsensusData,
-
-				RoundChangeContainer: &specqbft.MsgContainer{Msgs: map[specqbft.Round][]*specqbft.SignedMessage{}},
-			},
-			DecidedMessage: &specqbft.SignedMessage{
-				Message: &specqbft.Message{
-					MsgType:    specqbft.CommitMsgType,
-					Height:     specqbft.FirstHeight,
-					Round:      specqbft.FirstRound,
-					Identifier: identifier[:],
-					Data:       spectestingutils.PrepareDataBytes(encodedConsensusData),
-				},
-			},
-		}
 
 		if err := validateByRoot(expected.State, actual.State); err != nil {
 			return err
