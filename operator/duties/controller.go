@@ -179,11 +179,15 @@ func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 }
 
 func (dc *dutyController) genesisEpochEffective() bool {
-	if dc.ethNetwork.EstimatedCurrentEpoch() < prysmtypes.Epoch(dc.genesisEpoch) {
-		// wait until genesis epoch starts
-		dc.logger.Debug("skipping slot, lower than genesis",
-			zap.Uint64("genesis_slot", dc.getEpochFirstSlot(dc.genesisEpoch)),
-			zap.Uint64("current_slot", uint64(dc.ethNetwork.EstimatedCurrentSlot())))
+	curSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
+	genSlot := dc.getEpochFirstSlot(dc.genesisEpoch)
+	if curSlot < genSlot {
+		if curSlot%dc.ethNetwork.SlotsPerEpoch() == 0 {
+			// wait until genesis epoch starts
+			dc.logger.Debug("skipping epoch, lower than genesis",
+				zap.Uint64("genesis_epoch", dc.genesisEpoch),
+				zap.Uint64("current_epoch", uint64(dc.ethNetwork.EstimatedCurrentEpoch())))
+		}
 		return false
 	}
 
