@@ -50,3 +50,14 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 	}
 	logger.Debug(name + " is healthy")
 }
+
+// ReportSSVNodeHealthiness reports SSV node healthiness.
+func ReportSSVNodeHealthiness(healthy bool) {
+	if healthy {
+		log.Println("reporting ssv node status ok (ReportSSVNodeHealthiness)")
+		metricsNodeStatus.Set(float64(statusHealthy))
+	} else {
+		log.Println("reporting ssv node status not ok (ReportSSVNodeHealthiness)")
+		metricsNodeStatus.Set(float64(statusNotHealthy))
+	}
+}
