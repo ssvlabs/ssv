@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"go.uber.org/zap"
+	"log"
 	"time"
 )
 
@@ -19,6 +20,14 @@ func ProcessAgents(agents []HealthCheckAgent) []string {
 		if agentErrs := agent.HealthCheck(); len(agentErrs) > 0 {
 			errs = append(errs, agentErrs...)
 		}
+	}
+
+	if len(errs) > 0 {
+		log.Println("reporting ssv node status not ok (ProcessAgents)")
+		metricsNodeStatus.Set(float64(statusNotHealthy))
+	} else {
+		log.Println("reporting ssv node status ok (ProcessAgents)")
+		metricsNodeStatus.Set(float64(statusHealthy))
 	}
 
 	return errs
