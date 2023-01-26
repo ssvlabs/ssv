@@ -172,8 +172,9 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	pkHex, beaconRole := hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()
 	metricsPostConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		WithLabelValues(pkHex, beaconRole).
 		Observe(time.Since(r.postConsensusStart).Seconds())
 
 	for _, root := range roots {
@@ -192,15 +193,15 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		blockSubmissionStart := time.Now()
 
 		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
-			metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).Inc()
+			metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 		}
 
-		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		metricsBeaconSubmissionDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(blockSubmissionStart).Seconds())
-		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
+		metricsDutyFullFlowDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(r.consensusStart).Seconds())
-		metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).Inc()
+		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
 
 		r.logger.Info("successfully proposed block!")
 	}

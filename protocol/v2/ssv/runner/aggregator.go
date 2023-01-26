@@ -169,8 +169,9 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		return nil
 	}
 
+	pkHex, beaconRole := hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()
 	metricsPostConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		WithLabelValues(pkHex, beaconRole).
 		Observe(time.Since(r.postConsensusStart).Seconds())
 
 	for _, root := range roots {
@@ -189,15 +190,15 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		proofSubmissionStart := time.Now()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).Inc()
+			metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		metricsBeaconSubmissionDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(proofSubmissionStart).Seconds())
-		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
+		metricsDutyFullFlowDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(r.consensusStart).Seconds())
-		metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).Inc()
+		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
 
 		r.logger.Debug("successful submitted aggregate")
 	}

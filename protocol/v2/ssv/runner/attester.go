@@ -131,8 +131,9 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	pkHex, beaconRole := hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()
 	metricsPostConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
+		WithLabelValues(pkHex, beaconRole).
 		Observe(time.Since(r.postConsensusStart).Seconds())
 
 	for _, root := range roots {
@@ -161,17 +162,17 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
-			metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).Inc()
+			metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
 			r.logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
+		metricsBeaconSubmissionDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(attestationSubmissionStart).Seconds())
-		metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).
+		metricsDutyFullFlowDuration.WithLabelValues(pkHex, beaconRole).
 			Observe(time.Since(r.consensusStart).Seconds())
-		metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAttester.String()).Inc()
+		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
 
 		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
 	}
