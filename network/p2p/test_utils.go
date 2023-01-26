@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ import (
 
 	"go.uber.org/zap"
 )
+
+var CouldNotFindEnoughPeersErr = errors.New("could not find enough peers")
 
 // HostProvider holds host instance
 type HostProvider interface {
@@ -72,6 +75,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 		return nil, err
 	}
 	var wg sync.WaitGroup
+	var peersErr error
 	for i, node := range ln.Nodes {
 		wg.Add(1)
 		go func(node network.P2PNetwork, i int) {
@@ -83,7 +87,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*15)
+				ctx, cancel := context.WithTimeout(pctx, 15*time.Second)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -91,7 +95,8 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					time.Sleep(time.Millisecond * 100)
 				}
 				if ctx.Err() != nil {
-					logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+					logger.Warn("could not find enough peers, trying again", zap.Int("n", n), zap.Int("found", len(peers)))
+					peersErr = CouldNotFindEnoughPeersErr
 					return
 				}
 				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
@@ -101,7 +106,7 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 
 	wg.Wait()
 
-	return ln, nil
+	return ln, peersErr
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance

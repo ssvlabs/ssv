@@ -124,7 +124,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 			Data:       proposalData,
 		})
 		if err := validateSignedMessage(expectedProposeMsg, actual.State.ProposeContainer.Msgs[specqbft.FirstRound][0]); err != nil { // 0 - means expected always shall be on 0 index
-			return err
+			return fmt.Errorf("propose msgs not matching: %w", err)
 		}
 
 		// sometimes there may be no prepare quorum TODO add quorum check after fixes
@@ -224,7 +224,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		}
 
 		if err := validateByRoot(expectedDecidedMessage, actual.DecidedMessage); err != nil {
-			return err
+			return fmt.Errorf("decided msgs not matching: %w", err)
 		}
 
 		return nil
