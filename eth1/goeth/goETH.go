@@ -3,7 +3,6 @@ package goeth
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"strings"
 	"time"
@@ -114,18 +113,15 @@ func (ec *eth1Client) HealthCheck() []string {
 	defer cancel()
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
-		log.Println("reporting eth1 status unknown")
 		reportNodeStatus(statusUnknown)
 		return []string{"could not get eth1 node sync progress"}
 	}
 	if sp != nil {
-		log.Println("reporting eth1 status syncing")
 		reportNodeStatus(statusSyncing)
 		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
 			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
-	log.Println("reporting eth1 status ok")
 	reportNodeStatus(statusOK)
 
 	return []string{}
