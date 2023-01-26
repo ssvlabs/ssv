@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -38,8 +39,12 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			)
 			return
 		}
-		//v.logMsg(decodedMsg, "adding to q", zap.Any("type", decodedMsg.SSVMessage.MsgType))
+		start := time.Now()
 		q.Q.Push(decodedMsg)
+		v.logMsg(decodedMsg, "pushed msg to queue",
+			zap.String("pubKey", hex.EncodeToString(msg.MsgID.GetPubKey())),
+			zap.String("role", msg.MsgID.GetRoleType().String()),
+			zap.Duration("duration", time.Since(start)))
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}

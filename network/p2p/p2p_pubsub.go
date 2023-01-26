@@ -206,7 +206,10 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 
 // // withIncomingMsgFields adds fields to the given logger
 func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
+	logger = logger.With(
+		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
+		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
+	)
 	if ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
 		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
 		from, err := peer.IDFromBytes(msg.Message.GetFrom())
