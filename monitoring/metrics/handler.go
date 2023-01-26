@@ -136,6 +136,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
 	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+		log.Println("reporting ssv node status not ok")
 		metricsNodeStatus.Set(float64(statusNotHealthy))
 		result := map[string][]string{
 			"errors": errs,
@@ -146,6 +147,7 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 			http.Error(res, string(raw), http.StatusInternalServerError)
 		}
 	} else {
+		log.Println("reporting ssv node status ok")
 		metricsNodeStatus.Set(float64(statusHealthy))
 		if _, err := fmt.Fprintln(res, ""); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
