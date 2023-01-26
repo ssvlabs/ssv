@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1674671400984,
+  "iteration": 1674747316914,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -530,138 +530,12 @@
       "type": "timeseries"
     },
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "mappings": [],
-          "noValue": "No data",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 4,
-        "x": 0,
-        "y": 6
-      },
-      "id": 50,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv_eth1_last_synced_block{instance=~\"$instance.*\"}",
-          "interval": "",
-          "legendFormat": "{{pubKey}}",
-          "refId": "A"
-        }
-      ],
-      "title": "ETH1 last synced block",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "fixed"
-          },
-          "mappings": [],
-          "noValue": "No data",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 4,
-        "x": 4,
-        "y": 6
-      },
-      "id": 55,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv_eth1_registry_events{instance=~\"$instance.*\"}",
-          "interval": "",
-          "legendFormat": "{{pubKey}}",
-          "refId": "A"
-        }
-      ],
-      "title": "ETH1 registry events (TODO: implement, just a placeholder now)",
-      "type": "stat"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 6
       },
       "id": 18,
       "panels": [],
@@ -724,7 +598,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 14
+        "y": 7
       },
       "id": 14,
       "options": {
@@ -797,7 +671,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 14
+        "y": 7
       },
       "hiddenSeries": false,
       "id": 16,
@@ -912,7 +786,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 24
+        "y": 17
       },
       "hiddenSeries": false,
       "id": 22,
@@ -1009,7 +883,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 24
+        "y": 17
       },
       "height": "",
       "hiddenSeries": false,
@@ -1149,7 +1023,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 34
+        "y": 27
       },
       "id": 26,
       "options": {
@@ -1251,7 +1125,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 34
+        "y": 27
       },
       "id": 28,
       "links": [],
@@ -1313,7 +1187,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 35
       },
       "id": 12,
       "panels": [],
@@ -1356,7 +1230,7 @@
         "h": 11,
         "w": 4,
         "x": 0,
-        "y": 43
+        "y": 36
       },
       "id": 52,
       "options": {
@@ -1473,7 +1347,7 @@
         "h": 11,
         "w": 20,
         "x": 4,
-        "y": 43
+        "y": 36
       },
       "id": 57,
       "options": {
@@ -1597,7 +1471,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 54
+        "y": 47
       },
       "id": 54,
       "options": {
@@ -1775,7 +1649,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 54
+        "y": 47
       },
       "id": 59,
       "options": {
@@ -1930,7 +1804,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 56
       },
       "id": 40,
       "options": {
@@ -2042,7 +1916,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 69
       },
       "id": 2,
       "panels": [],
@@ -2109,7 +1983,7 @@
         "h": 12,
         "w": 8,
         "x": 0,
-        "y": 77
+        "y": 70
       },
       "id": 32,
       "options": {
@@ -2215,7 +2089,7 @@
         "h": 12,
         "w": 8,
         "x": 8,
-        "y": 77
+        "y": 70
       },
       "id": 36,
       "options": {
@@ -2309,7 +2183,7 @@
         "h": 12,
         "w": 8,
         "x": 16,
-        "y": 77
+        "y": 70
       },
       "id": 34,
       "options": {
@@ -2398,7 +2272,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 89
+        "y": 82
       },
       "id": 61,
       "options": {
@@ -2567,7 +2441,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 89
+        "y": 82
       },
       "id": 63,
       "options": {
@@ -2793,6 +2667,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 24,
+  "version": 25,
   "weekStart": ""
 }
