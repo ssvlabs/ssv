@@ -15,9 +15,9 @@ The dashboard consists of the following sections:
 ### Node Health
 
 **Row 1:**
-* Health status for the ssv node, eth1 and the beacon node: `ssv_node_status{}` (gauge)
-* Health status for eth1: `ssv_eth1_status{}` (gauge)
-* Health status for the beacon node: `ssv_beacon_status{}` (gauge)
+* Health status for the ssv node (up | error | down): `ssv_node_status{}` (gauge)
+* Health status for eth1 (ok | syncing | disconnected): `ssv_eth1_status{}` (gauge)
+* Health status for the beacon node (ok | syncing | disconnected): `ssv_beacon_status{}` (gauge)
 
 
 * Health of the execution client: `ssv_eth1_status{}` (time-series)
