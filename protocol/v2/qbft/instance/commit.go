@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"sort"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -68,6 +69,10 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 			}
 		}
 	}
+	// TODO: REWRITE THIS!
+	sort.Slice(ret.Signers, func(i, j int) bool {
+		return ret.Signers[i] < ret.Signers[j]
+	})
 	return ret, nil
 }
 

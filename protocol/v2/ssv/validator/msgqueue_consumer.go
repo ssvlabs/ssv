@@ -96,6 +96,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
+		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message and handle it.
 		msg := q.Q.Pop(queue.NewMessagePrioritizer(&state))
