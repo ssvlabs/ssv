@@ -15,7 +15,7 @@ The dashboard consists of the following sections:
 ### Node Health
 
 **Row 1:**
-* Health status for the ssv node: `ssv_node_status{}` (gauge)
+* Health status for the ssv node, eth1 and the beacon node: `ssv_node_status{}` (gauge)
 * Health status for eth1: `ssv_eth1_status{}` (gauge)
 * Health status for the beacon node: `ssv_beacon_status{}` (gauge)
 
@@ -31,7 +31,7 @@ The dashboard consists of the following sections:
 ### Process Health
 
 **Row 1:**
-* Go memory (stack and heap, in use / idle): `go_memstats_sys_bytes{}`, `go_memstats_heap_idle_bytes{}`, `go_memstats_heap_inuse_bytes{}`, `go_memstats_stack_inuse_bytes{}` (time-series)
+* Go memory (released | idle | in-use | heap-sys-bytes): `go_memstats_sys_bytes{}`, `go_memstats_heap_idle_bytes{}`, `go_memstats_heap_inuse_bytes{}`, `go_memstats_stack_inuse_bytes{}` (time-series)
 * Kubernetes memory usage (Ram): `container_memory_working_set_bytes{}` (time-series)
 
 **Row 2:**
@@ -53,16 +53,16 @@ The dashboard consists of the following sections:
 * Peers discovery rates: `ssv_p2p_dht_peers_found{} = <counter>`, `ssv_p2p_dht_peers_rejected{} = <counter>` (time-series)
 
 **Row 3:**
-* Node info: `ssv_p2p_node_info` (table - index, name, node type, public key, peer id)
+* Node info: `ssv_p2p_node_info` (table - index, name, node version, node type, public key, peer id)
 
 ### Network Messaging
 
 **Row 1:**
-* Amount of pubsub messages (in / out): `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, `ssv_p2p_pubsub_msg_invalid{topic}` (time-series)
+* Amount of pubsub messages (in / out / invalid): `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, `ssv_p2p_pubsub_msg_invalid{topic}` (time-series)
 * Rate of outgoing topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>` (time-series)
 * Rate of incoming topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>` (time-series)
 
 **Row 2:**
-* **TO DO** Stream messages: `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (time-series)
-* **TO DO** Incoming stream messages: `ssv_p2p_stream_msg{dir=out,protocol=<protocol_name>} = <counter>` (time-series)
-* **TO DO** Outgoing stream messages: `ssv_p2p_stream_msg{dir=in,protocol=<protocol_name>} = <counter>` (time-series)
+* Stream messages: `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (time-series)
+* Outgoing stream messages: `ssv_p2p_stream_msg{dir=out,protocol=<protocol_name>} = <counter>` (time-series)
+* Incoming stream messages: `ssv_p2p_stream_msg{dir=in,protocol=<protocol_name>} = <counter>` (time-series)
