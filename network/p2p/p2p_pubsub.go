@@ -166,6 +166,14 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 	delete(n.activeValidators, pkHex)
 }
 
+var tmpLogger = func() *zap.Logger {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+	return logger
+}()
+
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
 	if n.msgRouter == nil {
@@ -187,7 +195,7 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		return errors.New("message was not decoded")
 	}
 
-	logger := withIncomingMsgFields(n.logger, msg, ssvMsg)
+	logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
 	logger.Debug("incoming pubsub message", zap.String("topic", topic),
 		zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
 

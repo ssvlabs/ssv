@@ -93,6 +93,7 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	start := time.Now()
+	p2pID := msg.GetID().String()
 	msgType := "<unknown>"
 	var signers []spectypes.OperatorID
 
@@ -109,12 +110,14 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	logStart := func() {
 		v.logger.Debug(
 			fmt.Sprintf("started processing %s message", msgType),
+			zap.String("p2p_id", p2pID),
 			zap.String("tag", msgTag()),
 		)
 	}
 	logEnd := func() {
 		v.logger.Debug(
 			fmt.Sprintf("done processing %s message", msgType),
+			zap.String("p2p_id", p2pID),
 			zap.String("tag", msgTag()),
 			zap.Duration("took", time.Since(start)),
 		)
