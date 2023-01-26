@@ -396,10 +396,14 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 	var localNet *p2pv1.LocalNet
 	for {
 		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, len(operatorIDs), getQuorumFromCommittee(len(operatorIDs)), false)
-		if err == p2pv1.CouldNotFindEnoughPeersErr {
+		switch err {
+		case p2pv1.CouldNotFindEnoughPeersErr:
+			for _, n := range ln.Nodes {
+				_ = n.Close()
+			}
 			continue
-		}
-		if err != p2pv1.CouldNotFindEnoughPeersErr && err != nil {
+		case nil:
+		default:
 			return nil, err
 		}
 		localNet = ln

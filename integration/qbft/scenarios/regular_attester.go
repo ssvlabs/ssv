@@ -105,7 +105,8 @@ func regularAttesterInstanceValidator(operatorID spectypes.OperatorID, identifie
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(sharesSet.Shares[1], specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound), &specqbft.Message{
+		signerID := specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound)
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(sharesSet.Shares[signerID], signerID, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     specqbft.FirstHeight,
 			Round:      specqbft.FirstRound,

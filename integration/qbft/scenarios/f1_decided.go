@@ -150,7 +150,8 @@ func f1DecidedConsensusInstanceValidator(consensusData []byte, operatorID specty
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[2], specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound), &specqbft.Message{
+		signerID := specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound)
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[signerID], signerID, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     1,
 			Round:      specqbft.FirstRound,

@@ -113,7 +113,8 @@ func regularProposerInstanceValidator(operatorID spectypes.OperatorID, identifie
 		if len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]) != 1 {
 			return fmt.Errorf("propose container expected length = 1, actual = %d", len(actual.State.ProposeContainer.Msgs[specqbft.FirstRound]))
 		}
-		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[1], specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound), &specqbft.Message{
+		signerID := specqbft.RoundRobinProposer(expected.State, specqbft.FirstRound)
+		expectedProposeMsg := spectestingutils.SignQBFTMsg(spectestingutils.Testing4SharesSet().Shares[signerID], signerID, &specqbft.Message{
 			MsgType:    specqbft.ProposalMsgType,
 			Height:     specqbft.FirstHeight,
 			Round:      specqbft.FirstRound,
