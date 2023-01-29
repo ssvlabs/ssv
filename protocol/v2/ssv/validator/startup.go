@@ -20,6 +20,7 @@ func (v *Validator) Start() error {
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
+				v.logger.Warn("share is missing")
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
@@ -42,7 +43,9 @@ func (v *Validator) Start() error {
 func (v *Validator) Stop() error {
 	v.cancel()
 	// clear the msg q
+	v.mu.Lock()
 	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+	v.mu.Unlock()
 
 	return nil
 }

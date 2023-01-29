@@ -158,9 +158,9 @@ func BaseCommitValidation(
 	}
 
 	// verify signature
-	if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
-	}
+	//if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+	//	return errors.Wrap(err, "msg signature invalid")
+	//}
 
 	return nil
 }

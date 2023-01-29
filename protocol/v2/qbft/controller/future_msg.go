@@ -17,6 +17,7 @@ func (c *Controller) UponFutureMsg(msg *specqbft.SignedMessage) (*specqbft.Signe
 	}
 	if c.f1SyncTrigger() {
 		c.logger.Debug("triggered f+1 sync",
+			zap.Any("operator-id", c.Share.OperatorID),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Uint64("msg_height", uint64(msg.Message.Height)))
 		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
