@@ -82,6 +82,13 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 		return nil
 	}
 
+	msgID := spectypes.MessageIDFromBytes(signedMsg.Message.Identifier)
+	r.logger.Debug("create post consensus msg",
+		zap.String("pubKey", hex.EncodeToString(msgID.GetPubKey())),
+		zap.String("role", msgID.GetRoleType().String()),
+		zap.Int("slot", int(decidedValue.Duty.Slot)),
+		zap.Any("attData", decidedValue.AttestationData.String()))
+
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
