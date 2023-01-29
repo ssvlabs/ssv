@@ -56,7 +56,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(msgID, handler, time.Millisecond*5)
+		err := v.ConsumeQueue(msgID, handler, time.Millisecond*15)
 		if err != nil {
 			v.logger.Debug("failed consuming queue", zap.Error(err))
 		}
