@@ -393,29 +393,17 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 		dbs[operatorID] = db
 	}
 
-	var localNet *p2pv1.LocalNet
-	for {
-		ln, err := p2pv1.CreateAndStartLocalNet(ctx, loggerFactory, protocolforks.GenesisForkVersion, len(operatorIDs), getQuorumFromCommittee(len(operatorIDs)), false)
-		switch err {
-		case p2pv1.CouldNotFindEnoughPeersErr:
-			for _, n := range ln.Nodes {
-				_ = n.Close()
-			}
-			continue
-		case nil:
-		default:
-			return nil, err
-		}
-		localNet = ln
-		break
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, len(operatorIDs), getQuorumFromCommittee(len(operatorIDs)), false)
+	if err != nil {
+		return nil, err
 	}
 
 	nodes := make(map[spectypes.OperatorID]network.P2PNetwork)
 	nodeKeys := make(map[spectypes.OperatorID]testing.NodeKeys)
 
 	for i, operatorID := range operatorIDs {
-		nodes[operatorID] = localNet.Nodes[i]
-		nodeKeys[operatorID] = localNet.NodeKeys[i]
+		nodes[operatorID] = ln.Nodes[i]
+		nodeKeys[operatorID] = ln.NodeKeys[i]
 	}
 
 	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
@@ -445,7 +433,7 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 	return &scenarioContext{
 		ctx:         ctx,
 		logger:      logger,
-		ln:          localNet,
+		ln:          ln,
 		operatorIDs: operatorIDs,
 		nodes:       nodes,
 		nodeKeys:    nodeKeys,
