@@ -174,6 +174,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
+			zap.Int("round", int(r.GetState().RunningInstance.State.Round)),
 			zap.Duration("consensus_time", consensusTime))
 	}
 	r.GetState().Finished = true
