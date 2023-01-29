@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
+	"time"
 
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
@@ -85,6 +86,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 	go func() {
+		start := time.Now()
 		byts, err := msg.Encode()
 		if err != nil {
 			i.logger.Debug("failed to broadcast message: failed to encode", zap.Error(err))
@@ -103,6 +105,12 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 		if err != nil {
 			i.logger.Debug("failed to broadcast message", zap.Error(err))
 		}
+
+		i.logger.Debug("broadcast msg is done",
+			zap.String("pubKey", hex.EncodeToString(msgID.GetPubKey())),
+			zap.String("role", msgID.GetRoleType().String()),
+			zap.Int("msg type", int(msg.Message.MsgType)),
+			zap.Duration("duration", time.Since(start)))
 	}()
 
 	return nil

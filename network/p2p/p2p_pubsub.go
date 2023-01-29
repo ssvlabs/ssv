@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -61,7 +60,6 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
-
 	return nil
 }
 
