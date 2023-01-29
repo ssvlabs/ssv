@@ -28,7 +28,8 @@ type Instance struct {
 	startOnce   sync.Once
 	StartValue  []byte
 
-	logger *zap.Logger
+	StartTime time.Time
+	logger    *zap.Logger
 }
 
 func NewInstance(
@@ -66,6 +67,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
+		i.StartTime = time.Now()
 		i.logger.Debug("starting QBFT instance")
 
 		// propose if this node is the proposer
