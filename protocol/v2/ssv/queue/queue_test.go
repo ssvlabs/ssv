@@ -3,6 +3,7 @@ package queue
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
@@ -38,6 +39,40 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 	// Pop nil.
 	popped = queue.Pop(NewMessagePrioritizer(mockState))
 	require.Nil(t, popped)
+}
+
+func TestPriorityQueueWaitAndPop(t *testing.T) {
+	mockState := &State{
+		HasRunningInstance: true,
+		Height:             100,
+		Slot:               64,
+		Quorum:             4,
+	}
+
+	queue := New()
+	require.True(t, queue.IsEmpty())
+
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	// Push 1 message.
+	queue.Push(msg)
+
+	// WaitAndPop immediately.
+	popped := queue.WaitAndPop(NewMessagePrioritizer(mockState))
+	require.NotNil(t, popped)
+	require.Equal(t, msg, popped)
+
+	// Push 1 message in a goroutine.
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		queue.Push(msg)
+	}()
+
+	// WaitAndPop should wait for the message to be pushed.
+	popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
+	require.NotNil(t, popped)
+	require.Equal(t, msg, popped)
 }
 
 // TestPriorityQueueOrder tests that the queue returns the messages in the correct order.

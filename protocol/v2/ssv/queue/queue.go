@@ -1,9 +1,11 @@
 package queue
 
 import (
-	"github.com/bloxapp/ssv-spec/types"
+	"sync"
 	"sync/atomic"
 	"unsafe"
+
+	"github.com/bloxapp/ssv-spec/types"
 )
 
 // Filter is a function that returns true if the given message should be included.
@@ -28,12 +30,22 @@ type Queue interface {
 	Pop(MessagePrioritizer) *DecodedSSVMessage
 	// IsEmpty checks if the q is empty
 	IsEmpty() bool
+
+	// WaitAndPop waits for a message to be pushed to the queue and then returns it.
+	// If a message is already in the queue, it will be returned immediately.
+	// If a message is not in the queue, the function will block until a message is pushed.
+	// The returned Pop function should be called when the message is no longer needed.
+	// If the message is not popped, it will be returned by the next call to WaitAndPop.
+	WaitAndPop(MessagePrioritizer) *DecodedSSVMessage
 }
 
 // PriorityQueue implements Queue, it manages a lock-free linked list of DecodedSSVMessage.
 // Implemented using atomic CAS (CompareAndSwap) operations to handle multiple goroutines that add/pop messages.
 type PriorityQueue struct {
-	head unsafe.Pointer
+	head        unsafe.Pointer
+	wait        chan *DecodedSSVMessage
+	waiting     bool
+	waitingLock sync.Mutex
 }
 
 // New initialized a PriorityQueue with the given MessagePrioritizer.
@@ -43,6 +55,7 @@ func New() Queue {
 	h := unsafe.Pointer(&msgItem{})
 	return &PriorityQueue{
 		head: h,
+		wait: make(chan *DecodedSSVMessage),
 	}
 }
 
@@ -54,6 +67,14 @@ func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
 	if added {
 		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
 	}
+
+	q.waitingLock.Lock()
+	waiting := q.waiting
+	q.waiting = false
+	q.waitingLock.Unlock()
+	if waiting {
+		q.wait <- msg
+	}
 }
 
 func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
@@ -62,6 +83,17 @@ func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
 	}
 	return res
+}
+
+func (q *PriorityQueue) WaitAndPop(priority MessagePrioritizer) *DecodedSSVMessage {
+	q.waitingLock.Lock()
+	if msg := q.Pop(priority); msg != nil {
+		q.waitingLock.Unlock()
+		return msg
+	}
+	q.waiting = true
+	q.waitingLock.Unlock()
+	return <-q.wait
 }
 
 func (q *PriorityQueue) IsEmpty() bool {

@@ -99,12 +99,12 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message and handle it.
-		msg := q.Q.Pop(queue.NewMessagePrioritizer(&state))
-		if msg == nil {
-			//logger.Debug("could not pop message from queue")
-			time.Sleep(interval)
-			continue
-		}
+		msg := q.Q.WaitAndPop(queue.NewMessagePrioritizer(&state))
+		// if msg == nil {
+		// 	//logger.Debug("could not pop message from queue")
+		// 	time.Sleep(interval)
+		// 	continue
+		// }
 		//v.logMsg(msg, "after pop, handling msg", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state))
 		if err := handler(msg); err != nil {
 			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
