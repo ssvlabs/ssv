@@ -80,10 +80,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 	for ctx.Err() == nil {
 
-		if q.Q.IsEmpty() {
-			time.Sleep(interval)
-			continue
-		}
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
