@@ -161,7 +161,7 @@ func NewInMemDb() basedb.IDb {
 
 // CommitDataToBytes encode commit data and handle error if exist
 func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
-	ret, err := json.Marshal(input)
+	ret, err := json.ConfigFastest.Marshal(input)
 	require.NoError(t, err)
 	return ret
 }

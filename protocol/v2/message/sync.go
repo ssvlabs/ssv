@@ -84,12 +84,12 @@ type SyncMessage struct {
 
 // Encode encodes the message
 func (sm *SyncMessage) Encode() ([]byte, error) {
-	return json.Marshal(sm)
+	return json.ConfigFastest.Marshal(sm)
 }
 
 // Decode decodes the message
 func (sm *SyncMessage) Decode(data []byte) error {
-	return json.Unmarshal(data, sm)
+	return json.ConfigFastest.Unmarshal(data, sm)
 }
 
 // UpdateResults updates the given sync message with results or potential error

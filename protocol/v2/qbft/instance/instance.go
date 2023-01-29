@@ -235,10 +235,10 @@ func (i *Instance) GetRoot() ([]byte, error) {
 
 // Encode implementation
 func (i *Instance) Encode() ([]byte, error) {
-	return json.Marshal(i)
+	return json.ConfigFastest.Marshal(i)
 }
 
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
-	return json.Unmarshal(data, &i)
+	return json.ConfigFastest.Unmarshal(data, &i)
 }

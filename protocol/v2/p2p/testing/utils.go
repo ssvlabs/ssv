@@ -296,7 +296,7 @@ func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spe
 	spk := hex.EncodeToString(mid.GetPubKey())
 	topic := spk
 
-	syncMsg, err := json.Marshal(&message.SyncMessage{
+	syncMsg, err := json.ConfigFastest.Marshal(&message.SyncMessage{
 		Params: &message.SyncParams{
 			Identifier: mid,
 		},

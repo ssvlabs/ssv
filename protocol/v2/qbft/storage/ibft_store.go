@@ -14,12 +14,12 @@ type StoredInstance struct {
 
 // Encode returns a StoredInstance encoded bytes or error.
 func (si *StoredInstance) Encode() ([]byte, error) {
-	return json.Marshal(si)
+	return json.ConfigFastest.Marshal(si)
 }
 
 // Decode returns error if decoding failed.
 func (si *StoredInstance) Decode(data []byte) error {
-	return json.Unmarshal(data, &si)
+	return json.ConfigFastest.Unmarshal(data, &si)
 }
 
 // InstanceStore manages instance data.

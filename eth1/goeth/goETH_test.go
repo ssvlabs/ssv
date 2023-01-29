@@ -42,10 +42,10 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, contractAbi)
 			var vLogOperatorRegistration types.Log
-			err = json.Unmarshal([]byte(test.operatorRegistration), &vLogOperatorRegistration)
+			err = json.ConfigFastest.Unmarshal([]byte(test.operatorRegistration), &vLogOperatorRegistration)
 			require.NoError(t, err)
 			var vLogValidatorRegistration types.Log
-			err = json.Unmarshal([]byte(test.validatorRegistration), &vLogValidatorRegistration)
+			err = json.ConfigFastest.Unmarshal([]byte(test.validatorRegistration), &vLogValidatorRegistration)
 			require.NoError(t, err)
 
 			cn := make(chan *eth1.Event)

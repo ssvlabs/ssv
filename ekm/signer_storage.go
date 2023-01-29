@@ -79,7 +79,7 @@ func (s *storage) SaveWallet(wallet core.Wallet) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	data, err := json.Marshal(wallet)
+	data, err := json.ConfigFastest.Marshal(wallet)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal wallet")
 	}
@@ -106,7 +106,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 
 	// decode
 	var ret *hd.Wallet
-	if err := json.Unmarshal(obj.Value, &ret); err != nil {
+	if err := json.ConfigFastest.Unmarshal(obj.Value, &ret); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal HD Wallet object")
 	}
 	ret.SetContext(&core.WalletContext{Storage: s})
@@ -137,7 +137,7 @@ func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	data, err := json.Marshal(account)
+	data, err := json.ConfigFastest.Marshal(account)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal account")
 	}
@@ -181,7 +181,7 @@ func (s *storage) decodeAccount(byts []byte) (core.ValidatorAccount, error) {
 
 	// decode
 	var ret *wallets.HDAccount
-	if err := json.Unmarshal(byts, &ret); err != nil {
+	if err := json.ConfigFastest.Unmarshal(byts, &ret); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal HD account object")
 	}
 	ret.SetContext(&core.WalletContext{Storage: s})

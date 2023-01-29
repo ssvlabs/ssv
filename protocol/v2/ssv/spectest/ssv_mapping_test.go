@@ -41,7 +41,7 @@ func TestSSVMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	untypedTests := map[string]interface{}{}
-	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
+	if err := json.ConfigFastest.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
 
@@ -62,10 +62,10 @@ func TestSSVMapping(t *testing.T) {
 
 		switch testType {
 		case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
-			byts, err := json.Marshal(test)
+			byts, err := json.ConfigFastest.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &MsgProcessingSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
+			require.NoError(t, json.ConfigFastest.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsgProcessing(t, typedTest)
@@ -86,37 +86,37 @@ func TestSSVMapping(t *testing.T) {
 				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
-			byts, err := json.Marshal(test)
+			byts, err := json.ConfigFastest.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &messages.MsgSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
+			require.NoError(t, json.ConfigFastest.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
+			byts, err := json.ConfigFastest.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &valcheck.SpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
+			require.NoError(t, json.ConfigFastest.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
+			byts, err := json.ConfigFastest.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &valcheck.MultiSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
+			require.NoError(t, json.ConfigFastest.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				typedTest.Run(t)
 			})
 		case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
+			byts, err := json.ConfigFastest.Marshal(test)
 			require.NoError(t, err)
 			typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
+			require.NoError(t, json.ConfigFastest.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunSyncCommitteeAggProof(t, typedTest)
@@ -146,14 +146,14 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
 
 	duty := &spectypes.Duty{}
-	byts, _ := json.Marshal(m["Duty"])
-	require.NoError(t, json.Unmarshal(byts, duty))
+	byts, _ := json.ConfigFastest.Marshal(m["Duty"])
+	require.NoError(t, json.ConfigFastest.Unmarshal(byts, duty))
 
 	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
 	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
+		byts, _ = json.ConfigFastest.Marshal(msg)
 		typedMsg := &ssv.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		require.NoError(t, json.ConfigFastest.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
 
@@ -175,23 +175,23 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	runnerMap := m["Runner"].(map[string]interface{})["BaseRunner"].(map[string]interface{})
 
 	duty := &spectypes.Duty{}
-	byts, _ := json.Marshal(m["Duty"])
-	require.NoError(t, json.Unmarshal(byts, duty))
+	byts, _ := json.ConfigFastest.Marshal(m["Duty"])
+	require.NoError(t, json.ConfigFastest.Unmarshal(byts, duty))
 
 	msgs := make([]*spectypes.SSVMessage, 0)
 	for _, msg := range m["Messages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
+		byts, _ = json.ConfigFastest.Marshal(msg)
 		typedMsg := &spectypes.SSVMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		require.NoError(t, json.ConfigFastest.Unmarshal(byts, typedMsg))
 		msgs = append(msgs, typedMsg)
 	}
 
 	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
 	require.NotNilf(t, m["OutputMessages"], "OutputMessages can't be nil")
 	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
+		byts, _ = json.ConfigFastest.Marshal(msg)
 		typedMsg := &ssv.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
+		require.NoError(t, json.ConfigFastest.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
 
@@ -222,8 +222,8 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 
 func fixRunnerForRun(t *testing.T, baseRunner map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	base := runner.NewBaseRunner(zap.NewNop())
-	byts, _ := json.Marshal(baseRunner)
-	require.NoError(t, json.Unmarshal(byts, &base))
+	byts, _ := json.ConfigFastest.Marshal(baseRunner)
+	require.NoError(t, json.ConfigFastest.Unmarshal(byts, &base))
 
 	ret := baseRunnerForRole(base.BeaconRoleType, base, ks)
 	ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)

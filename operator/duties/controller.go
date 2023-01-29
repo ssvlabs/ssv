@@ -126,7 +126,7 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 // createDutyExecuteMsg returns ssvMsg with event type of duty execute
 func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
-	edd, err := json.Marshal(executeDutyData)
+	edd, err := json.ConfigFastest.Marshal(executeDutyData)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal execute duty data")
 	}

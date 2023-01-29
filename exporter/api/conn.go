@@ -235,7 +235,7 @@ func (c *conn) logMsg(message []byte, byteWritten int) {
 		return
 	}
 	j := make(map[string]stdjson.RawMessage)
-	if err := json.Unmarshal(message, &j); err != nil {
+	if err := json.ConfigFastest.Unmarshal(message, &j); err != nil {
 		c.logger.Error("could not parse msg", zap.Error(err))
 	}
 	fraw, ok := j["filter"]

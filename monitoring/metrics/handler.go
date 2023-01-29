@@ -141,7 +141,7 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 		result := map[string][]string{
 			"errors": errs,
 		}
-		if raw, err := json.Marshal(result); err != nil {
+		if raw, err := json.ConfigFastest.Marshal(result); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		} else {
 			http.Error(res, string(raw), http.StatusInternalServerError)

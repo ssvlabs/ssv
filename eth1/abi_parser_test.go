@@ -84,7 +84,7 @@ func TestParseValidatorRegistrationEvent(t *testing.T) {
 
 func unmarshalLog(t *testing.T, rawOperatorRegistration string, abiVersion Version) (*types.Log, abi.ABI) {
 	var vLogOperatorRegistration types.Log
-	err := json.Unmarshal([]byte(rawOperatorRegistration), &vLogOperatorRegistration)
+	err := json.ConfigFastest.Unmarshal([]byte(rawOperatorRegistration), &vLogOperatorRegistration)
 	require.NoError(t, err)
 	contractAbi, err := abi.JSON(strings.NewReader(ContractABI(abiVersion)))
 	require.NoError(t, err)

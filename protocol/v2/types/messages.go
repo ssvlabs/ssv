@@ -42,7 +42,7 @@ type ExecuteDutyData struct {
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
 	td := &TimeoutData{}
-	if err := json.Unmarshal(m.Data, td); err != nil {
+	if err := json.ConfigFastest.Unmarshal(m.Data, td); err != nil {
 		return nil, err
 	}
 	return td, nil
@@ -50,7 +50,7 @@ func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
 
 func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 	ed := &ExecuteDutyData{}
-	if err := json.Unmarshal(m.Data, ed); err != nil {
+	if err := json.ConfigFastest.Unmarshal(m.Data, ed); err != nil {
 		return nil, err
 	}
 	return ed, nil
@@ -58,10 +58,10 @@ func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 
 // Encode returns a msg encoded bytes or error
 func (msg *EventMsg) Encode() ([]byte, error) {
-	return json.Marshal(msg)
+	return json.ConfigFastest.Marshal(msg)
 }
 
 // Decode returns error if decoding failed
 func (msg *EventMsg) Decode(data []byte) error {
-	return json.Unmarshal(data, &msg)
+	return json.ConfigFastest.Unmarshal(data, &msg)
 }

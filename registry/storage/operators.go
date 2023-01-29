@@ -108,7 +108,7 @@ func (s *operatorsStorage) getOperatorData(index uint64) (*OperatorData, bool, e
 		return nil, found, nil
 	}
 	var operatorInformation OperatorData
-	err = json.Unmarshal(obj.Value, &operatorInformation)
+	err = json.ConfigFastest.Unmarshal(obj.Value, &operatorInformation)
 	return &operatorInformation, found, err
 }
 
@@ -116,7 +116,7 @@ func (s *operatorsStorage) listOperators(from, to uint64) ([]OperatorData, error
 	var operators []OperatorData
 	err := s.db.GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var od OperatorData
-		if err := json.Unmarshal(obj.Value, &od); err != nil {
+		if err := json.ConfigFastest.Unmarshal(obj.Value, &od); err != nil {
 			return err
 		}
 		if (od.Index >= from && od.Index <= to) || (to == 0) {
@@ -152,7 +152,7 @@ func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
 		return nil
 	}
 
-	raw, err := json.Marshal(operatorData)
+	raw, err := json.ConfigFastest.Marshal(operatorData)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal operator information")
 	}

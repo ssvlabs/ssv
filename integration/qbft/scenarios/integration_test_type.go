@@ -196,7 +196,7 @@ func (it *IntegrationTest) Run() error {
 					continue
 				}
 
-				jsonInstance, err := json.Marshal(storedInstance)
+				jsonInstance, err := json.ConfigFastest.Marshal(storedInstance)
 				if err != nil {
 					if _, ok := errMap[operatorID]; !ok {
 						errMap[operatorID] = fmt.Errorf("encode stored instance: %w", err)

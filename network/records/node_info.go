@@ -90,14 +90,14 @@ func (ni *NodeInfo) MarshalRecord() ([]byte, error) {
 	}
 	ser := newSerializable(parts...)
 
-	return json.Marshal(ser)
+	return json.ConfigFastest.Marshal(ser)
 }
 
 // UnmarshalRecord unmarshals a []byte payload into an instance of a particular Record type
 func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	var ser serializable
 
-	if err := json.Unmarshal(data, &ser); err != nil {
+	if err := json.ConfigFastest.Unmarshal(data, &ser); err != nil {
 		return err
 	}
 

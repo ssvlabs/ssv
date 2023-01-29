@@ -48,14 +48,14 @@ func TestTopicScoreParams(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			opts := test.opts()
 			// raw, err := json.MarshalIndent(&opts, "", "\t")
-			raw, err := json.Marshal(&opts)
+			raw, err := json.ConfigFastest.Marshal(&opts)
 			require.NoError(t, err)
 			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
 			topicScoreParams, err := TopicParams(*opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
 			// raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
-			raw, err = json.Marshal(topicScoreParams)
+			raw, err = json.ConfigFastest.Marshal(topicScoreParams)
 			require.NoError(t, err)
 			require.NotNil(t, raw)
 			t.Logf("[%s] topic score params:\n%s", test.name, string(raw))
@@ -87,7 +87,7 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 		SeenMsgTTL:                  psp.SeenMsgTTL,
 	}
 	// raw, err := json.MarshalIndent(&cp, "", "\t")
-	raw, err := json.Marshal(&cp)
+	raw, err := json.ConfigFastest.Marshal(&cp)
 	if err != nil {
 		return "", err
 	}

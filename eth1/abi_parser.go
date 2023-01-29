@@ -114,7 +114,7 @@ func LoadABI(abiFilePath string) error {
 
 	// assert valid JSON
 	var obj []interface{}
-	err = json.Unmarshal(raw, &obj)
+	err = json.ConfigFastest.Unmarshal(raw, &obj)
 	if err != nil {
 		return errors.Wrap(err, "abi is not a valid json")
 	}

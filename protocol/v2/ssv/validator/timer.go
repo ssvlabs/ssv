@@ -36,7 +36,7 @@ func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.He
 
 func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height) (*spectypes.SSVMessage, error) {
 	td := types.TimeoutData{Height: height}
-	data, err := json.Marshal(td)
+	data, err := json.ConfigFastest.Marshal(td)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal timout data")
 	}

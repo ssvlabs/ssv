@@ -54,7 +54,7 @@ func (client *WSClient) StartStream(addr, path string) error {
 			return errors.Wrap(err, "read error")
 		}
 		var msg Message
-		if err := json.Unmarshal(raw, &msg); err != nil {
+		if err := json.ConfigFastest.Unmarshal(raw, &msg); err != nil {
 			client.logger.Error("failed to parse message", zap.Error(err))
 			continue
 		}
@@ -90,7 +90,7 @@ msgLoop:
 				return errors.Wrap(err, "read error")
 			}
 			var msg Message
-			if err := json.Unmarshal(raw, &msg); err != nil {
+			if err := json.ConfigFastest.Unmarshal(raw, &msg); err != nil {
 				client.logger.Error("failed to parse message", zap.Error(err))
 				continue msgLoop
 			}

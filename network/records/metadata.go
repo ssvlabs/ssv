@@ -26,7 +26,7 @@ func (nm *NodeMetadata) Encode() ([]byte, error) {
 	//	nm.ExecutionNode,
 	//)
 
-	return json.Marshal(nm)
+	return json.ConfigFastest.Marshal(nm)
 }
 
 // Decode decodes a raw payload into metadata
@@ -34,7 +34,7 @@ func (nm *NodeMetadata) Encode() ([]byte, error) {
 func (nm *NodeMetadata) Decode(data []byte) error {
 	// var ser serializable
 
-	if err := json.Unmarshal(data, nm); err != nil {
+	if err := json.ConfigFastest.Unmarshal(data, nm); err != nil {
 		return err
 	}
 
