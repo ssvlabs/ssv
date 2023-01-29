@@ -62,3 +62,8 @@ func (n Network) EstimatedEpochAtSlot(slot types.Slot) types.Epoch {
 func (n Network) IsFirstSlotOfEpoch(slot types.Slot) bool {
 	return uint64(slot)%n.SlotsPerEpoch() == 0
 }
+
+// GetEpochFirstSlot returns the beacon node first slot in epoch
+func (n Network) GetEpochFirstSlot(epoch uint64) uint64 {
+	return epoch * 32
+}

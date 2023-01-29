@@ -80,7 +80,7 @@ type operatorNode struct {
 // New is the constructor of operatorNode
 func New(opts Options) Node {
 	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
-	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork)
+	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, opts.GenesisEpoch)
 
 	node := &operatorNode{
 		context:        opts.Context,
@@ -100,7 +100,6 @@ func New(opts Options) Node {
 			BeaconClient:        opts.Beacon,
 			EthNetwork:          opts.ETHNetwork,
 			ValidatorController: opts.ValidatorController,
-			GenesisEpoch:        opts.GenesisEpoch,
 			DutyLimit:           opts.DutyLimit,
 			Executor:            opts.DutyExec,
 			ForkVersion:         opts.ForkVersion,

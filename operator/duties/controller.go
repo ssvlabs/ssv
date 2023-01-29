@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"time"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
@@ -14,6 +11,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	prysmtypes "github.com/prysmaticlabs/eth2-types"
@@ -42,7 +40,6 @@ type ControllerOptions struct {
 	EthNetwork          beaconprotocol.Network
 	ValidatorController validator.Controller
 	Executor            DutyExecutor
-	GenesisEpoch        uint64
 	DutyLimit           uint64
 	ForkVersion         forksprotocol.ForkVersion
 	Ticker              slot_ticker.Ticker
@@ -57,7 +54,6 @@ type dutyController struct {
 	executor            DutyExecutor
 	fetcher             DutyFetcher
 	validatorController validator.Controller
-	genesisEpoch        uint64
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
 }
@@ -73,7 +69,6 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		ethNetwork:          opts.EthNetwork,
 		fetcher:             fetcher,
 		validatorController: opts.ValidatorController,
-		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
@@ -152,9 +147,6 @@ func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
 	for currentSlot := range slots {
 		// execute duties
-		if !dc.genesisEpochEffective() {
-			continue
-		}
 		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
@@ -177,25 +169,6 @@ func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 		return
 	}
 	logger.Warn("slot is irrelevant, ignoring duty")
-}
-
-func (dc *dutyController) genesisEpochEffective() bool {
-	curSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
-	genSlot := dc.getEpochFirstSlot(dc.genesisEpoch)
-	if curSlot < genSlot {
-		if dc.ethNetwork.IsFirstSlotOfEpoch(prysmtypes.Slot(curSlot)) {
-			// wait until genesis epoch starts
-			curEpoch := uint64(dc.ethNetwork.EstimatedCurrentEpoch())
-			gnsTime := dc.ethNetwork.GetSlotStartTime(genSlot)
-			dc.logger.Info("duties paused, will resume duties on genesis epoch",
-				zap.Uint64("genesis_epoch", dc.genesisEpoch),
-				zap.Uint64("current_epoch", curEpoch),
-				zap.String("genesis_time", gnsTime.Format(time.UnixDate)))
-		}
-		return false
-	}
-
-	return true
 }
 
 func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
@@ -222,11 +195,6 @@ func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *specty
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
 		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(uint64(duty.Slot))))
-}
-
-// getEpochFirstSlot returns the beacon node first slot in epoch
-func (dc *dutyController) getEpochFirstSlot(epoch uint64) uint64 {
-	return epoch * 32
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
