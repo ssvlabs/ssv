@@ -90,6 +90,6 @@ func TestDutyController_GetCurrentSlot(t *testing.T) {
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {
 	d := dutyController{logger: zap.L(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 
-	slot := d.getEpochFirstSlot(20203)
+	slot := d.ethNetwork.GetEpochFirstSlot(20203)
 	require.EqualValues(t, 646496, slot)
 }
