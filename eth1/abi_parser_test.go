@@ -2,9 +2,10 @@ package eth1
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"strings"
 	"testing"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/utils/logex"

@@ -4,8 +4,9 @@ import (
 	"context"
 	crand "crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"sync"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"

@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/url"
 	"sync"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"

@@ -1,10 +1,11 @@
 package params
 
 import (
-	"encoding/json"
 	"net"
 	"testing"
 	"time"
+
+	json "github.com/bytedance/sonic"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
