@@ -195,13 +195,15 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 		return errors.New("message was not decoded")
 	}
 
+	p2pID := ssvMsg.GetID().String()
+
 	logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
 	logger.Debug("incoming pubsub message",
-		zap.String("p2p_id", msg.ID),
+		zap.String("p2p_id", p2pID),
 		zap.String("topic", topic),
 		zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
 
-	metricsRouterIncoming.WithLabelValues(ssvMsg.GetID().String(), message.MsgTypeToString(ssvMsg.MsgType)).Inc()
+	metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
