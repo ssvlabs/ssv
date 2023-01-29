@@ -138,7 +138,7 @@ spec:
         - name: PUBSUB_TRACE
           value: 'false'
         - name: NETWORK_ID
-          value: "shifu-stage"
+          value: "shifu-v2-stage"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         volumeMounts:

@@ -176,7 +176,7 @@ spec:
             - name: EXPORTER
               value: "true"
             - name: NETWORK_ID
-              value: "shifu-stage"
+              value: "shifu-v2-stage"
             - name: P2P_LOG
               value: "false"
             - name: DISCOVERY_TRACE
