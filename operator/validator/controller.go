@@ -44,7 +44,7 @@ import (
 
 const (
 	metadataBatchSize        = 25
-	networkRouterConcurrency = 256
+	networkRouterConcurrency = 2048
 )
 
 // ShareEncryptionKeyProvider is a function that returns the operator private key
