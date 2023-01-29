@@ -38,18 +38,18 @@ func TestBroadcaster(t *testing.T) {
 	require.True(t, b.Register(bm2))
 
 	// wait so setup will be finished
-	<-time.After(10 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
-	<-time.After(5 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	go b.Deregister(bm2)
-	<-time.After(5 * time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
 	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})
 
 	// wait so messages will propagate
-	<-time.After(100 * time.Millisecond)
-	require.Equal(t, bm1.Size(), 2)
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, 2, bm1.Size())
 	// the second broadcasted was deregistered after the first message
-	require.Equal(t, bm2.Size(), 1)
+	require.Equal(t, 1, bm2.Size())
 }
 
 type broadcastedMock struct {

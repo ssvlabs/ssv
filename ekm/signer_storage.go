@@ -1,9 +1,10 @@
 package ekm
 
 import (
-	"encoding/json"
 	"fmt"
 	"sync"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/encryptor"

@@ -1,11 +1,12 @@
 package qbft
 
 import (
-	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	json "github.com/bytedance/sonic"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"

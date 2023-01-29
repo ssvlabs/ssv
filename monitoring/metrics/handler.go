@@ -3,13 +3,14 @@ package metrics
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
 	"strings"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -128,7 +129,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 	}
 	response.Count = n
 
-	if err := json.NewEncoder(w).Encode(&response); err != nil {
+	if err := json.ConfigDefault.NewEncoder(w).Encode(&response); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

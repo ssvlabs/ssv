@@ -2,9 +2,10 @@ package instance
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"sync"
 	"time"
+
+	json "github.com/bytedance/sonic"
 
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"

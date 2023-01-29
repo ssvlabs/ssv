@@ -3,11 +3,14 @@ package api
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"sync"
 	"time"
+
+	stdjson "encoding/json"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
@@ -231,7 +234,7 @@ func (c *conn) logMsg(message []byte, byteWritten int) {
 	if byteWritten == 0 {
 		return
 	}
-	j := make(map[string]json.RawMessage)
+	j := make(map[string]stdjson.RawMessage)
 	if err := json.Unmarshal(message, &j); err != nil {
 		c.logger.Error("could not parse msg", zap.Error(err))
 	}

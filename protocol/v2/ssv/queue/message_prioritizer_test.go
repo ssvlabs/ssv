@@ -2,12 +2,16 @@ package queue
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand"
 	"sort"
 	"strings"
 	"testing"
+
+	json "github.com/bytedance/sonic"
+
+	"github.com/bytedance/sonic"
 
 	"github.com/aquasecurity/table"
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -313,5 +317,55 @@ func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *ssv.Sig
 		return testingutils.SSVMsgSyncCommitteeContribution
 	default:
 		panic("invalid role")
+	}
+}
+
+func BenchmarkMessageDecoding(b *testing.B) {
+	msg := mockConsensusMessage{
+		Role:   types.BNRoleAttester,
+		Height: 1,
+		Type:   qbft.PrepareMsgType,
+	}.ssvMessage(&State{})
+
+	encoded, err := json.Marshal(msg)
+	require.NoError(b, err)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var decoded types.SSVMessage
+		err = json.Unmarshal(encoded, &decoded)
+		require.NoError(b, err)
+		b.StopTimer()
+		require.Equal(b, msg, &decoded)
+		b.StartTimer()
+	}
+}
+
+func BenchmarkMessageDecodingSonic(b *testing.B) {
+	msg := mockConsensusMessage{
+		Role:   types.BNRoleAttester,
+		Height: 1,
+		Type:   qbft.PrepareMsgType,
+	}.ssvMessage(&State{})
+
+	encoded, err := sonic.Marshal(msg)
+	require.NoError(b, err)
+
+	var jsonDecoded types.SSVMessage
+	err = json.Unmarshal(encoded, &jsonDecoded)
+	require.NoError(b, err)
+	require.Equal(b, msg, &jsonDecoded)
+
+	log.Printf("decoding %d bytes", len(encoded))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		var decoded types.SSVMessage
+		err = sonic.Unmarshal(encoded, &decoded)
+		require.NoError(b, err)
+
+		b.StopTimer()
+		require.Equal(b, msg, &decoded)
+		b.StartTimer()
 	}
 }

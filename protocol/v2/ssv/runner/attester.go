@@ -3,8 +3,9 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"time"
+
+	json "github.com/bytedance/sonic"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

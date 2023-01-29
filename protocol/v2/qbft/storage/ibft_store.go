@@ -1,7 +1,7 @@
 package qbftstorage
 
 import (
-	"encoding/json"
+	json "github.com/bytedance/sonic"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
