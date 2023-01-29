@@ -64,11 +64,11 @@ func (n Network) DivideSlotBy(times int64) time.Duration {
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
-func (n Network) IsFirstSlotOfEpoch(slot types.Slot) bool {
+func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%n.SlotsPerEpoch() == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
-func (n Network) GetEpochFirstSlot(epoch uint64) uint64 {
-	return epoch * 32
+func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
+	return phase0.Slot(epoch * 32)
 }
