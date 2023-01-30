@@ -33,10 +33,6 @@ type Queue interface {
 	IsEmpty() bool
 
 	// WaitAndPop waits for a message to be pushed to the queue and then returns it.
-	// If a message is already in the queue, it will be returned immediately.
-	// If a message is not in the queue, the function will block until a message is pushed.
-	// The returned Pop function should be called when the message is no longer needed.
-	// If the message is not popped, it will be returned by the next call to WaitAndPop.
 	WaitAndPop(MessagePrioritizer) *DecodedSSVMessage
 }
 
