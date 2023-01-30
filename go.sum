@@ -136,8 +136,8 @@ github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+Ce
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
-github.com/bloxapp/eth2-key-manager v1.1.4-0.20230123095048-6bf5f1398076 h1:fyG2kM+MqyOhHIstlVPzwLyn29FQvnST1IepYP2zwK8=
-github.com/bloxapp/eth2-key-manager v1.1.4-0.20230123095048-6bf5f1398076/go.mod h1:W6YH00zKUXlZEo+8lLlsZMOlira0YmpcMtsHZwk4LyI=
+github.com/bloxapp/eth2-key-manager v1.2.0 h1:KhEi6vY25+K023kgGKDChuB4eDGYO1b2iB5RKKgoRAM=
+github.com/bloxapp/eth2-key-manager v1.2.0/go.mod h1:ihH4gGX4nE72AXA3LCTuXWSrN1r/xS5MBD6VW4P0nks=
 github.com/bloxapp/ssv-spec v0.2.8-0.20230118104749-37a78c8e8a93 h1:y6ve7PO+Dhgqerutq1fo0i4pRYl//vtTyQiwG0c79M8=
 github.com/bloxapp/ssv-spec v0.2.8-0.20230118104749-37a78c8e8a93/go.mod h1:w0GcW7zn+EGU9YTUPM0W9L0w8Q7N3kVjIlO2Ha/htqw=
 github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40/go.mod h1:8rLXio+WjiTceGBHIoTvn60HIbs7Hm7bcHjyrSqYB9c=
