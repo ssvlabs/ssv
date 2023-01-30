@@ -207,6 +207,8 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
+		blockSubmissionStart := time.Now()
+
 		if r.decidedBlindedBlock() {
 			blk := &apiv1bellatrix.SignedBlindedBeaconBlock{
 				Message:   r.GetState().DecidedValue.BlindedBlockData,
@@ -215,15 +217,14 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(blk); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
-		} else {blk := &bellatrix.SignedBeaconBlock{
-			Message:   r.GetState().DecidedValue.BlockData,
-			Signature: specSig,
-		}
+		} else {
+			blk := &bellatrix.SignedBeaconBlock{
+				Message:   r.GetState().DecidedValue.BlockData,
+				Signature: specSig,
+			}
 
-		blockSubmissionStart := time.Now()
-
-		if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
-			metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
+			if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
+				metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
