@@ -111,6 +111,9 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
+			return dutyRunner.ProcessPostConsensus(signedMsg)
+		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(msg, dutyRunner)
