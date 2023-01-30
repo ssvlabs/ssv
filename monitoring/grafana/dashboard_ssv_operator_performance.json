@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1674579691906,
+  "iteration": 1674846489872,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -570,7 +570,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -665,7 +665,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -759,7 +759,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -853,7 +853,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -947,7 +947,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1041,7 +1041,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1135,7 +1135,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1229,7 +1229,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1337,7 +1337,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1431,7 +1431,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1525,7 +1525,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1619,7 +1619,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1713,7 +1713,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1821,7 +1821,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -1915,7 +1915,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -2009,7 +2009,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -2103,7 +2103,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -2197,7 +2197,7 @@
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}}",
+          "legendFormat": "{{le}}s",
           "refId": "A"
         }
       ],
@@ -2321,13 +2321,13 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-30d",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 51,
+  "version": 52,
   "weekStart": ""
 }
