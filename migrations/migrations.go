@@ -33,6 +33,7 @@ var (
 		migrationAddGraffiti,
 		migrationCleanRegistryData,
 		migrationCleanRegistryDataIncludingSignerStorage,
+		migrationCleanRegistryDataShifuV2,
 	}
 )
 
