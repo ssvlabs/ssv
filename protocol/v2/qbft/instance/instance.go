@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
-	"time"
 
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
@@ -27,8 +26,7 @@ type Instance struct {
 	startOnce   sync.Once
 	StartValue  []byte
 
-	StartTime time.Time
-	logger    *zap.Logger
+	logger *zap.Logger
 }
 
 func NewInstance(
@@ -66,7 +64,6 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		i.StartTime = time.Now()
 		i.logger.Debug("starting QBFT instance")
 
 		// propose if this node is the proposer

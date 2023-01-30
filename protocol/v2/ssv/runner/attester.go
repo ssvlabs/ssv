@@ -158,16 +158,11 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		var consensusTime time.Duration
-		if t := r.GetState().RunningInstance.StartTime; !t.IsZero() {
-			consensusTime = time.Since(t)
-		}
 		r.logger.Debug("successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.Duration("duration", time.Since(start)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			zap.Int("round", int(r.GetState().RunningInstance.State.Round)),
-			zap.Duration("consensus_time", consensusTime))
+			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true
 
