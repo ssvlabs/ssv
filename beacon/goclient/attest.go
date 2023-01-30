@@ -1,31 +1,28 @@
 package goclient
 
 import (
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-	prysmtime "github.com/prysmaticlabs/prysm/time"
-	"github.com/prysmaticlabs/prysm/time/slots"
-	"time"
 )
 
-func (gc *goClient) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
-	gc.waitOneThirdOrValidBlock(uint64(slot))
+func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
+	gc.waitOneThirdOrValidBlock(slot)
 
-	startTime := prysmtime.Now()
+	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
 	}
-	metricsAttestationDataRequest.WithLabelValues().
-		Observe(prysmtime.Since(startTime).Seconds())
+	metricsAttestationDataRequest.WithLabelValues().Observe(time.Since(startTime).Seconds())
 
 	return attestationData, nil
 }
 
 // SubmitAttestation implements Beacon interface
-func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
+func (gc *goClient) SubmitAttestation(attestation *phase0.Attestation) error {
 	signingRoot, err := gc.getSigningRoot(attestation.Data)
 	if err != nil {
 		return errors.Wrap(err, "failed to get signing root")
@@ -35,13 +32,13 @@ func (gc *goClient) SubmitAttestation(attestation *spec.Attestation) error {
 		return errors.Wrap(err, "failed attestation slashing protection check")
 	}
 
-	return gc.client.SubmitAttestations(gc.ctx, []*spec.Attestation{attestation})
+	return gc.client.SubmitAttestations(gc.ctx, []*phase0.Attestation{attestation})
 }
 
 // getSigningRoot returns signing root
-func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error) {
-	epoch := gc.network.EstimatedEpochAtSlot(prysmtypes.Slot(data.Slot))
-	domain, err := gc.DomainData(spec.Epoch(epoch), spectypes.DomainAttester)
+func (gc *goClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, error) {
+	epoch := gc.network.EstimatedEpochAtSlot(data.Slot)
+	domain, err := gc.DomainData(epoch, spectypes.DomainAttester)
 	if err != nil {
 		return [32]byte{}, err
 	}
@@ -53,11 +50,11 @@ func (gc *goClient) getSigningRoot(data *spec.AttestationData) ([32]byte, error)
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
+func (gc *goClient) waitOneThirdOrValidBlock(slot phase0.Slot) {
+	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := prysmtime.Until(finalTime)
+	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

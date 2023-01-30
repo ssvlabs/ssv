@@ -4,28 +4,27 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/golang/mock/gomock"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 )
 
 func init() {
@@ -61,7 +60,7 @@ func TestSubmitProposal(t *testing.T) {
 		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the first slot of epoch. each time should be 2 request as we have two batches
 
 		ticker := mocks.NewMockTicker(ctrl)
-		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan prysmtypes.Slot) event.Subscription {
+		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
 			subscription <- 1 // first time
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 2 // should not call submit
@@ -91,7 +90,7 @@ func TestSubmitProposal(t *testing.T) {
 		}).MinTimes(2).MaxTimes(2)
 
 		ticker := mocks.NewMockTicker(ctrl)
-		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan prysmtypes.Slot) event.Subscription {
+		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
 			subscription <- 100 // first time
 			return nil
 		})

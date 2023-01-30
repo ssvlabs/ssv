@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"go.uber.org/zap"
 	"strings"
 	"sync/atomic"
 
@@ -13,8 +12,8 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	types2 "github.com/bloxapp/ssv/protocol/v2/types"
-	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"go.uber.org/zap"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -62,13 +61,13 @@ func NewController(opts *ControllerOptions) *recipientController {
 }
 
 func (rc *recipientController) Start() {
-	tickerChan := make(chan types.Slot, 32)
+	tickerChan := make(chan phase0.Slot, 32)
 	rc.ticker.Subscribe(tickerChan)
 	rc.listenToTicker(tickerChan)
 }
 
 // listenToTicker loop over the given slot channel
-func (rc *recipientController) listenToTicker(slots chan types.Slot) {
+func (rc *recipientController) listenToTicker(slots chan phase0.Slot) {
 	firstTimeSubmitted := false
 	for currentSlot := range slots {
 		// submit if first time or if first slot in epoch
@@ -115,7 +114,7 @@ func (rc *recipientController) listenToTicker(slots chan types.Slot) {
 	}
 }
 
-func toProposalPreparation(m map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, share *types2.SSVShare) error {
+func toProposalPreparation(m map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, share *types.SSVShare) error {
 	if share.HasBeaconMetadata() {
 		var pubkey [20]byte
 		pubKeyBytes, err := hex.DecodeString(strings.TrimPrefix(share.OwnerAddress, "0x"))

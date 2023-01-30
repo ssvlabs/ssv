@@ -10,27 +10,41 @@ import (
 )
 
 var AttesterRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
 //var AttesterRunner7Operators = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-//	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+//	return baseRunner(spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
 //}
 
 var ProposerRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+	return baseRunner(spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+}
+
+var ProposerBlindedBlockRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
+	ret := baseRunner(
+		spectypes.BNRoleProposer,
+		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
+		keySet,
+	)
+	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
+	return ret
 }
 
 var AggregatorRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(spectypes.BNRoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
 }
 
 var SyncCommitteeRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleSyncCommittee, specssv.SyncCommitteeValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(spectypes.BNRoleSyncCommittee, specssv.SyncCommitteeValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
 }
 
 var SyncCommitteeContributionRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(spectypes.BNRoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.NowTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(spectypes.BNRoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+}
+
+var ValidatorRegistrationRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(spectypes.BNRoleValidatorRegistration, nil, keySet)
 }
 
 var UnknownDutyTypeRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -61,7 +75,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 	switch role {
 	case spectypes.BNRoleAttester:
 		return runner.NewAttesterRunnner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
@@ -71,7 +85,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		)
 	case spectypes.BNRoleAggregator:
 		return runner.NewAggregatorRunner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
@@ -81,7 +95,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		)
 	case spectypes.BNRoleProposer:
 		return runner.NewProposerRunner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
@@ -91,7 +105,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		)
 	case spectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
@@ -101,7 +115,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		)
 	case spectypes.BNRoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
@@ -109,9 +123,17 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 			km,
 			valCheck,
 		)
+	case spectypes.BNRoleValidatorRegistration:
+		return runner.NewValidatorRegistrationRunner(
+			spectypes.PraterNetwork,
+			share,
+			spectestingutils.NewTestingBeaconNode(),
+			net,
+			km,
+		)
 	case spectestingutils.UnknownDutyType:
 		ret := runner.NewAttesterRunnner(
-			spectypes.NowTestNetwork,
+			spectypes.BeaconTestNetwork,
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),

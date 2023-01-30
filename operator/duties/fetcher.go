@@ -3,17 +3,16 @@ package duties
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/patrickmn/go-cache"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -27,12 +26,12 @@ type cacheEntry struct {
 // validatorsIndicesFetcher represents the interface for retrieving indices.
 // It have a minimal interface instead of working with the complete validator.IController interface
 type validatorsIndicesFetcher interface {
-	GetValidatorsIndices() []spec.ValidatorIndex
+	GetValidatorsIndices() []phase0.ValidatorIndex
 }
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
-	GetDuties(slot uint64) ([]spectypes.Duty, error)
+	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
 }
 
 // newDutyFetcher creates a new instance
@@ -59,12 +58,11 @@ type dutyFetcher struct {
 
 // GetDuties tries to get slot's duties from cache, if not available in cache it fetches them from beacon
 // the relevant subnets will be subscribed once duties are fetched
-func (df *dutyFetcher) GetDuties(slot uint64) ([]spectypes.Duty, error) {
+func (df *dutyFetcher) GetDuties(slot phase0.Slot) ([]spectypes.Duty, error) {
 	var duties []spectypes.Duty
 
-	esEpoch := df.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
-	epoch := spec.Epoch(esEpoch)
-	logger := df.logger.With(zap.Uint64("slot", slot), zap.Uint64("epoch", uint64(epoch)))
+	epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
+	logger := df.logger.With(zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(epoch)))
 	start := time.Now()
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
@@ -89,7 +87,7 @@ func (df *dutyFetcher) GetDuties(slot uint64) ([]spectypes.Duty, error) {
 }
 
 // updateDutiesFromBeacon will be called once in an epoch to update the cache with all the epoch's slots
-func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
+func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
 	duties, err := df.fetchDuties(slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
@@ -112,12 +110,11 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot uint64) error {
 }
 
 // fetchDuties fetches duties for the epoch of the given slot
-func (df *dutyFetcher) fetchDuties(slot uint64) ([]*spectypes.Duty, error) {
+func (df *dutyFetcher) fetchDuties(slot phase0.Slot) ([]*spectypes.Duty, error) {
 	if indices := df.indicesFetcher.GetValidatorsIndices(); len(indices) > 0 {
 		df.logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
-		esEpoch := df.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
-		epoch := spec.Epoch(esEpoch)
+		epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
 		results, err := df.beaconClient.GetDuties(epoch, indices)
 		return results, err
 	}
@@ -131,7 +128,7 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
 		var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
 		// entries holds all the new duties to add
-		entries := map[spec.Slot]cacheEntry{}
+		entries := map[phase0.Slot]cacheEntry{}
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
 			if duty.Type == spectypes.BNRoleSyncCommittee {
@@ -156,7 +153,7 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 }
 
 // fillEntry adds the given duty on the relevant slot
-func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *spectypes.Duty) {
+func (df *dutyFetcher) fillEntry(entries map[phase0.Slot]cacheEntry, duty *spectypes.Duty) {
 	entry, slotExist := entries[duty.Slot]
 	if !slotExist {
 		entry = cacheEntry{[]spectypes.Duty{}}
@@ -166,10 +163,10 @@ func (df *dutyFetcher) fillEntry(entries map[spec.Slot]cacheEntry, duty *spectyp
 }
 
 // populateCache takes a map of entries and updates the cache
-func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
+func (df *dutyFetcher) populateCache(entriesToAdd map[phase0.Slot]cacheEntry) {
 	df.addMissingSlots(entriesToAdd)
 	for s, e := range entriesToAdd {
-		slot := uint64(s)
+		slot := s
 		if raw, exist := df.cache.Get(getDutyCacheKey(slot)); exist {
 			var dutiesToAdd []spectypes.Duty
 			existingEntry := raw.(cacheEntry)
@@ -191,7 +188,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[spec.Slot]cacheEntry) {
 	}
 }
 
-func (df *dutyFetcher) addMissingSlots(entries map[spec.Slot]cacheEntry) {
+func (df *dutyFetcher) addMissingSlots(entries map[phase0.Slot]cacheEntry) {
 	if len(entries) == int(df.ethNetwork.SlotsPerEpoch()) {
 		// in case all slots exist -> do nothing
 		return
@@ -205,7 +202,7 @@ func (df *dutyFetcher) addMissingSlots(entries map[spec.Slot]cacheEntry) {
 	epochFirstSlot := df.firstSlotOfEpoch(slot)
 	// add all missing slots
 	for i := 0; i < int(df.ethNetwork.SlotsPerEpoch()); i++ {
-		s := spec.Slot(epochFirstSlot + uint64(i))
+		s := phase0.Slot(epochFirstSlot + uint64(i))
 		if _, exist := entries[s]; !exist {
 			entries[s] = cacheEntry{[]spectypes.Duty{}}
 		}
@@ -218,7 +215,7 @@ func (df *dutyFetcher) firstSlotOfEpoch(slot uint64) uint64 {
 }
 
 // getDutyCacheKey return the cache key for a slot
-func getDutyCacheKey(slot uint64) string {
+func getDutyCacheKey(slot phase0.Slot) string {
 	return fmt.Sprintf("d-%d", slot)
 }
 
@@ -240,7 +237,7 @@ func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2ap
 	return &eth2apiv1.SyncCommitteeSubscription{
 		ValidatorIndex:       duty.ValidatorIndex,
 		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-		UntilEpoch:           spec.Epoch(endEpoch),
+		UntilEpoch:           phase0.Epoch(endEpoch),
 	}
 }
 
