@@ -141,6 +141,8 @@ spec:
           value: "false"
         - name: NETWORK_ID
           value: "shifu-stage"
+        - name: CLEAN_REGISTRY_DATA
+          value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-1
