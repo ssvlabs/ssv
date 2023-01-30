@@ -138,6 +138,7 @@ var StartNodeCmd = &cobra.Command{
 
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Beacon, "consensus client")
+		metrics.ReportSSVNodeHealthiness(true)
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) > 0 {
