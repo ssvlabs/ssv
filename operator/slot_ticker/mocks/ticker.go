@@ -7,8 +7,8 @@ package mocks
 import (
 	reflect "reflect"
 
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "github.com/golang/mock/gomock"
-	types "github.com/prysmaticlabs/eth2-types"
 	event "github.com/prysmaticlabs/prysm/async/event"
 )
 
@@ -48,7 +48,7 @@ func (mr *MockTickerMockRecorder) Start() *gomock.Call {
 }
 
 // Subscribe mocks base method.
-func (m *MockTicker) Subscribe(subscription chan types.Slot) event.Subscription {
+func (m *MockTicker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Subscribe", subscription)
 	ret0, _ := ret[0].(event.Subscription)

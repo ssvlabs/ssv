@@ -9,7 +9,7 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -73,9 +73,9 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	}
 
 	decodeds := make([][]byte, len(pks))
-	blsPubKeys := make([]spec.BLSPubKey, len(pks))
+	blsPubKeys := make([]phase0.BLSPubKey, len(pks))
 	for i, pk := range pks {
-		blsPubKey := spec.BLSPubKey{}
+		blsPubKey := phase0.BLSPubKey{}
 		decoded, _ := hex.DecodeString(pk)
 		copy(blsPubKey[:], decoded)
 		decodeds[i] = decoded
@@ -87,21 +87,21 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	defer ctrl.Finish()
 
 	bc := NewMockBeacon(ctrl)
-	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*v1.Validator, error) {
-		validatorsData := map[spec.BLSPubKey]*v1.Validator{
+	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+		validatorsData := map[phase0.BLSPubKey]*v1.Validator{
 			blsPubKeys[0]: {
-				Index:     spec.ValidatorIndex(210961),
+				Index:     phase0.ValidatorIndex(210961),
 				Status:    v1.ValidatorStateWithdrawalPossible,
-				Validator: &spec.Validator{PublicKey: blsPubKeys[0]},
+				Validator: &phase0.Validator{PublicKey: blsPubKeys[0]},
 			},
 			blsPubKeys[1]: {
-				Index:     spec.ValidatorIndex(213820),
+				Index:     phase0.ValidatorIndex(213820),
 				Status:    v1.ValidatorStateActiveOngoing,
-				Validator: &spec.Validator{PublicKey: blsPubKeys[1]},
+				Validator: &phase0.Validator{PublicKey: blsPubKeys[1]},
 			},
 		}
 
-		results := map[spec.ValidatorIndex]*v1.Validator{}
+		results := map[phase0.ValidatorIndex]*v1.Validator{}
 		for _, pk := range validatorPubKeys {
 			if data, ok := validatorsData[pk]; ok {
 				results[data.Index] = data
@@ -127,7 +127,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	onUpdated := func(pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
 		require.True(t, strings.Contains(joined, pk))
-		require.True(t, meta.Index == spec.ValidatorIndex(210961) || meta.Index == spec.ValidatorIndex(213820))
+		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
 	}
 	err := UpdateValidatorsMetadata([][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
@@ -151,9 +151,9 @@ func TestBatch(t *testing.T) {
 	}
 
 	decodeds := make([][]byte, 0)
-	blsPubKeys := make([]spec.BLSPubKey, len(pks))
+	blsPubKeys := make([]phase0.BLSPubKey, len(pks))
 	for i, pk := range pks {
-		blsPubKey := spec.BLSPubKey{}
+		blsPubKey := phase0.BLSPubKey{}
 		decoded, _ := hex.DecodeString(pk)
 		copy(blsPubKey[:], decoded)
 		decodeds = append(decodeds, decoded)

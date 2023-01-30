@@ -6,10 +6,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/config/params"
-	"github.com/prysmaticlabs/prysm/crypto/hash"
-	prysmtime "github.com/prysmaticlabs/prysm/time"
-	"github.com/prysmaticlabs/prysm/time/slots"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -17,15 +13,15 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(uint64(slot))
+	gc.waitToSlotTwoThirds(slot)
 
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
-		return nil, errors.Wrap(err, "Could not get aggregator status")
+		return nil, errors.Wrap(err, "could not get aggregator status")
 	}
 	if !isAggregator {
-		return nil, errors.New("Validator is not an aggregator")
+		return nil, errors.New("validator is not an aggregator")
 	}
 
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
@@ -76,23 +72,23 @@ func (gc *goClient) SubmitSignedAggregateSelectionProof(msg *phase0.SignedAggreg
 //	 return bytes_to_uint64(hash(slot_signature)[0:8]) % modulo == 0
 func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	modulo := uint64(1)
-	if committeeCount/params.BeaconConfig().TargetAggregatorsPerCommittee > 1 {
-		modulo = committeeCount / params.BeaconConfig().TargetAggregatorsPerCommittee
+	if TargetAggregatorsPerCommittee > 1 {
+		modulo = committeeCount / TargetAggregatorsPerCommittee
 	}
 
-	b := hash.Hash(slotSig)
+	b := Hash(slotSig)
 	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitToSlotTwoThirds(slot uint64) {
-	oneThird := slots.DivideSlotBy(3 /* one third of slot duration */)
+func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
+	oneThird := gc.network.DivideSlotBy(3 /* one third of slot duration */)
 	twoThird := oneThird + oneThird
 	delay := twoThird
 
 	startTime := gc.slotStartTime(slot)
 	finalTime := startTime.Add(delay)
-	wait := prysmtime.Until(finalTime)
+	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}

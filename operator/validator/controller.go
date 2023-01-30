@@ -12,7 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -86,7 +86,7 @@ type ControllerOptions struct {
 type Controller interface {
 	ListenToEth1Events(feed *event.Feed)
 	StartValidators()
-	GetValidatorsIndices() []spec.ValidatorIndex
+	GetValidatorsIndices() []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
@@ -492,9 +492,9 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 
 // GetValidatorsIndices returns a list of all the active validators indices
 // and fetch indices for missing once (could be first time attesting or non active once)
-func (c *controller) GetValidatorsIndices() []spec.ValidatorIndex {
+func (c *controller) GetValidatorsIndices() []phase0.ValidatorIndex {
 	var toFetch [][]byte
-	var indices []spec.ValidatorIndex
+	var indices []phase0.ValidatorIndex
 
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		if !v.Share.HasBeaconMetadata() {

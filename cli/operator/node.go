@@ -6,18 +6,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"time"
-
-	"github.com/bloxapp/ssv/network"
-	logging "github.com/ipfs/go-log"
 
 	"github.com/bloxapp/eth2-key-manager/core"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/prysmaticlabs/prysm/time/slots"
+	logging "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
@@ -28,6 +24,7 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
@@ -247,7 +244,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	}
 	eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
-	currentEpoch := slots.EpochsSinceGenesis(time.Unix(int64(eth2Network.MinGenesisTime()), 0))
+	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
 	logger.Info("setting ssv network", zap.String("domain", string(types.GetDefaultDomain())),
