@@ -60,20 +60,21 @@ func New() Queue {
 }
 
 func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
-	// nolint
-	n := &msgItem{value: unsafe.Pointer(msg), next: q.head}
-	// nolint
-	added := cas(&q.head, q.head, unsafe.Pointer(n))
-	if added {
-		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
-	}
-
 	q.waitingLock.Lock()
 	waiting := q.waiting
 	q.waiting = false
 	q.waitingLock.Unlock()
 	if waiting {
 		q.wait <- msg
+		return
+	}
+
+	// nolint
+	n := &msgItem{value: unsafe.Pointer(msg), next: q.head}
+	// nolint
+	added := cas(&q.head, q.head, unsafe.Pointer(n))
+	if added {
+		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
 	}
 }
 
