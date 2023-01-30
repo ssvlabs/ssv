@@ -55,7 +55,6 @@ In order to setup a grafana dashboard do the following:
 4. Align dashboard variables:
     * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
       In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
-    * `validator_dashboard_id` - exist only in operator dashboard, points to validator dashboard
 
 <br />
 
