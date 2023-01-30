@@ -123,7 +123,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: GENESIS_EPOCH
-          value: "152512"
+          value: "1"
         - name: DB_PATH
           value: "./data/db"
         - name: METRICS_API_PORT
@@ -131,7 +131,7 @@ spec:
         - name: ENABLE_PROFILE
           value: "true"
         - name: NETWORK_ID
-          value: "shifu-v2-stage"
+          value: "shifu-stage"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v3-4
