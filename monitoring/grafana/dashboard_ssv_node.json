@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1674747316914,
+  "iteration": 1674846489626,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -2119,7 +2119,7 @@
           "refId": "A"
         }
       ],
-      "title": "Outgoing Topic Messages (2m rate)",
+      "title": "Outgoing Pubsub Messages (2m rate)",
       "type": "timeseries"
     },
     {
@@ -2213,7 +2213,7 @@
           "refId": "A"
         }
       ],
-      "title": "Incoming Topic Messages (2m rate)",
+      "title": "Incoming Pubsub Messages (2m rate)",
       "type": "timeseries"
     },
     {
@@ -2344,7 +2344,7 @@
           "refId": "D"
         }
       ],
-      "title": "Stream Protocols",
+      "title": "Stream Protocols (table)",
       "transformations": [
         {
           "id": "seriesToColumns",
@@ -2512,7 +2512,7 @@
           "refId": "D"
         }
       ],
-      "title": "Stream Protocols",
+      "title": "Stream Protocols (time-series)",
       "transformations": [],
       "type": "timeseries"
     }
@@ -2667,6 +2667,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 25,
+  "version": 27,
   "weekStart": ""
 }
