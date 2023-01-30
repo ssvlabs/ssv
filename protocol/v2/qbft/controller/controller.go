@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"

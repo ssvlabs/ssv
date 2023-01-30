@@ -1,11 +1,10 @@
 package eth1
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
-
-	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/utils/logex"

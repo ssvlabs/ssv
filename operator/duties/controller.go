@@ -3,9 +3,7 @@ package duties
 import (
 	"context"
 	"encoding/hex"
-
-	json "github.com/bytedance/sonic"
-
+	"encoding/json"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/operator/slot_ticker"

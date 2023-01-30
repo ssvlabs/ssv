@@ -8,7 +8,6 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.1.3-0.20211102055147-c66d220973fd
 	github.com/bloxapp/ssv-spec v0.2.8-0.20230111210417-5daf9ca5561f
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
-	github.com/bytedance/sonic v1.7.0
 	github.com/dgraph-io/badger/v3 v3.2103.2
 	github.com/ethereum/go-ethereum v1.10.23
 	github.com/ferranbt/fastssz v0.0.0-20220103083642-bc5fefefa28b
@@ -52,7 +51,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
@@ -160,7 +158,6 @@ require (
 	github.com/thomaso-mirodin/intmath v0.0.0-20160323211736-5dc6d854e46e // indirect
 	github.com/tklauser/go-sysconf v0.3.5 // indirect
 	github.com/tklauser/numcpus v0.2.2 // indirect
-	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/urfave/cli/v2 v2.10.2 // indirect
 	github.com/wealdtech/go-bytesutil v1.1.1 // indirect
@@ -172,7 +169,6 @@ require (
 	go.uber.org/dig v1.16.0 // indirect
 	go.uber.org/fx v1.19.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
-	golang.org/x/arch v0.0.0-20210923205945-b76863e36670 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/exp v0.0.0-20230105000112-eab7a2c85304 // indirect
 	golang.org/x/net v0.5.0 // indirect
@@ -197,4 +193,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/moshe-blox/ssv-spec v0.0.0-20230129120505-9f75252e0424
+replace github.com/bloxapp/ssv-spec => github.com/olegshmuelov/ssv-spec v0.0.0-20230117095155-f5d26c0be261

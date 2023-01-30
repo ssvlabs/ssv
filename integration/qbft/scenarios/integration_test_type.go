@@ -3,17 +3,15 @@ package scenarios
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"log"
-	"sync"
-	"time"
-
-	json "github.com/bytedance/sonic"
-
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/pkg/errors"
+	"log"
+	"sync"
+	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

@@ -1,11 +1,10 @@
 package scenarios
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
-
-	json "github.com/bytedance/sonic"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"

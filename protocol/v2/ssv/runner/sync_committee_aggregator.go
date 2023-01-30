@@ -4,8 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"

@@ -1,8 +1,7 @@
 package types
 
 import (
-	json "github.com/bytedance/sonic"
-
+	"encoding/json"
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 )

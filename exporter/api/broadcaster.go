@@ -1,9 +1,8 @@
 package api
 
 import (
+	"encoding/json"
 	"sync"
-
-	json "github.com/bytedance/sonic"
 
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"

@@ -2,12 +2,11 @@ package goeth
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	json "github.com/bytedance/sonic"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
