@@ -84,7 +84,5 @@ Row 1:
   `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>`
 
 Row 2:
-* Stream messages (table, requests|responses|active) \
-  `ssv_p2p_stream_msg{dir=out|in,protocol=*}`
-* Stream messages (time-series, requests|responses|active) \
-  `ssv_p2p_stream_msg{dir=out|in,protocol=*}`
+* Stream messages (table) (requests|responses|active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (table)
+* Stream messages (time-series) (requests|responses|active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (time-series)
