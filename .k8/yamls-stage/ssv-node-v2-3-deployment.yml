@@ -146,7 +146,7 @@ spec:
         - name: P2P_LOG
           value: "false"
         - name: CLEAN_REGISTRY_DATA
-          value: "true"
+          value: "false"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-3
