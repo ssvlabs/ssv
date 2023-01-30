@@ -81,21 +81,13 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 }
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
-	oneThird := gc.network.DivideSlotBy(3 /* one third of slot duration */)
-	twoThird := oneThird + oneThird
-	delay := twoThird
+func (gc *goClient) waitToSlotTwoThirds(ctx, slot phase0.Slot) {
+	oneThird := gc.network.SlotDurationSec() / 3 /* one third of slot duration */
 
-	startTime := gc.slotStartTime(slot)
-	finalTime := startTime.Add(delay)
+	finalTime := gc.slotStartTime(slot).Add(2 * oneThird)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}
-
-	t := time.NewTimer(wait)
-	defer t.Stop()
-	for range t.C {
-		return
-	}
+	time.Sleep(wait)
 }

@@ -58,11 +58,6 @@ func (n Network) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
 	return phase0.Epoch(slot / phase0.Slot(n.SlotsPerEpoch()))
 }
 
-// DivideSlotBy divides the slots per epoch
-func (n Network) DivideSlotBy(times int64) time.Duration {
-	return time.Duration(int64(n.Network.SlotsPerEpoch()*1000)/times) * time.Millisecond
-}
-
 // IsFirstSlotOfEpoch estimates epoch at the given slot
 func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 	return uint64(slot)%n.SlotsPerEpoch() == 0
