@@ -77,25 +77,25 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 
 		eg, ctx := errgroup.WithContext(pCtx)
 		for i, node := range ln.Nodes {
-			func(i int, node network.P2PNetwork) { //hack to avoid closures. price of using error groups
-				eg.Go(func() error {
-					if err := node.Start(); err != nil {
-						return fmt.Errorf("could not start node %d: %w", i, err)
-					}
-					ctx, cancel := context.WithTimeout(ctx, 1000*time.Second)
-					defer cancel()
-					var peers []peer.ID
-					for len(peers) < minConnected && ctx.Err() == nil {
-						peers = node.(HostProvider).Host().Network().Peers()
-						time.Sleep(time.Millisecond * 100)
-					}
-					if ctx.Err() != nil {
-						return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, nodesQuantity, len(peers))
-					}
-					logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", nodesQuantity), zap.String("found", fmt.Sprintf("%+v", peers)))
-					return nil
-				})
-			}(i, node)
+			i, node := i, node //hack to avoid closures. price of using error groups
+
+			eg.Go(func() error {
+				if err := node.Start(); err != nil {
+					return fmt.Errorf("could not start node %d: %w", i, err)
+				}
+				ctx, cancel := context.WithTimeout(ctx, 1000*time.Second)
+				defer cancel()
+				var peers []peer.ID
+				for len(peers) < minConnected && ctx.Err() == nil {
+					peers = node.(HostProvider).Host().Network().Peers()
+					time.Sleep(time.Millisecond * 100)
+				}
+				if ctx.Err() != nil {
+					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, nodesQuantity, len(peers))
+				}
+				logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", nodesQuantity), zap.String("found", fmt.Sprintf("%+v", peers)))
+				return nil
+			})
 		}
 
 		return ln, eg.Wait()
