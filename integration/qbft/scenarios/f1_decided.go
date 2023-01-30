@@ -5,7 +5,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -17,11 +17,11 @@ func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 	pk := spectestingutils.Testing4SharesSet().ValidatorPK.Serialize()
 	identifier := spectypes.NewMsgID(pk, role)
 
-	slots := []spec.Slot{
-		spec.Slot(spectestingutils.TestingDutySlot + 0),
-		spec.Slot(spectestingutils.TestingDutySlot + 1),
-		spec.Slot(spectestingutils.TestingDutySlot + 2),
-		spec.Slot(spectestingutils.TestingDutySlot + 3),
+	slots := []phase0.Slot{
+		phase0.Slot(spectestingutils.TestingDutySlot + 0),
+		phase0.Slot(spectestingutils.TestingDutySlot + 1),
+		phase0.Slot(spectestingutils.TestingDutySlot + 2),
+		phase0.Slot(spectestingutils.TestingDutySlot + 3),
 	}
 
 	delays := []time.Duration{
@@ -33,7 +33,7 @@ func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 
 	data := &spectypes.ConsensusData{
 		Duty: createDuty(pk, slots[1], 1, role),
-		AttestationData: &spec.AttestationData{
+		AttestationData: &phase0.AttestationData{
 			Slot:            slots[1],
 			Index:           spectestingutils.TestingAttestationData.Index,
 			BeaconBlockRoot: spectestingutils.TestingAttestationData.BeaconBlockRoot,
@@ -42,8 +42,8 @@ func F1Decided(role spectypes.BeaconRole) *IntegrationTest {
 		},
 		BlockData:                 nil,
 		AggregateAndProof:         nil,
-		SyncCommitteeBlockRoot:    spec.Root{},
-		SyncCommitteeContribution: map[spec.BLSSignature]*altair.SyncCommitteeContribution{},
+		SyncCommitteeBlockRoot:    phase0.Root{},
+		SyncCommitteeContribution: map[phase0.BLSSignature]*altair.SyncCommitteeContribution{},
 	}
 
 	consensusData, err := data.Encode()

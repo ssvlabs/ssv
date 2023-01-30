@@ -4,18 +4,22 @@ import (
 	"encoding/hex"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/api"
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1bbellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	eth2keymanager "github.com/bloxapp/eth2-key-manager"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ssz "github.com/ferranbt/fastssz"
+	"github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -23,15 +27,17 @@ import (
 )
 
 // minimal att&block epoch/slot distance to protect slashing
-var minimalAttSlashingProtectionEpochDistance = prysmtypes.Epoch(0)
-var minimalBlockSlashingProtectionSlotDistance = prysmtypes.Slot(0)
+var minimalAttSlashingProtectionEpochDistance = phase0.Epoch(0)
+var minimalBlockSlashingProtectionSlotDistance = phase0.Slot(0)
 
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
 	walletLock        *sync.RWMutex
+	signer            signer.ValidatorSigner
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
+	isBlinded         bool
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
@@ -56,84 +62,103 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		}
 	}
 
-	slashingProtector := newSlashingProtection(signerStore)
+	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Network)
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
+		signer:            beaconSigner,
 		storage:           signerStore,
 		domain:            domain,
 		slashingProtector: slashingProtector,
 	}, nil
 }
 
-func newSlashingProtection(store core.SlashingStore) core.SlashingProtector {
-	return slashingprotection.NewNormalProtection(store)
-}
-
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain spec.Domain, pk []byte, domainType spec.DomainType) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	account, err := km.wallet.AccountByPublicKey(hex.EncodeToString(pk))
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not get signing account")
-	}
-	if account == nil {
-		return nil, nil, errors.New("pk not found")
-	}
-
-	r, err := spectypes.ComputeETHSigningRoot(obj, domain)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not compute signing root")
-	}
-
-	if err := km.slashingProtection(pk, obj, domainType); err != nil {
-		return nil, nil, err
-	}
-
-	sig, err := account.ValidationKeySign(r[:])
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not sign message")
-	}
-	blsSig := spec.BLSSignature{}
-	copy(blsSig[:], sig)
-
-	return sig, r[:], nil
-}
-
-func (km *ethKeyManagerSigner) slashingProtection(pk []byte, obj ssz.HashRoot, domainType spec.DomainType) error {
 	switch domainType {
 	case spectypes.DomainAttester:
-		data, ok := obj.(*spec.AttestationData)
+		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
-			return errors.New("could not convert obj to attestation data")
+			return nil, nil, errors.New("could not cast obj to AttestationData")
 		}
-		if err := km.IsAttestationSlashable(pk, data); err != nil {
-			return err
-		}
-		if err := km.slashingProtector.UpdateHighestAttestation(pk, specAttDataToPrysmAttData(data)); err != nil {
-			return err
+		return km.signer.SignBeaconAttestation(data, domain, pk)
+	case spectypes.DomainProposer:
+		if km.isBlinded {
+			block, ok := obj.(*apiv1bbellatrix.BlindedBeaconBlock)
+			if !ok {
+				return nil, nil, errors.New("could not cast obj to BlindedBeaconBlock")
+			}
+			vBlock := &api.VersionedBlindedBeaconBlock{
+				Version:   spec.DataVersionBellatrix,
+				Bellatrix: block,
+			}
+			return km.signer.SignBlindedBeaconBlock(vBlock, domain, pk)
 		}
 
-	case spectypes.DomainProposer:
-		data, ok := obj.(*bellatrix.BeaconBlock)
+		block, ok := obj.(*bellatrix.BeaconBlock)
 		if !ok {
-			return errors.New("could not convert obj to beacon block")
+			return nil, nil, errors.New("could not cast obj to BeaconBlock")
 		}
-		if err := km.IsBeaconBlockSlashable(pk, data); err != nil {
-			return err
+		vBlock := &spec.VersionedBeaconBlock{
+			Version:   spec.DataVersionBellatrix,
+			Bellatrix: block,
 		}
-		if err := km.slashingProtector.UpdateHighestProposal(pk, specBeaconBlockToPrysmBlock(data)); err != nil {
-			return err
+		return km.signer.SignBeaconBlock(vBlock, domain, pk)
+	case spectypes.DomainAggregateAndProof:
+		data, ok := obj.(*phase0.AggregateAndProof)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to AggregateAndProof")
 		}
+		return km.signer.SignAggregateAndProof(data, domain, pk)
+	case spectypes.DomainSelectionProof:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZUint64")
+		}
+
+		return km.signer.SignSlot(phase0.Slot(data), domain, pk)
+	case spectypes.DomainRandao:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZUint64")
+		}
+
+		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
+	case spectypes.DomainSyncCommittee:
+		data, ok := obj.(spectypes.SSZBytes)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZBytes")
+		}
+		return km.signer.SignSyncCommittee(data, domain, pk)
+	case spectypes.DomainSyncCommitteeSelectionProof:
+		data, ok := obj.(*altair.SyncAggregatorSelectionData)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SyncAggregatorSelectionData")
+		}
+		return km.signer.SignSyncCommitteeSelectionData(data, domain, pk)
+	case spectypes.DomainContributionAndProof:
+		data, ok := obj.(*altair.ContributionAndProof)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to ContributionAndProof")
+		}
+		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
+	case spectypes.DomainApplicationBuilder:
+		data, ok := obj.(*apiv1.ValidatorRegistration)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to ValidatorRegistration")
+		}
+		return km.signer.SignRegistration(data, domain, pk)
+	default:
+		return nil, nil, errors.New("domain unknown")
 	}
-	return nil
 }
 
-func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *spec.AttestationData) error {
-	prysmAttData := specAttDataToPrysmAttData(data)
-	if val, err := km.slashingProtector.IsSlashableAttestation(pk, prysmAttData); err != nil || val != nil {
+func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.AttestationData) error {
+	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err
 		}
@@ -143,7 +168,7 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *spec.Atte
 }
 
 func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, block *bellatrix.BeaconBlock) error {
-	status, err := km.slashingProtector.IsSlashableProposal(pk, specBeaconBlockToPrysmBlock(block))
+	status, err := km.slashingProtector.IsSlashableProposal(pk, block.Slot)
 	if err != nil {
 		return err
 	}
@@ -204,12 +229,11 @@ func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
 	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance
 
 	minAttData := minimalAttProtectionData(highestSource, highestTarget)
-	minBlockData := minimalBlockProtectionData(highestProposal)
 
 	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
 		return errors.Wrapf(err, "could not save minimal highest attestation for %s", string(pk))
 	}
-	if err := km.storage.SaveHighestProposal(pk, minBlockData); err != nil {
+	if err := km.storage.SaveHighestProposal(pk, highestProposal); err != nil {
 		return errors.Wrapf(err, "could not save minimal highest proposal for %s", string(pk))
 	}
 	return nil
@@ -253,79 +277,16 @@ func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func minimalAttProtectionData(source, target prysmtypes.Epoch) *eth.AttestationData {
-	return &eth.AttestationData{
-		BeaconBlockRoot: make([]byte, 32),
-		Source: &eth.Checkpoint{
+func minimalAttProtectionData(source, target phase0.Epoch) *phase0.AttestationData {
+	return &phase0.AttestationData{
+		BeaconBlockRoot: [32]byte{},
+		Source: &phase0.Checkpoint{
 			Epoch: source,
-			Root:  make([]byte, 32),
+			Root:  [32]byte{},
 		},
-		Target: &eth.Checkpoint{
+		Target: &phase0.Checkpoint{
 			Epoch: target,
-			Root:  make([]byte, 32),
-		},
-	}
-}
-
-func minimalBlockProtectionData(slot prysmtypes.Slot) *eth.BeaconBlock {
-	return &eth.BeaconBlock{
-		Slot:       slot,
-		ParentRoot: make([]byte, 32),
-		StateRoot:  make([]byte, 32),
-		Body: &eth.BeaconBlockBody{
-			RandaoReveal: make([]byte, 96),
-			Eth1Data: &eth.Eth1Data{
-				DepositRoot: make([]byte, 32),
-				BlockHash:   make([]byte, 32),
-			},
-			Graffiti:          make([]byte, 32),
-			ProposerSlashings: []*eth.ProposerSlashing{},
-			AttesterSlashings: []*eth.AttesterSlashing{},
-			Attestations:      []*eth.Attestation{},
-			Deposits:          []*eth.Deposit{},
-			VoluntaryExits:    []*eth.SignedVoluntaryExit{},
-		},
-	}
-}
-
-// specAttDataToPrysmAttData a simple func converting between data types
-func specAttDataToPrysmAttData(data *spec.AttestationData) *eth.AttestationData {
-	// TODO - adopt github.com/attestantio/go-eth2-client in eth2-key-manager
-	return &eth.AttestationData{
-		Slot:            prysmtypes.Slot(data.Slot),
-		CommitteeIndex:  prysmtypes.CommitteeIndex(data.Index),
-		BeaconBlockRoot: data.BeaconBlockRoot[:],
-		Source: &eth.Checkpoint{
-			Epoch: prysmtypes.Epoch(data.Source.Epoch),
-			Root:  data.Source.Root[:],
-		},
-		Target: &eth.Checkpoint{
-			Epoch: prysmtypes.Epoch(data.Target.Epoch),
-			Root:  data.Target.Root[:],
-		},
-	}
-}
-
-func specBeaconBlockToPrysmBlock(b *bellatrix.BeaconBlock) *eth.BeaconBlock {
-	return &eth.BeaconBlock{
-		ProposerIndex: prysmtypes.ValidatorIndex(b.ProposerIndex),
-		Slot:          prysmtypes.Slot(b.Slot),
-		ParentRoot:    b.ParentRoot[:],
-		StateRoot:     b.StateRoot[:],
-		Body: &eth.BeaconBlockBody{
-			RandaoReveal: b.Body.RANDAOReveal[:],
-			Eth1Data: &eth.Eth1Data{
-				DepositRoot:  b.Body.ETH1Data.DepositRoot[:],
-				DepositCount: b.Body.ETH1Data.DepositCount,
-				BlockHash:    b.Body.ETH1Data.BlockHash,
-			},
-			Graffiti: b.Body.Graffiti,
-			// fields not used to check the slashing
-			ProposerSlashings: []*eth.ProposerSlashing{},
-			AttesterSlashings: []*eth.AttesterSlashing{},
-			Attestations:      []*eth.Attestation{},
-			Deposits:          []*eth.Deposit{},
-			VoluntaryExits:    []*eth.SignedVoluntaryExit{},
+			Root:  [32]byte{},
 		},
 	}
 }
