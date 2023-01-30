@@ -62,7 +62,6 @@ The dashboard consists of the following sections:
 * Rate of outgoing topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>` (time-series)
 * Rate of incoming topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>` (time-series)
 
-
-**Row 2:**
-* Stream messages (table, requests|responses|active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}`
-* Stream messages (time-series, requests|responses|active) `ssv_p2p_stream_msg{dir=out|in,protocol=*}`
+Row 2:
+* Stream messages (table) (requests|responses|active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (table)
+* Stream messages (time-series) (requests|responses|active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (time-series)
