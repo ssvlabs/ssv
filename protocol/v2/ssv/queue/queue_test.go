@@ -46,7 +46,7 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 }
 
 func TestPriorityQueueParallelism(t *testing.T) {
-	start := time.Now()
+	totalStart := time.Now()
 	n := 10
 	for i := 0; i < n; i++ {
 		start := time.Now()
@@ -127,7 +127,8 @@ func TestPriorityQueueParallelism(t *testing.T) {
 					}
 					// print <- []any{"popped message %d/%d", len(popped), messageCount}
 					if time.Since(start).Seconds() > 10 {
-						t.Fatal("timeout")
+						t.Logf("timeout")
+						t.Fail()
 					}
 				}
 			}()
@@ -157,7 +158,7 @@ func TestPriorityQueueParallelism(t *testing.T) {
 		}
 	}
 
-	log.Printf("finished %d iterations in %s", n, time.Since(start))
+	log.Printf("finished %d iterations in %s", n, time.Since(totalStart))
 }
 
 func TestPriorityQueueWaitAndPop(t *testing.T) {
