@@ -54,10 +54,14 @@ func TestPriorityQueueWaitAndPop(t *testing.T) {
 
 	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
+	msg2, err := DecodeSSVMessage(mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
 
 	// Push 2 message.
 	queue.Push(msg)
-	queue.Push(msg)
+	queue.Push(msg2)
+
+	require.False(t, queue.IsEmpty())
 
 	// WaitAndPop immediately.
 	popped := queue.WaitAndPop(NewMessagePrioritizer(mockState))
@@ -67,15 +71,17 @@ func TestPriorityQueueWaitAndPop(t *testing.T) {
 	// WaitAndPop immediately.
 	popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
 	require.NotNil(t, popped)
-	require.Equal(t, msg, popped)
+	require.Equal(t, msg2, popped)
+
+	require.True(t, queue.IsEmpty())
 
 	// Push 1 message in a goroutine.
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(1000 * time.Millisecond)
 		queue.Push(msg)
 
-		time.Sleep(100 * time.Millisecond)
-		queue.Push(msg)
+		time.Sleep(1000 * time.Millisecond)
+		queue.Push(msg2)
 	}()
 
 	// WaitAndPop should wait for the message to be pushed.
@@ -86,7 +92,7 @@ func TestPriorityQueueWaitAndPop(t *testing.T) {
 	// WaitAndPop should wait for the message to be pushed.
 	popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
 	require.NotNil(t, popped)
-	require.Equal(t, msg, popped)
+	require.Equal(t, msg2, popped)
 }
 
 // TestPriorityQueueOrder tests that the queue returns the messages in the correct order.
