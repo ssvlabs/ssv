@@ -21,6 +21,8 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 	logger := logger.With(zap.String("who", "NonCommitteeValidator"),
 		zap.String("identifier", identifier.String()))
 
+	logger.Debug("NIV: share", zap.Any("share", opts.SSVShare.Share))
+
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:  types.GetDefaultDomain(),
