@@ -205,7 +205,7 @@ func roundChangeInstanceValidator(consensusData []byte, operatorID spectypes.Ope
 		}
 
 		if !stateFound {
-			actualStateJSON, err := json.ConfigFastest.Marshal(actual.State)
+			actualStateJSON, err := json.Marshal(actual.State)
 			if err != nil {
 				return fmt.Errorf("marshal actual state")
 			}

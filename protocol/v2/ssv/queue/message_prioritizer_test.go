@@ -240,11 +240,11 @@ func (m messageSlice) equal(m2 messageSlice) bool {
 		return false
 	}
 	for i := range m {
-		a, err := json.ConfigFastest.Marshal(m[i])
+		a, err := json.Marshal(m[i])
 		if err != nil {
 			panic(err)
 		}
-		b, err := json.ConfigFastest.Marshal(m2[i])
+		b, err := json.Marshal(m2[i])
 		if err != nil {
 			panic(err)
 		}
@@ -327,13 +327,13 @@ func BenchmarkMessageDecoding(b *testing.B) {
 		Type:   qbft.PrepareMsgType,
 	}.ssvMessage(&State{})
 
-	encoded, err := json.ConfigFastest.Marshal(msg)
+	encoded, err := json.Marshal(msg)
 	require.NoError(b, err)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		var decoded types.SSVMessage
-		err = json.ConfigFastest.Unmarshal(encoded, &decoded)
+		err = json.Unmarshal(encoded, &decoded)
 		require.NoError(b, err)
 		b.StopTimer()
 		require.Equal(b, msg, &decoded)
@@ -352,7 +352,7 @@ func BenchmarkMessageDecodingSonic(b *testing.B) {
 	require.NoError(b, err)
 
 	var jsonDecoded types.SSVMessage
-	err = json.ConfigFastest.Unmarshal(encoded, &jsonDecoded)
+	err = json.Unmarshal(encoded, &jsonDecoded)
 	require.NoError(b, err)
 	require.Equal(b, msg, &jsonDecoded)
 

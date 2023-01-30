@@ -247,12 +247,12 @@ func (r *AttesterRunner) GetSigner() spectypes.KeyManager {
 
 // Encode returns the encoded struct in bytes or error
 func (r *AttesterRunner) Encode() ([]byte, error) {
-	return json.ConfigFastest.Marshal(r)
+	return json.Marshal(r)
 }
 
 // Decode returns error if decoding failed
 func (r *AttesterRunner) Decode(data []byte) error {
-	return json.ConfigFastest.Unmarshal(data, &r)
+	return json.Unmarshal(data, &r)
 }
 
 // GetRoot returns the root used for signing and verification

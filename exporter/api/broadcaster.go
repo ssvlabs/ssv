@@ -61,7 +61,7 @@ func (b *broadcaster) FromFeed(msgFeed *event.Feed) error {
 
 // Broadcast broadcasts a message to all available connections
 func (b *broadcaster) Broadcast(msg Message) error {
-	data, err := json.ConfigFastest.Marshal(&msg)
+	data, err := json.Marshal(&msg)
 	if err != nil {
 		return errors.Wrap(err, "could not marshal msg")
 	}

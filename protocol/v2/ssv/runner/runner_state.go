@@ -56,10 +56,10 @@ func (pcs *State) GetRoot() ([]byte, error) {
 
 // Encode returns the encoded struct in bytes or error
 func (pcs *State) Encode() ([]byte, error) {
-	return json.ConfigFastest.Marshal(pcs)
+	return json.Marshal(pcs)
 }
 
 // Decode returns error if decoding failed
 func (pcs *State) Decode(data []byte) error {
-	return json.ConfigFastest.Unmarshal(data, &pcs)
+	return json.Unmarshal(data, &pcs)
 }

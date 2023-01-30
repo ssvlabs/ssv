@@ -259,12 +259,12 @@ func (r *AggregatorRunner) GetSigner() spectypes.KeyManager {
 
 // Encode returns the encoded struct in bytes or error
 func (r *AggregatorRunner) Encode() ([]byte, error) {
-	return json.ConfigFastest.Marshal(r)
+	return json.Marshal(r)
 }
 
 // Decode returns error if decoding failed
 func (r *AggregatorRunner) Decode(data []byte) error {
-	return json.ConfigFastest.Unmarshal(data, &r)
+	return json.Unmarshal(data, &r)
 }
 
 // GetRoot returns the root used for signing and verification

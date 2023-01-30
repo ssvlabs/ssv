@@ -217,7 +217,7 @@ func (c *Controller) CanStartInstance() error {
 
 // GetRoot returns the state's deterministic root
 func (c *Controller) GetRoot() ([]byte, error) {
-	marshaledRoot, err := json.ConfigFastest.Marshal(c)
+	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode state")
 	}
@@ -227,12 +227,12 @@ func (c *Controller) GetRoot() ([]byte, error) {
 
 // Encode implementation
 func (c *Controller) Encode() ([]byte, error) {
-	return json.ConfigFastest.Marshal(c)
+	return json.Marshal(c)
 }
 
 // Decode implementation
 func (c *Controller) Decode(data []byte) error {
-	err := json.ConfigFastest.Unmarshal(data, &c)
+	err := json.Unmarshal(data, &c)
 	if err != nil {
 		return errors.Wrap(err, "could not decode controller")
 	}

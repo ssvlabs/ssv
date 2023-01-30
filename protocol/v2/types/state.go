@@ -39,12 +39,12 @@ func (s *State) GetRoot() ([]byte, error) {
 
 // Encode returns a msg encoded bytes or error
 func (s *State) Encode() ([]byte, error) {
-	return json.ConfigFastest.Marshal(s)
+	return json.Marshal(s)
 }
 
 // Decode returns error if decoding failed
 func (s *State) Decode(data []byte) error {
-	return json.ConfigFastest.Unmarshal(data, &s)
+	return json.Unmarshal(data, &s)
 }
 
 // type ProposedValueCheckF func(data []byte) error
