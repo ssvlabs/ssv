@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -180,19 +179,9 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
-	// TODO: stop waiting 1/3rd inside Beacon and move this here V
-	duration := time.Second * time.Duration(uint64(duty.Slot)*uint64(spectypes.PraterNetwork.SlotDurationSec().Seconds()))
-	start := time.Unix(int64(spectypes.PraterNetwork.MinGenesisTime()), 0).Add(duration).Add(4 * time.Second)
-
 	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
-	}
-
-	// Log if fetching AttestationData took too long.
-	took := time.Since(start)
-	if took > 1*time.Second {
-		r.logger.Warn("get attestation data took too long", zap.Duration("took", took))
 	}
 
 	input := &spectypes.ConsensusData{

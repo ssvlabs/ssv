@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
-	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
@@ -94,37 +92,6 @@ func (v *Validator) StartDuty(duty *spectypes.Duty) error {
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
-	start := time.Now()
-	p2pID := msg.GetID().String()
-	msgType := "<unknown>"
-	var signers []spectypes.OperatorID
-
-	msgTag := func() string {
-		signersStr := ""
-		for i, signer := range signers {
-			if i != 0 {
-				signersStr += "_"
-			}
-			signersStr += fmt.Sprint(signer)
-		}
-		return fmt.Sprintf("%s-%s-%s", msg.MsgID.GetRoleType().String(), msgType, signersStr)
-	}
-	logStart := func() {
-		v.logger.Debug(
-			fmt.Sprintf("started processing %s message", msgType),
-			zap.String("p2p_id", p2pID),
-			zap.String("tag", msgTag()),
-		)
-	}
-	logEnd := func() {
-		v.logger.Debug(
-			fmt.Sprintf("done processing %s message", msgType),
-			zap.String("p2p_id", p2pID),
-			zap.String("tag", msgTag()),
-			zap.Duration("took", time.Since(start)),
-		)
-	}
-
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
@@ -140,35 +107,12 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-		signers = signedMsg.Signers
-		switch signedMsg.Message.MsgType {
-		case specqbft.PrepareMsgType:
-			msgType = "prepare"
-		case specqbft.CommitMsgType:
-			msgType = "commit"
-		case specqbft.ProposalMsgType:
-			msgType = "proposal"
-		case specqbft.RoundChangeMsgType:
-			msgType = "round-change"
-		default:
-			msgType = fmt.Sprintf("<unknown-%d>", signedMsg.Message.MsgType)
-		}
-		logStart()
-		defer logEnd()
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		signers = signedMsg.GetSigners()
-		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			msgType = "post-consensus"
-			return dutyRunner.ProcessPostConsensus(signedMsg)
-		}
-		msgType = "pre-consensus"
-		logStart()
-		defer logEnd()
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(msg, dutyRunner)
