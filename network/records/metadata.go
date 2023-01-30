@@ -1,6 +1,8 @@
 package records
 
-import json "github.com/bytedance/sonic"
+import (
+	"encoding/json"
+)
 
 // NodeMetadata holds node's general information
 type NodeMetadata struct {

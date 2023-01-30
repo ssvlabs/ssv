@@ -2,8 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
-
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"

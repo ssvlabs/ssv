@@ -1,13 +1,12 @@
 package testing
 
 import (
+	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	json "github.com/bytedance/sonic"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"

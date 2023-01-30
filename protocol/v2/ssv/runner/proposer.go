@@ -3,8 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/hex"
-
-	json "github.com/bytedance/sonic"
+	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"

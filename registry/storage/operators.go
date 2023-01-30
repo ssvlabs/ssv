@@ -2,12 +2,11 @@ package storage
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"sync"
-
-	json "github.com/bytedance/sonic"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/common"
