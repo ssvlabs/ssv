@@ -88,35 +88,20 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 }
 
 func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
-	go func() {
-		start := time.Now()
-		byts, err := msg.Encode()
-		if err != nil {
-			i.logger.Debug("failed to broadcast message: failed to encode", zap.Error(err))
-			return
-		}
+	byts, err := msg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "could not encode message")
+	}
 
-		msgID := spectypes.MessageID{}
-		copy(msgID[:], msg.Message.Identifier)
+	msgID := spectypes.MessageID{}
+	copy(msgID[:], msg.Message.Identifier)
 
-		msgToBroadcast := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   msgID,
-			Data:    byts,
-		}
-		err = i.config.GetNetwork().Broadcast(msgToBroadcast)
-		if err != nil {
-			i.logger.Debug("failed to broadcast message", zap.Error(err))
-		}
-
-		i.logger.Debug("broadcast msg is done",
-			zap.String("pubKey", hex.EncodeToString(msgID.GetPubKey())),
-			zap.String("role", msgID.GetRoleType().String()),
-			zap.Int("msg type", int(msg.Message.MsgType)),
-			zap.Duration("duration", time.Since(start)))
-	}()
-
-	return nil
+	msgToBroadcast := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVConsensusMsgType,
+		MsgID:   msgID,
+		Data:    byts,
+	}
+	return i.config.GetNetwork().Broadcast(msgToBroadcast)
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
