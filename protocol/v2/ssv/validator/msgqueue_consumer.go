@@ -10,8 +10,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
-	"time"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -38,7 +36,6 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 			)
 			return
 		}
-		//v.logMsg(decodedMsg, "adding to q", zap.Any("type", decodedMsg.SSVMessage.MsgType))
 		q.Q.Push(decodedMsg)
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
@@ -51,7 +48,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(msgID, handler, time.Millisecond*50)
+		err := v.ConsumeQueue(msgID, handler)
 		if err != nil {
 			v.logger.Debug("failed consuming queue", zap.Error(err))
 		}
@@ -60,7 +57,7 @@ func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler Messag
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler, interval time.Duration) error {
+func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -75,10 +72,6 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 	for ctx.Err() == nil {
 
-		if q.Q.IsEmpty() {
-			time.Sleep(interval)
-			continue
-		}
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -91,15 +84,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		}
 		state.Height = v.GetLastHeight(msgID)
 		state.Round = v.GetLastRound(msgID)
+		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message and handle it.
-		msg := q.Q.Pop(queue.NewMessagePrioritizer(&state))
-		if msg == nil {
-			//logger.Debug("could not pop message from queue")
-			time.Sleep(interval)
-			continue
-		}
-		//v.logMsg(msg, "after pop, handling msg", zap.Any("type", msg.SSVMessage.MsgType), zap.Any("LIOR:state", state))
+		msg := q.Q.WaitAndPop(queue.NewMessagePrioritizer(&state))
 		if err := handler(msg); err != nil {
 			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}

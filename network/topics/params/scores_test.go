@@ -17,30 +17,6 @@ func TestTopicScoreParams(t *testing.T) {
 		expectedErr error
 	}{
 		{
-			"decided topic 1k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(1000, 128)
-				return &opts
-			},
-			nil,
-		},
-		{
-			"decided topic 10k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(10000, 128)
-				return &opts
-			},
-			nil,
-		},
-		{
-			"decided topic 51k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(51000, 128)
-				return &opts
-			},
-			nil,
-		},
-		{
 			"subnet topic 1k validators",
 			func() *Options {
 				opts := NewSubnetTopicOpts(1000, 128)

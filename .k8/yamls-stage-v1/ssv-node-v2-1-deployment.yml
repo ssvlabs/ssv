@@ -138,9 +138,11 @@ spec:
         - name: PUBSUB_TRACE
           value: 'false'
         - name: P2P_LOG
-          value: "true"
+          value: "false"
         - name: NETWORK_ID
           value: "shifu-stage"
+        - name: CLEAN_REGISTRY_DATA
+          value: "false"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-1
