@@ -48,8 +48,6 @@ func NewValidator(pctx context.Context, options Options) *Validator {
 
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
-	logger.Debug("NIV: share", zap.Any("share", options.SSVShare.Share))
-
 	v := &Validator{
 		ctx:         ctx,
 		cancel:      cancel,
