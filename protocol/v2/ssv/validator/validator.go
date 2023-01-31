@@ -42,14 +42,13 @@ type Validator struct {
 }
 
 // NewValidator creates a new instance of Validator.
-func NewValidator(pctx context.Context, options Options) *Validator {
+func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
-	ctx, cancel := context.WithCancel(pctx)
 
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	v := &Validator{
-		ctx:         ctx,
+		ctx:         pctx,
 		cancel:      cancel,
 		logger:      logger,
 		DutyRunners: options.DutyRunners,

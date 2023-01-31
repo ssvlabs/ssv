@@ -65,9 +65,10 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 		}
 
 		if decided, err := ncv.qbftController.ProcessMsg(signedMsg); err != nil {
-			logger.Debug("failed to process message", zap.Error(err),
+			logger.Debug("failed to process message",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-				zap.Any("signers", signedMsg.Signers))
+				zap.Any("signers", signedMsg.Signers),
+				zap.Error(err))
 		} else if decided != nil {
 			if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
 				logger := logger.With(

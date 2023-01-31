@@ -117,10 +117,9 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 		return nil, nil
 	}
 
-	if decidedMsg == nil || decidedMsg.Message == nil {
-		// TODO: this shouldn't happen, but it does because instance.ProcessMsg
-		// returns a true decided with a nil decidedMsg when it's given
-		// a non-decided message while the instance is decided.
+	// ProcessMsg returns a nil decidedMsg when given a non-commit message
+	// while the instance is decided. In this case, we have nothing new to broadcast.
+	if decidedMsg == nil {
 		return nil, nil
 	}
 
