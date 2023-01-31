@@ -15,8 +15,8 @@ The dashboard consists of the following sections:
 ### Operator Stats
 
 **Row 1:**
-* Instance round distribution: (off|idle|working|change-round): `ssv_validators_status{mode=off|idle|working} = <counter>` (gauge bar)
-* Validators status: `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Validators status: `ssv_validators_status{mode=off|idle|working} = <counter>` (gauge bar)
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
 * **To do**: Operator data (effectiveness)
 
 **Row 2:**
