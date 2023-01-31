@@ -52,7 +52,8 @@ func (i *Instance) uponPrepare(
 
 	i.logger.Debug("got prepare quorum, broadcasting commit message",
 		zap.Uint64("round", uint64(i.State.Round)),
-		zap.Any("signers", commitMsg.Signers))
+		zap.Any("prepare-signers", signedPrepare.Signers),
+		zap.Any("commit-singers", commitMsg.Signers))
 
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")

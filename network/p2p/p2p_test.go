@@ -30,7 +30,6 @@ func TestGetMaxPeers(t *testing.T) {
 
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
-	require.Equal(t, 16, n.getMaxPeers(n.fork.DecidedTopic()))
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {

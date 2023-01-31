@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"sort"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -38,7 +39,10 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
 
-		i.logger.Debug("got commit quorum", zap.Any("signers", agg.Signers))
+		i.logger.Debug("got commit quorum",
+			zap.Uint64("round", uint64(i.State.Round)),
+			zap.Any("commit-signers", signedCommit.Signers),
+			zap.Any("agg-signers", agg.Signers))
 
 		i.observeStageDurationMetric("commit", time.Since(i.stageStart).Seconds())
 		i.stageStart = time.Now()
@@ -69,6 +73,10 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 			}
 		}
 	}
+	// TODO: REWRITE THIS!
+	sort.Slice(ret.Signers, func(i, j int) bool {
+		return ret.Signers[i] < ret.Signers[j]
+	})
 	return ret, nil
 }
 

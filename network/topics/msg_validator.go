@@ -38,7 +38,8 @@ func NewSSVMsgValidator(plogger *zap.Logger, fork forks.Fork, self peer.ID) func
 		}
 		pmsg.ValidatorData = *msg
 		return pubsub.ValidationAccept
-		// check decided topic
+
+		// Check if the message was sent on the right topic.
 		// currentTopic := pmsg.GetTopic()
 		// currentTopicBaseName := fork.GetTopicBaseName(currentTopic)
 		// topics := fork.ValidatorTopicID(msg.GetID().GetPubKey())

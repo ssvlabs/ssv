@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -126,6 +127,9 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+	r.logger.Debug("got partial signatures",
+		zap.Any("signer", signedMsg.Signer),
+		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
 
 	if !quorum {
 		return nil
@@ -174,7 +178,10 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			Observe(time.Since(r.consensusStart).Seconds())
 		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
 
-		r.logger.Debug("successfully submitted attestation", zap.Int64("slot", int64(duty.Slot)))
+		r.logger.Debug("successfully submitted attestation",
+			zap.Int64("slot", int64(duty.Slot)),
+			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
+			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true
 
@@ -196,8 +203,6 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
-	// TODO - waitOneThirdOrValidBlock
-
 	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")

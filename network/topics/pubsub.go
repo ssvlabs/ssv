@@ -2,6 +2,9 @@ package topics
 
 import (
 	"context"
+	"net"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
@@ -13,13 +16,11 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"net"
-	"time"
 )
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to.
-	// 128 subnets + decided topic
+	// 128 subnets + 1 safety buffer
 	subscriptionRequestLimit = 128 + 1
 )
 

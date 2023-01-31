@@ -118,8 +118,9 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 	}
 
 	if decidedMsg == nil || decidedMsg.Message == nil {
-		// TODO: remove this log after it stopped happening.
-		c.logger.Debug("was gonna send decided msg but decided msg is nil")
+		// TODO: this shouldn't happen, but it does because instance.ProcessMsg
+		// returns a true decided with a nil decidedMsg when it's given
+		// a non-decided message while the instance is decided.
 		return nil, nil
 	}
 

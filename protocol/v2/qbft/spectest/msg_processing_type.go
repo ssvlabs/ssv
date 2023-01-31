@@ -3,10 +3,11 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
@@ -56,7 +57,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	require.NoError(t, err)
 
 	// broadcasting is asynchronic, so need to wait a bit before checking
-	time.Sleep(time.Millisecond * 50)
+	time.Sleep(time.Millisecond * 5)
 
 	// test output message
 	broadcastedMsgs := preInstance.GetConfig().GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs

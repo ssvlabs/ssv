@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

@@ -51,17 +51,11 @@ func (gc *goClient) getSigningRoot(data *phase0.AttestationData) ([32]byte, erro
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (gc *goClient) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	delay := gc.network.DivideSlotBy(3 /* a third of the slot duration */)
-	startTime := gc.slotStartTime(slot)
-	finalTime := startTime.Add(delay)
+	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
+	finalTime := gc.slotStartTime(slot).Add(delay)
 	wait := time.Until(finalTime)
 	if wait <= 0 {
 		return
 	}
-
-	t := time.NewTimer(wait)
-	defer t.Stop()
-	for range t.C {
-		return
-	}
+	time.Sleep(wait)
 }
