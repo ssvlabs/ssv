@@ -27,7 +27,7 @@ func (i *Instance) uponRoundChange(
 	i.logger.Debug("got change round",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Uint64("height", uint64(i.State.Height)),
-		zap.Any("signers", signedRoundChange.Signers))
+		zap.Any("round-change-signers", signedRoundChange.Signers))
 
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		i.State,
