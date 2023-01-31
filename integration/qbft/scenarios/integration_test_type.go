@@ -258,7 +258,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext, sharesSet *sp
 
 		ctx, cancel := context.WithCancel(sCtx.ctx)
 		options.DutyRunners = validator.SetupRunners(ctx, l, options)
-		val := protocolvalidator.NewValidator(sCtx.ctx, cancel, options)
+		val := protocolvalidator.NewValidator(ctx, cancel, options)
 		validators[operatorID] = val
 	}
 
