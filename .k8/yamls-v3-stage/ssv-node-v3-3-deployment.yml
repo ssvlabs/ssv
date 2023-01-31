@@ -135,7 +135,7 @@ spec:
         - name: NETWORK_ID
           value: "shifu-v2-stage"
         - name: GENESIS_EPOCH
-          value: "152802"
+          value: "152834"
         - name: WS_API_PORT
           value: "16303"
         - name: FULLNODE

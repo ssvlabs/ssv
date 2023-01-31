@@ -68,6 +68,10 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
+func (i *ibftStorage) CleanRegistryData() error {
+	return i.db.RemoveAllByCollection(append(i.prefix, highestInstanceKey...))
+}
+
 // GetHighestInstance returns the StoredInstance for the highest instance.
 func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
 	val, found, err := i.get(highestInstanceKey, identifier[:])

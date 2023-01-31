@@ -2,6 +2,7 @@ package qbftstorage
 
 import (
 	"encoding/json"
+	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
@@ -49,4 +50,5 @@ type InstanceStore interface {
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
 	InstanceStore
+	registry.RegistryStore
 }

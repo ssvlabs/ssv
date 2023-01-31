@@ -3,6 +3,9 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"github.com/bloxapp/ssv/ibft/storage"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -81,6 +84,10 @@ func (o Options) nodeStorage() operatorstorage.Storage {
 
 func (o Options) signerStorage() ekm.Storage {
 	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
+}
+
+func (o Options) ibftStorage(prefix string) qbftstorage.QBFTStore {
+	return storage.New(o.Db, o.Logger, prefix, forksprotocol.GenesisForkVersion)
 }
 
 // Run executes the migrations.
