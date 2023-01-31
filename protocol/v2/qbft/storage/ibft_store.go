@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
@@ -50,5 +49,4 @@ type InstanceStore interface {
 // QBFTStore is the store used by QBFT components
 type QBFTStore interface {
 	InstanceStore
-	registry.RegistryStore
 }
