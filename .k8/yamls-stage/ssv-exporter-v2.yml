@@ -175,6 +175,8 @@ spec:
               value: "true"
             - name: EXPORTER
               value: "true"
+            - name: GENESIS_EPOCH
+              value: "1"
             - name: NETWORK_ID
               value: "shifu-v2-stage"
             - name: P2P_LOG
