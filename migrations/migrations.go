@@ -3,18 +3,18 @@ package migrations
 import (
 	"bytes"
 	"context"
-	"github.com/bloxapp/ssv/ibft/storage"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/ibft/storage"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
