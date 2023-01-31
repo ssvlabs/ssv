@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -166,6 +167,8 @@ func TestPriorityQueueParallelism(t *testing.T) {
 }
 
 func TestPriorityQueueWaitAndPop(t *testing.T) {
+	ctx := context.Background()
+
 	for i := 0; i < 10; i++ {
 		queue := New()
 		require.True(t, queue.IsEmpty())
@@ -178,12 +181,12 @@ func TestPriorityQueueWaitAndPop(t *testing.T) {
 		queue.Push(msg)
 
 		// WaitAndPop immediately.
-		popped := queue.WaitAndPop(NewMessagePrioritizer(mockState))
+		popped := queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
 		require.NotNil(t, popped)
 		require.Equal(t, msg, popped)
 
 		// WaitAndPop immediately.
-		popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
+		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
 		require.NotNil(t, popped)
 		require.Equal(t, msg, popped)
 
@@ -197,12 +200,12 @@ func TestPriorityQueueWaitAndPop(t *testing.T) {
 		}()
 
 		// WaitAndPop should wait for the message to be pushed.
-		popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
+		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
 		require.NotNil(t, popped)
 		require.Equal(t, msg, popped)
 
 		// WaitAndPop should wait for the message to be pushed.
-		popped = queue.WaitAndPop(NewMessagePrioritizer(mockState))
+		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
 		require.NotNil(t, popped)
 		require.Equal(t, msg, popped)
 	}

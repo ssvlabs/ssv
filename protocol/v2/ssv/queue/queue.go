@@ -2,6 +2,7 @@
 package queue
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -33,7 +34,7 @@ type Queue interface {
 	IsEmpty() bool
 
 	// WaitAndPop waits for a message to be pushed to the queue and then returns it.
-	WaitAndPop(MessagePrioritizer) *DecodedSSVMessage
+	WaitAndPop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 }
 
 // PriorityQueue implements Queue, it manages a lock-free linked list of DecodedSSVMessage.
@@ -83,7 +84,7 @@ func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	return res
 }
 
-func (q *PriorityQueue) WaitAndPop(priority MessagePrioritizer) *DecodedSSVMessage {
+func (q *PriorityQueue) WaitAndPop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
 	q.waitingLock.Lock()
 	if msg := q.Pop(priority); msg != nil {
 		q.waitingLock.Unlock()
@@ -91,7 +92,12 @@ func (q *PriorityQueue) WaitAndPop(priority MessagePrioritizer) *DecodedSSVMessa
 	}
 	q.waiting = true
 	q.waitingLock.Unlock()
-	return <-q.wait
+	select {
+	case msg := <-q.wait:
+		return msg
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 func (q *PriorityQueue) IsEmpty() bool {

@@ -76,8 +76,13 @@ func (vm *validatorsMap) GetOrCreateValidator(share *types.SSVShare) *validator.
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		opts := *vm.optsTemplate
 		opts.SSVShare = share
-		opts.DutyRunners = SetupRunners(vm.ctx, vm.logger, opts)
-		vm.validatorsMap[pubKey] = validator.NewValidator(vm.ctx, opts)
+
+		// Share context with both the validator and the runners,
+		// so that when the validator is stopped, the runners are stopped as well.
+		ctx, cancel := context.WithCancel(vm.ctx)
+		opts.DutyRunners = SetupRunners(ctx, vm.logger, opts)
+		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
+
 		printShare(share, vm.logger, "setup validator done")
 		opts.SSVShare = nil
 	} else {
