@@ -83,7 +83,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 				if err := node.Start(); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
-				ctx, cancel := context.WithTimeout(ctx, 1000*time.Second)
+				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
