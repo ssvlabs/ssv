@@ -2,12 +2,13 @@ package runner
 
 import (
 	"bytes"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"sort"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"sort"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) error {
@@ -75,7 +76,7 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *types.Cons
 	return nil
 }
 
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
+func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain phase0.DomainType) error {
 	if len(expectedRootObjs) != len(signedMsg.Message.Messages) {
 		return errors.New("wrong expected roots count")
 	}

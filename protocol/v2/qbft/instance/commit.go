@@ -2,6 +2,7 @@ package instance
 
 import (
 	"bytes"
+	"sort"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -37,7 +38,10 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
 
-		i.logger.Debug("got commit quorum", zap.Any("signers", agg.Signers))
+		i.logger.Debug("got commit quorum",
+			zap.Uint64("round", uint64(i.State.Round)),
+			zap.Any("commit-signers", signedCommit.Signers),
+			zap.Any("agg-signers", agg.Signers))
 
 		return true, msgCommitData.Data, agg, nil
 	}
@@ -65,6 +69,10 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 			}
 		}
 	}
+	// TODO: REWRITE THIS!
+	sort.Slice(ret.Signers, func(i, j int) bool {
+		return ret.Signers[i] < ret.Signers[j]
+	})
 	return ret, nil
 }
 

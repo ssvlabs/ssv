@@ -2,8 +2,9 @@ package goclient
 
 import (
 	"fmt"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -11,7 +12,7 @@ import (
 )
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
-func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
+func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
 	// TODO need to support blinded?
 	// TODO what with fee recipient?
 	sig := phase0.BLSSignature{}
@@ -28,6 +29,14 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*
 	default:
 		return nil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlockRoot.Version))
 	}
+}
+
+func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {
+	return nil, nil
+}
+
+func (gc *goClient) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {
+	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node

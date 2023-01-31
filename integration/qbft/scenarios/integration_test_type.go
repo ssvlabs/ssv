@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -242,7 +242,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext, sharesSet *sp
 				Share: *testingShare(sharesSet, operatorID),
 				Metadata: types.Metadata{
 					BeaconMetadata: &protocolbeacon.ValidatorMetadata{
-						Index: spec.ValidatorIndex(1),
+						Index: phase0.ValidatorIndex(1),
 					},
 					OwnerAddress: "0x0",
 					Operators:    operators,
@@ -275,7 +275,7 @@ var testingShare = func(keysSet *spectestingutils.TestKeySet, id spectypes.Opera
 	}
 }
 
-func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole) *spectypes.Duty {
+func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.BeaconRole) *spectypes.Duty {
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
 
@@ -306,7 +306,7 @@ func createDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectyp
 	}
 }
 
-func createScheduledDuty(pk []byte, slot spec.Slot, idx spec.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) scheduledDuty {
+func createScheduledDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.BeaconRole, delay time.Duration) scheduledDuty {
 	return scheduledDuty{
 		Duty:  createDuty(pk, slot, idx, role),
 		Delay: delay,
@@ -332,7 +332,7 @@ type beaconNode struct {
 }
 
 // GetAttestationData returns attestation data by the given slot and committee index
-func (bn beaconNode) GetAttestationData(slot spec.Slot, committeeIndex spec.CommitteeIndex) (*spec.AttestationData, error) {
+func (bn beaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
 	data := spectestingutils.TestingAttestationData
 	data.Slot = slot
 	data.Index = committeeIndex

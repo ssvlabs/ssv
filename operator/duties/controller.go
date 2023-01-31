@@ -4,8 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -13,11 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	prysmtypes "github.com/prysmaticlabs/eth2-types"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -82,7 +82,7 @@ func (dc *dutyController) Start() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
-	tickerChan := make(chan prysmtypes.Slot, 32)
+	tickerChan := make(chan phase0.Slot, 32)
 	dc.ticker.Subscribe(tickerChan)
 	dc.listenToTicker(tickerChan)
 }
@@ -144,10 +144,10 @@ func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 }
 
 // listenToTicker loop over the given slot channel
-func (dc *dutyController) listenToTicker(slots <-chan prysmtypes.Slot) {
+func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
 		// execute duties
-		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
+		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
 		}
@@ -194,7 +194,7 @@ func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *specty
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(uint64(duty.Slot))))
+		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(duty.Slot)))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode

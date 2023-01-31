@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -54,32 +53,13 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	vpk := msg.GetID().GetPubKey()
 	topics := n.fork.ValidatorTopicID(vpk)
-	// for decided message, send on decided channel first
-	logger := n.logger.With(zap.String("pk", hex.EncodeToString(vpk)))
-
-	if msg.MsgType == spectypes.SSVConsensusMsgType {
-		sm := specqbft.SignedMessage{}
-		if err := sm.Decode(msg.Data); err == nil && sm.Message != nil {
-			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-				zap.Any("signers", sm.GetSigners()))
-
-			// TODO: The signers check is a temporary workaround solution. We need to check for a quorum using a share.
-			if sm.Message.MsgType == specqbft.CommitMsgType && len(sm.Signers) > 1 {
-				if decidedTopic := n.fork.DecidedTopic(); len(decidedTopic) > 0 {
-					topics = append([]string{decidedTopic}, topics...)
-				}
-			}
-		}
-	}
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			logger.Debug("could not broadcast msg", zap.Error(err))
+			n.logger.Debug("could not broadcast msg", zap.String("pk", hex.EncodeToString(vpk)), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
-
 	return nil
 }
 
@@ -204,33 +184,42 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 	if ssvMsg == nil {
 		return errors.New("message was not decoded")
 	}
-	// logger = withIncomingMsgFields(logger, msg, ssvMsg)
-	// logger.Debug("incoming pubsub message", zap.String("topic", topic),
-	//	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
-	metricsRouterIncoming.WithLabelValues(ssvMsg.GetID().String(), message.MsgTypeToString(ssvMsg.MsgType)).Inc()
+
+	p2pID := ssvMsg.GetID().String()
+
+	// logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
+	// logger.Debug("incoming pubsub message",
+	// 	zap.String("p2p_id", p2pID),
+	// 	zap.String("topic", topic),
+	// 	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+
+	metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 	n.msgRouter.Route(*ssvMsg)
 	return nil
 }
 
-//// withIncomingMsgFields adds fields to the given logger
+// // withIncomingMsgFields adds fields to the given logger
 // func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-//	logger = logger.With(zap.String("identifier", ssvMsg.MsgID.String()))
-//	if ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
-//		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
-//		from, err := peer.IDFromBytes(msg.Message.GetFrom())
-//		if err == nil {
-//			logger = logger.With(zap.String("msgFrom", from.String()))
-//		}
-//		var sm specqbft.SignedMessage
-//		err = sm.Decode(ssvMsg.Data)
-//		if err == nil && sm.Message != nil {
-//			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-//				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-//				zap.Any("signers", sm.GetSigners()))
-//		}
-//	}
-//	return logger
-//}
+// 	logger = logger.With(
+// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
+// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
+// 	)
+// 	if ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
+// 		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
+// 		from, err := peer.IDFromBytes(msg.Message.GetFrom())
+// 		if err == nil {
+// 			logger = logger.With(zap.String("msgFrom", from.String()))
+// 		}
+// 		var sm specqbft.SignedMessage
+// 		err = sm.Decode(ssvMsg.Data)
+// 		if err == nil && sm.Message != nil {
+// 			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
+// 				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
+// 				zap.Any("signers", sm.GetSigners()))
+// 		}
+// 	}
+// 	return logger
+// }
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets() error {

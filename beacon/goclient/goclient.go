@@ -9,6 +9,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -153,8 +154,8 @@ func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
-func (gc *goClient) slotStartTime(slot uint64) time.Time {
-	duration := time.Second * time.Duration(slot*uint64(gc.network.SlotDurationSec().Seconds()))
+func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

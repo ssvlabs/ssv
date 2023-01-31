@@ -11,7 +11,7 @@ import (
 // GetSyncMessageBlockRoot returns beacon block root for sync committee
 func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, error) {
 	// Wait a 1/3 into the slot.
-	gc.waitOneThirdOrValidBlock(uint64(slot))
+	gc.waitOneThirdOrValidBlock(slot)
 	root, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
 		return phase0.Root{}, err
