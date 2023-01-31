@@ -37,7 +37,6 @@ var (
 		migrationCleanRegistryData,
 		migrationCleanRegistryDataIncludingSignerStorage,
 		migrationCleanRegistryDataShifuV2,
-		migrationCleanRegistryDataShifuV2Stage,
 	}
 )
 

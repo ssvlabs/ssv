@@ -2,9 +2,9 @@ package qbftstorage
 
 import (
 	"encoding/json"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
