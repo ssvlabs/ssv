@@ -57,7 +57,7 @@ func (i *Instance) uponRoundChange(
 		}
 
 		i.logger.Debug("got justified change round, broadcasting proposal message",
-			zap.Uint64("round", uint64(i.State.Round)), zap.Any("signers", signedRoundChange.Signers))
+			zap.Uint64("round", uint64(i.State.Round)))
 
 		if err := i.Broadcast(proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
