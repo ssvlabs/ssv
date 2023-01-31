@@ -24,6 +24,11 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
+	i.logger.Debug("got change round",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Uint64("height", uint64(i.State.Height)),
+		zap.Any("proposal-signers", signedRoundChange.Signers))
+
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		i.State,
 		i.config,
@@ -52,7 +57,7 @@ func (i *Instance) uponRoundChange(
 		}
 
 		i.logger.Debug("got justified change round, broadcasting proposal message",
-			zap.Uint64("round", uint64(i.State.Round)))
+			zap.Uint64("round", uint64(i.State.Round)), zap.Any("signers", signedRoundChange.Signers))
 
 		if err := i.Broadcast(proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
