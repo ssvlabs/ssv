@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1675262903422,
+  "iteration": 1675265973211,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -378,8 +378,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -392,17 +392,19 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
-            "spanNulls": false,
+            "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
           "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -411,7 +413,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
@@ -425,9 +428,11 @@
       "interval": "2m",
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -441,13 +446,98 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_beacon_attestation_data_request_duration_seconds_bucket{instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}} s",
-          "refId": "A"
+          "legendFormat": "< 0.02 s",
+          "refId": "< 0.02 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.02 - 0.05 s",
+          "refId": "0.02 - 0.05 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.05 - 0.1 s",
+          "refId": "0.05 - 0.1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.1 - 0.2 s",
+          "refId": "0.1 - 0.2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.2 - 0.5 s",
+          "refId": "0.2 - 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 5 s",
+          "refId": "1 - 5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 5 s",
+          "refId": "> 5 s"
         }
       ],
       "title": "Attestation Data Request Duration",
@@ -2136,6 +2226,6 @@
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 61,
+  "version": 63,
   "weekStart": ""
 }
