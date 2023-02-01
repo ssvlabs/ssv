@@ -125,8 +125,6 @@ spec:
           value: "13004"
         - name: UDP_PORT
           value: "12004"
-        - name: GENESIS_EPOCH
-          value: "1"
         - name: LOGGER_LEVEL
           value: "debug"
         - name: DB_PATH
@@ -144,7 +142,9 @@ spec:
         - name: PUBSUB_TRACE
           value: 'false'
         - name: NETWORK_ID
-          value: "shifu-stage"
+          value: "shifu-v2-stage"
+        - name: GENESIS_EPOCH
+          value: "152834"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         volumeMounts:
