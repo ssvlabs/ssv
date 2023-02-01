@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675278980387,
+  "iteration": 1675279940052,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -126,8 +126,12 @@
                       "value": null
                     },
                     {
-                      "color": "green",
+                      "color": "#EAB839",
                       "value": 1
+                    },
+                    {
+                      "color": "green",
+                      "value": 2
                     }
                   ]
                 }
@@ -2557,7 +2561,7 @@
     "list": [
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "ssv-node-v3-1",
           "value": "ssv-node-v3-1"
         },
@@ -2700,6 +2704,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 32,
+  "version": 33,
   "weekStart": ""
 }
