@@ -100,7 +100,7 @@ Unless provided, the key will be generated and stored locally for future use,
 and can be revoked in case it was compromised. 
 
 `Operator Key` is used for decryption of share's keys that are used for signing/verifying consensus messages and duties. \
-Exporter and Bootnode does not hold this key.
+Exporter and Bootnode do not hold this key.
 
 
 ### Network Discovery
@@ -133,7 +133,7 @@ All the messages that are being transmitted over the network must be wrapped wit
 syntax = "proto3";
 import "gogo.proto";
 
-// SignedMessage holds a message and it's corresponding signature
+// SignedMessage holds a message and its corresponding signature
 message SSVMessage {
   // type of the message
   MsgType MsgType = 1 [(gogoproto.nullable) = false];
@@ -230,7 +230,7 @@ More details can be found in the [QBFT spec](https://github.com/bloxapp/ssv/blob
 
 ## Sync Protocols
 
-There are several sync protocols, tha main purpose is to enable operator nodes to sync past decided message or to catch up with round changes.
+There are several sync protocols, the main purpose is to enable operator nodes to sync past decided message or to catch up with round changes.
 
 In order to participate in some validator's consensus, a peer will first use sync protocols to align on past information.
 
@@ -488,7 +488,7 @@ each incoming message will be validated to avoid relaying bad messages,
 and affecting peers scores.
 
 [Extended Validators](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/gossipsub-v1.1.md#extended-validators) 
-allows the application to aid in the gossipsub peer-scoring scheme.
+allow the application to aid in the gossipsub peer-scoring scheme.
 We utilize `ACCEPT`, `REJECT`, and `IGNORE` as the result of the validation, 
 this will affect the scoring of the sending peers.
 
@@ -598,7 +598,7 @@ established in a separate [handshake process](https://github.com/ethereum/devp2p
 
 **Bootnode** 
 
-A peer that have a public, static ENR to enable new peers to join the network. For the sake of flexibility, 
+A peer that has a public, static ENR to enable new peers to join the network. For the sake of flexibility, 
 bootnode/s ENR values are configurable and can be changed on demand by operators. \
 Bootnode doesn't start a libp2p host for TCP communication, 
 its role ends once a new peer finds existing peers in the network.
@@ -662,7 +662,7 @@ In addition, the limit of peers per topic is also configurable.
 
 #### Connection Gating
 
-Connection Gating allows safeguarding against bad/pruned peers that tries to reconnect multiple times. 
+Connection Gating allows safeguarding against bad/pruned peers that try to reconnect multiple times. 
 Inbound and outbound connections are intercepted and being checked before other components process the connection.
 
 See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go) 
@@ -710,7 +710,7 @@ Number of subnets for this version is 128
 
 **Sync Protocol ID**
 
-`v0` - all protocols resides on a single stream protocol `/sync/0.0.1` 
+`v0` - all protocols reside on a single stream protocol `/sync/0.0.1` 
 
 `v1` - each protocol has its own id, as specified in [Sync Protocols](#sync-protocols)
 
