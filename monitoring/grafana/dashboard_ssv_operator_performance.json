@@ -22,775 +22,17 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1675252828225,
+  "iteration": 1675261952334,
   "links": [],
   "liveNow": false,
   "panels": [
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "description": "Information on attestation duties for all validators registered to an operator",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "align": "left",
-            "displayMode": "auto",
-            "filterable": true
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Stage"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "rgba(92, 92, 92, 1)",
-                        "index": 0,
-                        "text": "Not Started"
-                      },
-                      "1": {
-                        "color": "super-light-green",
-                        "index": 1,
-                        "text": "Pre Prepare"
-                      },
-                      "2": {
-                        "color": "light-green",
-                        "index": 2,
-                        "text": "Prepare"
-                      },
-                      "3": {
-                        "color": "semi-dark-green",
-                        "index": 3,
-                        "text": "Commit"
-                      },
-                      "4": {
-                        "color": "yellow",
-                        "index": 4,
-                        "text": "Change Round"
-                      },
-                      "5": {
-                        "color": "dark-green",
-                        "index": 5,
-                        "text": "Decided"
-                      },
-                      "6": {
-                        "color": "rgba(39, 39, 39, 1)",
-                        "index": 6,
-                        "text": "Stopped"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.width",
-                "value": 123
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Connected Peers"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "2": {
-                        "color": "yellow",
-                        "index": 1
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "from": 0,
-                      "result": {
-                        "color": "red",
-                        "index": 0
-                      },
-                      "to": 1
-                    },
-                    "type": "range"
-                  },
-                  {
-                    "options": {
-                      "from": 3,
-                      "result": {
-                        "color": "green",
-                        "index": 2
-                      },
-                      "to": 10
-                    },
-                    "type": "range"
-                  }
-                ]
-              },
-              {
-                "id": "custom.width",
-                "value": 146
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "pubKey"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 804
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Round"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": null
-                    },
-                    {
-                      "color": "#EAB839",
-                      "value": 4
-                    },
-                    {
-                      "color": "orange",
-                      "value": 6
-                    },
-                    {
-                      "color": "red",
-                      "value": 8
-                    },
-                    {
-                      "color": "dark-red",
-                      "value": 15
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.width",
-                "value": 100
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "IBFT Status"
-            },
-            "properties": [
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "custom.width",
-                "value": 148
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "gray",
-                        "index": 0,
-                        "text": "IDLE"
-                      },
-                      "1": {
-                        "color": "green",
-                        "index": 1,
-                        "text": "Running"
-                      },
-                      "2": {
-                        "color": "yellow",
-                        "index": 2,
-                        "text": "Initializing"
-                      },
-                      "3": {
-                        "color": "green",
-                        "index": 3,
-                        "text": "Initialized"
-                      },
-                      "4": {
-                        "color": "red",
-                        "index": 4,
-                        "text": "Error"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Public Key"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "",
-                    "url": "$explorer/validators/${__data.fields[\"Public Key\"]}#attestations"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Beaconcha"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "",
-                    "url": "https://prater.beaconcha.in/validator/${__data.fields[\"Public Key\"]}#attestations"
-                  }
-                ]
-              },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "ssv": {
-                        "index": 0,
-                        "text": "Open"
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "match": "null+nan",
-                      "result": {
-                        "index": 1,
-                        "text": "Open"
-                      }
-                    },
-                    "type": "special"
-                  }
-                ]
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "auto"
-              },
-              {
-                "id": "custom.width",
-                "value": 90
-              },
-              {
-                "id": "custom.filterable"
-              },
-              {
-                "id": "custom.align",
-                "value": "center"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Current Sequence"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 150
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Highest Decided"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 150
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Current slot"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 125
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Dashboard"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "ssv": {
-                        "index": 0,
-                        "text": "Open"
-                      }
-                    },
-                    "type": "value"
-                  },
-                  {
-                    "options": {
-                      "match": "null+nan",
-                      "result": {
-                        "index": 1,
-                        "text": "Open"
-                      }
-                    },
-                    "type": "special"
-                  }
-                ]
-              },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "",
-                    "url": "/d/${validator_dashboard_id}/ssv-validator?orgId=1&refresh=10s&var-instance=${instance}&var-pubkey=${__data.fields[\"Public Key\"]}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.width",
-                "value": 90
-              },
-              {
-                "id": "custom.filterable"
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "auto"
-              },
-              {
-                "id": "custom.align",
-                "value": "center"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Validator Status"
-            },
-            "properties": [
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "options": {
-                      "0": {
-                        "color": "gray",
-                        "index": 0,
-                        "text": "Inactive"
-                      },
-                      "1": {
-                        "color": "orange",
-                        "index": 1,
-                        "text": "No Index"
-                      },
-                      "2": {
-                        "color": "red",
-                        "index": 2,
-                        "text": "Error"
-                      },
-                      "3": {
-                        "color": "green",
-                        "index": 3,
-                        "text": "Ready"
-                      },
-                      "4": {
-                        "color": "grey",
-                        "index": 4,
-                        "text": "Not Activated"
-                      },
-                      "5": {
-                        "color": "gray",
-                        "index": 5,
-                        "text": "Exited"
-                      },
-                      "6": {
-                        "color": "red",
-                        "index": 6,
-                        "text": "Slashed"
-                      },
-                      "7": {
-                        "color": "red",
-                        "index": 7,
-                        "text": "Not Found"
-                      }
-                    },
-                    "type": "value"
-                  }
-                ]
-              },
-              {
-                "id": "custom.align",
-                "value": "left"
-              },
-              {
-                "id": "custom.displayMode",
-                "value": "color-text"
-              },
-              {
-                "id": "custom.width",
-                "value": 162
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 13,
-        "w": 23,
-        "x": 0,
-        "y": 0
-      },
-      "id": 50,
-      "options": {
-        "footer": {
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Round"
-          }
-        ]
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_stage{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "E"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_highest_decided{instance=~\"$instance.*\"}",
-          "format": "table",
-          "instant": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:network:connected_peers{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv:validator:ibft_current_sequence{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:validator:ibft_round{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:validator:running_ibfts_count{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "F"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "ssv:validator:v2:ibft_current_slot{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "G"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:validator:v2:status{instance=~\"$instance.*\"}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "H"
-        }
-      ],
-      "title": "Validators (Attestation)",
-      "transformations": [
-        {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "pubKey"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time 1": true,
-              "Time 2": true,
-              "Time 3": true,
-              "Time 4": true,
-              "Time 5": true,
-              "Time 6": true,
-              "Time 7": true,
-              "Time 8": true,
-              "Value #B": true,
-              "__name__ 1": true,
-              "__name__ 2": true,
-              "__name__ 3": true,
-              "__name__ 4": true,
-              "__name__ 5": true,
-              "__name__ 6": true,
-              "__name__ 7": true,
-              "__name__ 8": true,
-              "instance 1": true,
-              "instance 2": true,
-              "instance 3": true,
-              "instance 4": true,
-              "instance 5": true,
-              "instance 6": true,
-              "instance 7": true,
-              "instance 8": true,
-              "job 1": false,
-              "job 2": false,
-              "job 3": true,
-              "job 4": true,
-              "job 5": true,
-              "job 6": true,
-              "job 7": true,
-              "job 8": true,
-              "lambda 1": true,
-              "lambda 2": true,
-              "lambda 3": true,
-              "lambda 4": true
-            },
-            "indexByName": {
-              "Time 1": 12,
-              "Time 2": 17,
-              "Time 3": 11,
-              "Time 4": 23,
-              "Time 5": 28,
-              "Time 6": 33,
-              "Time 7": 37,
-              "Time 8": 41,
-              "Value #A": 10,
-              "Value #B": 3,
-              "Value #C": 9,
-              "Value #D": 7,
-              "Value #E": 6,
-              "Value #F": 5,
-              "Value #G": 8,
-              "Value #H": 4,
-              "__name__ 1": 13,
-              "__name__ 2": 16,
-              "__name__ 3": 19,
-              "__name__ 4": 24,
-              "__name__ 5": 29,
-              "__name__ 6": 34,
-              "__name__ 7": 38,
-              "__name__ 8": 42,
-              "instance 1": 14,
-              "instance 2": 18,
-              "instance 3": 20,
-              "instance 4": 25,
-              "instance 5": 30,
-              "instance 6": 35,
-              "instance 7": 39,
-              "instance 8": 43,
-              "job 1": 1,
-              "job 2": 0,
-              "job 3": 21,
-              "job 4": 26,
-              "job 5": 31,
-              "job 6": 36,
-              "job 7": 40,
-              "job 8": 44,
-              "lambda 1": 15,
-              "lambda 2": 22,
-              "lambda 3": 27,
-              "lambda 4": 32,
-              "pubKey": 2
-            },
-            "renameByName": {
-              "Time 3": "",
-              "Value #A": "Highest Decided",
-              "Value #B": "Connected Peers",
-              "Value #C": "Current Sequence",
-              "Value #D": "Round",
-              "Value #E": "Stage",
-              "Value #F": "IBFT Status",
-              "Value #G": "Current slot",
-              "Value #H": "Validator Status",
-              "job 1": "Beaconcha",
-              "job 2": "Dashboard",
-              "pubKey": "Public Key"
-            }
-          }
-        },
-        {
-          "id": "filterByValue",
-          "options": {
-            "filters": [
-              {
-                "config": {
-                  "id": "regex",
-                  "options": {
-                    "value": "\\d{3}.+"
-                  }
-                },
-                "fieldName": "Public Key"
-              }
-            ],
-            "match": "any",
-            "type": "include"
-          }
-        }
-      ],
-      "type": "table"
-    },
     {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 0
       },
       "id": 8,
       "panels": [],
@@ -854,7 +96,7 @@
         "h": 10,
         "w": 7,
         "x": 0,
-        "y": 14
+        "y": 1
       },
       "id": 46,
       "options": {
@@ -930,7 +172,7 @@
         "h": 10,
         "w": 7,
         "x": 7,
-        "y": 14
+        "y": 1
       },
       "id": 48,
       "options": {
@@ -1003,7 +245,7 @@
         "h": 7,
         "w": 4,
         "x": 0,
-        "y": 24
+        "y": 11
       },
       "id": 43,
       "options": {
@@ -1074,7 +316,7 @@
         "h": 7,
         "w": 4,
         "x": 4,
-        "y": 24
+        "y": 11
       },
       "id": 44,
       "options": {
@@ -1115,7 +357,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 18
       },
       "id": 6,
       "panels": [],
@@ -1181,7 +423,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 32
+        "y": 19
       },
       "id": 12,
       "interval": "2m",
@@ -1276,7 +518,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 32
+        "y": 19
       },
       "id": 14,
       "interval": "2m",
@@ -1370,7 +612,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 40
+        "y": 27
       },
       "id": 16,
       "interval": "2m",
@@ -1464,7 +706,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 40
+        "y": 27
       },
       "id": 18,
       "interval": "2m",
@@ -1558,7 +800,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 48
+        "y": 35
       },
       "id": 20,
       "interval": "2m",
@@ -1652,7 +894,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 48
+        "y": 35
       },
       "id": 22,
       "interval": "2m",
@@ -1746,7 +988,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 56
+        "y": 43
       },
       "id": 24,
       "interval": "2m",
@@ -1840,7 +1082,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 56
+        "y": 43
       },
       "id": 26,
       "interval": "2m",
@@ -1880,7 +1122,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 51
       },
       "id": 4,
       "panels": [],
@@ -1948,7 +1190,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 65
+        "y": 52
       },
       "id": 28,
       "interval": "2m",
@@ -2042,7 +1284,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 65
+        "y": 52
       },
       "id": 32,
       "interval": "2m",
@@ -2136,7 +1378,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 73
+        "y": 60
       },
       "id": 34,
       "interval": "2m",
@@ -2230,7 +1472,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 73
+        "y": 60
       },
       "id": 35,
       "interval": "2m",
@@ -2324,7 +1566,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 81
+        "y": 68
       },
       "id": 30,
       "interval": "2m",
@@ -2364,7 +1606,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 89
+        "y": 76
       },
       "id": 2,
       "panels": [],
@@ -2432,7 +1674,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 90
+        "y": 77
       },
       "id": 36,
       "interval": "2m",
@@ -2526,7 +1768,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 90
+        "y": 77
       },
       "id": 37,
       "interval": "2m",
@@ -2620,7 +1862,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 98
+        "y": 85
       },
       "id": 38,
       "interval": "2m",
@@ -2714,7 +1956,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 98
+        "y": 85
       },
       "id": 39,
       "interval": "2m",
@@ -2808,7 +2050,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 106
+        "y": 93
       },
       "id": 40,
       "interval": "2m",
@@ -2966,6 +2208,6 @@
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 59,
+  "version": 60,
   "weekStart": ""
 }
