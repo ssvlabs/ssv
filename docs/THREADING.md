@@ -8,7 +8,7 @@
 ## Background
 iBFT and SSV are both message driven protocols, changing their internal state by incoming messages from the network.\
 This presents a challenge as the messages are asynchronous.\
-Every message has it's own pipeline of validations and upon procedures.
+Every message has its own pipeline of validations and upon procedures.
 
 
 ### iBFT round instance design pattern
