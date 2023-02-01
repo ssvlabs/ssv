@@ -18,7 +18,6 @@ vendor/
 /config/share*
 /config/events.yaml
 /config/events.local.yaml
-/config/config.yaml
 /config/config.exporter.yaml
 /config/config.local.yaml
 
