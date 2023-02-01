@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1674846489626,
+  "iteration": 1675278980371,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -208,6 +208,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Status of the connected beacon node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -218,7 +219,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 5,
+            "fillOpacity": 8,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -231,8 +232,8 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "never",
-            "spanNulls": true,
+            "showPoints": "auto",
+            "spanNulls": false,
             "stacking": {
               "group": "A",
               "mode": "none"
@@ -241,21 +242,47 @@
               "mode": "off"
             }
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Unknown"
+                },
+                "1": {
+                  "color": "yellow",
+                  "index": 1,
+                  "text": "Syncing"
+                },
+                "2": {
+                  "color": "green",
+                  "index": 2,
+                  "text": "OK"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "max": 2,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
-                "color": "red",
-                "value": 80
+                "color": "#EAB839",
+                "value": 1
+              },
+              {
+                "color": "green",
+                "value": 2
               }
             ]
-          },
-          "unit": "bool_on_off"
+          }
         },
         "overrides": []
       },
@@ -265,7 +292,7 @@
         "x": 12,
         "y": 1
       },
-      "id": 44,
+      "id": 48,
       "options": {
         "legend": {
           "calcs": [],
@@ -284,15 +311,13 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "ssv_node_status{instance=~\"$instance.*\"}",
-          "format": "time_series",
-          "instant": false,
+          "expr": "ssv_beacon_status{instance=~\"$instance.*\"}",
           "interval": "",
-          "legendFormat": "{{pod}}",
+          "legendFormat": "",
           "refId": "A"
         }
       ],
-      "title": "Operator Node Health",
+      "title": "Beacon Node Health",
       "type": "timeseries"
     },
     {
@@ -417,7 +442,6 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Status of the connected beacon node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -428,7 +452,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 8,
+            "fillOpacity": 0,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -456,42 +480,35 @@
               "options": {
                 "0": {
                   "color": "red",
-                  "index": 0,
-                  "text": "Unknown"
+                  "index": 1,
+                  "text": "Error"
                 },
                 "1": {
-                  "color": "yellow",
-                  "index": 1,
-                  "text": "Syncing"
-                },
-                "2": {
                   "color": "green",
+                  "index": 0,
+                  "text": "Up"
+                },
+                "-1": {
+                  "color": "text",
                   "index": 2,
-                  "text": "OK"
+                  "text": "Down"
                 }
               },
               "type": "value"
             }
           ],
-          "max": 2,
-          "min": 0,
+          "max": 1,
+          "min": -1,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "#EAB839",
-                "value": 1
-              },
-              {
                 "color": "green",
-                "value": 2
+                "value": null
               }
             ]
-          }
+          },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -501,7 +518,7 @@
         "x": 20,
         "y": 1
       },
-      "id": 48,
+      "id": 44,
       "options": {
         "legend": {
           "calcs": [],
@@ -520,13 +537,27 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "ssv_beacon_status{instance=~\"$instance.*\"}",
+          "expr": "ssv_node_status{instance=~\"$instance.*\"}",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{pod}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "-absent(ssv_node_status{instance=~\"$instance.*\"})",
+          "hide": false,
           "interval": "",
           "legendFormat": "",
-          "refId": "A"
+          "refId": "B"
         }
       ],
-      "title": "Beacon Node Health",
+      "title": "Operator Node Health",
       "type": "timeseries"
     },
     {
@@ -539,8 +570,113 @@
       },
       "id": 18,
       "panels": [],
-      "title": "Process Health",
+      "title": "Resource Usage",
       "type": "row"
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "decimals": 2,
+      "editable": true,
+      "error": false,
+      "fill": 0,
+      "fillGradient": 0,
+      "grid": {},
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 7
+      },
+      "hiddenSeries": false,
+      "id": 16,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": true,
+        "hideEmpty": false,
+        "max": true,
+        "min": false,
+        "rightSide": false,
+        "show": true,
+        "sideWidth": 200,
+        "total": false,
+        "values": true
+      },
+      "lines": true,
+      "linewidth": 2,
+      "links": [],
+      "nullPointMode": "connected",
+      "options": {
+        "alertThreshold": true
+      },
+      "paceLength": 10,
+      "percentage": false,
+      "pluginVersion": "8.3.4",
+      "pointradius": 5,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": true,
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum (container_memory_working_set_bytes{image!=\"\", pod=~\"$instance.*\"}) by (pod)",
+          "format": "time_series",
+          "hide": false,
+          "interval": "10s",
+          "intervalFactor": 1,
+          "legendFormat": "{{ pod }}",
+          "metric": "container_memory_usage:sort_desc",
+          "refId": "A",
+          "step": 10
+        }
+      ],
+      "thresholds": [],
+      "timeRegions": [],
+      "title": "Memory Usage (RAM)",
+      "tooltip": {
+        "msResolution": false,
+        "shared": true,
+        "sort": 2,
+        "value_type": "cumulative"
+      },
+      "type": "graph",
+      "xaxis": {
+        "mode": "time",
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "$$hashKey": "object:65",
+          "format": "bytes",
+          "logBase": 1,
+          "min": "0",
+          "show": true
+        },
+        {
+          "$$hashKey": "object:66",
+          "format": "short",
+          "logBase": 1,
+          "show": false
+        }
+      ],
+      "yaxis": {
+        "align": false
+      }
     },
     {
       "datasource": {
@@ -596,8 +732,8 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 12,
-        "x": 0,
+        "w": 8,
+        "x": 8,
         "y": 7
       },
       "id": 14,
@@ -661,107 +797,6 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "decimals": 2,
-      "editable": true,
-      "error": false,
-      "fill": 0,
-      "fillGradient": 0,
-      "grid": {},
-      "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
-        "y": 7
-      },
-      "hiddenSeries": false,
-      "id": 16,
-      "legend": {
-        "alignAsTable": true,
-        "avg": false,
-        "current": true,
-        "hideEmpty": false,
-        "max": true,
-        "min": false,
-        "rightSide": false,
-        "show": true,
-        "sideWidth": 200,
-        "total": false,
-        "values": true
-      },
-      "lines": true,
-      "linewidth": 2,
-      "links": [],
-      "nullPointMode": "connected",
-      "options": {
-        "alertThreshold": true
-      },
-      "paceLength": 10,
-      "percentage": false,
-      "pluginVersion": "8.3.4",
-      "pointradius": 5,
-      "points": false,
-      "renderer": "flot",
-      "seriesOverrides": [],
-      "spaceLength": 10,
-      "stack": false,
-      "steppedLine": true,
-      "targets": [
-        {
-          "exemplar": true,
-          "expr": "sum (container_memory_working_set_bytes{image!=\"\", pod=~\"$instance.*\"}) by (pod)",
-          "format": "time_series",
-          "hide": false,
-          "interval": "10s",
-          "intervalFactor": 1,
-          "legendFormat": "{{ pod }}",
-          "metric": "container_memory_usage:sort_desc",
-          "refId": "A",
-          "step": 10
-        }
-      ],
-      "thresholds": [],
-      "timeRegions": [],
-      "title": "Memory Usage (k8s)",
-      "tooltip": {
-        "msResolution": false,
-        "shared": true,
-        "sort": 2,
-        "value_type": "cumulative"
-      },
-      "type": "graph",
-      "xaxis": {
-        "mode": "time",
-        "show": true,
-        "values": []
-      },
-      "yaxes": [
-        {
-          "$$hashKey": "object:65",
-          "format": "bytes",
-          "logBase": 1,
-          "min": "0",
-          "show": true
-        },
-        {
-          "$$hashKey": "object:66",
-          "format": "short",
-          "logBase": 1,
-          "show": false
-        }
-      ],
-      "yaxis": {
-        "align": false
-      }
-    },
-    {
-      "aliasColors": {},
-      "bars": false,
-      "dashLength": 10,
-      "dashes": false,
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
       "description": "",
       "fieldConfig": {
         "defaults": {},
@@ -784,9 +819,9 @@
       "fillGradient": 0,
       "gridPos": {
         "h": 10,
-        "w": 12,
-        "x": 0,
-        "y": 17
+        "w": 8,
+        "x": 16,
+        "y": 7
       },
       "hiddenSeries": false,
       "id": 22,
@@ -880,9 +915,9 @@
       "fillGradient": 0,
       "grid": {},
       "gridPos": {
-        "h": 10,
-        "w": 12,
-        "x": 12,
+        "h": 9,
+        "w": 8,
+        "x": 0,
         "y": 17
       },
       "height": "",
@@ -1020,10 +1055,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 27
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 17
       },
       "id": 26,
       "options": {
@@ -1061,7 +1096,7 @@
           "refId": "B"
         }
       ],
-      "title": "Disk Usage",
+      "title": "Disk Usage (HDD)",
       "transformations": [],
       "type": "timeseries"
     },
@@ -1122,10 +1157,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 27
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 17
       },
       "id": 28,
       "links": [],
@@ -1187,7 +1222,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 26
       },
       "id": 12,
       "panels": [],
@@ -1230,7 +1265,7 @@
         "h": 11,
         "w": 4,
         "x": 0,
-        "y": 36
+        "y": 27
       },
       "id": 52,
       "options": {
@@ -1347,7 +1382,7 @@
         "h": 11,
         "w": 20,
         "x": 4,
-        "y": 36
+        "y": 27
       },
       "id": 57,
       "options": {
@@ -1377,7 +1412,7 @@
           "refId": "A"
         }
       ],
-      "title": "Topics Peers Distribution ",
+      "title": "Subnet Peers Distribution ",
       "type": "timeseries"
     },
     {
@@ -1469,9 +1504,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
+        "w": 8,
         "x": 0,
-        "y": 47
+        "y": 38
       },
       "id": 54,
       "options": {
@@ -1486,7 +1521,7 @@
         "sortBy": [
           {
             "desc": false,
-            "displayName": "Connected Peers"
+            "displayName": "Subnet"
           }
         ]
       },
@@ -1549,6 +1584,7 @@
               "Time 1": true,
               "Time 2": true,
               "Time 3": true,
+              "Value #C": false,
               "__name__ 1": true,
               "__name__ 2": true,
               "__name__ 3": true,
@@ -1647,9 +1683,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 47
+        "w": 16,
+        "x": 8,
+        "y": 38
       },
       "id": 59,
       "options": {
@@ -1804,7 +1840,7 @@
         "h": 13,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 47
       },
       "id": 40,
       "options": {
@@ -1916,7 +1952,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 60
       },
       "id": 2,
       "panels": [],
@@ -1983,7 +2019,7 @@
         "h": 12,
         "w": 8,
         "x": 0,
-        "y": 70
+        "y": 61
       },
       "id": 32,
       "options": {
@@ -2089,7 +2125,7 @@
         "h": 12,
         "w": 8,
         "x": 8,
-        "y": 70
+        "y": 61
       },
       "id": 36,
       "options": {
@@ -2183,7 +2219,7 @@
         "h": 12,
         "w": 8,
         "x": 16,
-        "y": 70
+        "y": 61
       },
       "id": 34,
       "options": {
@@ -2272,7 +2308,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 82
+        "y": 73
       },
       "id": 61,
       "options": {
@@ -2441,7 +2477,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 82
+        "y": 73
       },
       "id": 63,
       "options": {
@@ -2660,13 +2696,13 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 27,
+  "version": 31,
   "weekStart": ""
 }
