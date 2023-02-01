@@ -111,6 +111,8 @@ spec:
           value: "debug"
         - name: DB_REPORTING
           value: "false"
+        - name: DEBUG_SERVICES
+          value: "ssv/protocol*"
         - name: PUBSUB_TRACE
           value: "false"
         - name: P2P_LOG
