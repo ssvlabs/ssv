@@ -419,7 +419,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
         "y": 19
@@ -599,7 +599,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
         "y": 19
@@ -767,10 +767,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
-        "y": 27
+        "y": 28
       },
       "id": 50,
       "interval": "2m",
@@ -935,10 +935,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
-        "y": 27
+        "y": 28
       },
       "id": 51,
       "interval": "2m",
@@ -1098,8 +1098,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1112,17 +1112,19 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
-            "spanNulls": false,
+            "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
           "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1131,23 +1133,26 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
-        "y": 35
+        "y": 37
       },
-      "id": 20,
+      "id": 52,
       "interval": "2m",
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -1161,13 +1166,122 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}} s",
-          "refId": "A"
+          "legendFormat": "< 0.02 s",
+          "refId": "< 0.02 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.02 - 0.05 s",
+          "refId": "0.02 - 0.05 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.05 - 0.1 s",
+          "refId": "0.05 - 0.1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.1 - 0.2 s",
+          "refId": "0.1 - 0.2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.2 - 0.5 s",
+          "refId": "0.2 - 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"1.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 1.5 s",
+          "refId": "1 - 1.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"1.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1.5 - 2 s",
+          "refId": "1.5 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"5.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 5 s",
+          "refId": "2 - 5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"prepare\",le=\"5.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"prepare\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 5 s",
+          "refId": "> 5 s"
         }
       ],
       "title": "Prepare Stage Duration",
@@ -1188,8 +1302,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1202,17 +1316,19 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
-            "spanNulls": false,
+            "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
           "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1221,23 +1337,26 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
-        "y": 35
+        "y": 37
       },
-      "id": 22,
+      "id": 53,
       "interval": "2m",
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -1251,13 +1370,122 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}} s",
-          "refId": "A"
+          "legendFormat": "< 0.02 s",
+          "refId": "< 0.02 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.02 - 0.05 s",
+          "refId": "0.02 - 0.05 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.05 - 0.1 s",
+          "refId": "0.05 - 0.1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.1 - 0.2 s",
+          "refId": "0.1 - 0.2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.2 - 0.5 s",
+          "refId": "0.2 - 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"1.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 1.5 s",
+          "refId": "1 - 1.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"1.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1.5 - 2 s",
+          "refId": "1.5 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"5.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 5 s",
+          "refId": "2 - 5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_instance_stage_duration_seconds_bucket{stage=\"commit\",le=\"5.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_instance_stage_duration_seconds_count{stage=\"commit\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 5 s",
+          "refId": "> 5 s"
         }
       ],
       "title": "Commit Stage Duration",
@@ -1278,8 +1506,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1292,17 +1520,19 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
-            "spanNulls": false,
+            "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
           "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1311,23 +1541,26 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 0,
-        "y": 43
+        "y": 46
       },
-      "id": 24,
+      "id": 54,
       "interval": "2m",
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -1341,13 +1574,86 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}} s",
-          "refId": "A"
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
         }
       ],
       "title": "Post-consensus (signature collection) Duration",
@@ -1368,8 +1674,8 @@
             "axisLabel": "",
             "axisPlacement": "auto",
             "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -1382,17 +1688,19 @@
             "scaleDistribution": {
               "type": "linear"
             },
-            "showPoints": "auto",
-            "spanNulls": false,
+            "showPoints": "never",
+            "spanNulls": true,
             "stacking": {
               "group": "A",
-              "mode": "none"
+              "mode": "percent"
             },
             "thresholdsStyle": {
               "mode": "off"
             }
           },
           "mappings": [],
+          "max": 1,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1401,23 +1709,26 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "percent"
         },
         "overrides": []
       },
       "gridPos": {
-        "h": 8,
+        "h": 9,
         "w": 12,
         "x": 12,
-        "y": 43
+        "y": 46
       },
-      "id": 26,
+      "id": 55,
       "interval": "2m",
       "options": {
         "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -1431,13 +1742,98 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",instance=~\"$instance.*\"}[$__interval])) by (le) ",
+          "expr": "sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
+          "hide": false,
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
-          "legendFormat": "{{le}} s",
-          "refId": "A"
+          "legendFormat": "< 0.02 s",
+          "refId": "< 0.02 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.02 - 0.05 s",
+          "refId": "0.02 - 0.05 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.05 - 0.1 s",
+          "refId": "0.05 - 0.1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.1 - 0.2 s",
+          "refId": "0.1 - 0.2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.2 - 0.5 s",
+          "refId": "0.2 - 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(sssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"5.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 5 s",
+          "refId": "1 - 5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_beacon_submission_duration_seconds_bucket{role=\"ATTESTER\",le=\"5.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_beacon_submission_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 5 s",
+          "refId": "> 5 s"
         }
       ],
       "title": "Attestation Submission Duration",
@@ -1449,7 +1845,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 55
       },
       "id": 4,
       "panels": [],
@@ -1513,7 +1909,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 52
+        "y": 56
       },
       "id": 28,
       "interval": "2m",
@@ -1603,7 +1999,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 52
+        "y": 56
       },
       "id": 32,
       "interval": "2m",
@@ -1693,7 +2089,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 60
+        "y": 64
       },
       "id": 34,
       "interval": "2m",
@@ -1783,7 +2179,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 60
+        "y": 64
       },
       "id": 35,
       "interval": "2m",
@@ -1873,7 +2269,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 72
       },
       "id": 30,
       "interval": "2m",
@@ -1913,7 +2309,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 80
       },
       "id": 2,
       "panels": [],
@@ -1977,7 +2373,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 81
       },
       "id": 36,
       "interval": "2m",
@@ -2067,7 +2463,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 77
+        "y": 81
       },
       "id": 37,
       "interval": "2m",
@@ -2157,7 +2553,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 85
+        "y": 89
       },
       "id": 38,
       "interval": "2m",
@@ -2247,7 +2643,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 85
+        "y": 89
       },
       "id": 39,
       "interval": "2m",
@@ -2337,7 +2733,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 93
+        "y": 97
       },
       "id": 40,
       "interval": "2m",
@@ -2495,6 +2891,6 @@
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 67,
+  "version": 70,
   "weekStart": ""
 }
