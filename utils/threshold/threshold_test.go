@@ -72,7 +72,7 @@ func TestIncorrectShare(t *testing.T) {
 }
 
 // plain library example
-//func TestSplitAndReconstructHerumi(t *testing.T) {
+// func TestSplitAndReconstructHerumi(t *testing.T) {
 //	Init()
 //	count := uint64(4)
 //	msg := "this is message"

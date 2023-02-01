@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/pkg/errors"
 	"sync"
 	"time"
 
@@ -15,11 +16,13 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"go.uber.org/zap"
 )
+
+var CouldNotFindEnoughPeersErr = errors.New("could not find enough peers")
 
 // HostProvider holds host instance
 type HostProvider interface {
@@ -72,18 +75,19 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 		return nil, err
 	}
 	var wg sync.WaitGroup
+	var peersErr error
 	for i, node := range ln.Nodes {
 		wg.Add(1)
 		go func(node network.P2PNetwork, i int) {
 			logger := loggerFactory(fmt.Sprintf("node-%d", i))
 			if err := node.Start(); err != nil {
-				logger.Error("could not start node", zap.Error(err))
+				logger.Warn("could not start node", zap.Error(err))
 				wg.Done()
 				return
 			}
 			go func(node network.P2PNetwork, logger *zap.Logger) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, time.Second*10)
+				ctx, cancel := context.WithTimeout(pctx, 15*time.Second)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -91,17 +95,18 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					time.Sleep(time.Millisecond * 100)
 				}
 				if ctx.Err() != nil {
-					logger.Fatal("could not find enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+					logger.Warn("could not find enough peers, trying again", zap.Int("n", n), zap.Int("found", len(peers)))
+					peersErr = CouldNotFindEnoughPeersErr
 					return
 				}
-				//logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
+				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
 			}(node, logger)
 		}(node, i)
 	}
 
 	wg.Wait()
 
-	return ln, nil
+	return ln, peersErr
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
@@ -112,7 +117,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	}
 	cfg := NewNetConfig(logger, keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode,
 		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
-	p := New(ctx, cfg)
+	cfg.Ctx = ctx
+	p := New(cfg)
 	err = p.Setup()
 	if err != nil {
 		return nil, err
@@ -155,8 +161,11 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 	forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode,
 	tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
+	discT := "discv5"
 	if bn != nil {
 		bns = bn.ENR
+	} else {
+		discT = "mdns"
 	}
 	ua := ""
 	return &Config{
@@ -175,5 +184,7 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
+		Discovery:         discT,
+		P2pLog:            true,
 	}
 }

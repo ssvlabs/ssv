@@ -12,10 +12,11 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v1/qbft/storage"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v1/testing"
-	"github.com/bloxapp/ssv/protocol/v1/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -60,6 +61,7 @@ func TestHandleErrorQuery(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			nm := NetworkMessage{
 				Msg: Message{
@@ -85,14 +87,14 @@ func TestHandleDecidedQuery(t *testing.T) {
 	_, ibftStorage := newStorageForTest(db, l)
 	_ = bls.Init(bls.BLS12_381)
 
-	sks, _ := validator.GenerateNodes(4)
+	sks, _ := GenerateNodes(4)
 	oids := make([]spectypes.OperatorID, 0)
 	for oid := range sks {
 		oids = append(oids, oid)
 	}
 
 	pk := sks[1].GetPublicKey()
-	decided250Seq, err := protocoltesting.CreateMultipleSignedMessages(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
 		commitDataBytes, err := commitData.Encode()
 		if err != nil {
@@ -112,7 +114,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	// save decided
 	for _, d := range decided250Seq {
-		require.NoError(t, ibftStorage.SaveDecided(d))
+		require.NoError(t, ibftStorage.SaveInstance(d))
 	}
 
 	t.Run("valid range", func(t *testing.T) {
@@ -174,8 +176,26 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorage.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorageprotocol.QBFTStore) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.NewQBFTStore(db, logger, "attestation")
+	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion)
 	return sExporter, sIbft
+}
+
+// GenerateNodes generates randomly nodes
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator) {
+	_ = bls.Init(bls.BLS12_381)
+	nodes := make([]*spectypes.Operator, 0)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+	for i := 1; i <= cnt; i++ {
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		nodes = append(nodes, &spectypes.Operator{
+			OperatorID: spectypes.OperatorID(i),
+			PubKey:     sk.GetPublicKey().Serialize(),
+		})
+		sks[spectypes.OperatorID(i)] = sk
+	}
+	return sks, nodes
 }

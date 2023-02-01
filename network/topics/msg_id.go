@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"sync"
 	"time"
@@ -97,7 +97,7 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 		if pmsg == nil {
 			return MsgIDEmptyMessage
 		}
-		logger := handler.logger.With(zap.ByteString("seq_no", pmsg.GetSeqno()))
+		//logger := handler.logger.With()
 		if len(pmsg.GetData()) == 0 {
 			return MsgIDEmptyMessage
 		}
@@ -105,10 +105,11 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 		if err != nil {
 			return MsgIDBadPeerID
 		}
-		logger = logger.With(zap.String("from", pid.String()))
 		mid := handler.fork.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
-			logger.Warn("could not create msg_id")
+			handler.logger.Debug("could not create msg_id",
+				zap.ByteString("seq_no", pmsg.GetSeqno()),
+				zap.String("from", pid.String()))
 			return MsgIDError
 		}
 		handler.Add(mid, pid)

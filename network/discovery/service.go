@@ -2,19 +2,21 @@ package discovery
 
 import (
 	"context"
+	"io"
+
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/network/peers"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/libp2p/go-libp2p-core/discovery"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"go.uber.org/zap"
-	"io"
 )
 
 const (
-	//udp4 = "udp4"
-	//udp6 = "udp6"
+	// udp4 = "udp4"
+	// udp6 = "udp6"
 	tcp = "tcp"
 )
 

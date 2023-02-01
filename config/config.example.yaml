@@ -18,8 +18,8 @@ p2p:
 #  HostAddress: example.ip
 #  TcpPort:
 #  UdpPort:
-  # mdns for local network setup
-#  DiscoveryType: mdns
+# mdns for local network setup
+#  Discovery: mdns
 
 ssv:
   GenesisEpoch:
@@ -32,3 +32,5 @@ OperatorPrivateKey:
 bootnode:
   ExternalIP:
   PrivateKey:
+
+LocalEventsPath: # path to local events. used for running the node with custom local events

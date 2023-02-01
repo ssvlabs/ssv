@@ -3,25 +3,24 @@ package duties
 import (
 	"context"
 	"encoding/hex"
-	"time"
+	"encoding/json"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	types "github.com/prysmaticlabs/eth2-types"
-	"github.com/prysmaticlabs/prysm/time/slots"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
-
-const (
-	slotChanBuffer = 32
-)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -31,8 +30,6 @@ type DutyExecutor interface {
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
 	Start()
-	// CurrentSlotChan will trigger every slot
-	CurrentSlotChan() <-chan uint64
 }
 
 // ControllerOptions holds the needed dependencies
@@ -43,9 +40,9 @@ type ControllerOptions struct {
 	EthNetwork          beaconprotocol.Network
 	ValidatorController validator.Controller
 	Executor            DutyExecutor
-	GenesisEpoch        uint64
 	DutyLimit           uint64
 	ForkVersion         forksprotocol.ForkVersion
+	Ticker              slot_ticker.Ticker
 }
 
 // dutyController internal implementation of DutyController
@@ -57,11 +54,8 @@ type dutyController struct {
 	executor            DutyExecutor
 	fetcher             DutyFetcher
 	validatorController validator.Controller
-	genesisEpoch        uint64
 	dutyLimit           uint64
-
-	// chan
-	currentSlotC chan uint64
+	ticker              slot_ticker.Ticker
 }
 
 var secPerSlot int64 = 12
@@ -75,9 +69,9 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		ethNetwork:          opts.EthNetwork,
 		fetcher:             fetcher,
 		validatorController: opts.ValidatorController,
-		genesisEpoch:        opts.GenesisEpoch,
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
+		ticker:              opts.Ticker,
 	}
 	return &dc
 }
@@ -88,16 +82,9 @@ func (dc *dutyController) Start() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
-	genesisTime := time.Unix(int64(dc.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := slots.NewSlotTicker(genesisTime, uint64(dc.ethNetwork.SlotDurationSec().Seconds()))
-	dc.listenToTicker(slotTicker.C())
-}
-
-func (dc *dutyController) CurrentSlotChan() <-chan uint64 {
-	if dc.currentSlotC == nil {
-		dc.currentSlotC = make(chan uint64, slotChanBuffer)
-	}
-	return dc.currentSlotC
+	tickerChan := make(chan phase0.Slot, 32)
+	dc.ticker.Subscribe(tickerChan)
+	dc.listenToTicker(tickerChan)
 }
 
 // ExecuteDuty tries to execute the given duty
@@ -107,48 +94,66 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return dc.executor.ExecuteDuty(duty)
 	}
 	logger := dc.loggerWithDutyContext(dc.logger, duty)
+
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
+	// so we need to copy the pubkey val to avoid pointer
+	var pk phase0.BLSPubKey
+	copy(pk[:], duty.PubKey[:])
+
 	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(duty.PubKey[:]); err != nil {
+	if err := pubKey.Deserialize(pk[:]); err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		go func() {
-			// force the validator to be started (subscribed to validator's topic and synced)
-			// TODO: handle error (return error
-			if err := v.Start(); err != nil {
-				logger.Warn("could not start validator", zap.Error(err))
-				return
-			}
-			logger.Info("starting duty processing")
-			v.StartDuty(duty)
-		}()
+		ssvMsg, err := createDutyExecuteMsg(duty, pubKey)
+		if err != nil {
+			return err
+		}
+		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		if err != nil {
+			return err
+		}
+		v.Queues[duty.Type].Q.Push(dec)
 	} else {
 		logger.Warn("could not find validator")
 	}
+
 	return nil
 }
 
-// listenToTicker loop over the given slot channel
-func (dc *dutyController) listenToTicker(slots <-chan types.Slot) {
-	for currentSlot := range slots {
-		// notify current slot to channel
-		go dc.notifyCurrentSlot(currentSlot)
+// createDutyExecuteMsg returns ssvMsg with event type of duty execute
+func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	edd, err := json.Marshal(executeDutyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+	}
+	msg := types.EventMsg{
+		Type: types.ExecuteDuty,
+		Data: edd,
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode event msg")
+	}
+	return &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
+		Data:    data,
+	}, nil
+}
 
+// listenToTicker loop over the given slot channel
+func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
+	for currentSlot := range slots {
 		// execute duties
-		dc.logger.Info("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
-		duties, err := dc.fetcher.GetDuties(uint64(currentSlot))
+		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
 		}
 		for i := range duties {
 			go dc.onDuty(&duties[i])
 		}
-	}
-}
-
-func (dc *dutyController) notifyCurrentSlot(slot types.Slot) {
-	if dc.currentSlotC != nil {
-		dc.currentSlotC <- uint64(slot)
 	}
 }
 
@@ -167,21 +172,13 @@ func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 }
 
 func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
-	if uint64(duty.Slot) < dc.getEpochFirstSlot(dc.genesisEpoch) {
-		// wait until genesis epoch starts
-		dc.logger.Debug("skipping slot, lower than genesis",
-			zap.Uint64("genesis_slot", dc.getEpochFirstSlot(dc.genesisEpoch)),
-			zap.Uint64("slot", uint64(duty.Slot)))
-		return false
-	}
-
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) {
-		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, " +
-			"assuming diff caused by a time drift - ignoring and executing duty")
+		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, "+
+			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.Type.String()))
 		return true
 	}
 	return false
@@ -191,17 +188,13 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
+		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(zap.Uint64("current slot", currentSlot)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(uint64(duty.Slot))))
-}
-
-// getEpochFirstSlot returns the beacon node first slot in epoch
-func (dc *dutyController) getEpochFirstSlot(epoch uint64) uint64 {
-	return epoch * 32
+		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(duty.Slot)))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode

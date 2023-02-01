@@ -54,7 +54,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		async.RunEvery(options.Ctx, 1*time.Minute, _db.report)
 	}
 
-	options.Logger.Info("Badger db initialized")
+	options.Logger.Info("badger db initialized")
 	return &_db, nil
 }
 
@@ -112,7 +112,7 @@ func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 				return err
 			}
 			cp = make([]byte, len(value))
-			copy(cp, value[:])
+			copy(cp, value)
 			if err := iterator(basedb.Obj{
 				Key:   k,
 				Value: cp,

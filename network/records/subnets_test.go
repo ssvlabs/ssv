@@ -2,11 +2,13 @@ package records
 
 import (
 	crand "crypto/rand"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 func Test_SubnetsEntry(t *testing.T) {
@@ -72,6 +74,7 @@ func TestSubnetsParsing(t *testing.T) {
 	}
 
 	for _, subtest := range subtests {
+		subtest := subtest
 		t.Run(subtest.name, func(t *testing.T) {
 			s, err := Subnets{}.FromString(subtest.str)
 			if subtest.shouldError {

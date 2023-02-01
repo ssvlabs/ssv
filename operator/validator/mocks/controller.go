@@ -7,9 +7,8 @@ package mocks
 import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth1 "github.com/bloxapp/ssv/eth1"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beacon "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
-	validator "github.com/bloxapp/ssv/protocol/v1/validator"
+	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	types "github.com/bloxapp/ssv/protocol/v2/types"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
 	reflect "reflect"
@@ -77,10 +76,10 @@ func (mr *MockControllerMockRecorder) GetValidatorsIndices() *gomock.Call {
 }
 
 // GetValidator mocks base method
-func (m *MockController) GetValidator(pubKey string) (validator.IValidator, bool) {
+func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(validator.IValidator)
+	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
 }
@@ -130,10 +129,10 @@ func (mr *MockControllerMockRecorder) Eth1EventHandler(ongoingSync interface{}) 
 }
 
 // GetAllValidatorShares mocks base method
-func (m *MockController) GetAllValidatorShares() ([]*beacon.Share, error) {
+func (m *MockController) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllValidatorShares")
-	ret0, _ := ret[0].([]*beacon.Share)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -147,25 +146,16 @@ func (mr *MockControllerMockRecorder) GetAllValidatorShares() *gomock.Call {
 // GetValidatorStats mocks base method
 func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	m.ctrl.T.Helper()
-	return 2, 2, 2, nil
+	ret := m.ctrl.Call(m, "GetValidatorStats")
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(uint64)
+	ret2, _ := ret[2].(uint64)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
 }
 
 // GetValidatorStats indicates an expected call of GetValidatorStats
 func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
-}
-
-// OnFork mocks base method
-func (m *MockController) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "OnFork", forkVersion)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// OnFork indicates an expected call of OnFork
-func (mr *MockControllerMockRecorder) OnFork(forkVersion interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OnFork", reflect.TypeOf((*MockController)(nil).OnFork), forkVersion)
 }

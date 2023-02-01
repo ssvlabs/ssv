@@ -1,10 +1,11 @@
 package params
 
 import (
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/pkg/errors"
 	"math"
 	"time"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -22,7 +23,6 @@ const (
 	dampeningFactor = 50
 
 	subnetTopicsWeight = 4.0
-	decidedTopicWeight = 0.5
 )
 
 const (
@@ -42,7 +42,7 @@ type NetworkOpts struct {
 	// Subnets is the number of subnets in the network
 	Subnets int
 	//// Groups is the amount of groups used in the network
-	//Groups int
+	// Groups int
 	// OneEpochDuration is used as a time-frame length to control scoring in a dynamic way
 	OneEpochDuration time.Duration
 	// TotalTopicsWeight is the weight of all the topics in the network
@@ -75,7 +75,7 @@ func (o *Options) defaults() {
 		o.Network.OneEpochDuration = oneEpochDuration
 	}
 	if o.Network.TotalTopicsWeight == 0 {
-		o.Network.TotalTopicsWeight = decidedTopicWeight + subnetTopicsWeight
+		o.Network.TotalTopicsWeight = subnetTopicsWeight // + ...
 	}
 	if o.Topic.D == 0 {
 		o.Topic.D = gossipSubD
@@ -103,19 +103,6 @@ func NewOpts(activeValidators, subnets int) Options {
 		},
 		Topic: TopicOpts{},
 	}
-}
-
-// NewDecidedTopicOpts creates new TopicOpts for decided topic
-func NewDecidedTopicOpts(activeValidators, subnets int) Options {
-	opts := NewOpts(activeValidators, subnets)
-	opts.defaults()
-	opts.Topic.TopicWeight = decidedTopicWeight
-	opts.Topic.ExpectedMsgRate = float64(opts.Network.ActiveValidators) / float64(slotsPerEpoch)
-	opts.Topic.FirstMsgDecayTime = time.Duration(1)
-	opts.Topic.MeshMsgDecayTime = time.Duration(16)
-	opts.Topic.MeshMsgCapFactor = 32.0 // using a large factor until we have more accurate values
-	opts.Topic.MeshMsgActivationTime = opts.Network.OneEpochDuration
-	return opts
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic

@@ -1,20 +1,22 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
+
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var (
 	metricsCurrentSlot = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_current_slot",
+		Name: "ssv:validator:v2:ibft_current_slot",
 		Help: "Current running slot",
 	}, []string{"pubKey"})
 	metricsValidatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:status",
+		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
 	}, []string{"pubKey"})
 )

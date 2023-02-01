@@ -1,10 +1,11 @@
 package params
 
 import (
-	"github.com/libp2p/go-libp2p-core/peer"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"net"
 	"time"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
@@ -29,7 +30,7 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight f
 		oneEpoch = oneEpochDuration
 	}
 
-	maxPositiveScore := (maxInMeshScore + maxFirstDeliveryScore) * (decidedTopicWeight + subnetTopicsWeight)
+	maxPositiveScore := (maxInMeshScore + maxFirstDeliveryScore) * (subnetTopicsWeight)
 	topicScoreCap := maxPositiveScore / 4.0 // ETH divides by 2, we use lower value to reduce cap
 
 	behaviourPenaltyThreshold := 10.0 // using a larger threshold than ETH (6) to reduce the effect of behavioural penalty

@@ -4,22 +4,22 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/prysmaticlabs/prysm/beacon-chain/core/signing"
-	"github.com/prysmaticlabs/prysm/config/params"
-	"github.com/prysmaticlabs/prysm/network"
-	eth "github.com/prysmaticlabs/prysm/proto/prysm/v1alpha1"
 	"io"
 	"log"
 	"net"
 	"net/http"
 
+	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/prysmaticlabs/prysm/network"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/beacon/goclient"
+	"github.com/bloxapp/ssv/utils"
 )
 
 // Options contains options to create the node
@@ -27,6 +27,7 @@ type Options struct {
 	Logger     *zap.Logger
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 }
 
 // Node represents the behavior of boot node
@@ -42,6 +43,7 @@ type bootNode struct {
 	discv5port  int
 	forkVersion []byte
 	externalIP  string
+	network     core.Network
 }
 
 // New is the constructor of ssvNode
@@ -52,6 +54,7 @@ func New(opts Options) Node {
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
 		externalIP:  opts.ExternalIP,
+		network:     core.NetworkFromString(opts.Network),
 	}
 }
 
@@ -89,7 +92,7 @@ func (n *bootNode) Start(ctx context.Context) error {
 		PrivateKey: privKey,
 	}
 	ipAddr, err := network.ExternalIP()
-	//ipAddr = "127.0.0.1"
+	// ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
 		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
@@ -164,10 +167,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	//fVersion := params.BeaconConfig().GenesisForkVersion
-	fVersion := params.BeaconConfig().GenesisForkVersion
+	fVersion := n.network.ForkVersion()
 
-	//if *forkVersion != "" {
+	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
 	//	if err != nil {
 	//		return nil, errors.Wrap(err, "Could not retrieve fork version")
@@ -177,7 +179,7 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//}
 	genRoot := [32]byte{}
-	//if *genesisValidatorRoot != "" {
+	// if *genesisValidatorRoot != "" {
 	//	retRoot, err := hex.DecodeString(*genesisValidatorRoot)
 	//	if err != nil {
 	//		return nil, errors.Wrap(err, "Could not retrieve genesis validator root")
@@ -187,15 +189,16 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	//	}
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
-	digest, err := signing.ComputeForkDigest(fVersion, genRoot[:])
+
+	digest, err := goclient.ComputeForkDigest(fVersion, genRoot)
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not compute fork digest")
 	}
 
-	forkID := &eth.ENRForkID{
+	forkID := &ENRForkID{
 		CurrentForkDigest: digest[:],
-		NextForkVersion:   fVersion,
-		NextForkEpoch:     params.BeaconConfig().FarFutureEpoch,
+		NextForkVersion:   fVersion[:],
+		NextForkEpoch:     goclient.FarFutureEpoch,
 	}
 	forkEntry, err := forkID.MarshalSSZ()
 	if err != nil {

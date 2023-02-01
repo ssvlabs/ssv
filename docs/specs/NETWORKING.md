@@ -399,52 +399,6 @@ only those who turn on the corresponding flag will support this protocol.
   ```
 </details>
 
-### 3. Last Change Round
-
-This protocol enables a node to catch up with change round messages.
-All the nodes in the network should support this protocol.
-
-`/ssv/sync/last_change_round/0.0.1`
-
-<details>
-  <summary>examples</summary>
-  
-  Request:
-  ```json
-  {
-    "protocol": "/ssv/sync/decided/history/0.0.1",
-    "identifier": "...",
-    "params": ["7554"]
-  }
-  ```
-
-  Response:
-  ```json
-  {
-    "protocol": "/ssv/sync/decided/history/0.0.1",
-    "identifier": "...",
-    "params": ["7554"],
-    "statusCode": 0,
-    "data": [
-      {
-        "message": {
-          "type": 4,
-          "round": 6,
-          "identifier": "...",
-          "seq_number": 7554,
-          "value": "Xmcg...sPM="
-        },
-        "signature": "g5y....7Dv",
-        "signer_ids": [1]
-      }
-    ]
-  }
-  ```
-</details>
-
----
-
-
 
 ## Networking
 
@@ -711,7 +665,7 @@ In addition, the limit of peers per topic is also configurable.
 Connection Gating allows safeguarding against bad/pruned peers that tries to reconnect multiple times. 
 Inbound and outbound connections are intercepted and being checked before other components process the connection.
 
-See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p-core/blob/master/connmgr/gater.go) 
+See libp2p's [ConnectionGater](https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go) 
 interface for more info.
 
 

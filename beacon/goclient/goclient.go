@@ -7,23 +7,19 @@ import (
 	"sync"
 	"time"
 
-	client "github.com/attestantio/go-eth2-client"
 	eth2client "github.com/attestantio/go-eth2-client"
-	api "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	prysmTime "github.com/prysmaticlabs/prysm/time"
-	"github.com/prysmaticlabs/prysm/time/slots"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v1/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -33,19 +29,57 @@ const (
 type beaconNodeStatus int32
 
 var (
+	allMetrics = []prometheus.Collector{
+		metricsBeaconNodeStatus,
+		metricsAttestationDataRequest,
+	}
 	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:beacon:node_status",
 		Help: "Status of the connected beacon node",
 	})
+	metricsAttestationDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv:beacon:attestation_data_request_duration_seconds",
+		Help:    "Attestation data request duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{})
 	statusUnknown beaconNodeStatus = 0
 	statusSyncing beaconNodeStatus = 1
 	statusOK      beaconNodeStatus = 2
 )
 
 func init() {
-	if err := prometheus.Register(metricsBeaconNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
+	for _, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			log.Println("could not register prometheus collector")
+		}
 	}
+}
+
+// Client defines all go-eth2-client interfaces used in ssv
+type Client interface {
+	eth2client.Service
+
+	eth2client.AttestationDataProvider
+	eth2client.AggregateAttestationProvider
+	eth2client.AggregateAttestationsSubmitter
+	eth2client.AttestationDataProvider
+	eth2client.AttestationsSubmitter
+	eth2client.BeaconCommitteeSubscriptionsSubmitter
+	eth2client.SyncCommitteeSubscriptionsSubmitter
+	eth2client.AttesterDutiesProvider
+	eth2client.ProposerDutiesProvider
+	eth2client.SyncCommitteeDutiesProvider
+	eth2client.NodeSyncingProvider
+	eth2client.BeaconBlockProposalProvider
+	eth2client.BeaconBlockSubmitter
+	eth2client.DomainProvider
+	eth2client.BeaconBlockRootProvider
+	eth2client.SyncCommitteeMessagesSubmitter
+	eth2client.BeaconBlockRootProvider
+	eth2client.SyncCommitteeContributionProvider
+	eth2client.SyncCommitteeContributionsSubmitter
+	eth2client.ValidatorsProvider
+	eth2client.ProposalPreparationsSubmitter
 }
 
 // goClient implementing Beacon struct
@@ -53,7 +87,7 @@ type goClient struct {
 	ctx            context.Context
 	logger         *zap.Logger
 	network        beaconprotocol.Network
-	client         client.Service
+	client         Client
 	indicesMapLock sync.Mutex
 	graffiti       []byte
 }
@@ -63,8 +97,8 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	logger := opt.Logger.With(zap.String("component", "goClient"), zap.String("network", opt.Network))
-	logger.Info("connecting to beacon client...")
+	logger := opt.Logger
+	logger.Info("connecting to consensus client...", zap.String("address", opt.BeaconNodeAddr), zap.String("network", opt.Network))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -77,15 +111,14 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger = logger.With(zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
-	logger.Info("successfully connected to beacon client")
+	logger.Info("successfully connected to consensus client", zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 
-	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network))
+	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
 		ctx:            opt.Context,
 		logger:         logger,
 		network:        network,
-		client:         httpClient,
+		client:         httpClient.(*http.Service),
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
 	}
@@ -98,81 +131,31 @@ func (gc *goClient) HealthCheck() []string {
 	if gc.client == nil {
 		return []string{"not connected to beacon node"}
 	}
-	if provider, isProvider := gc.client.(eth2client.NodeSyncingProvider); isProvider {
-		ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-		defer cancel()
-		syncState, err := provider.NodeSyncing(ctx)
-		if err != nil {
-			metricsBeaconNodeStatus.Set(float64(statusUnknown))
-			return []string{"could not get beacon node sync state"}
-		}
-		if syncState != nil && syncState.IsSyncing {
-			metricsBeaconNodeStatus.Set(float64(statusSyncing))
-			return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-				syncState.HeadSlot, syncState.SyncDistance)}
-		}
+	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
+	defer cancel()
+	syncState, err := gc.client.NodeSyncing(ctx)
+	if err != nil {
+		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		return []string{"could not get beacon node sync state"}
+	}
+	if syncState != nil && syncState.IsSyncing {
+		metricsBeaconNodeStatus.Set(float64(statusSyncing))
+		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
+			syncState.HeadSlot, syncState.SyncDistance)}
 	}
 	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return []string{}
 }
 
-func (gc *goClient) GetDuties(epoch spec.Epoch, validatorIndices []spec.ValidatorIndex) ([]*spectypes.Duty, error) {
-	if provider, isProvider := gc.client.(eth2client.AttesterDutiesProvider); isProvider {
-		attesterDuties, err := provider.AttesterDuties(gc.ctx, epoch, validatorIndices)
-		if err != nil {
-			return nil, err
-		}
-		var duties []*spectypes.Duty
-		for _, attesterDuty := range attesterDuties {
-			duties = append(duties, &spectypes.Duty{
-				Type:                    spectypes.BNRoleAttester,
-				PubKey:                  attesterDuty.PubKey,
-				Slot:                    attesterDuty.Slot,
-				ValidatorIndex:          attesterDuty.ValidatorIndex,
-				CommitteeIndex:          attesterDuty.CommitteeIndex,
-				CommitteeLength:         attesterDuty.CommitteeLength,
-				CommitteesAtSlot:        attesterDuty.CommitteesAtSlot,
-				ValidatorCommitteeIndex: attesterDuty.ValidatorCommitteeIndex,
-			})
-		}
-		return duties, nil
-	}
-	return nil, errors.New("client does not support AttesterDutiesProvider")
-}
-
-// GetValidatorData returns metadata (balance, index, status, more) for each pubkey from the node
-func (gc *goClient) GetValidatorData(validatorPubKeys []spec.BLSPubKey) (map[spec.ValidatorIndex]*api.Validator, error) {
-	if provider, isProvider := gc.client.(eth2client.ValidatorsProvider); isProvider {
-		validatorsMap, err := provider.ValidatorsByPubKey(gc.ctx, "head", validatorPubKeys) // TODO maybe need to get the chainId (head) as var
-		if err != nil {
-			return nil, err
-		}
-		return validatorsMap, nil
-	}
-	return nil, errors.New("client does not support ValidatorsProvider")
-}
-
-// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
-func (gc *goClient) waitOneThirdOrValidBlock(slot uint64) {
-	delay := slots.DivideSlotBy(3 /* a third of the slot duration */)
-	startTime := gc.slotStartTime(slot)
-	finalTime := startTime.Add(delay)
-	wait := prysmTime.Until(finalTime)
-	if wait <= 0 {
-		return
-	}
-
-	t := time.NewTimer(wait)
-	defer t.Stop()
-	for range t.C {
-		return
-	}
+// GetBeaconNetwork returns the beacon network the node is on
+func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
+	return spectypes.BeaconNetwork(gc.network.Network)
 }
 
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
-func (gc *goClient) slotStartTime(slot uint64) time.Time {
-	duration := time.Second * time.Duration(slot*uint64(gc.network.SlotDurationSec().Seconds()))
+func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

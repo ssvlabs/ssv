@@ -2,19 +2,19 @@ package connections
 
 import (
 	"context"
+	"strings"
+	"time"
+
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (
@@ -62,8 +62,6 @@ type handshaker struct {
 	ids         identify.IDService
 	net         libp2pnetwork.Network
 
-	pending *sync.Map
-
 	subnetsProvider SubnetsProvider
 }
 
@@ -91,7 +89,6 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 		subnetsIdx:      cfg.SubnetsIdx,
 		ids:             cfg.IDService,
 		filters:         filters,
-		pending:         &sync.Map{},
 		states:          cfg.States,
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
@@ -105,11 +102,6 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
 		pidStr := pid.String()
-		_, pending := h.pending.LoadOrStore(pidStr, true)
-		if pending {
-			return
-		}
-		defer h.pending.Delete(pidStr)
 
 		req, res, done, err := h.streams.HandleStream(stream)
 		defer done()
@@ -177,10 +169,6 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	pid := conn.RemotePeer()
-	if _, loaded := h.pending.LoadOrStore(pid.String(), true); loaded {
-		return errHandshakeInProcess
-	}
-	defer h.pending.Delete(pid.String())
 	// check if the peer is known before we continue
 	ni, err := h.getNodeInfo(pid)
 	if err != nil || ni != nil {
@@ -311,7 +299,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 	for _, filter := range h.filters {
 		ok, err := filter(nodeInfo)
 		if err != nil {
-			//h.logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
+			// h.logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
 			return false
 		}
 		if !ok {

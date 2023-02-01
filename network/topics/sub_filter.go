@@ -2,9 +2,9 @@ package topics
 
 import (
 	"github.com/bloxapp/ssv/network/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"sync"
 )
@@ -14,7 +14,7 @@ type SubFilter interface {
 	// SubscriptionFilter allows controlling what topics the node will subscribe to
 	// otherwise it might subscribe to irrelevant topics that were suggested by other peers
 	pubsub.SubscriptionFilter
-	//Whitelist
+	// Whitelist
 }
 
 type subFilter struct {

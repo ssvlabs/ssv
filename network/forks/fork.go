@@ -4,9 +4,9 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v1/p2p"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 // Fork is an interface for network specific fork implementations
@@ -27,9 +27,6 @@ type nodeRecord interface {
 type pubSubMapping interface {
 	// ValidatorTopicID maps the given validator public key to the corresponding pubsub topic
 	ValidatorTopicID(pk []byte) []string
-	// DecidedTopic returns the name used for main/decided topic,
-	// or empty string if the fork doesn't include a decided topic
-	DecidedTopic() string
 	// GetTopicFullName returns the topic full name, including prefix
 	GetTopicFullName(baseName string) string
 	// GetTopicBaseName return the base topic name of the topic, w/o ssv prefix

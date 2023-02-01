@@ -2,24 +2,25 @@ package topics
 
 import (
 	"context"
+	"net"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/bloxapp/ssv/utils/async"
-	"github.com/libp2p/go-libp2p-core/discovery"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/discovery"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"net"
-	"time"
 )
 
 const (
 	// subscriptionRequestLimit sets an upper bound for the number of topic we are allowed to subscribe to.
-	// 128 subnets + decided topic
+	// 128 subnets + 1 safety buffer
 	subscriptionRequestLimit = 128 + 1
 )
 
@@ -118,10 +119,10 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
-		//pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
+		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
-		//}),
+		// }),
 	}
 
 	if cfg.Discovery != nil {

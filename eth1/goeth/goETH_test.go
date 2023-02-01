@@ -3,17 +3,19 @@ package goeth
 import (
 	"context"
 	"encoding/json"
-	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/abiparser"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"strings"
-	"sync"
-	"testing"
-	"time"
+
+	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth1/abiparser"
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
@@ -32,6 +34,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			ec := newEth1Client(test.version)
 			contractAbi, err := abi.JSON(strings.NewReader(eth1.ContractABI(test.version)))

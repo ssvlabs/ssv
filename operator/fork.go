@@ -1,19 +1,20 @@
 package operator
 
 import (
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	types "github.com/prysmaticlabs/eth2-types"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
+
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 // getForkVersion returns the fork version of the given slot
-func (n *operatorNode) getForkVersion(slot uint64) forksprotocol.ForkVersion {
-	epoch := n.ethNetwork.EstimatedEpochAtSlot(types.Slot(slot))
+func (n *operatorNode) getForkVersion(slot phase0.Slot) forksprotocol.ForkVersion {
+	epoch := n.ethNetwork.EstimatedEpochAtSlot(slot)
 	return forksprotocol.GetCurrentForkVersion(epoch)
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed
-func (n *operatorNode) setFork(slot uint64) {
+func (n *operatorNode) setFork(slot phase0.Slot) {
 	currentVersion := n.getForkVersion(slot)
 	if currentVersion == n.forkVersion {
 		return

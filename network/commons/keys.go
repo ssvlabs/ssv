@@ -7,7 +7,7 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 
-	"github.com/libp2p/go-libp2p-core/crypto"
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
 )
 

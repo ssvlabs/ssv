@@ -2,10 +2,10 @@ package peers
 
 import (
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/peerstore"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"strconv"
@@ -75,7 +75,7 @@ func (pi *peersIndex) IsBad(id peer.ID) bool {
 	threshold := -10000.0
 	scores, err := pi.GetScore(id, "")
 	if err != nil {
-		//logger.Debug("could not read score", zap.Error(err))
+		// logger.Debug("could not read score", zap.Error(err))
 		return false
 	}
 	for _, score := range scores {

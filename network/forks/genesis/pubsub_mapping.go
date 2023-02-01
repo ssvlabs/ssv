@@ -10,7 +10,6 @@ import (
 const (
 	// UnknownSubnet is used when a validator public key is invalid
 	UnknownSubnet = "unknown"
-	decidedTopic  = "decided"
 
 	topicPrefix = "ssv.v2"
 )
@@ -33,11 +32,6 @@ func (genesis *ForkGenesis) GetTopicFullName(baseName string) string {
 // GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
 func (genesis *ForkGenesis) GetTopicBaseName(topicName string) string {
 	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
-}
-
-// DecidedTopic returns decided topic name for v1
-func (genesis *ForkGenesis) DecidedTopic() string {
-	return decidedTopic
 }
 
 // topicOf returns the topic for the given subnet

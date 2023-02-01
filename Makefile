@@ -35,16 +35,50 @@ lint-prepare:
 .PHONY: lint
 lint:
 	./bin/golangci-lint run -v ./...
-	if [ ! -z "${UNFORMATTED}" ]; then \
-		@echo "Some files requires formatting, please run 'go fmt ./...'"; \
-		@exit 1; \
+	@if [ ! -z "${UNFORMATTED}" ]; then \
+		echo "Some files requires formatting, please run 'go fmt ./...'"; \
+		exit 1; \
 	fi
 
-#Test
 .PHONY: full-test
 full-test:
-	@echo "Running the full test..."
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v ./...
+	@echo "Running all tests"
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./...
+
+.PHONY: integration-test
+integration-test:
+	@echo "Running integration tests"
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
+
+.PHONY: unit-test
+unit-test:
+	@echo "Running unit tests"
+	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+
+.PHONY: spec-test
+spec-test:
+	@echo "Running spec tests"
+	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -p 1 -v `go list ./... | grep spectest`
+
+#Test
+.PHONY: docker-spec-test
+docker-spec-test:
+	@echo "Running spec tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make spec-test
+
+#Test
+.PHONY: docker-unit-test
+docker-unit-test:
+	@echo "Running unit tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make unit-test
+
+.PHONY: docker-integration-test
+docker-integration-test:
+	@echo "Running integration tests in docker"
+	@docker build -t ssv_tests -f tests.Dockerfile .
+	@docker run --rm ssv_tests make integration-test
 
 #Build
 .PHONY: build
@@ -71,7 +105,6 @@ docker:
 	@echo "node ${NODES_ID}"
 	@docker rm -f ssv_node && docker build -t ssv_node . && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp -it ssv_node make BUILD_PATH=/go/bin/ssvnode  start-node && docker logs ssv_node --follow
 
-
 .PHONY: docker-image
 docker-image:
 	@echo "node ${NODES_ID}"
@@ -82,6 +115,12 @@ NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 docker-all:
 	@echo "nodes $(NODES)"
 	@docker-compose up --build $(NODES)
+
+NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+.PHONY: docker-local
+docker-local:
+	@echo "nodes $(NODES)"
+	@docker-compose -f docker-compose-local.yaml up --build $(NODES)
 
 DEBUG_NODES=ssv-node-1-dev ssv-node-2-dev ssv-node-3-dev ssv-node-4-dev
 .PHONY: docker-debug
@@ -97,11 +136,6 @@ stop:
 start-boot-node:
 	@echo "Running start-boot-node"
 	${BUILD_PATH} start-boot-node
-
-.PHONY: start-exporter
-start-exporter:
-	@echo "Running exporter on address: ${HOST_ADDRESS}"
-	${BUILD_PATH} start-exporter ${NODE_COMMAND}
 
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor

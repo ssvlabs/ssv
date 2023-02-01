@@ -2,11 +2,12 @@ package params
 
 import (
 	"encoding/json"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/stretchr/testify/require"
 	"net"
 	"testing"
 	"time"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTopicScoreParams(t *testing.T) {
@@ -15,30 +16,6 @@ func TestTopicScoreParams(t *testing.T) {
 		opts        func() *Options
 		expectedErr error
 	}{
-		{
-			"decided topic 1k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(1000, 128)
-				return &opts
-			},
-			nil,
-		},
-		{
-			"decided topic 10k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(10000, 128)
-				return &opts
-			},
-			nil,
-		},
-		{
-			"decided topic 51k validators",
-			func() *Options {
-				opts := NewDecidedTopicOpts(51000, 128)
-				return &opts
-			},
-			nil,
-		},
 		{
 			"subnet topic 1k validators",
 			func() *Options {
@@ -66,16 +43,17 @@ func TestTopicScoreParams(t *testing.T) {
 	}
 
 	for _, test := range tests {
+		test := test
 		t.Run(test.name, func(t *testing.T) {
 			opts := test.opts()
-			//raw, err := json.MarshalIndent(&opts, "", "\t")
+			// raw, err := json.MarshalIndent(&opts, "", "\t")
 			raw, err := json.Marshal(&opts)
 			require.NoError(t, err)
 			t.Logf("[%s] using opts:\n%s", test.name, string(raw))
 			topicScoreParams, err := TopicParams(*opts)
 			require.NoError(t, err)
 			require.NotNil(t, topicScoreParams)
-			//raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
+			// raw, err = json.MarshalIndent(topicScoreParams, "", "\t")
 			raw, err = json.Marshal(topicScoreParams)
 			require.NoError(t, err)
 			require.NotNil(t, raw)
@@ -107,7 +85,7 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 		RetainScore:                 psp.RetainScore,
 		SeenMsgTTL:                  psp.SeenMsgTTL,
 	}
-	//raw, err := json.MarshalIndent(&cp, "", "\t")
+	// raw, err := json.MarshalIndent(&cp, "", "\t")
 	raw, err := json.Marshal(&cp)
 	if err != nil {
 		return "", err
@@ -116,7 +94,7 @@ func peerScoreParamsString(psp *pubsub.PeerScoreParams) (string, error) {
 }
 
 type peerScoreParamsSerializable struct {
-	//Topics map[string]*TopicScoreParams
+	// Topics map[string]*TopicScoreParams
 	TopicScoreCap                                                            float64
 	AppSpecificWeight                                                        float64
 	IPColocationFactorWeight                                                 float64

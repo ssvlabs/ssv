@@ -16,6 +16,8 @@ vendor/
 
 .env*
 /config/share*
+/config/events.yaml
+/config/events.local.yaml
 /config/config.yaml
 /config/config.exporter.yaml
 /config/config.local.yaml
@@ -42,10 +44,13 @@ vendor/
 .idea/**/gradle.xml
 .idea/**/libraries
 
+docker-compose-local.yaml
 
 .DS_Store
 
 bin/
 /data/
-
-spectest/**/tests.json
+/db
+/scripts/config
+/scripts/spec_align_report/data
+/scripts/spec_align_report/ssv-spec

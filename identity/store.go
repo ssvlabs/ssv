@@ -13,12 +13,12 @@ var (
 	// TODO: use the new prefixes and add migration
 	// prefix is the store prefix
 	prefix = []byte("p2p-")
-	//prefix = []byte("identity/")
+	// prefix = []byte("identity/")
 	// netKeyPrefix is the prefix for network key
 	netKeyPrefix = []byte("private-key")
-	//netKeyPrefix = []byte("network-key/")
+	// netKeyPrefix = []byte("network-key/")
 	// operatorKeyPrefix is the prefix for operator key
-	//operatorKeyPrefix = []byte("operator-key/")
+	// operatorKeyPrefix = []byte("operator-key/")
 )
 
 // Store represents the interface for accessing the node's keys (operator and network keys)
@@ -26,8 +26,8 @@ var (
 type Store interface {
 	GetNetworkKey() (*ecdsa.PrivateKey, bool, error)
 	SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error)
-	//GetOperatorKey() (*rsa.PrivateKey, bool, error)
-	//SetupOperatorkKey(skEncoded string) (*rsa.PrivateKey, error)
+	// GetOperatorKey() (*rsa.PrivateKey, bool, error)
+	// SetupOperatorkKey(skEncoded string) (*rsa.PrivateKey, error)
 }
 
 type identityStore struct {

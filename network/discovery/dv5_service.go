@@ -1,6 +1,7 @@
 package discovery
 
 import (
+	"bytes"
 	"context"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
@@ -10,7 +11,7 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net"
@@ -36,7 +37,7 @@ type NodeProvider interface {
 type NodeFilter func(*enode.Node) bool
 
 // DiscV5Service wraps discover.UDPv5 with additional functionality
-// it implements go-libp2p-core/discovery.Discovery
+// it implements go-libp2p/core/discovery.Discovery
 // currently using ENR entry (subnets) to facilitate subnets discovery
 // TODO: should be changed once discv5 supports topics (v5.2)
 type DiscV5Service struct {
@@ -139,10 +140,16 @@ func (dvs *DiscV5Service) Node(info peer.AddrInfo) (*enode.Node, error) {
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
+	zeroSubnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
+
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
 			dvs.logger.Debug("could not read subnets", zap.String("enr", e.Node.String()))
+			return
+		}
+		if bytes.Equal(zeroSubnets, nodeSubnets) {
+			dvs.logger.Debug("skipping zero subnets", zap.String("enr", e.Node.String()))
 			return
 		}
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
@@ -159,7 +166,7 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 		}
 		metricFoundNodes.Inc()
 		handler(e)
-	}, defaultDiscoveryInterval) //, dvs.forkVersionFilter) //, dvs.badNodeFilter)
+	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
 	return nil
 }
@@ -301,7 +308,7 @@ func (dvs *DiscV5Service) publishENR() {
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		//dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
+		// dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 

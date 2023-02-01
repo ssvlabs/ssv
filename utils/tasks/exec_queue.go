@@ -1,7 +1,7 @@
 package tasks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v1/queue"
+	"github.com/bloxapp/ssv/protocol/v2/queue"
 	"sync"
 	"time"
 )

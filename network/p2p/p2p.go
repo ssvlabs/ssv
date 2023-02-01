@@ -3,6 +3,10 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -11,19 +15,16 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
-	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
-	"github.com/pkg/errors"
+	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 // network states
@@ -67,21 +68,22 @@ type p2pNetwork struct {
 	activeValidatorsLock *sync.Mutex
 	activeValidators     map[string]int32
 
-	backoffConnector *libp2pdisc.BackoffConnector
+	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
+	syncer           syncing.Syncer
 }
 
 // New creates a new p2p network
-func New(pctx context.Context, cfg *Config) network.P2PNetwork {
-	ctx, cancel := context.WithCancel(pctx)
+func New(cfg *Config) network.P2PNetwork {
+	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger := cfg.Logger.With(zap.String("who", "p2pNetwork"))
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
 	return &p2pNetwork{
-		parentCtx:            pctx,
+		parentCtx:            cfg.Ctx,
 		ctx:                  ctx,
 		cancel:               cancel,
 		logger:               logger,
@@ -122,7 +124,7 @@ func (n *p2pNetwork) Close() error {
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start() error {
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
-		//return errors.New("could not setup network: in ready state")
+		// return errors.New("could not setup network: in ready state")
 		return nil
 	}
 
@@ -140,9 +142,14 @@ func (n *p2pNetwork) Start() error {
 
 	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics)
 
-	if err := n.registerInitialTopics(); err != nil {
+	if err := n.subscribeToSubnets(); err != nil {
 		return err
 	}
+
+	// Create & start ConcurrentSyncer.
+	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n.logger, n), 16, syncing.DefaultTimeouts, nil)
+	go syncer.Run()
+	n.syncer = syncer
 
 	return nil
 }
@@ -161,27 +168,6 @@ func (n *p2pNetwork) peersBalancing() {
 	mySubnets := records.Subnets(n.subnets).Clone()
 	connMgr.TagBestPeers(n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 	connMgr.TrimPeers(ctx, n.host.Network())
-}
-
-func (n *p2pNetwork) registerInitialTopics() error {
-	decidedTopic := n.fork.DecidedTopic()
-	if len(decidedTopic) == 0 {
-		return nil
-	}
-	// start listening to decided topic
-	err := tasks.RetryWithContext(n.ctx, func() error {
-		if err := n.topicsCtrl.Subscribe(decidedTopic); err != nil {
-			n.logger.Warn("could not register to decided topic", zap.Error(err))
-			return err
-		}
-		return nil
-	}, 3)
-	if err != nil {
-		return errors.Wrap(err, "could not register to decided topic")
-	}
-	_ = n.subscribeToSubnets()
-
-	return nil
 }
 
 // startDiscovery starts the required services
@@ -268,10 +254,6 @@ func (n *p2pNetwork) UpdateSubnets() {
 func (n *p2pNetwork) getMaxPeers(topic string) int {
 	if len(topic) == 0 {
 		return n.cfg.MaxPeers
-	}
-	baseName := n.fork.GetTopicBaseName(topic)
-	if baseName == n.fork.DecidedTopic() { // allow more peers for decided topic
-		return n.cfg.TopicMaxPeers * 2
 	}
 	return n.cfg.TopicMaxPeers
 }

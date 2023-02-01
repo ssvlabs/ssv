@@ -3,9 +3,9 @@ package peers
 import (
 	"context"
 	"github.com/bloxapp/ssv/network/records"
-	connmgrcore "github.com/libp2p/go-libp2p-core/connmgr"
-	libp2pnetwork "github.com/libp2p/go-libp2p-core/network"
-	"github.com/libp2p/go-libp2p-core/peer"
+	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 )
 
@@ -13,7 +13,7 @@ const (
 	protectedTag = "ssv/subnets"
 )
 
-// ConnManager is a wrapper on top of go-libp2p-core/connmgr.ConnManager.
+// ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {
@@ -60,12 +60,12 @@ func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready
-	//c.connManager.TrimOpenConns(ctx)
+	// c.connManager.TrimOpenConns(ctx)
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
 			_ = net.ClosePeer(pid)
-			//err := net.ClosePeer(pid)
-			//if err != nil {
+			// err := net.ClosePeer(pid)
+			// if err != nil {
 			//	c.logger.Debug("could not close trimmed peer",
 			//		zap.String("pid", pid.String()), zap.Error(err))
 			//}
@@ -102,7 +102,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		// adding the number of shared subnets to the score, considering only up to 25% subnets
 		shared := records.SharedSubnets(subnets, mySubnets, len(mySubnets)/4)
 		peerScore += len(shared) / 2
-		//c.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
+		// c.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
 		peerScores[pid] = peerScore
 	}
 

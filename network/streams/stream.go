@@ -1,10 +1,9 @@
 package streams
 
 import (
-	core "github.com/libp2p/go-libp2p-core"
+	"github.com/libp2p/go-libp2p/core"
 	"github.com/pkg/errors"
 	"io"
-	"io/ioutil"
 	"time"
 )
 
@@ -55,7 +54,7 @@ func (ts *streamWrapper) ReadWithTimeout(timeout time.Duration) ([]byte, error) 
 	if err := ts.s.SetReadDeadline(time.Now().Add(timeout)); err != nil {
 		return nil, errors.Wrap(err, "could not set read deadline")
 	}
-	return ioutil.ReadAll(ts.s)
+	return io.ReadAll(ts.s)
 }
 
 // WriteWithTimeout reads next message with timeout

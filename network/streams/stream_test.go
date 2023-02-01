@@ -3,10 +3,10 @@ package streams
 import (
 	"context"
 	"github.com/libp2p/go-libp2p"
-	core "github.com/libp2p/go-libp2p-core"
-	"github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
-	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p/core"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
@@ -26,7 +26,7 @@ func TestStream(t *testing.T) {
 		s := NewStream(stream)
 		defer s.Close()
 		<-time.After(timeout * 3)
-		//require.Error(t, s.WriteWithTimeout([]byte("xxx"), timeout))
+		// require.Error(t, s.WriteWithTimeout([]byte("xxx"), timeout))
 	})
 
 	hosts[2].SetStreamHandler(prot, func(stream core.Stream) {

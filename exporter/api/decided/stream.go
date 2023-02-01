@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/protocol/v1/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.

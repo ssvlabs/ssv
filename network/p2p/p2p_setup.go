@@ -1,29 +1,30 @@
 package p2pv1
 
 import (
-	"github.com/bloxapp/ssv/network/commons"
+	"math/rand"
+	"net"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
-	commons2 "github.com/bloxapp/ssv/utils/commons"
+	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
-	connmgr "github.com/libp2p/go-libp2p-connmgr"
-	"github.com/libp2p/go-libp2p-core/crypto"
-	libp2pdisc "github.com/libp2p/go-libp2p-discovery"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"math/rand"
-	"net"
-	"strings"
-	"sync/atomic"
-	"time"
 
 	logging "github.com/ipfs/go-log"
 )
@@ -104,24 +105,22 @@ func (n *p2pNetwork) SetupHost() error {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
 
-	lowPeers, hiPeers := n.cfg.MaxPeers-3, n.cfg.MaxPeers-1
-	connManager := connmgr.NewConnManager(lowPeers, hiPeers, time.Minute*5)
-	opts = append(opts, libp2p.ConnectionManager(connManager))
+	limitsCfg := rcmgr.DefaultLimits.AutoScale()
 	// TODO: enable and extract resource manager params as config
-	//rmgr, err := rcmgr.NewResourceManager(rcmgr.NewDefaultDynamicLimiter(0.2, 128<<20, 1<<29)) // 134-536MB
-	//if err != nil {
-	//	return errors.Wrap(err, "could not create resource manager")
-	//}
-	//opts = append(opts, libp2p.ResourceManager(rmgr))
+	rmgr, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limitsCfg))
+	if err != nil {
+		return errors.Wrap(err, "could not create resource manager")
+	}
+	opts = append(opts, libp2p.ResourceManager(rmgr))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
 	}
 	n.host = host
-	n.libConnManager = connManager
+	n.libConnManager = host.ConnManager()
 
-	backoffFactory := libp2pdisc.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
-	backoffConnector, err := libp2pdisc.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
+	backoffFactory := libp2pdiscbackoff.NewExponentialDecorrelatedJitter(backoffLow, backoffHigh, backoffExponentBase, rand.NewSource(0))
+	backoffConnector, err := libp2pdiscbackoff.NewBackoffConnector(host, backoffConnectorCacheSize, connectTimeout, backoffFactory)
 	if err != nil {
 		return errors.Wrap(err, "could not create backoff connector")
 	}
@@ -155,7 +154,7 @@ func (n *p2pNetwork) setupStreamCtrl() error {
 }
 
 func (n *p2pNetwork) setupPeerServices() error {
-	libPrivKey, err := commons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	libPrivKey, err := p2pcommons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
 	}
@@ -163,7 +162,7 @@ func (n *p2pNetwork) setupPeerServices() error {
 	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
-		NodeVersion: commons2.GetNodeVersion(),
+		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {
@@ -210,12 +209,12 @@ func (n *p2pNetwork) setupPeerServices() error {
 }
 
 func (n *p2pNetwork) setupDiscovery() error {
-	ipAddr, err := commons.IPAddr()
+	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
 	}
 	var discV5Opts *discovery.DiscV5Options
-	if len(n.cfg.Bootnodes) > 0 { // otherwise, we are in local scenario
+	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
 			IP:         ipAddr.String(),
 			BindIP:     net.IPv4zero.String(),
@@ -231,9 +230,9 @@ func (n *p2pNetwork) setupDiscovery() error {
 		if len(n.subnets) > 0 {
 			discV5Opts.Subnets = n.subnets
 		}
-		n.logger.Debug("using bootnodes to start discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
+		n.logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
-		n.logger.Debug("no bootnodes were configured, using mdns discovery")
+		n.logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
 		Logger:      n.logger,

@@ -8,9 +8,9 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/libp2p/go-libp2p-core/peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -21,7 +21,7 @@ import (
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	logger := zap.L()
-	//logger := zaptest.NewLogger(t)
+	// logger := zaptest.NewLogger(t)
 	f := genesis.ForkGenesis{}
 	self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
 	mv := NewSSVMsgValidator(logger, &f, self)
@@ -42,7 +42,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	// TODO: enable once topic validation is in place
-	//t.Run("wrong topic", func(t *testing.T) {
+	// t.Run("wrong topic", func(t *testing.T) {
 	//	pkHex := "b5de683dbcb3febe8320cc741948b9282d59b75a6970ed55d6f389da59f26325331b7ea0e71a2552373d0debb6048b8a"
 	//	msg, err := dummySSVConsensusMsg(pkHex, 15160)
 	//	require.NoError(t, err)
@@ -54,7 +54,7 @@ func TestMsgValidator(t *testing.T) {
 	//	pmsg := newPBMsg(raw, topics[0], []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 	//	res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 	//	require.Equal(t, res, pubsub.ValidationReject)
-	//})
+	// })
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
@@ -63,7 +63,7 @@ func TestMsgValidator(t *testing.T) {
 	})
 
 	// TODO: enable once topic validation is in place
-	//t.Run("invalid validator public key", func(t *testing.T) {
+	// t.Run("invalid validator public key", func(t *testing.T) {
 	//	msg, err := dummySSVConsensusMsg("10101011", 1)
 	//	require.NoError(t, err)
 	//	raw, err := msg.Encode()
@@ -71,7 +71,7 @@ func TestMsgValidator(t *testing.T) {
 	//	pmsg := newPBMsg(raw, "xxx", []byte{})
 	//	res := mv(context.Background(), "xxxx", pmsg)
 	//	require.Equal(t, res, pubsub.ValidationReject)
-	//})
+	// })
 
 }
 

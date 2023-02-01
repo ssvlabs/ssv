@@ -4,21 +4,22 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/network"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v1/p2p"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -29,7 +30,6 @@ func TestGetMaxPeers(t *testing.T) {
 
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
-	require.Equal(t, 16, n.getMaxPeers(n.fork.DecidedTopic()))
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
@@ -45,32 +45,37 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
 
-	msg1, err := dummyMsg(pks[0], 1)
-	require.NoError(t, err)
-	msg2, err := dummyMsg(pks[1], 2)
-	require.NoError(t, err)
-	msg3, err := dummyMsg(pks[0], 3)
-	require.NoError(t, err)
+	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		msg1, err := dummyMsg(pks[0], 1)
+		require.NoError(t, err)
+		msg3, err := dummyMsg(pks[0], 3)
+		require.NoError(t, err)
+		require.NoError(t, node1.Broadcast(msg1))
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg3))
+		require.NoError(t, node2.Broadcast(msg3))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg1))
+		require.NoError(t, node2.Broadcast(msg1))
 	}()
 
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		msg1, err := dummyMsg(pks[0], 1)
+		require.NoError(t, err)
+		msg2, err := dummyMsg(pks[1], 2)
+		require.NoError(t, err)
+		msg3, err := dummyMsg(pks[0], 3)
+		require.NoError(t, err)
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg2))
+		require.NoError(t, node1.Broadcast(msg2))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, ln.Nodes[2].Broadcast(*msg1))
-		require.NoError(t, ln.Nodes[1].Broadcast(*msg3))
+		require.NoError(t, node2.Broadcast(msg1))
+		require.NoError(t, node1.Broadcast(msg3))
 	}()
 
 	wg.Wait()
@@ -134,23 +139,23 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastChangeRound(mid, specqbft.Height(0))
+	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(res), 5)
-	require.Less(t, len(res), 7)
-	require.GreaterOrEqual(t, msgCounter, int64(9))
+	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
+	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
+	require.GreaterOrEqual(t, msgCounter, int64(2))
 }
 
 func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
 	node.RegisterHandlers(&protcolp2p.SyncHandler{
-		Protocol: protcolp2p.LastChangeRoundProtocol,
+		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
 				Signature: []byte("xxx"),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
 				Message: &specqbft.Message{
-					MsgType:    specqbft.RoundChangeMsgType,
+					MsgType:    specqbft.CommitMsgType,
 					Height:     height,
 					Round:      round,
 					Identifier: mid[:],
@@ -188,7 +193,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 
 	routers := make([]*dummyRouter, n)
 	// for now, skip routers for v0
-	//if forkVersion != forksprotocol.GenesisForkVersion {
+	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
 		node.UseMessageRouter(routers[i])
@@ -196,17 +201,23 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 
 	logger.Debug("subscribing to topics")
 
+	var wg sync.WaitGroup
 	for _, pk := range pks {
 		vpk, err := hex.DecodeString(pk)
 		if err != nil {
 			return nil, nil, errors.Wrap(err, "could not decode validator public key")
 		}
 		for _, node := range ln.Nodes {
-			if err := node.Subscribe(vpk); err != nil {
-				return nil, nil, err
-			}
+			wg.Add(1)
+			go func(node network.P2PNetwork, vpk []byte) {
+				defer wg.Done()
+				if err := node.Subscribe(vpk); err != nil {
+					logger.Warn("could not subscribe to topic", zap.Error(err))
+				}
+			}(node, vpk)
 		}
 	}
+	wg.Wait()
 	// let the nodes subscribe
 	<-time.After(time.Second)
 	for _, pk := range pks {
@@ -264,7 +275,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &spectypes.SSVMessage{
-		MsgType: spectypes.SSVDecidedMsgType,
+		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}, nil
