@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675278980371,
+  "iteration": 1675278980387,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -98,13 +98,18 @@
                     "options": {
                       "0": {
                         "color": "red",
-                        "index": 1,
-                        "text": "Unhealthy"
+                        "index": 2,
+                        "text": "Down"
                       },
                       "1": {
+                        "color": "yellow",
+                        "index": 1,
+                        "text": "Error"
+                      },
+                      "2": {
                         "color": "green",
                         "index": 0,
-                        "text": "OK"
+                        "text": "Up"
                       }
                     },
                     "type": "value"
@@ -184,20 +189,12 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "ssv_node_status{instance=~\"$instance.*\"}",
+          "expr": "(ssv_node_status{instance=~\"$instance.*\"} + 1) or (absent(ssv_node_status{instance=~\"$instance.*\"}) * 0)",
           "hide": false,
           "instant": true,
           "interval": "",
           "legendFormat": "SSV Operator",
           "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "hide": false,
-          "refId": "D"
         }
       ],
       "title": "Current Health Status",
@@ -480,25 +477,25 @@
               "options": {
                 "0": {
                   "color": "red",
+                  "index": 2,
+                  "text": "Down"
+                },
+                "1": {
+                  "color": "yellow",
                   "index": 1,
                   "text": "Error"
                 },
-                "1": {
+                "2": {
                   "color": "green",
                   "index": 0,
                   "text": "Up"
-                },
-                "-1": {
-                  "color": "text",
-                  "index": 2,
-                  "text": "Down"
                 }
               },
               "type": "value"
             }
           ],
-          "max": 1,
-          "min": -1,
+          "max": 2,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -537,7 +534,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "ssv_node_status{instance=~\"$instance.*\"}",
+          "expr": "ssv_node_status{instance=~\"$instance.*\"} + 1",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -550,7 +547,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "-absent(ssv_node_status{instance=~\"$instance.*\"})",
+          "expr": "absent(ssv_node_status{instance=~\"$instance.*\"}) * 0",
           "hide": false,
           "interval": "",
           "legendFormat": "",
@@ -2560,7 +2557,7 @@
     "list": [
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": "ssv-node-v3-1",
           "value": "ssv-node-v3-1"
         },
@@ -2703,6 +2700,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 31,
+  "version": 32,
   "weekStart": ""
 }
