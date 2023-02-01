@@ -145,7 +145,6 @@ func (c *controller) handleValidatorRegistrationEvent(
 		}
 	}
 
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorRegistrationEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
