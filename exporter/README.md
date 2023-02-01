@@ -106,7 +106,7 @@ The following objects will be used by the API:
 
 `/stream` is an API that allows consumers to get live data that is collected by the exporter, which will push the information it receives from SSV nodes.
 
-For example, exporter will push a message for a new decided message that was broadcast-ed in the network:
+For example, exporter will push a message for a new decided message that was broadcasted in the network:
 ```json
 {
   "type": "decided",
@@ -117,7 +117,7 @@ For example, exporter will push a message for a new decided message that was bro
 
 #### Query
 
-`/query` is an API that allows some consumer to request data, by specifying filter.
+`/query` is an API that allows some consumers to request data, by specifying filter.
 
 Example request:
 ```json
@@ -177,7 +177,7 @@ Once connection is ready, type your query:
 > { "type": "decided", "filter": { "publicKey": "...", "role": "ATTESTER", "from": 2, "to": 4 } }
 ```
 
-The expected results contains a list of desired decided messages, in our case in index `[2, 4]`
+The expected results contain a list of desired decided messages, in our case in index `[2, 4]`
 ```shell
 < { "type": "decided", "filter": { "publicKey": "...", "role": "ATTESTER", "from": 2, "to": 4 }, "data":[...] }
 ```
