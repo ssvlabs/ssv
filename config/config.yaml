@@ -1,0 +1,39 @@
+global:
+  LogLevel: debug
+  DebugServices: ssv/protocol*
+
+db:
+  Path: ./data/db
+
+eth2:
+  ### replace with your beacon node address
+  BeaconNodeAddr: eth2-lh-prater-5052.stage.bloxinfra.com
+  Network: prater
+
+eth1:
+  ### replace with your eth1 node WebSocket address
+  ETH1Addr:  ws://eth1-testnet-stage-ws.blockchain.bloxinfra.com
+
+p2p:
+  Discovery: mdns
+### replace with your ip and ports
+### otherwise, the default ports (TCP 13001, UDP 12001) are used
+#  HostAddress:
+#  TcpPort:
+#  UdpPort:
+### mdns for local network setup
+#  Bootnodes: enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g
+
+ssv:
+  GenesisEpoch: 1
+  DutyLimit: 32
+  ValidatorOptions:
+    SignatureCollectionTimeout: 5s
+
+### replace with your operator key
+### NOTES:
+###  - required for operators
+###  - optional for exporters
+OperatorPrivateKey:
+
+LocalEventsPath: ./config/events.yaml
