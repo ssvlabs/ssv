@@ -5,7 +5,7 @@ FROM golang:1.19 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl git zip unzip wget g++ python gcc-aarch64-linux-gnu bzip2 make      \
+  curl git zip unzip wget g++ gcc-aarch64-linux-gnu bzip2 make      \
   && rm -rf /var/lib/apt/lists/*
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
@@ -16,7 +16,6 @@ RUN cd jemalloc-5.2.1 \
   && make && make install
 
 RUN go version
-RUN python --version
 
 WORKDIR /go/src/github.com/bloxapp/ssv/
 COPY go.mod .
