@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"time"
 
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -17,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ProposerRunner struct {
@@ -29,10 +29,7 @@ type ProposerRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
-
-	preConsensusStart  time.Time
-	consensusStart     time.Time
-	postConsensusStart time.Time
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(
@@ -82,11 +79,8 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		return nil
 	}
 
-	metricsPreConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
-		Observe(time.Since(r.preConsensusStart).Seconds())
-
-	r.consensusStart = time.Now()
+	r.metrics.EndPreConsensus()
+	r.metrics.StartConsensus()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -135,11 +129,8 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 		return nil
 	}
 
-	metricsConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()).
-		Observe(time.Since(r.consensusStart).Seconds())
-
-	r.postConsensusStart = time.Now()
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
@@ -194,10 +185,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
-	pkHex, beaconRole := hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleProposer.String()
-	metricsPostConsensusDuration.
-		WithLabelValues(pkHex, beaconRole).
-		Observe(time.Since(r.postConsensusStart).Seconds())
+	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -207,7 +195,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		blockSubmissionStart := time.Now()
+		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if r.decidedBlindedBlock() {
 			blk := &apiv1bellatrix.SignedBlindedBeaconBlock{
@@ -224,16 +212,14 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			}
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
-				metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
+				r.metrics.RoleSubmissionFailed()
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
 
-		metricsBeaconSubmissionDuration.WithLabelValues(pkHex, beaconRole).
-			Observe(time.Since(blockSubmissionStart).Seconds())
-		metricsDutyFullFlowDuration.WithLabelValues(pkHex, beaconRole).
-			Observe(time.Since(r.consensusStart).Seconds())
-		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
+		blockSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
 
 		r.logger.Info("successfully proposed block!")
 	}
@@ -269,7 +255,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
-	r.preConsensusStart = time.Now()
+	r.metrics.StartPreConsensus()
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -11,9 +12,9 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type AggregatorRunner struct {
@@ -24,10 +25,7 @@ type AggregatorRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
-
-	preConsensusStart  time.Time
-	consensusStart     time.Time
-	postConsensusStart time.Time
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewAggregatorRunner(
@@ -48,12 +46,12 @@ func NewAggregatorRunner(
 			QBFTController: qbftController,
 			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
-
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
 		logger:   logger.With(zap.String("who", "AggregatorRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAggregator),
 	}
 }
 
@@ -76,11 +74,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 		return nil
 	}
 
-	metricsPreConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
-		Observe(time.Since(r.preConsensusStart).Seconds())
-
-	r.consensusStart = time.Now()
+	r.metrics.EndPreConsensus()
+	r.metrics.StartConsensus()
 
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
@@ -121,11 +116,8 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 		return nil
 	}
 
-	metricsConsensusDuration.
-		WithLabelValues(hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()).
-		Observe(time.Since(r.consensusStart).Seconds())
-
-	r.postConsensusStart = time.Now()
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
@@ -169,10 +161,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		return nil
 	}
 
-	pkHex, beaconRole := hex.EncodeToString(r.GetShare().ValidatorPubKey), spectypes.BNRoleAggregator.String()
-	metricsPostConsensusDuration.
-		WithLabelValues(pkHex, beaconRole).
-		Observe(time.Since(r.postConsensusStart).Seconds())
+	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -187,18 +176,16 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 			Signature: specSig,
 		}
 
-		proofSubmissionStart := time.Now()
+		proofSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			metricsRolesSubmissionFailures.WithLabelValues(pkHex, beaconRole).Inc()
+			r.metrics.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		metricsBeaconSubmissionDuration.WithLabelValues(pkHex, beaconRole).
-			Observe(time.Since(proofSubmissionStart).Seconds())
-		metricsDutyFullFlowDuration.WithLabelValues(pkHex, beaconRole).
-			Observe(time.Since(r.consensusStart).Seconds())
-		metricsRolesSubmitted.WithLabelValues(pkHex, beaconRole).Inc()
+		proofSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
 
 		r.logger.Debug("successful submitted aggregate")
 	}
@@ -223,7 +210,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
-	r.preConsensusStart = time.Now()
+	r.metrics.StartPreConsensus()
 
 	// sign selection proof
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(duty.Slot), duty.Slot, spectypes.DomainSelectionProof)
