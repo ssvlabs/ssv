@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675279940052,
+  "iteration": 1675280176156,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1470,6 +1470,10 @@
               {
                 "id": "custom.displayMode",
                 "value": "auto"
+              },
+              {
+                "id": "unit",
+                "value": "short"
               }
             ]
           },
@@ -1498,6 +1502,24 @@
                     }
                   ]
                 }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "0": {
+                        "index": 0,
+                        "text": "False"
+                      },
+                      "1": {
+                        "index": 1,
+                        "text": "True"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
               }
             ]
           }
@@ -1505,7 +1527,7 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 8,
+        "w": 11,
         "x": 0,
         "y": 38
       },
@@ -1519,12 +1541,7 @@
           "show": false
         },
         "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Subnet"
-          }
-        ]
+        "sortBy": []
       },
       "pluginVersion": "8.3.4",
       "targets": [
@@ -1684,8 +1701,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 16,
-        "x": 8,
+        "w": 13,
+        "x": 11,
         "y": 38
       },
       "id": 59,
@@ -2704,6 +2721,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 33,
+  "version": 34,
   "weekStart": ""
 }
