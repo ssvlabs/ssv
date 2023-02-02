@@ -32,6 +32,8 @@ type Queue interface {
 	// If the context is canceled, nil is returned.
 	WaitAndPop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 
+	// TODO: rename Pop to TryPop and WaitAndPop to Pop
+
 	// Empty returns true if the queue is empty.
 	Empty() bool
 }
