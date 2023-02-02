@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675280176156,
+  "iteration": 1675280176160,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1350,34 +1350,10 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "short"
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "decided"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 11,
@@ -1394,7 +1370,7 @@
             "mean"
           ],
           "displayMode": "table",
-          "placement": "bottom"
+          "placement": "right"
         },
         "tooltip": {
           "mode": "single"
@@ -2578,7 +2554,7 @@
     "list": [
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": "ssv-node-v3-1",
           "value": "ssv-node-v3-1"
         },
@@ -2721,6 +2697,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 34,
+  "version": 35,
   "weekStart": ""
 }
