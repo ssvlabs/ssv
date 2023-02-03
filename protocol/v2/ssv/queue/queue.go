@@ -9,12 +9,11 @@ type Queue interface {
 	// Push inserts a message to the queue
 	Push(*DecodedSSVMessage)
 
-	// TryPop returns immediately with the next message in the queue,
-	// or nil if the queue is empty.
+	// TryPop returns immediately with the next message in the queue, or nil if there is none.
 	TryPop(MessagePrioritizer) *DecodedSSVMessage
 
-	// Pop returns the next message in the queue,
-	// or blocks until a message is available.
+	// Pop returns and removes the next message in the queue, or blocks until a message is available.
+	// When the context is canceled, Pop returns immediately with any leftover message or nil.
 	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
@@ -37,7 +36,7 @@ func New(capacity int, pusher Pusher) Queue {
 }
 
 // NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a default capacity of 32 and a PushStrategyDrop.
+// with a default capacity of 32 and an impatient PusherDropping.
 func NewDefault() Queue {
 	return New(32, PusherDropping(0))
 }
