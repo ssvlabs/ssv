@@ -56,6 +56,7 @@ func NewProposerRunner(
 		signer:   signer,
 		valCheck: valCheck,
 		logger:   logger.With(zap.String("who", "ProposerRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
 	}
 }
 

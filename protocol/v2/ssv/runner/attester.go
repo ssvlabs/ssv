@@ -54,7 +54,8 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		logger: logger.With(zap.String("who", "AttesterRunner")),
+		logger:  logger.With(zap.String("who", "AttesterRunner")),
+		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),
 	}
 }
 
