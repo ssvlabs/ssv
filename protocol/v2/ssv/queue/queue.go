@@ -2,66 +2,58 @@ package queue
 
 import (
 	"context"
-
-	"github.com/bloxapp/ssv-spec/types"
 )
 
-// Filter is a function that returns true if the given message should be included.
-type Filter func(*DecodedSSVMessage) bool
-
-// Pop removes a message from the queue
-type Pop func()
-
-// FilterRole returns a Filter which returns true for messages whose BeaconRole matches the given role.
-func FilterRole(role types.BeaconRole) Filter {
-	return func(msg *DecodedSSVMessage) bool {
-		return msg != nil && msg.MsgID.GetRoleType() == role
-	}
-}
-
-// Queue objective is to receive messages and pop the right msg by to specify priority.
+// Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
 type Queue interface {
 	// Push inserts a message to the queue
 	Push(*DecodedSSVMessage)
 
-	// Pop removes & returns the highest priority message which matches the given filter.
-	// Returns nil if no message is found.
-	Pop(MessagePrioritizer) *DecodedSSVMessage
+	// TryPop returns immediately with the next message in the queue,
+	// or nil if the queue is empty.
+	TryPop(MessagePrioritizer) *DecodedSSVMessage
 
-	// WaitAndPop waits for a message to be pushed to the queue and returns it.
-	// If the context is canceled, nil is returned.
-	WaitAndPop(context.Context, MessagePrioritizer) *DecodedSSVMessage
-
-	// TODO: rename Pop to TryPop and WaitAndPop to Pop
+	// Pop returns the next message in the queue,
+	// or blocks until a message is available.
+	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
 }
 
-// PriorityQueue implements Queue, it manages a lock-free linked list of DecodedSSVMessage.
-// Implemented using atomic CAS (CompareAndSwap) operations to handle multiple goroutines that add/pop messages.
-type PriorityQueue struct {
-	head *item
-	push chan *DecodedSSVMessage
+type priorityQueue struct {
+	head   *item
+	inbox  chan *DecodedSSVMessage
+	pusher Pusher
 }
 
-// New initialized a PriorityQueue with the given MessagePrioritizer.
-func New() Queue {
-	return &PriorityQueue{
-		push: make(chan *DecodedSSVMessage, 64),
+// New returns an implementation of Queue optimized for concurrent push and sequential pop.
+// Pops aren't thread-safe, so don't call Pop from multiple goroutines.
+func New(capacity int, pusher Pusher) Queue {
+	return &priorityQueue{
+		pusher: pusher,
+		inbox:  make(chan *DecodedSSVMessage, capacity),
 	}
 }
 
-func (q *PriorityQueue) Push(msg *DecodedSSVMessage) {
-	q.push <- msg
-	metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
+// NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
+// with a default capacity of 32 and a PushStrategyDrop.
+func NewDefault() Queue {
+	return New(32, PusherDropping(0))
 }
 
-func (q *PriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
-	return nil
+func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
+	q.pusher(q.inbox, msg)
 }
 
-func (q *PriorityQueue) WaitAndPop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+	if q.head == nil {
+		return nil
+	}
+	return q.pop(prioritizer)
+}
+
+func (q *priorityQueue) Pop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
 	// Try to pop immediately.
 	if q.head != nil {
 		return q.pop(priority)
@@ -69,7 +61,7 @@ func (q *PriorityQueue) WaitAndPop(ctx context.Context, priority MessagePrioriti
 
 	// Wait for a message to be pushed.
 	select {
-	case msg := <-q.push:
+	case msg := <-q.inbox:
 		q.head = &item{message: msg}
 	case <-ctx.Done():
 	}
@@ -77,7 +69,7 @@ func (q *PriorityQueue) WaitAndPop(ctx context.Context, priority MessagePrioriti
 	// Consume any messages that were pushed while waiting.
 	for {
 		select {
-		case msg := <-q.push:
+		case msg := <-q.inbox:
 			if q.head == nil {
 				q.head = &item{message: msg}
 			} else {
@@ -98,7 +90,7 @@ done:
 	return q.pop(priority)
 }
 
-func (q *PriorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	if q.head.next == nil {
 		m := q.head.message
 		q.head = nil
@@ -124,11 +116,11 @@ func (q *PriorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	return current.message
 }
 
-func (q *PriorityQueue) Empty() bool {
+func (q *priorityQueue) Empty() bool {
 	return q.head == nil
 }
 
-// item is an item in the linked list that is used by PriorityQueue
+// item is a node in a linked list of DecodedSSVMessage.
 type item struct {
 	message *DecodedSSVMessage
 	next    *item

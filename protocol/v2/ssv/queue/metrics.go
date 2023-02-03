@@ -6,12 +6,12 @@ import (
 )
 
 var (
-	metricMsgQRatio = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:ibft:msgq:size",
-		Help: "The amount of message in the validator's msg queue",
+	metricMessageDropped = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:ibft:msgq:drops",
+		Help: "The amount of message dropped from the validator's msg queue",
 	}, []string{"pk"})
 )
 
 func init() {
-	_ = prometheus.Register(metricMsgQRatio)
+	_ = prometheus.Register(metricMessageDropped)
 }

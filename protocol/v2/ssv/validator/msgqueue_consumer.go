@@ -87,7 +87,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message and handle it.
-		msg := q.Q.WaitAndPop(ctx, queue.NewMessagePrioritizer(&state))
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
 		if msg == nil {
 			continue
 		}

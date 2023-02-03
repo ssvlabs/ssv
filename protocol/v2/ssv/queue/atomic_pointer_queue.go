@@ -39,23 +39,17 @@ func (q *AtomicPointerPriorityQueue) Push(msg *DecodedSSVMessage) {
 	n.value.Store(msg)
 	n.next.Store(q.head.Load())
 
-	added := q.head.CompareAndSwap(q.head.Load(), n)
-	if added {
-		metricMsgQRatio.WithLabelValues(msg.MsgID.String()).Inc()
-	}
+	q.head.CompareAndSwap(q.head.Load(), n)
 }
 
-func (q *AtomicPointerPriorityQueue) Pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+func (q *AtomicPointerPriorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	res := q.pop(prioritizer)
-	if res != nil {
-		metricMsgQRatio.WithLabelValues(res.MsgID.String()).Dec()
-	}
 	return res
 }
 
-func (q *AtomicPointerPriorityQueue) WaitAndPop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
+func (q *AtomicPointerPriorityQueue) Pop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
 	q.waitingLock.Lock()
-	if msg := q.Pop(priority); msg != nil {
+	if msg := q.pop(priority); msg != nil {
 		q.waitingLock.Unlock()
 		return msg
 	}
