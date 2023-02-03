@@ -92,36 +92,52 @@ func NewConsensusMetrics(pk []byte, role spectypes.BeaconRole) ConsensusMetrics 
 
 // StartPreConsensus stores pre-consensus start time.
 func (cm *ConsensusMetrics) StartPreConsensus() {
-	cm.preConsensusStart = time.Now()
+	if cm != nil {
+		cm.preConsensusStart = time.Now()
+	}
 }
 
 // StartConsensus stores consensus start time.
 func (cm *ConsensusMetrics) StartConsensus() {
-	cm.consensusStart = time.Now()
+	if cm != nil {
+		cm.consensusStart = time.Now()
+	}
 }
 
 // StartPostConsensus stores post-consensus start time.
 func (cm *ConsensusMetrics) StartPostConsensus() {
-	cm.postConsensusStart = time.Now()
+	if cm != nil {
+		cm.postConsensusStart = time.Now()
+	}
 }
 
 // EndPreConsensus sends metrics for pre-consensus duration.
 func (cm *ConsensusMetrics) EndPreConsensus() {
-	cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
+	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
+		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
+	}
 }
 
 // EndConsensus sends metrics for consensus duration.
 func (cm *ConsensusMetrics) EndConsensus() {
-	cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
+	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
+		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
+	}
 }
 
 // EndPostConsensus sends metrics for post-consensus duration.
 func (cm *ConsensusMetrics) EndPostConsensus() {
-	cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
+	if cm != nil && cm.postConsensus != nil && !cm.postConsensusStart.IsZero() {
+		cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
+	}
 }
 
 // StartBeaconSubmission returns a function that sends metrics for beacon submission duration.
 func (cm *ConsensusMetrics) StartBeaconSubmission() (endBeaconSubmission func()) {
+	if cm == nil || cm.beaconSubmission == nil {
+		return func() {}
+	}
+
 	start := time.Now()
 	return func() {
 		cm.beaconSubmission.Observe(time.Since(start).Seconds())
@@ -130,19 +146,27 @@ func (cm *ConsensusMetrics) StartBeaconSubmission() (endBeaconSubmission func())
 
 // EndDutyFullFlow sends metrics for duty full flow duration.
 func (cm *ConsensusMetrics) EndDutyFullFlow() {
-	start := cm.consensusStart
-	if !cm.preConsensusStart.IsZero() {
-		start = cm.preConsensusStart
+	if cm != nil && cm.dutyFullFlow != nil {
+		start := cm.consensusStart
+		if !cm.preConsensusStart.IsZero() {
+			start = cm.preConsensusStart
+		}
+		if !start.IsZero() {
+			cm.dutyFullFlow.Observe(time.Since(start).Seconds())
+		}
 	}
-	cm.dutyFullFlow.Observe(time.Since(start).Seconds())
 }
 
 // RoleSubmitted increases submitted roles counter.
 func (cm *ConsensusMetrics) RoleSubmitted() {
-	cm.rolesSubmitted.Inc()
+	if cm != nil && cm.rolesSubmitted != nil {
+		cm.rolesSubmitted.Inc()
+	}
 }
 
 // RoleSubmissionFailed increases non-submitted roles counter.
 func (cm *ConsensusMetrics) RoleSubmissionFailed() {
-	cm.rolesSubmissionFailures.Inc()
+	if cm != nil && cm.rolesSubmissionFailures != nil {
+		cm.rolesSubmissionFailures.Inc()
+	}
 }
