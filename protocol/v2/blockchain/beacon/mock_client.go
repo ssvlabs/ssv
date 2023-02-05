@@ -5,6 +5,7 @@
 package beacon
 
 import (
+	eth2client "github.com/attestantio/go-eth2-client"
 	reflect "reflect"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -222,6 +223,26 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain interface{})
 type MockBeacon struct {
 	ctrl     *gomock.Controller
 	recorder *MockBeaconMockRecorder
+}
+
+func (m *MockBeacon) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockBeacon) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockBeacon) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockBeacon) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 // MockBeaconMockRecorder is the mock recorder for MockBeacon.

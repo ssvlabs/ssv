@@ -3,6 +3,7 @@ package beacon
 import (
 	"context"
 
+	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -19,6 +20,10 @@ import (
 type beaconDuties interface {
 	// GetDuties returns duties for the passed validators indices
 	GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	Events(topics []string, handler eth2client.EventHandlerFunc) error
 }
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)

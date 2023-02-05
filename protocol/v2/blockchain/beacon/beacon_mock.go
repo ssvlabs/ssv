@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	eth2client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -13,6 +14,26 @@ import (
 
 // TODO need to use mockgen instead
 type beaconMock struct {
+}
+
+func (b beaconMock) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b beaconMock) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b beaconMock) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (b beaconMock) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {

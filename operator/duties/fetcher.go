@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -31,7 +32,12 @@ type validatorsIndicesFetcher interface {
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
+	//eth2client.EventsProvider
 	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
+	AttesterDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	ProposerDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	Events(topics []string, handler eth2client.EventHandlerFunc) error
 }
 
 // newDutyFetcher creates a new instance
@@ -54,6 +60,42 @@ type dutyFetcher struct {
 	indicesFetcher validatorsIndicesFetcher
 
 	cache *cache.Cache
+}
+
+func (df *dutyFetcher) AttesterDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	return df.beaconClient.AttesterDuties(epoch, indices)
+}
+
+func (df *dutyFetcher) ProposerDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	return df.beaconClient.ProposerDuties(epoch, indices)
+}
+
+func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	period := uint64(epoch) / goclient.EpochsPerSyncCommitteePeriod
+	firstEpoch := df.firstEpochOfSyncPeriod(period)
+	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch()
+	if firstEpoch < currentEpoch {
+		firstEpoch = currentEpoch
+	}
+	lastEpoch := df.firstEpochOfSyncPeriod(period+1) - 1
+
+	duties, err := df.beaconClient.SyncCommitteeDuties(firstEpoch, indices)
+	if err != nil {
+		return nil, err
+	}
+
+	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
+	if len(syncCommitteeSubscriptions) > 0 {
+		if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
+			df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+		}
+	}
+	return duties, nil
+}
+
+func (df *dutyFetcher) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+	df.logger.Debug("subscribing to events", zap.Any("topics", topics))
+	return df.beaconClient.Events(topics, handler)
 }
 
 // GetDuties tries to get slot's duties from cache, if not available in cache it fetches them from beacon
@@ -126,16 +168,16 @@ func (df *dutyFetcher) fetchDuties(slot phase0.Slot) ([]*spectypes.Duty, error) 
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
-		var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
+		//var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
 		// entries holds all the new duties to add
 		entries := map[phase0.Slot]cacheEntry{}
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
-			if duty.Type == spectypes.BNRoleSyncCommittee {
-				syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, df.toSyncCommitteeSubscription(duty))
-			} else {
-				subscriptions = append(subscriptions, toSubscription(duty))
-			}
+			//if duty.Type == spectypes.BNRoleSyncCommittee {
+			//	syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, df.toSyncCommitteeSubscription(duty))
+			//} else {
+			subscriptions = append(subscriptions, toSubscription(duty))
+			//}
 		}
 
 		df.populateCache(entries)
@@ -143,11 +185,11 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
 		}
-		if len(syncCommitteeSubscriptions) > 0 {
-			if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
-				df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
-			}
-		}
+		//if len(syncCommitteeSubscriptions) > 0 {
+		//	if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
+		//		df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+		//	}
+		//}
 	}
 	return nil
 }
@@ -212,6 +254,26 @@ func (df *dutyFetcher) addMissingSlots(entries map[phase0.Slot]cacheEntry) {
 func (df *dutyFetcher) firstSlotOfEpoch(slot uint64) uint64 {
 	mod := slot % df.ethNetwork.SlotsPerEpoch()
 	return slot - mod
+}
+
+// firstEpochOfSyncPeriod calculates the first epoch of the given sync period.
+func (df *dutyFetcher) firstEpochOfSyncPeriod(period uint64) phase0.Epoch {
+	return phase0.Epoch(period * goclient.EpochsPerSyncCommitteePeriod)
+}
+
+// calculateSubscriptions calculates the sync committee subscriptions
+// given a set of duties.
+func (df *dutyFetcher) calculateSubscriptions(endEpoch phase0.Epoch, duties []*spectypes.Duty) []*eth2apiv1.SyncCommitteeSubscription {
+	subscriptions := make([]*eth2apiv1.SyncCommitteeSubscription, 0, len(duties))
+	for _, duty := range duties {
+		subscriptions = append(subscriptions, &eth2apiv1.SyncCommitteeSubscription{
+			ValidatorIndex:       duty.ValidatorIndex,
+			SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+			UntilEpoch:           endEpoch,
+		})
+	}
+
+	return subscriptions
 }
 
 // getDutyCacheKey return the cache key for a slot

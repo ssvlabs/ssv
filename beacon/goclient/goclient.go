@@ -80,6 +80,7 @@ type Client interface {
 	eth2client.SyncCommitteeContributionsSubmitter
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
+	eth2client.EventsProvider
 }
 
 // goClient implementing Beacon struct
@@ -158,4 +159,18 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
+}
+
+func (gc *goClient) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+	gc.logger.Debug("subscribing to events", zap.Strings("topics", topics))
+	eventsProvider, isProvider := gc.client.(eth2client.EventsProvider)
+	if !isProvider {
+		return errors.New("events provider not supported")
+	}
+	//if eventsProvider, isProvider := gc.client.(eth2client.EventsProvider); isProvider {
+	if err := eventsProvider.Events(gc.ctx, topics, handler); err != nil {
+		return errors.Wrap(err, "failed to configure head event")
+	}
+	//}
+	return nil
 }

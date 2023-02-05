@@ -15,9 +15,9 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	type FetchFunc func(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 
 	fetchers := map[spectypes.BeaconRole]FetchFunc{
-		spectypes.BNRoleAttester:      gc.fetchAttesterDuties,
-		spectypes.BNRoleProposer:      gc.fetchProposerDuties,
-		spectypes.BNRoleSyncCommittee: gc.fetchSyncCommitteeDuties,
+		spectypes.BNRoleAttester: gc.AttesterDuties,
+		spectypes.BNRoleProposer: gc.ProposerDuties,
+		//spectypes.BNRoleSyncCommittee: gc.SyncCommitteeDuties,
 	}
 	duties := make([]*spectypes.Duty, 0)
 	var lock sync.Mutex
@@ -43,8 +43,9 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	return duties, nil
 }
 
-// fetchAttesterDuties applies attester + aggregator duties
-func (gc *goClient) fetchAttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+// AttesterDuties applies attester + aggregator duties
+func (gc *goClient) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	gc.logger.Debug("fetching attester duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("validatorIndices", len(validatorIndices)))
 	var duties []*spectypes.Duty
 	attesterDuties, err := gc.client.AttesterDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {
@@ -70,8 +71,9 @@ func (gc *goClient) fetchAttesterDuties(epoch phase0.Epoch, validatorIndices []p
 	return duties, nil
 }
 
-// fetchProposerDuties applies proposer duties
-func (gc *goClient) fetchProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+// ProposerDuties applies proposer duties
+func (gc *goClient) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+	gc.logger.Debug("fetching proposer duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("validatorIndices", len(validatorIndices)))
 	var duties []*spectypes.Duty
 	proposerDuties, err := gc.client.ProposerDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {
@@ -88,8 +90,8 @@ func (gc *goClient) fetchProposerDuties(epoch phase0.Epoch, validatorIndices []p
 	return duties, nil
 }
 
-// fetchSyncCommitteeDuties applies sync committee + sync committee contributor duties
-func (gc *goClient) fetchSyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+// SyncCommitteeDuties applies sync committee + sync committee contributor duties
+func (gc *goClient) SyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	var duties []*spectypes.Duty
 	syncCommitteeDuties, err := gc.client.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {

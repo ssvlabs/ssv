@@ -5,12 +5,15 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -21,6 +24,10 @@ import (
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
+// syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
+// period change at which to prepare the relevant duties.
+var syncCommitteePreparationEpochs = uint64(2)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -56,6 +63,7 @@ type dutyController struct {
 	validatorController validator.Controller
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
+	dutyMap             *hashmap.Map[phase0.Slot, []*spectypes.Duty]
 }
 
 var secPerSlot int64 = 12
@@ -72,6 +80,8 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
+		//dutyMap:             make(map[phase0.Slot][]*spectypes.Duty),
+		dutyMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
 	}
 	return &dc
 }
@@ -82,9 +92,28 @@ func (dc *dutyController) Start() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
+	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
+	// re-request duties if there is a change in beacon block.
+	// This also allows us to re-request duties if the dependent roots change.
+	if err := dc.fetcher.Events([]string{"head"}, dc.HandleHeadEvent); err != nil {
+		dc.logger.Error("failed to subscribe to head events", zap.Error(err))
+	}
 	tickerChan := make(chan phase0.Slot, 32)
+	dc.initDuties()
 	dc.ticker.Subscribe(tickerChan)
 	dc.listenToTicker(tickerChan)
+}
+
+func (dc *dutyController) initDuties() {
+	indices := dc.validatorController.GetValidatorsIndices()
+	currentEpoch := dc.ethNetwork.EstimatedCurrentEpoch()
+
+	thisSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod) * goclient.EpochsPerSyncCommitteePeriod)
+	go dc.scheduleSyncCommitteeMessages(thisSyncCommitteePeriodStartEpoch, indices)
+	nextSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch)/goclient.EpochsPerSyncCommitteePeriod + 1) * goclient.EpochsPerSyncCommitteePeriod)
+	if uint64(nextSyncCommitteePeriodStartEpoch-currentEpoch) <= syncCommitteePreparationEpochs {
+		go dc.scheduleSyncCommitteeMessages(nextSyncCommitteePeriodStartEpoch, indices)
+	}
 }
 
 // ExecuteDuty tries to execute the given duty
@@ -143,17 +172,149 @@ func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 	}, nil
 }
 
+// HandleHeadEvent handles the "head" events from the beacon node.
+func (dc *dutyController) HandleHeadEvent(event *apiv1.Event) {
+	if event.Data == nil {
+		return
+	}
+
+	data := event.Data.(*apiv1.HeadEvent)
+	dc.logger.Debug("received head event", zap.Uint64("slot", uint64(data.Slot)))
+	if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
+		return
+	}
+
+	//// check if slot in dc.dutyMap[data.Slot] is not nil
+	//if duties := dc.dutyMap[data.Slot]; duties != nil {
+	//	for i := range duties {
+	//		go dc.onDuty(duties[i])
+	//	}
+	//}
+
+}
+
 // listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
+		// check if first slot of epoch
+		if dc.ethNetwork.IsFirstSlotOfEpoch(currentSlot) {
+			dc.logger.Debug("first slot of epoch", zap.Uint64("slot", uint64(currentSlot)))
+			currentEpoch := dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)
+			indices := dc.validatorController.GetValidatorsIndices()
+			//go dc.scheduleProposals(currentEpoch, indices)
+
+			// Update the _next_ period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
+			if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
+				go dc.scheduleSyncCommitteeMessages(currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
+			}
+		}
+
+		//// determine half epoch
+		//if uint64(currentSlot)%dc.ethNetwork.SlotsPerEpoch() == dc.ethNetwork.SlotsPerEpoch()/2 {
+		//	dc.logger.Debug("half epoch", zap.Uint64("slot", uint64(currentSlot)))
+		//	// prepare for next epoch duties
+		//	// schedule attestations
+		//	dc.prepareForEpoch(dc.ctx, dc.ethNetwork.EstimatedCurrentEpoch()+1)
+		//}
+
 		// execute duties
 		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
 		}
 		for i := range duties {
+			dc.logger.Debug("executing duty", zap.Uint64("slot", uint64(currentSlot)),
+				zap.String("pubKey", duties[i].PubKey.String()), zap.String("role", duties[i].Type.String()))
 			go dc.onDuty(&duties[i])
 		}
+
+		// execute sync committee duties
+		syncCommitteeDuties, found := dc.dutyMap.Get(currentSlot)
+		if found {
+			for _, duty := range syncCommitteeDuties {
+				go dc.onDuty(duty)
+			}
+		}
+
+		// delete duties from map
+		dc.dutyMap.Del(currentSlot - 2)
+	}
+}
+
+// prepareForEpoch fetches duties for the given epoch
+func (dc *dutyController) prepareForEpoch(ctx context.Context, epoch phase0.Epoch) {
+	dc.logger.Debug("preparing for epoch", zap.Uint64("epoch", uint64(epoch)))
+	// TODO: get indices by Epoch
+	indices := dc.validatorController.GetValidatorsIndices()
+	go dc.scheduleAttestations(epoch, indices)
+	// TODO: SubscribeToCommitteeSubnet subscribe to beacon committees
+}
+
+// scheduleAttestations schedules attestations for the given epoch and validator indices.
+func (dc *dutyController) scheduleAttestations(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+	if len(indices) == 0 {
+		// no validators
+		return
+	}
+
+	// TODO: Sort the response by slot, then committee index, then validator index.
+	attesterDuties, err := dc.fetcher.AttesterDuties(epoch, indices)
+	if err != nil {
+		return
+	}
+	// populate dc.dutyMap
+	for _, duty := range attesterDuties {
+		duties, found := dc.dutyMap.Get(duty.Slot)
+		if !found {
+			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+		}
+		dc.dutyMap.Set(duty.Slot, append(duties, duty))
+	}
+	// TODO: handle Aggregate
+}
+
+// scheduleProposals schedules proposals for the given epoch and validator indices.
+func (dc *dutyController) scheduleProposals(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+	dc.logger.Debug("scheduling proposals", zap.Uint64("epoch", uint64(epoch)), zap.Int("validators", len(indices)))
+	if len(indices) == 0 {
+		// no validators
+		return
+	}
+
+	proposerDuties, err := dc.fetcher.ProposerDuties(epoch, indices)
+	if err != nil {
+		return
+	}
+	// populate dc.dutyMap
+	for _, duty := range proposerDuties {
+		duties, found := dc.dutyMap.Get(duty.Slot)
+		if !found {
+			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+		}
+		dc.dutyMap.Set(duty.Slot, append(duties, duty))
+	}
+}
+
+// scheduleSyncCommitteeMessages schedules sync committee messages for the given period and validator indices.
+func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+	if len(indices) == 0 {
+		// no validators
+		return
+	}
+
+	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(epoch, indices)
+	if err != nil {
+		return
+	}
+	dc.logger.Debug("sync committee duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("duties", len(syncCommitteeDuties)))
+
+	// populate dc.dutyMap
+	for _, duty := range syncCommitteeDuties {
+		duties, found := dc.dutyMap.Get(duty.Slot)
+		if !found {
+			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+		}
+		dc.dutyMap.Set(duty.Slot, append(duties, duty))
 	}
 }
 

@@ -5,6 +5,7 @@
 package mocks
 
 import (
+	eth2client "github.com/attestantio/go-eth2-client"
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -53,6 +54,26 @@ func (mr *MockvalidatorsIndicesFetcherMockRecorder) GetValidatorsIndices() *gomo
 type MockDutyFetcher struct {
 	ctrl     *gomock.Controller
 	recorder *MockDutyFetcherMockRecorder
+}
+
+func (m *MockDutyFetcher) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockDutyFetcher) AttesterDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockDutyFetcher) ProposerDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockDutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 // MockDutyFetcherMockRecorder is the mock recorder for MockDutyFetcher.
