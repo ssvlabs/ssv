@@ -181,6 +181,9 @@ func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
 }
 
 func isDecidedMesssage(s *State, sm *qbft.SignedMessage) bool {
+	if sm == nil {
+		return false
+	}
 	return sm.Message.MsgType == qbft.CommitMsgType &&
 		len(sm.Signers) > int(s.Quorum)
 }
