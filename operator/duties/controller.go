@@ -242,58 +242,58 @@ func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 }
 
 // prepareForEpoch fetches duties for the given epoch
-func (dc *dutyController) prepareForEpoch(ctx context.Context, epoch phase0.Epoch) {
-	dc.logger.Debug("preparing for epoch", zap.Uint64("epoch", uint64(epoch)))
-	// TODO: get indices by Epoch
-	indices := dc.validatorController.GetValidatorsIndices()
-	go dc.scheduleAttestations(epoch, indices)
-	// TODO: SubscribeToCommitteeSubnet subscribe to beacon committees
-}
+//func (dc *dutyController) prepareForEpoch(ctx context.Context, epoch phase0.Epoch) {
+//	dc.logger.Debug("preparing for epoch", zap.Uint64("epoch", uint64(epoch)))
+//	// TODO: get indices by Epoch
+//	indices := dc.validatorController.GetValidatorsIndices()
+//	go dc.scheduleAttestations(epoch, indices)
+//	// TODO: SubscribeToCommitteeSubnet subscribe to beacon committees
+//}
 
 // scheduleAttestations schedules attestations for the given epoch and validator indices.
-func (dc *dutyController) scheduleAttestations(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
-	if len(indices) == 0 {
-		// no validators
-		return
-	}
+//func (dc *dutyController) scheduleAttestations(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+//	if len(indices) == 0 {
+//		// no validators
+//		return
+//	}
+//
+//	// TODO: Sort the response by slot, then committee index, then validator index.
+//	attesterDuties, err := dc.fetcher.AttesterDuties(epoch, indices)
+//	if err != nil {
+//		return
+//	}
+//	// populate dc.dutyMap
+//	for _, duty := range attesterDuties {
+//		duties, found := dc.dutyMap.Get(duty.Slot)
+//		if !found {
+//			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+//		}
+//		dc.dutyMap.Set(duty.Slot, append(duties, duty))
+//	}
+//	// TODO: handle Aggregate
+//}
 
-	// TODO: Sort the response by slot, then committee index, then validator index.
-	attesterDuties, err := dc.fetcher.AttesterDuties(epoch, indices)
-	if err != nil {
-		return
-	}
-	// populate dc.dutyMap
-	for _, duty := range attesterDuties {
-		duties, found := dc.dutyMap.Get(duty.Slot)
-		if !found {
-			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
-		}
-		dc.dutyMap.Set(duty.Slot, append(duties, duty))
-	}
-	// TODO: handle Aggregate
-}
-
-// scheduleProposals schedules proposals for the given epoch and validator indices.
-func (dc *dutyController) scheduleProposals(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
-	dc.logger.Debug("scheduling proposals", zap.Uint64("epoch", uint64(epoch)), zap.Int("validators", len(indices)))
-	if len(indices) == 0 {
-		// no validators
-		return
-	}
-
-	proposerDuties, err := dc.fetcher.ProposerDuties(epoch, indices)
-	if err != nil {
-		return
-	}
-	// populate dc.dutyMap
-	for _, duty := range proposerDuties {
-		duties, found := dc.dutyMap.Get(duty.Slot)
-		if !found {
-			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
-		}
-		dc.dutyMap.Set(duty.Slot, append(duties, duty))
-	}
-}
+//// scheduleProposals schedules proposals for the given epoch and validator indices.
+//func (dc *dutyController) scheduleProposals(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+//	dc.logger.Debug("scheduling proposals", zap.Uint64("epoch", uint64(epoch)), zap.Int("validators", len(indices)))
+//	if len(indices) == 0 {
+//		// no validators
+//		return
+//	}
+//
+//	proposerDuties, err := dc.fetcher.ProposerDuties(epoch, indices)
+//	if err != nil {
+//		return
+//	}
+//	// populate dc.dutyMap
+//	for _, duty := range proposerDuties {
+//		duties, found := dc.dutyMap.Get(duty.Slot)
+//		if !found {
+//			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+//		}
+//		dc.dutyMap.Set(duty.Slot, append(duties, duty))
+//	}
+//}
 
 // scheduleSyncCommitteeMessages schedules sync committee messages for the given period and validator indices.
 func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {

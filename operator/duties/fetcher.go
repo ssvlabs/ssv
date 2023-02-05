@@ -292,16 +292,16 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 	}
 }
 
-func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2apiv1.SyncCommitteeSubscription {
-	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch() // TODO can do this calculation one time outside this func
-	period := uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod
-	endEpoch := (period + 1) * goclient.EpochsPerSyncCommitteePeriod
-	return &eth2apiv1.SyncCommitteeSubscription{
-		ValidatorIndex:       duty.ValidatorIndex,
-		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-		UntilEpoch:           phase0.Epoch(endEpoch),
-	}
-}
+//func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2apiv1.SyncCommitteeSubscription {
+//	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch() // TODO can do this calculation one time outside this func
+//	period := uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod
+//	endEpoch := (period + 1) * goclient.EpochsPerSyncCommitteePeriod
+//	return &eth2apiv1.SyncCommitteeSubscription{
+//		ValidatorIndex:       duty.ValidatorIndex,
+//		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+//		UntilEpoch:           phase0.Epoch(endEpoch),
+//	}
+//}
 
 type serializedDuty struct {
 	PubKey string
