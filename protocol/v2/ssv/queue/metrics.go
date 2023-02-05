@@ -9,7 +9,7 @@ var (
 	metricMessageDropped = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:ibft:msgq:drops",
 		Help: "The amount of message dropped from the validator's msg queue",
-	}, []string{"pk"})
+	}, []string{"msg_id"})
 )
 
 func init() {

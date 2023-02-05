@@ -68,9 +68,9 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	return -1
 }
 
-// compareRound returns an integer comparing the message's round (if exist) to the current.
+// scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
-func compareRound(state *State, m *DecodedSSVMessage) int {
+func scoreRound(state *State, m *DecodedSSVMessage) int {
 	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
 		if mm.Message.Round == state.Round {
 			return 2
@@ -83,112 +83,104 @@ func compareRound(state *State, m *DecodedSSVMessage) int {
 	return 0
 }
 
-// messageScore returns a score based on the top level message type,
+// scoreMessageType returns a score based on the top level message type,
 // where event type messages are prioritized over other types.
-func messageScore(m *DecodedSSVMessage) int {
-	switch m.MsgType {
-	case ssvmessage.SSVEventMsgType:
-		return 1 + scoreByPrecedence(nil, m, isMessageEventOfType(ssvtypes.ExecuteDuty), isMessageEventOfType(ssvtypes.Timeout))
+func scoreMessageType(m *DecodedSSVMessage) int {
+	switch mm := m.Body.(type) {
+	case *ssvtypes.EventMsg:
+		switch mm.Type {
+		case ssvtypes.ExecuteDuty:
+			return 3
+		case ssvtypes.Timeout:
+			return 2
+		}
+		return 0
 	default:
 		return 0
 	}
 }
 
-// messageTypeScore returns an integer score for the message's type.
-func messageTypeScore(state *State, m *DecodedSSVMessage, relativeHeight int) int {
-	// Current.
+// scoreMessageSubtype returns an integer score for the message's type.
+func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
+	consensusMessage, isConsensusMessage := m.Body.(*qbft.SignedMessage)
+
+	var (
+		isPreConsensusMessage  = false
+		isPostConsensusMessage = false
+	)
+	if mm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
+		isPostConsensusMessage = mm.Message.Type == ssv.PostConsensusPartialSig
+		isPreConsensusMessage = !isPostConsensusMessage
+	}
+
+	// Current height.
 	if relativeHeight == 0 {
 		if state.HasRunningInstance {
-			return scoreByPrecedence(state, m,
-				isConsensusMessage, isPreConsensusMessage, isPostConsensusMessage)
+			switch {
+			case isConsensusMessage:
+				return 3
+			case isPreConsensusMessage:
+				return 2
+			case isPostConsensusMessage:
+				return 1
+			}
+			return 0
 		}
-		return scoreByPrecedence(state, m,
-			isPreConsensusMessage, isPostConsensusMessage, isConsensusMessage)
+		switch {
+		case isPreConsensusMessage:
+			return 3
+		case isPostConsensusMessage:
+			return 2
+		case isConsensusMessage:
+			return 1
+		}
+		return 0
 	}
 
-	// Higher.
+	// Higher height.
 	if relativeHeight == 1 {
-		return scoreByPrecedence(state, m,
-			isDecidedMesssage, isPreConsensusMessage, isConsensusMessage, isPostConsensusMessage)
+		switch {
+		case isDecidedMesssage(state, consensusMessage):
+			return 4
+		case isPreConsensusMessage:
+			return 3
+		case isConsensusMessage:
+			return 2
+		case isPostConsensusMessage:
+			return 1
+		}
+		return 0
 	}
 
-	// Lower.
-	return scoreByPrecedence(state, m,
-		isDecidedMesssage, isMessageOfType(qbft.CommitMsgType),
-	)
-}
-
-// consensusTypeScore returns an integer score for the type of a consensus message.
-// When given a non-consensus message, consensusTypeScore returns 0.
-func consensusTypeScore(state *State, m *DecodedSSVMessage) int {
-	if isConsensusMessage(state, m) {
-		return scoreByPrecedence(state, m,
-			isMessageOfType(qbft.ProposalMsgType), isMessageOfType(qbft.PrepareMsgType),
-			isMessageOfType(qbft.CommitMsgType), isMessageOfType(qbft.RoundChangeMsgType))
+	// Lower height.
+	switch {
+	case isDecidedMesssage(state, consensusMessage):
+		return 2
+	case isConsensusMessage && consensusMessage.Message.MsgType == qbft.CommitMsgType:
+		return 1
 	}
 	return 0
 }
 
-// messageCondition returns whether the given message complies to a condition within the given state.
-type messageCondition func(s *State, m *DecodedSSVMessage) bool
-
-// scoreByPrecedence returns the inverted index of the first true within the given conditions,
-// so that the earlier the true, the higher the score.
-func scoreByPrecedence(s *State, m *DecodedSSVMessage, conditions ...messageCondition) int {
-	for i, check := range conditions {
-		if check(s, m) {
-			return len(conditions) - i
+// scoreConsensusType returns an integer score for the type of a consensus message.
+// When given a non-consensus message, scoreConsensusType returns 0.
+func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
+	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
+		switch mm.Message.MsgType {
+		case qbft.ProposalMsgType:
+			return 4
+		case qbft.PrepareMsgType:
+			return 3
+		case qbft.CommitMsgType:
+			return 2
+		case qbft.RoundChangeMsgType:
+			return 1
 		}
 	}
 	return 0
 }
 
-func isConsensusMessage(s *State, m *DecodedSSVMessage) bool {
-	return m.MsgType == types.SSVConsensusMsgType
-}
-
-func isPreConsensusMessage(s *State, m *DecodedSSVMessage) bool {
-	if m.MsgType != types.SSVPartialSignatureMsgType {
-		return false
-	}
-	if sm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
-		return sm.Message.Type != ssv.PostConsensusPartialSig
-	}
-	return false
-}
-
-func isPostConsensusMessage(s *State, m *DecodedSSVMessage) bool {
-	if m.MsgType != types.SSVPartialSignatureMsgType {
-		return false
-	}
-	if sm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
-		return sm.Message.Type == ssv.PostConsensusPartialSig
-	}
-	return false
-}
-
-func isDecidedMesssage(s *State, m *DecodedSSVMessage) bool {
-	if sm, ok := m.Body.(*qbft.SignedMessage); ok {
-		return sm.Message.MsgType == qbft.CommitMsgType &&
-			len(sm.Signers) > int(s.Quorum)
-	}
-	return false
-}
-
-func isMessageOfType(t qbft.MessageType) messageCondition {
-	return func(s *State, m *DecodedSSVMessage) bool {
-		if sm, ok := m.Body.(*qbft.SignedMessage); ok {
-			return sm.Message.MsgType == t
-		}
-		return false
-	}
-}
-
-func isMessageEventOfType(eventType ssvtypes.EventType) messageCondition {
-	return func(s *State, m *DecodedSSVMessage) bool {
-		if em, ok := m.Body.(*ssvtypes.EventMsg); ok {
-			return em.Type == eventType
-		}
-		return false
-	}
+func isDecidedMesssage(s *State, sm *qbft.SignedMessage) bool {
+	return sm.Message.MsgType == qbft.CommitMsgType &&
+		len(sm.Signers) > int(s.Quorum)
 }

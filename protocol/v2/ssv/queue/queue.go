@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"time"
 )
 
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
@@ -36,9 +37,9 @@ func New(capacity int, pusher Pusher) Queue {
 }
 
 // NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a default capacity of 32 and an impatient PusherDropping.
+// with a default capacity of 32 and a PusherDropping with a patience of 400ms and 64 tries.
 func NewDefault() Queue {
-	return New(32, PusherDropping(0))
+	return New(32, PusherDropping(400*time.Millisecond, 64))
 }
 
 func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
@@ -46,16 +47,32 @@ func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
 }
 
 func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+	// Consume any pending messages from the inbox.
+	for {
+		select {
+		case msg := <-q.inbox:
+			if q.head == nil {
+				q.head = &item{message: msg}
+			} else {
+				q.head = &item{message: msg, next: q.head}
+			}
+		default:
+			goto done
+		}
+	}
+done:
 	if q.head == nil {
 		return nil
 	}
+
+	// Pop the highest priority message.
 	return q.pop(prioritizer)
 }
 
-func (q *priorityQueue) Pop(ctx context.Context, priority MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Try to pop immediately.
 	if q.head != nil {
-		return q.pop(priority)
+		return q.pop(prioritizer)
 	}
 
 	// Wait for a message to be pushed.
@@ -79,14 +96,12 @@ func (q *priorityQueue) Pop(ctx context.Context, priority MessagePrioritizer) *D
 		}
 	}
 done:
-
-	// Return nil if nothing was pushed.
 	if q.head == nil {
 		return nil
 	}
 
 	// Pop the highest priority message.
-	return q.pop(priority)
+	return q.pop(prioritizer)
 }
 
 func (q *priorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
@@ -97,26 +112,31 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	}
 
 	// Remove the highest priority message and return it.
-	var prev, current *item
-	current = q.head
-	for current.next != nil {
-		if prioritizer.Prior(current.next.message, current.message) {
-			prev = current
-			current = current.next
-		} else {
+	var (
+		prior   *item
+		highest = q.head
+		current = q.head
+	)
+	for {
+		if prioritizer.Prior(current.next.message, highest.message) {
+			highest = current.next
+			prior = current
+		}
+		current = current.next
+		if current.next == nil {
 			break
 		}
 	}
-	if prev == nil {
-		q.head = current.next
+	if prior == nil {
+		q.head = highest.next
 	} else {
-		prev.next = current.next
+		prior.next = highest.next
 	}
-	return current.message
+	return highest.message
 }
 
 func (q *priorityQueue) Empty() bool {
-	return q.head == nil
+	return q.head == nil && len(q.inbox) == 0
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

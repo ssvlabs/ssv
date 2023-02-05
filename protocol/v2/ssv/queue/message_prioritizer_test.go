@@ -287,12 +287,16 @@ func (m messageSlice) dump(s *State) string {
 			typ = mm.Message.MsgType
 		}
 
+		decided := false
+		if sm, ok := msg.Body.(*qbft.SignedMessage); ok {
+			decided = isDecidedMesssage(s, sm)
+		}
 		tbl.AddRow(
 			fmt.Sprint(i),
 			kind,
 			fmt.Sprintf("%d (%s)", heightOrSlot, relation),
 			fmt.Sprint(typ),
-			fmt.Sprintf("%t", isDecidedMesssage(s, msg)),
+			fmt.Sprintf("%t", decided),
 		)
 	}
 	tbl.Render()

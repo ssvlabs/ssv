@@ -22,7 +22,7 @@ var mockState = &State{
 	Quorum:             4,
 }
 
-func TestPriorityQueuePushAndPop(t *testing.T) {
+func TestPriorityQueue_TryPop(t *testing.T) {
 	queue := NewDefault()
 
 	require.True(t, queue.Empty())
@@ -45,6 +45,202 @@ func TestPriorityQueuePushAndPop(t *testing.T) {
 	// Pop nil.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState))
 	require.Nil(t, popped)
+}
+
+func TestPriorityQueue_Pop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	const (
+		capacity       = 3
+		contextTimeout = 50 * time.Millisecond
+		pushDelay      = 50 * time.Millisecond
+		precision      = 5 * time.Millisecond
+	)
+	queue := New(capacity, PusherDropping(15*time.Millisecond, 3))
+	require.True(t, queue.Empty())
+
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	// Push messages.
+	for i := 0; i < capacity; i++ {
+		queue.Push(msg)
+	}
+	require.False(t, queue.Empty())
+
+	// Should pop everything immediately.
+	for i := 0; i < capacity; i++ {
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Equal(t, msg, popped)
+	}
+	require.True(t, queue.Empty())
+
+	// Should pop nil after context cancellation.
+	{
+		ctx, _ := context.WithTimeout(context.Background(), contextTimeout)
+		expectedEnd := time.Now().Add(contextTimeout)
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Nil(t, popped)
+		require.WithinDuration(t, expectedEnd, time.Now(), precision)
+	}
+
+	// Push messages in a goroutine.
+	go func() {
+		for i := 0; i < capacity; i++ {
+			time.Sleep(pushDelay)
+			queue.Push(msg)
+		}
+	}()
+
+	// Should wait for the messages to be pushed.
+	expectedEnd := time.Now().Add(pushDelay * time.Duration(capacity))
+	for i := 0; i < capacity; i++ {
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Equal(t, msg, popped)
+	}
+	require.True(t, queue.Empty())
+	require.WithinDuration(t, expectedEnd, time.Now(), precision)
+}
+
+// TestPriorityQueue_Order tests that the queue returns the messages in the correct order.
+func TestPriorityQueue_Order(t *testing.T) {
+	for _, test := range messagePriorityTests {
+		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
+			// Create the PriorityQueue and populate it with messages.
+			q := NewDefault()
+
+			// Decode messages.
+			messages := make(messageSlice, len(test.messages))
+			for i, m := range test.messages {
+				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
+				require.NoError(t, err)
+				messages[i] = mm
+			}
+
+			for i := 0; i < 20; i++ {
+				// Push shuffled messages to the queue.
+				for _, msg := range messages.shuffle() {
+					q.Push(msg)
+				}
+
+				// Pop messages from the queue and compare to the expected order.
+				for i, excepted := range messages {
+					actual := q.TryPop(NewMessagePrioritizer(test.state))
+					require.Equal(t, excepted, actual, "incorrect message at index %d", i)
+				}
+			}
+		})
+	}
+}
+
+func TestPriorityQueue_PusherDropping_Patience(t *testing.T) {
+	const (
+		capacity  = 3
+		patience  = 50 * time.Millisecond
+		maxTries  = 3
+		precision = 5 * time.Millisecond
+	)
+	queue := New(capacity, PusherDropping(patience, maxTries))
+	require.True(t, queue.Empty())
+
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	// Push messages under capacity.
+	expectedEnd := time.Now()
+	for i := 0; i < capacity; i++ {
+		queue.Push(msg)
+	}
+	require.False(t, queue.Empty())
+	require.WithinDuration(t, expectedEnd, time.Now(), precision)
+
+	// Push messages over capacity with patience.
+	expectedEnd = time.Now()
+	maxHeight := maxTries * 2
+	for i := 0; i < maxHeight; i++ {
+		msg, err := DecodeSSVMessage(
+			mockConsensusMessage{Height: qbft.Height(i), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		require.NoError(t, err)
+		queue.Push(msg)
+		if i < maxTries {
+			expectedEnd = expectedEnd.Add(patience * time.Duration(float64(i)/float64(maxTries)))
+		}
+	}
+	require.False(t, queue.Empty())
+	require.WithinDuration(t, expectedEnd, time.Now(), precision)
+
+	// Expect the first messages to be dropped.
+	for i := capacity; i > 0; i-- {
+		popped := queue.TryPop(NewMessagePrioritizer(mockState))
+		require.Equal(t, qbft.Height(maxHeight-i), popped.Body.(*qbft.SignedMessage).Message.Height)
+	}
+}
+
+func TestPriorityQueue_PusherDropping_Patience_Parallel(t *testing.T) {
+	const (
+		capacity  = 3
+		patience  = 50 * time.Millisecond
+		maxTries  = 3
+		precision = 5 * time.Millisecond
+	)
+	queue := New(capacity, PusherDropping(patience, maxTries))
+	require.True(t, queue.Empty())
+
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	pushConcurrently := func(count int, expectedDuration time.Duration) {
+		// Push messages concurrently with expected duration.
+		start := time.Now()
+		expectedEnd := time.Now().Add(expectedDuration)
+		var wg sync.WaitGroup
+		for i := 0; i < count; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				queue.Push(msg)
+			}()
+			time.Sleep(50 * time.Microsecond)
+		}
+		wg.Wait()
+		require.False(t, queue.Empty())
+		require.WithinDuration(t, expectedEnd, time.Now(), precision,
+			"expected duration: %v, actual duration: %v", expectedDuration, time.Since(start))
+
+		// Pop min(count, capacity) messages immediately.
+		expectedPops := count
+		if expectedPops > capacity {
+			expectedPops = capacity
+		}
+		start = time.Now()
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+		for i := 0; i < expectedPops; i++ {
+			popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+			require.Equal(t, msg, popped)
+		}
+		require.True(t, queue.Empty())
+		require.Less(t, time.Since(start), 5*time.Millisecond)
+	}
+
+	// Push messages under capacity, expect no delay.
+	pushConcurrently(capacity, 0*time.Millisecond)
+
+	// Push 1 message over capacity, expect delay equal to patience.
+	pushConcurrently(capacity+1, patience)
+
+	// Push 2 messages over capacity, expect delay equal to patience*2/3.
+	pushConcurrently(capacity+2, patience*2/3)
+
+	// Push 3 messages over capacity, expect delay equal to patience*1/3.
+	pushConcurrently(capacity+3, patience*1/3)
+
+	// Push 12 messages over capacity, expect no delay because
+	// maxTries is 3 and any push after the 3rd should drop
+	// old messages without waiting, making space for
+	// prior pending pushes to complete immediately.
+	pushConcurrently(capacity+12, 0*time.Millisecond)
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
@@ -70,15 +266,6 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 		messageCount = 2080
 	)
 	queue := factory()
-
-	// Spawn a printer to allow for non-blocking logging.
-	print := make(chan []any, 2048)
-	go func() {
-		for msg := range print {
-			b.Logf(msg[0].(string), msg[1:]...)
-			_ = msg
-		}
-	}()
 
 	// Prepare messages.
 	messages := make([]*DecodedSSVMessage, messageCount)
@@ -121,7 +308,6 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 				for m := range messageStream {
 					queue.Push(m)
 					pushedCount.Add(1)
-					// print <- []any{"pushed message %d/%d", n, messageCount}
 					time.Sleep(time.Duration(rand.Intn(5)) * time.Microsecond)
 				}
 			}()
@@ -150,12 +336,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 					if msg == nil {
 						return
 					}
-					if msg == nil {
-						b.Logf("nil message")
-						b.Fail()
-					}
 					popped <- msg
-					// print <- []any{"popped message %d/%d", len(popped), messageCount}
 				}
 			}()
 		}
@@ -193,86 +374,12 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 
 	// Log metrics.
 	b.Log(english.Sprintf(
-		"popped %d/%d (%.f%% loss) messages at %d messages/sec",
+		"popped %d/%d (%.3f%% loss) messages at %d messages/sec",
 		totalPopped,
 		totalPushed,
 		100*(1-float64(totalPopped)/float64(totalPushed)),
 		int64(float64(totalPopped)/totalDuration.Seconds()),
 	))
-}
-
-func TestPriorityQueue_Pop(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	for i := 0; i < 10; i++ {
-		queue := NewDefault()
-		require.True(t, queue.Empty())
-
-		msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-		require.NoError(t, err)
-
-		// Push 2 message.
-		queue.Push(msg)
-		queue.Push(msg)
-
-		// Pop immediately.
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// Pop immediately.
-		popped = queue.Pop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// Push 1 message in a goroutine.
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			queue.Push(msg)
-
-			time.Sleep(100 * time.Millisecond)
-			queue.Push(msg)
-		}()
-
-		// Pop should wait for the message to be pushed.
-		popped = queue.Pop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// Pop should wait for the message to be pushed.
-		popped = queue.Pop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-	}
-}
-
-// TestPriorityQueue_Order tests that the queue returns the messages in the correct order.
-func TestPriorityQueue_Order(t *testing.T) {
-	for _, test := range messagePriorityTests {
-		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
-			// Create the PriorityQueue and populate it with messages.
-			q := NewDefault()
-
-			decodedMessages := make([]*DecodedSSVMessage, len(test.messages))
-			for i, m := range test.messages {
-				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
-				require.NoError(t, err)
-
-				q.Push(mm)
-
-				// Keep track of the messages we push so we can
-				// effortlessly compare to them later.
-				decodedMessages[i] = mm
-			}
-
-			// Pop messages from the queue and compare to the expected order.
-			for i, excepted := range decodedMessages {
-				actual := q.TryPop(NewMessagePrioritizer(test.state))
-				require.Equal(t, excepted, actual, "incorrect message at index %d", i)
-			}
-		})
-	}
 }
 
 func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
