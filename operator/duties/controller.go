@@ -310,6 +310,10 @@ func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indi
 
 	// populate dc.dutyMap
 	for _, duty := range syncCommitteeDuties {
+		// skip duties for past slots
+		if duty.Slot < dc.ethNetwork.EstimatedCurrentSlot() {
+			continue
+		}
 		duties, found := dc.dutyMap.Get(duty.Slot)
 		if !found {
 			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
