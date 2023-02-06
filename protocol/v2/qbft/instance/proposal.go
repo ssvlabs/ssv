@@ -29,7 +29,7 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 	if signedProposal.Message.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
 	}
-	i.BumpToRound(newRound)
+	i.bumpToRound(newRound)
 
 	i.observeStageDurationMetric("proposal", time.Since(i.stageStart).Seconds())
 	i.stageStart = time.Now()

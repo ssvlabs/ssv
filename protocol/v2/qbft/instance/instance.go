@@ -6,13 +6,13 @@ import (
 	"sync"
 	"time"
 
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
@@ -62,7 +62,7 @@ func NewInstance(
 func (i *Instance) Start(value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.BumpToRound(specqbft.FirstRound)
+		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.stageStart = time.Now()
 
@@ -228,8 +228,8 @@ func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
 }
 
-// BumpToRound sets round and sends current round metrics.
-func (i *Instance) BumpToRound(round specqbft.Round) {
+// bumpToRound sets round and sends current round metrics.
+func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.State.Round = round
 	messageID := specqbft.ControllerIdToMessageID(i.State.ID)
 	metricsQBFTInstanceRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(round))
