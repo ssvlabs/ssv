@@ -84,6 +84,17 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 		return nil, err
 	}
 
+	if len(duties) == 0 {
+		return nil, nil
+	}
+
+	// print the newly fetched duties
+	var toPrint []serializedDuty
+	for _, d := range duties {
+		toPrint = append(toPrint, toSerialized(d))
+	}
+	df.logger.Debug("got sync committee duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("count", len(duties)), zap.Any("duties", toPrint))
+
 	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
 	if len(syncCommitteeSubscriptions) > 0 {
 		if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {

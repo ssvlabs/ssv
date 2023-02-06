@@ -302,16 +302,16 @@ func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indi
 		return
 	}
 
+	currentSlot := dc.ethNetwork.EstimatedCurrentSlot()
 	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(epoch, indices)
 	if err != nil {
 		return
 	}
-	dc.logger.Debug("sync committee duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("duties", len(syncCommitteeDuties)))
 
 	// populate dc.dutyMap
 	for _, duty := range syncCommitteeDuties {
 		// skip duties for past slots
-		if duty.Slot < dc.ethNetwork.EstimatedCurrentSlot() {
+		if duty.Slot < currentSlot {
 			continue
 		}
 		duties, found := dc.dutyMap.Get(duty.Slot)
