@@ -42,7 +42,7 @@ to run validators in a decentralized and trustless way.
 
 ## Getting Started
 
-The following documents contains instructions and information on how to get started:
+The following documents contain instructions and information on how to get started:
 * [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
 * [Developers' Guide](./docs/DEV_GUIDE.md)
 
