@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675691446991,
+  "iteration": 1675700243386,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -42,6 +42,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Current status of the beacon, ETH1 and SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -209,7 +210,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Status of the connected beacon node",
+      "description": "Health status of the beacon node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -326,7 +327,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Status of the connected ETH1 node",
+      "description": "Health status of the ETH1 node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -443,6 +444,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Health status of the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -584,6 +586,7 @@
         "uid": "eXfXfqH7z"
       },
       "decimals": 2,
+      "description": "RAM memory usage of the SSV operator node",
       "editable": true,
       "error": false,
       "fill": 0,
@@ -684,6 +687,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Go memory usage of the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -798,7 +802,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "",
+      "description": "Number of go routines running on the SSV operator node",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
@@ -904,6 +908,7 @@
         "uid": "eXfXfqH7z"
       },
       "decimals": 3,
+      "description": "CPU usage of the SSV operator node",
       "editable": true,
       "error": false,
       "fieldConfig": {
@@ -1007,6 +1012,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Hard drive memory usage of the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1097,7 +1103,7 @@
           "refId": "B"
         }
       ],
-      "title": "Disk Usage (HDD)",
+      "title": "Disk Usage",
       "transformations": [],
       "type": "timeseries"
     },
@@ -1106,6 +1112,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Network input and output usage of the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1235,6 +1242,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Number of connected peers to the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1306,6 +1314,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Subnet peer distribution based on topic",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1397,6 +1406,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Subnet peers breakdown table of the SSV operator node",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1609,6 +1619,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "The discovery rate of the subnet peers",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1709,6 +1720,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Table breakdown of all the SSV operator nodes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1845,11 +1857,11 @@
             "type": "prometheus",
             "uid": "eXfXfqH7z"
           },
-          "exemplar": false,
+          "exemplar": true,
           "expr": "(ssv:network:peers_identity{instance=~\"$instance.*\"}) + on(pubKey, instance, job) group_left() sum without (name) (ssv:exporter:operator_index)",
           "format": "table",
           "hide": false,
-          "instant": true,
+          "instant": false,
           "interval": "",
           "legendFormat": "",
           "refId": "A"
@@ -1948,6 +1960,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Rate per second of inbound / outbound topic messages over the last 2 minutes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2054,99 +2067,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "none"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 8,
-        "x": 8,
-        "y": 61
-      },
-      "id": 36,
-      "options": {
-        "legend": {
-          "calcs": [
-            "lastNotNull",
-            "max",
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "rate (ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m])",
-          "interval": "",
-          "legendFormat": "{{topic}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Outgoing Pubsub Messages (2m rate)",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
+      "description": "Rate per second of incoming topic messages for every topic over the last 2 minutes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2202,7 +2123,7 @@
       "gridPos": {
         "h": 12,
         "w": 8,
-        "x": 16,
+        "x": 8,
         "y": 61
       },
       "id": 34,
@@ -2241,6 +2162,101 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Rate per second of outgoing topic messages for every topic over the last 2 minutes",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 16,
+        "y": 61
+      },
+      "id": 36,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "max",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "rate (ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m])",
+          "interval": "",
+          "legendFormat": "{{topic}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Outgoing Pubsub Messages (2m rate)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "Table breakdown for each stream protocol",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2411,6 +2427,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Rate per second of requests,  responses and active requests",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2687,6 +2704,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 45,
+  "version": 47,
   "weekStart": ""
 }
