@@ -177,6 +177,8 @@ spec:
             value: "14008"
           - name: FULLNODE
             value: "true"
+          - name: EXPORTER
+            value: "true"
           - name: MSG_WORKERS_COUNT
             value: "1024"
           - name: MSG_WORKER_BUFFER_SIZE
