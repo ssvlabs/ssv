@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675684382766,
+  "iteration": 1675691446991,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1414,24 +1414,8 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "#ccccdc",
                 "value": null
-              },
-              {
-                "color": "orange",
-                "value": 1
-              },
-              {
-                "color": "yellow",
-                "value": 3
-              },
-              {
-                "color": "green",
-                "value": 5
-              },
-              {
-                "color": "dark-green",
-                "value": 10
               }
             ]
           }
@@ -1469,11 +1453,11 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "#808080",
+                      "color": "#ccccdc",
                       "value": null
                     },
                     {
-                      "color": "text",
+                      "color": "#ccccdc",
                       "value": 1
                     }
                   ]
@@ -2703,6 +2687,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 44,
+  "version": 45,
   "weekStart": ""
 }

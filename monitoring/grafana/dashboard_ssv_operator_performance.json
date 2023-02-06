@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1675688784162,
+  "iteration": 1675691445125,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -94,7 +94,7 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 7,
+        "w": 12,
         "x": 0,
         "y": 1
       },
@@ -158,10 +158,6 @@
               {
                 "color": "green",
                 "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
               }
             ]
           }
@@ -170,8 +166,8 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 7,
-        "x": 7,
+        "w": 12,
+        "x": 12,
         "y": 1
       },
       "id": 48,
@@ -208,7 +204,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"} > 2)",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"})",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -230,84 +226,17 @@
             "mode": "thresholds"
           },
           "mappings": [],
-          "noValue": "No Data",
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 4,
-        "x": 0,
-        "y": 11
-      },
-      "id": 43,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "text": {},
-        "textMode": "auto"
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(ssv_validator_roles_submitted{instance=~\"$instance.*\"})",
-          "interval": "",
-          "legendFormat": "{{role}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Submitted Roles",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "noValue": "No Data",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
               },
               {
                 "color": "red",
-                "value": 5
+                "value": 1
               }
             ]
           }
@@ -316,8 +245,8 @@
       },
       "gridPos": {
         "h": 7,
-        "w": 4,
-        "x": 4,
+        "w": 5,
+        "x": 0,
         "y": 11
       },
       "id": 44,
@@ -354,6 +283,69 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "noValue": "No Data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 19,
+        "x": 5,
+        "y": 11
+      },
+      "id": 43,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "text": {},
+        "textMode": "auto"
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(ssv_validator_roles_submitted{instance=~\"$instance.*\"})",
+          "interval": "",
+          "legendFormat": "{{role}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Submitted Roles",
+      "type": "stat"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -365,185 +357,6 @@
       "panels": [],
       "title": "Attester Role",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 19
-      },
-      "id": 12,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.02 s",
-          "refId": "< 0.02 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.02 - 0.05 s",
-          "refId": "0.02 - 0.05 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.05 - 0.1 s",
-          "refId": "0.05 - 0.1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.1 - 0.2 s",
-          "refId": "0.1 - 0.2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.2 - 0.5 s",
-          "refId": "0.2 - 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 5 s",
-          "refId": "1 - 5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 5 s",
-          "refId": "> 5 s"
-        }
-      ],
-      "title": "Attestation Data Request Duration",
-      "type": "timeseries"
     },
     {
       "datasource": {
@@ -601,9 +414,9 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
+        "h": 8,
+        "w": 24,
+        "x": 0,
         "y": 19
       },
       "id": 49,
@@ -718,174 +531,6 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Duration from proposal to commits",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "id": 50,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.5 s",
-          "refId": "< 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 2 s",
-          "refId": "1 - 2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "2 - 3 s",
-          "refId": "2 - 3 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "3 - 4 s",
-          "refId": "3 - 4 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "4 - 10 s",
-          "refId": "4 - 10 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 10 s",
-          "refId": "> 10 s"
-        }
-      ],
-      "title": "Consensus Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
       "description": "Proposal processing ",
       "fieldConfig": {
         "defaults": {
@@ -938,9 +583,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 28
+        "w": 8,
+        "x": 0,
+        "y": 27
       },
       "id": 51,
       "interval": "2m",
@@ -1142,9 +787,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 37
+        "w": 8,
+        "x": 8,
+        "y": 27
       },
       "id": 52,
       "interval": "2m",
@@ -1346,9 +991,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 37
+        "w": 8,
+        "x": 16,
+        "y": 27
       },
       "id": 53,
       "interval": "2m",
@@ -1498,6 +1143,174 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "Duration from proposal to commits",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 36
+      },
+      "id": 50,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"ATTESTER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"ATTESTER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
+        }
+      ],
+      "title": "Consensus Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
       "description": "Signature collection duration",
       "fieldConfig": {
         "defaults": {
@@ -1551,8 +1364,8 @@
       "gridPos": {
         "h": 9,
         "w": 12,
-        "x": 0,
-        "y": 46
+        "x": 12,
+        "y": 36
       },
       "id": 54,
       "interval": "2m",
@@ -1666,6 +1479,185 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 45
+      },
+      "id": 12,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.02 s",
+          "refId": "< 0.02 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.02\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.02 - 0.05 s",
+          "refId": "0.02 - 0.05 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.05\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.05 - 0.1 s",
+          "refId": "0.05 - 0.1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.1\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.1 - 0.2 s",
+          "refId": "0.1 - 0.2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.2\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.2 - 0.5 s",
+          "refId": "0.2 - 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 5 s",
+          "refId": "1 - 5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_beacon_attestation_data_request_duration_seconds_bucket{le=\"5.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_beacon_attestation_data_request_duration_seconds_count{instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 5 s",
+          "refId": "> 5 s"
+        }
+      ],
+      "title": "Attestation Data Request Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
       "description": "Attestation submission duration",
       "fieldConfig": {
         "defaults": {
@@ -1717,10 +1709,10 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 12,
         "x": 12,
-        "y": 46
+        "y": 45
       },
       "id": 55,
       "interval": "2m",
@@ -1879,7 +1871,7 @@
             },
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "pointSize": 5,
+            "pointSize": 1,
             "scaleDistribution": {
               "type": "linear"
             },
@@ -1911,11 +1903,11 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
+        "w": 8,
         "x": 0,
         "y": 56
       },
-      "id": 56,
+      "id": 59,
       "interval": "2m",
       "options": {
         "legend": {
@@ -1937,7 +1929,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))",
+          "expr": "sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -1952,7 +1944,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "0.5 - 1 s",
@@ -1964,7 +1956,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "1 - 2 s",
@@ -1976,7 +1968,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "2 - 3 s",
@@ -1988,7 +1980,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "3 - 4 s",
@@ -2000,7 +1992,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "4 - 10 s",
@@ -2012,14 +2004,14 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "> 10 s",
           "refId": "> 10 s"
         }
       ],
-      "title": "Duty Full Flow Duration",
+      "title": "Pre-Consensus Duration",
       "type": "timeseries"
     },
     {
@@ -2079,8 +2071,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 12,
+        "w": 8,
+        "x": 8,
         "y": 56
       },
       "id": 57,
@@ -2247,177 +2239,9 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 65
-      },
-      "id": 59,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.5 s",
-          "refId": "< 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 2 s",
-          "refId": "1 - 2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "2 - 3 s",
-          "refId": "2 - 3 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "3 - 4 s",
-          "refId": "3 - 4 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "4 - 10 s",
-          "refId": "4 - 10 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 10 s",
-          "refId": "> 10 s"
-        }
-      ],
-      "title": "Pre-Consensus Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 65
+        "w": 8,
+        "x": 16,
+        "y": 56
       },
       "id": 58,
       "interval": "2m",
@@ -2531,7 +2355,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Block submission duration",
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2585,7 +2409,175 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 74
+        "y": 65
+      },
+      "id": 56,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_duty_full_flow_duration_seconds_bucket{role=\"PROPOSER\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_duty_full_flow_duration_seconds_count{role=\"PROPOSER\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
+        }
+      ],
+      "title": "Duty Full Flow Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "Block submission duration",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 65
       },
       "id": 60,
       "interval": "2m",
@@ -2712,12 +2704,516 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 74
       },
       "id": 2,
       "panels": [],
       "title": "Aggregator Role",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 0,
+        "y": 75
+      },
+      "id": 63,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
+        }
+      ],
+      "title": "Pre-Consensus Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 8,
+        "y": 75
+      },
+      "id": 62,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
+        }
+      ],
+      "title": "Consensus Duration",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 1,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "percent"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 75
+      },
+      "id": 64,
+      "interval": "2m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "< 0.5 s",
+          "refId": "< 0.5 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "0.5 - 1 s",
+          "refId": "0.5 - 1 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "1 - 2 s",
+          "refId": "1 - 2 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "2 - 3 s",
+          "refId": "2 - 3 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "3 - 4 s",
+          "refId": "3 - 4 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "4 - 10 s",
+          "refId": "4 - 10 s"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "> 10 s",
+          "refId": "> 10 s"
+        }
+      ],
+      "title": "Post-Consensus Duration",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -2892,510 +3388,6 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 84
-      },
-      "id": 62,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.5 s",
-          "refId": "< 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 2 s",
-          "refId": "1 - 2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "2 - 3 s",
-          "refId": "2 - 3 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "3 - 4 s",
-          "refId": "3 - 4 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "4 - 10 s",
-          "refId": "4 - 10 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 10 s",
-          "refId": "> 10 s"
-        }
-      ],
-      "title": "Consensus Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 93
-      },
-      "id": 63,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.5 s",
-          "refId": "< 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 2 s",
-          "refId": "1 - 2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "2 - 3 s",
-          "refId": "2 - 3 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "3 - 4 s",
-          "refId": "3 - 4 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "4 - 10 s",
-          "refId": "4 - 10 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_pre_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_pre_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 10 s",
-          "refId": "> 10 s"
-        }
-      ],
-      "title": "Pre-Consensus Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
-      "description": "",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "bars",
-            "fillOpacity": 100,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 1,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "spanNulls": true,
-            "stacking": {
-              "group": "A",
-              "mode": "percent"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "max": 1,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 93
-      },
-      "id": 64,
-      "interval": "2m",
-      "options": {
-        "legend": {
-          "calcs": [
-            "mean"
-          ],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "pluginVersion": "8.3.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m])) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))",
-          "format": "time_series",
-          "hide": false,
-          "instant": false,
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "< 0.5 s",
-          "refId": "< 0.5 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"0.5\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "0.5 - 1 s",
-          "refId": "0.5 - 1 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"1.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "1 - 2 s",
-          "refId": "1 - 2 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"2.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "2 - 3 s",
-          "refId": "2 - 3 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"3.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "3 - 4 s",
-          "refId": "3 - 4 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"4.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "4 - 10 s",
-          "refId": "4 - 10 s"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "(sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"+Inf\",instance=~\"$instance.*\"}[2m])) - sum(rate(ssv_validator_post_consensus_duration_seconds_bucket{role=\"AGGREGATOR\",le=\"10.0\",instance=~\"$instance.*\"}[2m]))) / ignoring (le) sum(rate(ssv_validator_post_consensus_duration_seconds_count{role=\"AGGREGATOR\",instance=~\"$instance.*\"}[2m]))\n",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "> 10 s",
-          "refId": "> 10 s"
-        }
-      ],
-      "title": "Post-Consensus Duration",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
       "description": "Proof submission duration",
       "fieldConfig": {
         "defaults": {
@@ -3449,8 +3441,8 @@
       "gridPos": {
         "h": 9,
         "w": 12,
-        "x": 0,
-        "y": 102
+        "x": 12,
+        "y": 84
       },
       "id": 65,
       "interval": "2m",
@@ -3695,6 +3687,6 @@
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 74,
+  "version": 78,
   "weekStart": ""
 }
