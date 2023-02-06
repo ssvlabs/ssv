@@ -74,18 +74,45 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 	period := uint64(epoch) / goclient.EpochsPerSyncCommitteePeriod
 	firstEpoch := df.firstEpochOfSyncPeriod(period)
 	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch()
+	currentSlot := df.ethNetwork.EstimatedCurrentSlot()
 	if firstEpoch < currentEpoch {
 		firstEpoch = currentEpoch
 	}
-	lastEpoch := df.firstEpochOfSyncPeriod(period+1) - 1
+	firstSlot := df.ethNetwork.GetEpochFirstSlot(firstEpoch) - 1
+	if firstSlot < currentSlot {
+		firstSlot = currentSlot
+	}
 
-	duties, err := df.beaconClient.SyncCommitteeDuties(firstEpoch, indices)
+	lastEpoch := df.firstEpochOfSyncPeriod(period+1) - 1
+	lastSlot := df.ethNetwork.GetEpochFirstSlot(lastEpoch+1) - 2
+
+	syncCommitteeDuties, err := df.beaconClient.SyncCommitteeDuties(firstEpoch, indices)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(duties) == 0 {
+	if len(syncCommitteeDuties) == 0 {
 		return nil, nil
+	}
+
+	toBeaconDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
+		return &spectypes.Duty{
+			Type:                          role,
+			PubKey:                        duty.PubKey,
+			Slot:                          slot, // in order for the duty ctrl to execute
+			ValidatorIndex:                duty.ValidatorIndex,
+			ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+		}
+	}
+
+	var duties []*spectypes.Duty
+
+	// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
+	for slot := firstSlot; slot <= lastSlot; slot++ {
+		for _, syncCommitteeDuty := range syncCommitteeDuties {
+			duties = append(duties, toBeaconDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommittee))
+			duties = append(duties, toBeaconDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
+		}
 	}
 
 	// print the newly fetched duties

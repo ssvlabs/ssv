@@ -26,7 +26,7 @@ func (b beaconMock) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0
 	panic("implement me")
 }
 
-func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	//TODO implement me
 	panic("implement me")
 }

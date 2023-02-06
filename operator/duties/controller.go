@@ -63,7 +63,10 @@ type dutyController struct {
 	validatorController validator.Controller
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
-	dutyMap             *hashmap.Map[phase0.Slot, []*spectypes.Duty]
+
+	dutyMap *hashmap.Map[phase0.Slot, []*spectypes.Duty]
+	//lastBlockEpoch           phase0.Epoch
+	//currentDutyDependentRoot phase0.Root
 }
 
 var secPerSlot int64 = 12
@@ -178,11 +181,25 @@ func (dc *dutyController) HandleHeadEvent(event *apiv1.Event) {
 		return
 	}
 
+	//var zeroRoot phase0.Root
+
 	data := event.Data.(*apiv1.HeadEvent)
 	dc.logger.Debug("received head event", zap.Uint64("slot", uint64(data.Slot)))
 	if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
 		return
 	}
+
+	//epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
+
+	//if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
+	//	if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
+	//		!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+	//		dc.handleCurrentDependentRootChanged()
+	//	}
+	//}
+	//
+	//dc.lastBlockEpoch = epoch
+	//dc.currentDutyDependentRoot = data.CurrentDutyDependentRoot
 
 	//// check if slot in dc.dutyMap[data.Slot] is not nil
 	//if duties := dc.dutyMap[data.Slot]; duties != nil {

@@ -235,7 +235,7 @@ func (m *MockBeacon) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase
 	panic("implement me")
 }
 
-func (m *MockBeacon) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+func (m *MockBeacon) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	//TODO implement me
 	panic("implement me")
 }
