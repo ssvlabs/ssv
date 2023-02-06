@@ -93,7 +93,7 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 	for _, d := range duties {
 		toPrint = append(toPrint, toSerialized(d))
 	}
-	df.logger.Debug("got sync committee duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("count", len(duties)), zap.Any("duties", toPrint))
+	df.logger.Debug("got sync committee duties", zap.Uint64("epoch", uint64(firstEpoch)), zap.Int("count", len(duties)), zap.Any("duties", toPrint))
 
 	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
 	if len(syncCommitteeSubscriptions) > 0 {
