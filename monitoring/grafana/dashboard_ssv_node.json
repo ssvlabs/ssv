@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675280176160,
+  "iteration": 1675684382766,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -453,7 +453,7 @@
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
-            "fillOpacity": 0,
+            "fillOpacity": 8,
             "gradientMode": "none",
             "hideFrom": {
               "legend": false,
@@ -558,7 +558,7 @@
           "refId": "B"
         }
       ],
-      "title": "Operator Node Health",
+      "title": "SSV Operator Node Health",
       "type": "timeseries"
     },
     {
@@ -1503,7 +1503,7 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 11,
+        "w": 8,
         "x": 0,
         "y": 38
       },
@@ -1677,8 +1677,8 @@
       },
       "gridPos": {
         "h": 9,
-        "w": 13,
-        "x": 11,
+        "w": 16,
+        "x": 8,
         "y": 38
       },
       "id": 59,
@@ -1836,7 +1836,7 @@
         "x": 0,
         "y": 47
       },
-      "id": 40,
+      "id": 64,
       "options": {
         "footer": {
           "fields": "",
@@ -1847,7 +1847,12 @@
         },
         "frameIndex": 1,
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Index"
+          }
+        ]
       },
       "pluginVersion": "8.3.4",
       "targets": [
@@ -1857,8 +1862,9 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "ssv:network:peers_identity{instance=~\"$instance.*\"}",
+          "expr": "(ssv:network:peers_identity{instance=~\"$instance.*\"}) + on(pubKey, instance, job) group_left() sum without (name) (ssv:exporter:operator_index)",
           "format": "table",
+          "hide": false,
           "instant": true,
           "interval": "",
           "legendFormat": "",
@@ -2554,7 +2560,7 @@
     "list": [
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": "ssv-node-v3-1",
           "value": "ssv-node-v3-1"
         },
@@ -2690,13 +2696,13 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 35,
+  "version": 44,
   "weekStart": ""
 }
