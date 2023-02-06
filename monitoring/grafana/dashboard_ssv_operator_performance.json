@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1675278971217,
+  "iteration": 1675688784162,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -194,9 +194,10 @@
             "type": "prometheus",
             "uid": "eXfXfqH7z"
           },
-          "exemplar": true,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\"} > 2)",
+          "exemplar": false,
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"} > 2)",
           "hide": false,
+          "instant": true,
           "interval": "",
           "legendFormat": "Total Above Round 2",
           "refId": "A"
@@ -206,9 +207,10 @@
             "type": "prometheus",
             "uid": "eXfXfqH7z"
           },
-          "exemplar": true,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\"} > 2)",
+          "exemplar": false,
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"} > 2)",
           "hide": false,
+          "instant": true,
           "interval": "",
           "legendFormat": "round {{ round }}",
           "refId": "D"
@@ -3686,13 +3688,13 @@
     ]
   },
   "time": {
-    "from": "now-30m",
+    "from": "now-15m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 73,
+  "version": 74,
   "weekStart": ""
 }
