@@ -44,7 +44,6 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 
 // AttesterDuties applies attester + aggregator duties
 func (gc *goClient) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	gc.logger.Debug("fetching attester duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("validatorIndices", len(validatorIndices)))
 	var duties []*spectypes.Duty
 	attesterDuties, err := gc.client.AttesterDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {
@@ -72,7 +71,6 @@ func (gc *goClient) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0
 
 // ProposerDuties applies proposer duties
 func (gc *goClient) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	gc.logger.Debug("fetching proposer duties", zap.Uint64("epoch", uint64(epoch)), zap.Int("validatorIndices", len(validatorIndices)))
 	var duties []*spectypes.Duty
 	proposerDuties, err := gc.client.ProposerDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {

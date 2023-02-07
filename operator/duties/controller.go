@@ -66,7 +66,7 @@ type dutyController struct {
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
 
-	// sync committee duties map [period, duty]
+	// sync committee duties map [period, duties]
 	syncCommitteeDutiesMap   *hashmap.Map[uint64, []*eth2apiv1.SyncCommitteeDuty]
 	lastBlockEpoch           phase0.Epoch
 	currentDutyDependentRoot phase0.Root
