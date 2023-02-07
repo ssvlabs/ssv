@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -203,6 +204,9 @@ func (dc *dutyController) HandleHeadEvent(event *eth2apiv1.Event) {
 	if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
 		if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
 			!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+			dc.logger.Debug("Current duty dependent root has changed",
+				zap.String("old_dependent_root", fmt.Sprintf("%#x", dc.currentDutyDependentRoot[:])),
+				zap.String("new_dependent_root", fmt.Sprintf("%#x", data.CurrentDutyDependentRoot[:])))
 			dc.handleCurrentDependentRootChanged()
 		}
 	}
