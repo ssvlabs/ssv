@@ -228,14 +228,18 @@ func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 		// execute sync committee duties
 		syncPeriod := uint64(dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)) / goclient.EpochsPerSyncCommitteePeriod
 		if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
-			for _, duty := range syncCommitteeDuties {
-				go dc.onDuty(&spectypes.Duty{
-					Type:                          spectypes.BNRoleSyncCommittee,
+			toSpecDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
+				return &spectypes.Duty{
+					Type:                          role,
 					PubKey:                        duty.PubKey,
-					Slot:                          currentSlot,
+					Slot:                          slot, // in order for the duty ctrl to execute
 					ValidatorIndex:                duty.ValidatorIndex,
 					ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-				})
+				}
+			}
+			for _, duty := range syncCommitteeDuties {
+				go dc.onDuty(toSpecDuty(duty, currentSlot, spectypes.BNRoleSyncCommittee))
+				go dc.onDuty(toSpecDuty(duty, currentSlot, spectypes.BNRoleSyncCommitteeContribution))
 			}
 		}
 
