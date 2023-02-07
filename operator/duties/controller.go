@@ -216,17 +216,6 @@ func (dc *dutyController) HandleHeadEvent(event *eth2apiv1.Event) {
 // listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-
-		if dc.ethNetwork.IsFirstSlotOfEpoch(currentSlot) {
-			currentEpoch := dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)
-			indices := dc.validatorController.GetValidatorsIndices()
-
-			// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
-			if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
-				go dc.scheduleSyncCommitteeMessages(currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
-			}
-		}
-
 		// execute duties (attester, proposal)
 		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
@@ -247,6 +236,18 @@ func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 					ValidatorIndex:                duty.ValidatorIndex,
 					ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
 				})
+			}
+		}
+
+		// Get next period's sync committee duties, but wait until half-way through the epoch
+		// This allows us to set them up at a time when the beacon node should be less busy.
+		if uint64(currentSlot)%dc.ethNetwork.SlotsPerEpoch() == dc.ethNetwork.SlotsPerEpoch()/2 {
+			currentEpoch := dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)
+			indices := dc.validatorController.GetValidatorsIndices()
+
+			// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
+			if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
+				go dc.scheduleSyncCommitteeMessages(currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
 			}
 		}
 
