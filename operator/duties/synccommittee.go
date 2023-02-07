@@ -17,13 +17,6 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 	if firstEpoch < currentEpoch {
 		firstEpoch = currentEpoch
 	}
-	// If we are in the sync committee that starts at slot x we need to generate a message during slot x-1
-	// for it to be included in slot x, hence -1.
-	firstSlot := df.ethNetwork.GetEpochFirstSlot(firstEpoch) - 1
-	currentSlot := df.ethNetwork.EstimatedCurrentSlot()
-	if firstSlot < currentSlot {
-		firstSlot = currentSlot
-	}
 	lastEpoch := df.ethNetwork.FirstEpochOfSyncPeriod(period+1) - 1
 
 	duties, err := df.beaconClient.SyncCommitteeDuties(firstEpoch, indices)
