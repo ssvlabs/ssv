@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type SyncCommitteeRunner struct {
@@ -24,6 +26,7 @@ type SyncCommitteeRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeRunner(
@@ -50,6 +53,7 @@ func NewSyncCommitteeRunner(
 		signer:   signer,
 		valCheck: valCheck,
 		logger:   logger.With(zap.String("who", "SyncCommitteeRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
 	}
 }
 
@@ -76,6 +80,9 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	if !decided {
 		return nil
 	}
+
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
@@ -119,6 +126,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		return nil
 	}
 
+	r.metrics.EndPostConsensus()
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -133,9 +142,18 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 			ValidatorIndex:  r.GetState().DecidedValue.Duty.ValidatorIndex,
 			Signature:       specSig,
 		}
+
+		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
+
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
+			r.metrics.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
+
+		messageSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
+
 		r.logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height))
 	}
@@ -169,6 +187,7 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 		SyncCommitteeBlockRoot: root,
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
