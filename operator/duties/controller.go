@@ -193,14 +193,12 @@ func (dc *dutyController) HandleHeadEvent(event *eth2apiv1.Event) {
 	var zeroRoot phase0.Root
 
 	data := event.Data.(*eth2apiv1.HeadEvent)
-	dc.logger.Debug("received head event", zap.Uint64("slot", uint64(data.Slot)))
 	if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
 		return
 	}
 
-	epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
-
 	// check for reorg
+	epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
 	if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
 		if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
 			!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
