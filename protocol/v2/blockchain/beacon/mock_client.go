@@ -5,6 +5,7 @@
 package beacon
 
 import (
+	context "context"
 	reflect "reflect"
 
 	client "github.com/attestantio/go-eth2-client"
@@ -41,17 +42,17 @@ func (m *MockbeaconDuties) EXPECT() *MockbeaconDutiesMockRecorder {
 }
 
 // Events mocks base method.
-func (m *MockbeaconDuties) Events(topics []string, handler client.EventHandlerFunc) error {
+func (m *MockbeaconDuties) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", topics, handler)
+	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Events indicates an expected call of Events.
-func (mr *MockbeaconDutiesMockRecorder) Events(topics, handler interface{}) *gomock.Call {
+func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), topics, handler)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), ctx, topics, handler)
 }
 
 // GetDuties mocks base method.
@@ -302,17 +303,17 @@ func (mr *MockBeaconMockRecorder) DomainData(epoch, domain interface{}) *gomock.
 }
 
 // Events mocks base method.
-func (m *MockBeacon) Events(topics []string, handler client.EventHandlerFunc) error {
+func (m *MockBeacon) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Events", topics, handler)
+	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Events indicates an expected call of Events.
-func (mr *MockBeaconMockRecorder) Events(topics, handler interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) Events(ctx, topics, handler interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeacon)(nil).Events), topics, handler)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeacon)(nil).Events), ctx, topics, handler)
 }
 
 // GetAttestationData mocks base method.

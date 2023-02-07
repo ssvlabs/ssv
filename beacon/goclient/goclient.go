@@ -161,6 +161,6 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 	return startTime
 }
 
-func (gc *goClient) Events(topics []string, handler eth2client.EventHandlerFunc) error {
-	return gc.client.Events(gc.ctx, topics, handler)
+func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
+	return gc.client.Events(ctx, topics, handler)
 }

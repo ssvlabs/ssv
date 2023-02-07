@@ -1,6 +1,8 @@
 package beacon
 
 import (
+	"context"
+
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
@@ -21,7 +23,7 @@ func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.Val
 	panic("implement me")
 }
 
-func (b beaconMock) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+func (b beaconMock) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	//TODO implement me
 	panic("implement me")
 }

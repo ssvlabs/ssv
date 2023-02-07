@@ -2,10 +2,6 @@ package spectest
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"testing"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -13,7 +9,11 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 )
 
 type MsgProcessingSpecTest struct {

@@ -32,10 +32,9 @@ type validatorsIndicesFetcher interface {
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
-	eth2client.EventsProvider
 	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
 	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
-	//Events(topics []string, handler eth2client.EventHandlerFunc) error
+	eth2client.EventsProvider
 }
 
 // newDutyFetcher creates a new instance
@@ -62,7 +61,7 @@ type dutyFetcher struct {
 
 func (df *dutyFetcher) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	df.logger.Debug("subscribing to events", zap.Any("topics", topics))
-	return df.beaconClient.Events(topics, handler)
+	return df.beaconClient.Events(ctx, topics, handler)
 }
 
 // GetDuties tries to get slot's duties from cache, if not available in cache it fetches them from beacon
