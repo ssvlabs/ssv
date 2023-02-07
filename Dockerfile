@@ -33,9 +33,8 @@ COPY . .
 
 ARG APP_VERSION
 
-RUN git fetch --tags
 RUN --mount=type=cache,target=/root/.cache/go-build \
-  CGO_ENABLED=1 GOOS=linux go install \
+  git fetch --tags; CGO_ENABLED=1 GOOS=linux go install \
   -tags="blst_enabled,jemalloc,allocator" \
   -ldflags "-X main.Version=`if [ ! -z "${APP_VERSION}" ]; then echo $APP_VERSION; else git describe --always --tags $(git rev-list --tags --max-count=1); fi` -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
