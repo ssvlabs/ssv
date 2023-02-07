@@ -5,6 +5,7 @@ stages:
 variables:
   #GLOBAL
   IMAGE_NAME: ssv-node
+  DOCKER_BUILDKIT: 1
 
   #STAGE
   ACCOUNT_ID_INFRA_STAGE: 121827225315
@@ -29,8 +30,6 @@ Build stage Docker image:
   stage: build
   tags:
     - blox-infra-stage
-  variables:
-    DOCKER_BUILDKIT: 1
   script:
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
