@@ -67,3 +67,21 @@ func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(epoch * 32)
 }
+
+// EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
+func (n Network) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
+	return uint64(epoch) / 256 // EpochsPerSyncCommitteePeriod
+}
+
+// FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
+func (n Network) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
+	return phase0.Epoch(period * 256) // EpochsPerSyncCommitteePeriod
+}
+
+// LastSlotOfSyncPeriod calculates the first epoch of the given sync period.
+func (n Network) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
+	lastEpoch := n.FirstEpochOfSyncPeriod(period+1) - 1
+	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
+	// as it will never be included, hence -1.
+	return n.GetEpochFirstSlot(lastEpoch+1) - 2
+}

@@ -33,7 +33,7 @@ type validatorsIndicesFetcher interface {
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
 	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
-	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
 	eth2client.EventsProvider
 }
 

@@ -65,7 +65,8 @@ type dutyController struct {
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
 
-	syncCommitteeDutiesMap   *hashmap.Map[phase0.Slot, []*spectypes.Duty]
+	// sync committee duties map [period, duty]
+	syncCommitteeDutiesMap   *hashmap.Map[uint64, []*eth2apiv1.SyncCommitteeDuty]
 	lastBlockEpoch           phase0.Epoch
 	currentDutyDependentRoot phase0.Root
 }
@@ -85,7 +86,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
 
-		syncCommitteeDutiesMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
+		syncCommitteeDutiesMap: hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty](),
 	}
 	return &dc
 }
@@ -115,12 +116,12 @@ func (dc *dutyController) warmUpDuties() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	currentEpoch := dc.ethNetwork.EstimatedCurrentEpoch()
 
-	thisSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod) * goclient.EpochsPerSyncCommitteePeriod)
+	thisSyncCommitteePeriodStartEpoch := dc.ethNetwork.FirstEpochOfSyncPeriod(uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod)
 	go dc.scheduleSyncCommitteeMessages(thisSyncCommitteePeriodStartEpoch, indices)
 
 	// next sync committee period.
 	// TODO: we should fetch duties for validator indices that became active (active_ongoing) in the next sync committee period as well
-	nextSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch)/goclient.EpochsPerSyncCommitteePeriod + 1) * goclient.EpochsPerSyncCommitteePeriod)
+	nextSyncCommitteePeriodStartEpoch := dc.ethNetwork.FirstEpochOfSyncPeriod(uint64(currentEpoch)/goclient.EpochsPerSyncCommitteePeriod + 1)
 	if uint64(nextSyncCommitteePeriodStartEpoch-currentEpoch) <= syncCommitteePreparationEpochs {
 		go dc.scheduleSyncCommitteeMessages(nextSyncCommitteePeriodStartEpoch, indices)
 	}
@@ -234,14 +235,23 @@ func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 		}
 
 		// execute sync committee duties
-		if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(currentSlot); found {
+		syncPeriod := uint64(dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)) / goclient.EpochsPerSyncCommitteePeriod
+		if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
 			for _, duty := range syncCommitteeDuties {
-				go dc.onDuty(duty)
+				go dc.onDuty(&spectypes.Duty{
+					Type:                          spectypes.BNRoleSyncCommittee,
+					PubKey:                        duty.PubKey,
+					Slot:                          currentSlot,
+					ValidatorIndex:                duty.ValidatorIndex,
+					ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+				})
 			}
 		}
 
-		// delete duties from map
-		dc.syncCommitteeDutiesMap.Del(currentSlot - 2)
+		if currentSlot == dc.ethNetwork.LastSlotOfSyncPeriod(syncPeriod) {
+			// delete duties from map
+			dc.syncCommitteeDutiesMap.Del(syncPeriod)
+		}
 	}
 }
 
@@ -262,17 +272,18 @@ func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indi
 
 	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(epoch, indices)
 	if err != nil {
-		dc.logger.Error("failed to get sync committee duties", zap.Error(err))
+		dc.logger.Warn("failed to get sync committee duties", zap.Error(err))
 		return
 	}
 
 	// populate syncCommitteeDutiesMap
+	syncPeriod := dc.ethNetwork.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	for _, duty := range syncCommitteeDuties {
-		duties, found := dc.syncCommitteeDutiesMap.Get(duty.Slot)
+		duties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod)
 		if !found {
-			dc.syncCommitteeDutiesMap.Set(duty.Slot, []*spectypes.Duty{})
+			dc.syncCommitteeDutiesMap.Set(syncPeriod, []*eth2apiv1.SyncCommitteeDuty{})
 		}
-		dc.syncCommitteeDutiesMap.Set(duty.Slot, append(duties, duty))
+		dc.syncCommitteeDutiesMap.Set(syncPeriod, append(duties, duty))
 	}
 }
 

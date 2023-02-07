@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	client "github.com/attestantio/go-eth2-client"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
@@ -104,10 +105,10 @@ func (mr *MockDutyFetcherMockRecorder) GetDuties(slot interface{}) *gomock.Call 
 }
 
 // SyncCommitteeDuties mocks base method.
-func (m *MockDutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+func (m *MockDutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
-	ret0, _ := ret[0].([]*types.Duty)
+	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

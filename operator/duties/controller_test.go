@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"sync"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
 		executor:               mockExecutor,
 		fetcher:                mockFetcher,
-		syncCommitteeDutiesMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
+		syncCommitteeDutiesMap: hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty](),
 	}
 
 	cn := make(chan phase0.Slot)

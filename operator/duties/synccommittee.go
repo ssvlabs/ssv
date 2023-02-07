@@ -11,9 +11,9 @@ import (
 	"go.uber.org/zap"
 )
 
-func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	period := uint64(epoch) / goclient.EpochsPerSyncCommitteePeriod
-	firstEpoch := df.firstEpochOfSyncPeriod(period)
+	firstEpoch := df.ethNetwork.FirstEpochOfSyncPeriod(period)
 	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch()
 	if firstEpoch < currentEpoch {
 		firstEpoch = currentEpoch
@@ -25,7 +25,7 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 	if firstSlot < currentSlot {
 		firstSlot = currentSlot
 	}
-	lastEpoch := df.firstEpochOfSyncPeriod(period+1) - 1
+	lastEpoch := df.ethNetwork.FirstEpochOfSyncPeriod(period+1) - 1
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
 	lastSlot := df.ethNetwork.GetEpochFirstSlot(lastEpoch+1) - 2
@@ -50,15 +50,15 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 	}
 
 	var duties []*spectypes.Duty
-	// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
+	// loop all slots in period and add the duties to each slot as sync committee is for each slot
 	for slot := firstSlot; slot <= lastSlot; slot++ {
 		for _, syncCommitteeDuty := range syncCommitteeDuties {
-			duties = append(duties, toSpecDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommittee))
 			duties = append(duties, toSpecDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
 		}
 	}
 	df.logger.Debug("got sync committee duties", zap.String("period", fmt.Sprintf("%d - %d", firstEpoch, lastEpoch)), zap.Int("count", len(duties)))
 
+	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
 	if len(syncCommitteeSubscriptions) > 0 {
 		if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
@@ -66,12 +66,7 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 		}
 	}
 
-	return duties, nil
-}
-
-// firstEpochOfSyncPeriod calculates the first epoch of the given sync period.
-func (df *dutyFetcher) firstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period * goclient.EpochsPerSyncCommitteePeriod)
+	return syncCommitteeDuties, nil
 }
 
 // calculateSubscriptions calculates the sync committee subscriptions
