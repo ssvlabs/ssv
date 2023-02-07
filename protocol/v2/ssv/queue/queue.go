@@ -36,7 +36,7 @@ func New(capacity int, pusher Pusher) Queue {
 }
 
 // NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
-// with a default capacity of 32 and a PusherDropping with a patience of 400ms and 64 tries.
+// with a capacity of 32 and a PusherDropping.
 func NewDefault() Queue {
 	return New(32, PusherDropping)
 }
