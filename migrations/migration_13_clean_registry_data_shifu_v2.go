@@ -14,6 +14,7 @@ var migrationCleanRegistryDataShifuV2 = Migration{
 				return err
 			}
 		}
+
 		return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
 	},
 }
