@@ -1,4 +1,3 @@
-# syntax = docker/dockerfile:experimental
 #
 # STEP 1: Prepare environment
 #
