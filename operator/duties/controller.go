@@ -1,11 +1,12 @@
 package duties
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
 
-	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -64,9 +65,9 @@ type dutyController struct {
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
 
-	dutyMap *hashmap.Map[phase0.Slot, []*spectypes.Duty]
-	//lastBlockEpoch           phase0.Epoch
-	//currentDutyDependentRoot phase0.Root
+	syncCommitteeDutiesMap   *hashmap.Map[phase0.Slot, []*spectypes.Duty]
+	lastBlockEpoch           phase0.Epoch
+	currentDutyDependentRoot phase0.Root
 }
 
 var secPerSlot int64 = 12
@@ -83,8 +84,8 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
-		//dutyMap:             make(map[phase0.Slot][]*spectypes.Duty),
-		dutyMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
+
+		syncCommitteeDutiesMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
 	}
 	return &dc
 }
@@ -98,21 +99,27 @@ func (dc *dutyController) Start() {
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
 	// This also allows us to re-request duties if the dependent roots change.
-	if err := dc.fetcher.Events([]string{"head"}, dc.HandleHeadEvent); err != nil {
+	if err := dc.fetcher.Events(dc.ctx, []string{"head"}, dc.HandleHeadEvent); err != nil {
 		dc.logger.Error("failed to subscribe to head events", zap.Error(err))
 	}
+	dc.warmUpDuties()
 	tickerChan := make(chan phase0.Slot, 32)
-	dc.initDuties()
 	dc.ticker.Subscribe(tickerChan)
 	dc.listenToTicker(tickerChan)
 }
 
-func (dc *dutyController) initDuties() {
+// warmUpDuties preparing duties for all validators when the node starts
+// this is done to avoid missing duties for the current epoch when the node starts
+// for now we are fetching duties in this way for sync committees only
+func (dc *dutyController) warmUpDuties() {
 	indices := dc.validatorController.GetValidatorsIndices()
 	currentEpoch := dc.ethNetwork.EstimatedCurrentEpoch()
 
 	thisSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod) * goclient.EpochsPerSyncCommitteePeriod)
 	go dc.scheduleSyncCommitteeMessages(thisSyncCommitteePeriodStartEpoch, indices)
+
+	// next sync committee period.
+	// TODO: we should fetch duties for validator indices that became active (active_ongoing) in the next sync committee period as well
 	nextSyncCommitteePeriodStartEpoch := phase0.Epoch((uint64(currentEpoch)/goclient.EpochsPerSyncCommitteePeriod + 1) * goclient.EpochsPerSyncCommitteePeriod)
 	if uint64(nextSyncCommitteePeriodStartEpoch-currentEpoch) <= syncCommitteePreparationEpochs {
 		go dc.scheduleSyncCommitteeMessages(nextSyncCommitteePeriodStartEpoch, indices)
@@ -176,166 +183,96 @@ func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (dc *dutyController) HandleHeadEvent(event *apiv1.Event) {
+func (dc *dutyController) HandleHeadEvent(event *eth2apiv1.Event) {
 	if event.Data == nil {
 		return
 	}
 
-	//var zeroRoot phase0.Root
+	var zeroRoot phase0.Root
 
-	data := event.Data.(*apiv1.HeadEvent)
+	data := event.Data.(*eth2apiv1.HeadEvent)
 	dc.logger.Debug("received head event", zap.Uint64("slot", uint64(data.Slot)))
 	if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
 		return
 	}
 
-	//epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
+	epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
 
-	//if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
-	//	if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
-	//		!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
-	//		dc.handleCurrentDependentRootChanged()
-	//	}
-	//}
-	//
-	//dc.lastBlockEpoch = epoch
-	//dc.currentDutyDependentRoot = data.CurrentDutyDependentRoot
+	// check for reorg
+	if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
+		if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
+			!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+			dc.handleCurrentDependentRootChanged()
+		}
+	}
 
-	//// check if slot in dc.dutyMap[data.Slot] is not nil
-	//if duties := dc.dutyMap[data.Slot]; duties != nil {
-	//	for i := range duties {
-	//		go dc.onDuty(duties[i])
-	//	}
-	//}
-
+	dc.lastBlockEpoch = epoch
+	dc.currentDutyDependentRoot = data.CurrentDutyDependentRoot
 }
 
 // listenToTicker loop over the given slot channel
 func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		// check if first slot of epoch
+
 		if dc.ethNetwork.IsFirstSlotOfEpoch(currentSlot) {
-			dc.logger.Debug("first slot of epoch", zap.Uint64("slot", uint64(currentSlot)))
 			currentEpoch := dc.ethNetwork.EstimatedEpochAtSlot(currentSlot)
 			indices := dc.validatorController.GetValidatorsIndices()
-			//go dc.scheduleProposals(currentEpoch, indices)
 
-			// Update the _next_ period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
+			// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
 			if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
 				go dc.scheduleSyncCommitteeMessages(currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
 			}
 		}
 
-		//// determine half epoch
-		//if uint64(currentSlot)%dc.ethNetwork.SlotsPerEpoch() == dc.ethNetwork.SlotsPerEpoch()/2 {
-		//	dc.logger.Debug("half epoch", zap.Uint64("slot", uint64(currentSlot)))
-		//	// prepare for next epoch duties
-		//	// schedule attestations
-		//	dc.prepareForEpoch(dc.ctx, dc.ethNetwork.EstimatedCurrentEpoch()+1)
-		//}
-
-		// execute duties
+		// execute duties (attester, proposal)
 		duties, err := dc.fetcher.GetDuties(currentSlot)
 		if err != nil {
 			dc.logger.Warn("failed to get duties", zap.Error(err))
 		}
 		for i := range duties {
-			dc.logger.Debug("executing duty", zap.Uint64("slot", uint64(currentSlot)),
-				zap.String("pubKey", duties[i].PubKey.String()), zap.String("role", duties[i].Type.String()))
 			go dc.onDuty(&duties[i])
 		}
 
 		// execute sync committee duties
-		syncCommitteeDuties, found := dc.dutyMap.Get(currentSlot)
-		if found {
+		if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(currentSlot); found {
 			for _, duty := range syncCommitteeDuties {
 				go dc.onDuty(duty)
 			}
 		}
 
 		// delete duties from map
-		dc.dutyMap.Del(currentSlot - 2)
+		dc.syncCommitteeDutiesMap.Del(currentSlot - 2)
 	}
 }
 
-// prepareForEpoch fetches duties for the given epoch
-//func (dc *dutyController) prepareForEpoch(ctx context.Context, epoch phase0.Epoch) {
-//	dc.logger.Debug("preparing for epoch", zap.Uint64("epoch", uint64(epoch)))
-//	// TODO: get indices by Epoch
-//	indices := dc.validatorController.GetValidatorsIndices()
-//	go dc.scheduleAttestations(epoch, indices)
-//	// TODO: SubscribeToCommitteeSubnet subscribe to beacon committees
-//}
-
-// scheduleAttestations schedules attestations for the given epoch and validator indices.
-//func (dc *dutyController) scheduleAttestations(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
-//	if len(indices) == 0 {
-//		// no validators
-//		return
-//	}
-//
-//	// TODO: Sort the response by slot, then committee index, then validator index.
-//	attesterDuties, err := dc.fetcher.AttesterDuties(epoch, indices)
-//	if err != nil {
-//		return
-//	}
-//	// populate dc.dutyMap
-//	for _, duty := range attesterDuties {
-//		duties, found := dc.dutyMap.Get(duty.Slot)
-//		if !found {
-//			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
-//		}
-//		dc.dutyMap.Set(duty.Slot, append(duties, duty))
-//	}
-//	// TODO: handle Aggregate
-//}
-
-//// scheduleProposals schedules proposals for the given epoch and validator indices.
-//func (dc *dutyController) scheduleProposals(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
-//	dc.logger.Debug("scheduling proposals", zap.Uint64("epoch", uint64(epoch)), zap.Int("validators", len(indices)))
-//	if len(indices) == 0 {
-//		// no validators
-//		return
-//	}
-//
-//	proposerDuties, err := dc.fetcher.ProposerDuties(epoch, indices)
-//	if err != nil {
-//		return
-//	}
-//	// populate dc.dutyMap
-//	for _, duty := range proposerDuties {
-//		duties, found := dc.dutyMap.Get(duty.Slot)
-//		if !found {
-//			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
-//		}
-//		dc.dutyMap.Set(duty.Slot, append(duties, duty))
-//	}
-//}
+func (dc *dutyController) handleCurrentDependentRootChanged() {
+	// We need to refresh the sync committee duties for the next period if we are
+	// at the appropriate boundary.
+	if uint64(dc.ethNetwork.EstimatedCurrentEpoch())%goclient.EpochsPerSyncCommitteePeriod == 0 {
+		indices := dc.validatorController.GetValidatorsIndices()
+		go dc.scheduleSyncCommitteeMessages(dc.ethNetwork.EstimatedCurrentEpoch()+phase0.Epoch(syncCommitteePreparationEpochs), indices)
+	}
+}
 
 // scheduleSyncCommitteeMessages schedules sync committee messages for the given period and validator indices.
 func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
 	if len(indices) == 0 {
-		// no validators
 		return
 	}
 
-	currentSlot := dc.ethNetwork.EstimatedCurrentSlot()
 	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(epoch, indices)
 	if err != nil {
+		dc.logger.Error("failed to get sync committee duties", zap.Error(err))
 		return
 	}
 
-	// populate dc.dutyMap
+	// populate syncCommitteeDutiesMap
 	for _, duty := range syncCommitteeDuties {
-		// skip duties for past slots
-		if duty.Slot < currentSlot {
-			continue
-		}
-		duties, found := dc.dutyMap.Get(duty.Slot)
+		duties, found := dc.syncCommitteeDutiesMap.Get(duty.Slot)
 		if !found {
-			dc.dutyMap.Set(duty.Slot, []*spectypes.Duty{})
+			dc.syncCommitteeDutiesMap.Set(duty.Slot, []*spectypes.Duty{})
 		}
-		dc.dutyMap.Set(duty.Slot, append(duties, duty))
+		dc.syncCommitteeDutiesMap.Set(duty.Slot, append(duties, duty))
 	}
 }
 

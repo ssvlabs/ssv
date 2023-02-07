@@ -2,7 +2,7 @@ package beacon
 
 import (
 	eth2client "github.com/attestantio/go-eth2-client"
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -16,17 +16,7 @@ import (
 type beaconMock struct {
 }
 
-func (b beaconMock) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (b beaconMock) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+func (b beaconMock) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	//TODO implement me
 	panic("implement me")
 }
@@ -122,17 +112,17 @@ func (b beaconMock) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	panic("implement me")
 }
 
-func (b beaconMock) SubscribeToCommitteeSubnet(subscription []*v1.BeaconCommitteeSubscription) error {
+func (b beaconMock) SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (b beaconMock) SubmitSyncCommitteeSubscriptions(subscription []*v1.SyncCommitteeSubscription) error {
+func (b beaconMock) SubmitSyncCommitteeSubscriptions(subscription []*eth2apiv1.SyncCommitteeSubscription) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (b beaconMock) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*v1.Validator, error) {
+func (b beaconMock) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 	//TODO implement me
 	panic("implement me")
 }

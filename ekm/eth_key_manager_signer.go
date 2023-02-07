@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
-	apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bbellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -147,7 +147,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
 	case spectypes.DomainApplicationBuilder:
-		data, ok := obj.(*apiv1.ValidatorRegistration)
+		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to ValidatorRegistration")
 		}

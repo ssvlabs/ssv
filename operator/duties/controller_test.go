@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -38,8 +39,9 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 	dutyCtrl := &dutyController{
 		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
-		executor: mockExecutor,
-		fetcher:  mockFetcher,
+		executor:               mockExecutor,
+		fetcher:                mockFetcher,
+		syncCommitteeDutiesMap: hashmap.New[phase0.Slot, []*spectypes.Duty](),
 	}
 
 	cn := make(chan phase0.Slot)

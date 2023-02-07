@@ -4,7 +4,7 @@ import (
 	"encoding/hex"
 	"math"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,9 +22,9 @@ type ValidatorMetadataStorage interface {
 
 // ValidatorMetadata represents validator metdata from beacon
 type ValidatorMetadata struct {
-	Balance phase0.Gwei           `json:"balance"`
-	Status  v1.ValidatorState     `json:"status"`
-	Index   phase0.ValidatorIndex `json:"index"` // pointer in order to support nil
+	Balance phase0.Gwei              `json:"balance"`
+	Status  eth2apiv1.ValidatorState `json:"status"`
+	Index   phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
 }
 
 // Equals returns true if the given metadata is equal to current
@@ -47,7 +47,7 @@ func (m *ValidatorMetadata) Activated() bool {
 
 // IsActive returns true if the validator is currently active. Cant be other state
 func (m *ValidatorMetadata) IsActive() bool {
-	return m.Status == v1.ValidatorStateActiveOngoing
+	return m.Status == eth2apiv1.ValidatorStateActiveOngoing
 }
 
 // Exiting returns true if the validator is existing or exited
@@ -57,7 +57,7 @@ func (m *ValidatorMetadata) Exiting() bool {
 
 // Slashed returns true if the validator is existing or exited due to slashing
 func (m *ValidatorMetadata) Slashed() bool {
-	return m.Status == v1.ValidatorStateExitedSlashed || m.Status == v1.ValidatorStateActiveSlashed
+	return m.Status == eth2apiv1.ValidatorStateExitedSlashed || m.Status == eth2apiv1.ValidatorStateActiveSlashed
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated

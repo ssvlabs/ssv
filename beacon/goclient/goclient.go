@@ -162,15 +162,5 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (gc *goClient) Events(topics []string, handler eth2client.EventHandlerFunc) error {
-	gc.logger.Debug("subscribing to events", zap.Strings("topics", topics))
-	eventsProvider, isProvider := gc.client.(eth2client.EventsProvider)
-	if !isProvider {
-		return errors.New("events provider not supported")
-	}
-	//if eventsProvider, isProvider := gc.client.(eth2client.EventsProvider); isProvider {
-	if err := eventsProvider.Events(gc.ctx, topics, handler); err != nil {
-		return errors.Wrap(err, "failed to configure head event")
-	}
-	//}
-	return nil
+	return gc.client.Events(gc.ctx, topics, handler)
 }

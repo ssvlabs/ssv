@@ -1,6 +1,7 @@
 package duties
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -32,12 +32,10 @@ type validatorsIndicesFetcher interface {
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
-	//eth2client.EventsProvider
+	eth2client.EventsProvider
 	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
-	AttesterDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
-	ProposerDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
-	Events(topics []string, handler eth2client.EventHandlerFunc) error
+	//Events(topics []string, handler eth2client.EventHandlerFunc) error
 }
 
 // newDutyFetcher creates a new instance
@@ -62,76 +60,7 @@ type dutyFetcher struct {
 	cache *cache.Cache
 }
 
-func (df *dutyFetcher) AttesterDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	return df.beaconClient.AttesterDuties(epoch, indices)
-}
-
-func (df *dutyFetcher) ProposerDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	return df.beaconClient.ProposerDuties(epoch, indices)
-}
-
-func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	period := uint64(epoch) / goclient.EpochsPerSyncCommitteePeriod
-	firstEpoch := df.firstEpochOfSyncPeriod(period)
-	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch()
-	currentSlot := df.ethNetwork.EstimatedCurrentSlot()
-	if firstEpoch < currentEpoch {
-		firstEpoch = currentEpoch
-	}
-	firstSlot := df.ethNetwork.GetEpochFirstSlot(firstEpoch) - 1
-	if firstSlot < currentSlot {
-		firstSlot = currentSlot
-	}
-
-	lastEpoch := df.firstEpochOfSyncPeriod(period+1) - 1
-	lastSlot := df.ethNetwork.GetEpochFirstSlot(lastEpoch+1) - 2
-
-	syncCommitteeDuties, err := df.beaconClient.SyncCommitteeDuties(firstEpoch, indices)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(syncCommitteeDuties) == 0 {
-		return nil, nil
-	}
-
-	toBeaconDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
-		return &spectypes.Duty{
-			Type:                          role,
-			PubKey:                        duty.PubKey,
-			Slot:                          slot, // in order for the duty ctrl to execute
-			ValidatorIndex:                duty.ValidatorIndex,
-			ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-		}
-	}
-
-	var duties []*spectypes.Duty
-
-	// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
-	for slot := firstSlot; slot <= lastSlot; slot++ {
-		for _, syncCommitteeDuty := range syncCommitteeDuties {
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommittee))
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, slot, spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
-		}
-	}
-
-	// print the newly fetched duties
-	var toPrint []serializedDuty
-	for _, d := range duties {
-		toPrint = append(toPrint, toSerialized(d))
-	}
-	df.logger.Debug("got sync committee duties", zap.Uint64("epoch", uint64(firstEpoch)), zap.Int("count", len(duties)), zap.Any("duties", toPrint))
-
-	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
-	if len(syncCommitteeSubscriptions) > 0 {
-		if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
-			df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
-		}
-	}
-	return duties, nil
-}
-
-func (df *dutyFetcher) Events(topics []string, handler eth2client.EventHandlerFunc) error {
+func (df *dutyFetcher) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	df.logger.Debug("subscribing to events", zap.Any("topics", topics))
 	return df.beaconClient.Events(topics, handler)
 }
@@ -206,16 +135,11 @@ func (df *dutyFetcher) fetchDuties(slot phase0.Slot) ([]*spectypes.Duty, error) 
 func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
-		//var syncCommitteeSubscriptions []*eth2apiv1.SyncCommitteeSubscription
 		// entries holds all the new duties to add
 		entries := map[phase0.Slot]cacheEntry{}
 		for _, duty := range fetchedDuties {
 			df.fillEntry(entries, duty)
-			//if duty.Type == spectypes.BNRoleSyncCommittee {
-			//	syncCommitteeSubscriptions = append(syncCommitteeSubscriptions, df.toSyncCommitteeSubscription(duty))
-			//} else {
 			subscriptions = append(subscriptions, toSubscription(duty))
-			//}
 		}
 
 		df.populateCache(entries)
@@ -223,11 +147,6 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
 			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
 		}
-		//if len(syncCommitteeSubscriptions) > 0 {
-		//	if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
-		//		df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
-		//	}
-		//}
 	}
 	return nil
 }
@@ -294,26 +213,6 @@ func (df *dutyFetcher) firstSlotOfEpoch(slot uint64) uint64 {
 	return slot - mod
 }
 
-// firstEpochOfSyncPeriod calculates the first epoch of the given sync period.
-func (df *dutyFetcher) firstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period * goclient.EpochsPerSyncCommitteePeriod)
-}
-
-// calculateSubscriptions calculates the sync committee subscriptions
-// given a set of duties.
-func (df *dutyFetcher) calculateSubscriptions(endEpoch phase0.Epoch, duties []*spectypes.Duty) []*eth2apiv1.SyncCommitteeSubscription {
-	subscriptions := make([]*eth2apiv1.SyncCommitteeSubscription, 0, len(duties))
-	for _, duty := range duties {
-		subscriptions = append(subscriptions, &eth2apiv1.SyncCommitteeSubscription{
-			ValidatorIndex:       duty.ValidatorIndex,
-			SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-			UntilEpoch:           endEpoch,
-		})
-	}
-
-	return subscriptions
-}
-
 // getDutyCacheKey return the cache key for a slot
 func getDutyCacheKey(slot phase0.Slot) string {
 	return fmt.Sprintf("d-%d", slot)
@@ -329,17 +228,6 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		IsAggregator:     duty.Type == spectypes.BNRoleAggregator, // TODO call subscribe after pre-consensus (aggregate & sync committee contribution)
 	}
 }
-
-//func (df *dutyFetcher) toSyncCommitteeSubscription(duty *spectypes.Duty) *eth2apiv1.SyncCommitteeSubscription {
-//	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch() // TODO can do this calculation one time outside this func
-//	period := uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod
-//	endEpoch := (period + 1) * goclient.EpochsPerSyncCommitteePeriod
-//	return &eth2apiv1.SyncCommitteeSubscription{
-//		ValidatorIndex:       duty.ValidatorIndex,
-//		SyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-//		UntilEpoch:           phase0.Epoch(endEpoch),
-//	}
-//}
 
 type serializedDuty struct {
 	PubKey string

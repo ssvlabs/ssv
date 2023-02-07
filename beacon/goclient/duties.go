@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	api "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
@@ -17,7 +17,6 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	fetchers := map[spectypes.BeaconRole]FetchFunc{
 		spectypes.BNRoleAttester: gc.AttesterDuties,
 		spectypes.BNRoleProposer: gc.ProposerDuties,
-		//spectypes.BNRoleSyncCommittee: gc.SyncCommitteeDuties,
 	}
 	duties := make([]*spectypes.Duty, 0)
 	var lock sync.Mutex
@@ -51,7 +50,7 @@ func (gc *goClient) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0
 	if err != nil {
 		return duties, err
 	}
-	toBeaconDuty := func(duty *api.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
+	toBeaconDuty := func(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
 		return &spectypes.Duty{
 			Type:                    role,
 			PubKey:                  duty.PubKey,
@@ -91,6 +90,6 @@ func (gc *goClient) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0
 }
 
 // SyncCommitteeDuties applies sync committee + sync committee contributor duties
-func (gc *goClient) SyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*api.SyncCommitteeDuty, error) {
+func (gc *goClient) SyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	return gc.client.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
 }
