@@ -33,8 +33,7 @@ COPY . .
 
 ARG APP_VERSION
 
-RUN --mount=type=cache,target=/root/.cache/go-build \
-    git fetch --tags
+RUN git fetch --tags
 RUN --mount=type=cache,target=/root/.cache/go-build \
   CGO_ENABLED=1 GOOS=linux go install \
   -tags="blst_enabled,jemalloc,allocator" \
