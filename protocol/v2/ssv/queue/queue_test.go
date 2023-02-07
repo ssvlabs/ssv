@@ -57,7 +57,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 5 * time.Millisecond
 	)
-	queue := New(capacity, PusherDropping(15*time.Millisecond, 3))
+	queue := New(capacity, PusherDropping)
 	require.True(t, queue.Empty())
 
 	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
@@ -134,118 +134,9 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
-func TestPriorityQueue_PusherDropping_Patience(t *testing.T) {
-	const (
-		capacity  = 3
-		patience  = 50 * time.Millisecond
-		maxTries  = 3
-		precision = 5 * time.Millisecond
-	)
-	queue := New(capacity, PusherDropping(patience, maxTries))
-	require.True(t, queue.Empty())
-
-	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-	require.NoError(t, err)
-
-	// Push messages under capacity.
-	expectedEnd := time.Now()
-	for i := 0; i < capacity; i++ {
-		queue.Push(msg)
-	}
-	require.False(t, queue.Empty())
-	require.WithinDuration(t, expectedEnd, time.Now(), precision)
-
-	// Push messages over capacity with patience.
-	expectedEnd = time.Now()
-	maxHeight := maxTries * 2
-	for i := 0; i < maxHeight; i++ {
-		msg, err := DecodeSSVMessage(
-			mockConsensusMessage{Height: qbft.Height(i), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-		require.NoError(t, err)
-		queue.Push(msg)
-		if i < maxTries {
-			expectedEnd = expectedEnd.Add(patience * time.Duration(float64(i)/float64(maxTries)))
-		}
-	}
-	require.False(t, queue.Empty())
-	require.WithinDuration(t, expectedEnd, time.Now(), precision)
-
-	// Expect the first messages to be dropped.
-	for i := capacity; i > 0; i-- {
-		popped := queue.TryPop(NewMessagePrioritizer(mockState))
-		require.Equal(t, qbft.Height(maxHeight-i), popped.Body.(*qbft.SignedMessage).Message.Height)
-	}
-}
-
-func TestPriorityQueue_PusherDropping_Patience_Parallel(t *testing.T) {
-	const (
-		capacity  = 3
-		patience  = 50 * time.Millisecond
-		maxTries  = 3
-		precision = 5 * time.Millisecond
-	)
-	queue := New(capacity, PusherDropping(patience, maxTries))
-	require.True(t, queue.Empty())
-
-	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-	require.NoError(t, err)
-
-	pushConcurrently := func(count int, expectedDuration time.Duration) {
-		// Push messages concurrently with expected duration.
-		start := time.Now()
-		expectedEnd := time.Now().Add(expectedDuration)
-		var wg sync.WaitGroup
-		for i := 0; i < count; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				queue.Push(msg)
-			}()
-			time.Sleep(50 * time.Microsecond)
-		}
-		wg.Wait()
-		require.False(t, queue.Empty())
-		require.WithinDuration(t, expectedEnd, time.Now(), precision,
-			"expected duration: %v, actual duration: %v", expectedDuration, time.Since(start))
-
-		// Pop min(count, capacity) messages immediately.
-		expectedPops := count
-		if expectedPops > capacity {
-			expectedPops = capacity
-		}
-		start = time.Now()
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
-		for i := 0; i < expectedPops; i++ {
-			popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
-			require.Equal(t, msg, popped)
-		}
-		require.True(t, queue.Empty())
-		require.Less(t, time.Since(start), 5*time.Millisecond)
-	}
-
-	// Push messages under capacity, expect no delay.
-	pushConcurrently(capacity, 0*time.Millisecond)
-
-	// Push 1 message over capacity, expect delay equal to patience.
-	pushConcurrently(capacity+1, patience)
-
-	// Push 2 messages over capacity, expect delay equal to patience*2/3.
-	pushConcurrently(capacity+2, patience*2/3)
-
-	// Push 3 messages over capacity, expect delay equal to patience*1/3.
-	pushConcurrently(capacity+3, patience*1/3)
-
-	// Push 12 messages over capacity, expect no delay because
-	// maxTries is 3 and any push after the 3rd should drop
-	// old messages without waiting, making space for
-	// prior pending pushes to complete immediately.
-	pushConcurrently(capacity+12, 0*time.Millisecond)
-}
-
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(32, PusherBlocking())
+		return New(32, PusherBlocking)
 	}, false)
 }
 

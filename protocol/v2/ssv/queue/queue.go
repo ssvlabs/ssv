@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"time"
 )
 
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
@@ -39,7 +38,7 @@ func New(capacity int, pusher Pusher) Queue {
 // NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
 // with a default capacity of 32 and a PusherDropping with a patience of 400ms and 64 tries.
 func NewDefault() Queue {
-	return New(32, PusherDropping(400*time.Millisecond, 64))
+	return New(32, PusherDropping)
 }
 
 func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
