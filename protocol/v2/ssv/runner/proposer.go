@@ -81,7 +81,6 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 	}
 
 	r.metrics.EndPreConsensus()
-	r.metrics.StartConsensus()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -112,6 +111,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		input.BlockData = blk
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

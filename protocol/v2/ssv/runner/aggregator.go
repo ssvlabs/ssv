@@ -75,7 +75,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 	}
 
 	r.metrics.EndPreConsensus()
-	r.metrics.StartConsensus()
 
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
@@ -98,6 +97,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialS
 		AggregateAndProof: res,
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

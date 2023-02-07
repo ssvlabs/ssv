@@ -79,7 +79,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 	}
 
 	r.metrics.EndPreConsensus()
-	r.metrics.StartConsensus()
 
 	duty := r.GetState().StartingDuty
 	input := &spectypes.ConsensusData{
@@ -121,6 +120,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 	}
 
 	if anyIsAggregator {
+		r.metrics.StartConsensus()
 		if err := r.BaseRunner.decide(r, input); err != nil {
 			return errors.Wrap(err, "can't start new duty runner instance for duty")
 		}
