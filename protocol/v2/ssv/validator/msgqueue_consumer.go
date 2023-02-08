@@ -67,11 +67,9 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 
 	logger := v.logger.With(zap.String("identifier", msgID.String()))
-
 	logger.Debug("queue consumer is running")
 
 	for ctx.Err() == nil {
-
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -86,15 +84,22 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum
 
-		// Pop the highest priority message and handle it.
+		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
-		if msg == nil {
-			continue
+		if ctx.Err() != nil {
+			break
 		}
+		if msg == nil {
+			logger.Error("got nil message from queue, but context is not done!")
+			break
+		}
+
+		// Handle the message.
 		if err := handler(msg); err != nil {
 			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
+
 	logger.Debug("queue consumer is closed")
 	return nil
 }
