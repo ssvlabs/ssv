@@ -4,13 +4,12 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 const (
@@ -18,7 +17,7 @@ const (
 )
 
 // HandleDecidedQuery handles TypeDecided queries.
-func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, nm *NetworkMessage) {
+func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
 	logger.Debug("handles decided request",
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
@@ -37,10 +36,18 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage qbftstorage.QBFTStore, n
 		return
 	}
 
-	msgID := spectypes.NewMsgID(pkRaw, message.BeaconRoleFromString(string(nm.Msg.Filter.Role)))
+	beaconRole, err := message.BeaconRoleFromString(string(nm.Msg.Filter.Role))
+	if err != nil {
+		logger.Warn("failed to parse role", zap.Error(err))
+		res.Data = []string{"malformed role"}
+		nm.Msg = res
+		return
+	}
+
+	msgID := spectypes.NewMsgID(pkRaw, beaconRole)
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
-	instances, err := qbftStorage.GetInstancesInRange(msgID[:], from, to)
+	instances, err := qbftStorage.Get(beaconRole).GetInstancesInRange(msgID[:], from, to)
 	if err != nil {
 		logger.Warn("failed to get instances", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}

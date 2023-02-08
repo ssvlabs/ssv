@@ -15,7 +15,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -93,6 +92,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		oids = append(oids, oid)
 	}
 
+	role := spectypes.BNRoleAttester
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
@@ -101,7 +101,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			panic(err)
 		}
 
-		id := spectypes.NewMsgID(pk.Serialize(), spectypes.BNRoleAttester)
+		id := spectypes.NewMsgID(pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -114,7 +114,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	// save decided
 	for _, d := range decided250Seq {
-		require.NoError(t, ibftStorage.SaveInstance(d))
+		require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
 	}
 
 	t.Run("valid range", func(t *testing.T) {
@@ -176,10 +176,17 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorageprotocol.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion)
-	return sExporter, sIbft
+
+	storageMap := qbftstorage.NewStores()
+	storageMap.Add(spectypes.BNRoleAttester, qbftstorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion))
+	storageMap.Add(spectypes.BNRoleProposer, qbftstorage.New(db, logger, spectypes.BNRoleProposer.String(), forksprotocol.GenesisForkVersion))
+	storageMap.Add(spectypes.BNRoleAggregator, qbftstorage.New(db, logger, spectypes.BNRoleAggregator.String(), forksprotocol.GenesisForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommittee, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommittee.String(), forksprotocol.GenesisForkVersion))
+	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommitteeContribution.String(), forksprotocol.GenesisForkVersion))
+
+	return sExporter, storageMap
 }
 
 // GenerateNodes generates randomly nodes

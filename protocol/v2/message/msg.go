@@ -2,6 +2,7 @@ package message
 
 import (
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
@@ -31,20 +32,19 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 }
 
 // BeaconRoleFromString returns BeaconRole from string
-func BeaconRoleFromString(s string) spectypes.BeaconRole {
+func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	switch s {
 	case "ATTESTER":
-		return spectypes.BNRoleAttester
+		return spectypes.BNRoleAttester, nil
 	case "AGGREGATOR":
-		return spectypes.BNRoleAggregator
+		return spectypes.BNRoleAggregator, nil
 	case "PROPOSER":
-		return spectypes.BNRoleProposer
+		return spectypes.BNRoleProposer, nil
 	case "SYNC_COMMITTEE":
-		return spectypes.BNRoleSyncCommittee
+		return spectypes.BNRoleSyncCommittee, nil
 	case "SYNC_COMMITTEE_CONTRIBUTION":
-		return spectypes.BNRoleSyncCommitteeContribution
+		return spectypes.BNRoleSyncCommitteeContribution, nil
 	default:
-		// TODO(nkryuchkov): don't panic
-		panic("unknown role")
+		return 0, fmt.Errorf("unknown role: %s", s)
 	}
 }
