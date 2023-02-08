@@ -42,7 +42,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
 		executor:               mockExecutor,
 		fetcher:                mockFetcher,
-		syncCommitteeDutiesMap: hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty](),
+		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
 	}
 
 	cn := make(chan phase0.Slot)
