@@ -82,7 +82,7 @@ Build prod Docker image:
   tags:
     - blox-infra-prod
   script:
-    - DOCKER_BUILDKIT=1 docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
