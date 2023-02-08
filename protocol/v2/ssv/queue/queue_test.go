@@ -145,10 +145,6 @@ func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, NewDefault, true)
 }
 
-func BenchmarkPriorityQueue_Parallel_AtomicPointer_Lossy(b *testing.B) {
-	benchmarkPriorityQueueParallel(b, NewAtomicPointer, true)
-}
-
 func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
 	english := message.NewPrinter(language.English)
 
