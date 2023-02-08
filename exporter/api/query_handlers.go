@@ -44,10 +44,18 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
+	roleStorage := qbftStorage.Get(beaconRole)
+	if roleStorage == nil {
+		logger.Warn("role storage doesn't exist", zap.String("role", beaconRole.String()))
+		res.Data = []string{"internal error - role storage doesn't exist"}
+		nm.Msg = res
+		return
+	}
+
 	msgID := spectypes.NewMsgID(pkRaw, beaconRole)
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
-	instances, err := qbftStorage.Get(beaconRole).GetInstancesInRange(msgID[:], from, to)
+	instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)
 	if err != nil {
 		logger.Warn("failed to get instances", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}
