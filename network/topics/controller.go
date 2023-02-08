@@ -3,13 +3,16 @@ package topics
 import (
 	"context"
 	"io"
+	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/network/forks"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 var (
@@ -225,7 +228,14 @@ func (ctrl *topicsCtrl) listen(sub *pubsub.Subscription) error {
 			logger.Warn("got empty message from subscription")
 			continue
 		}
-		metricPubsubInbound.WithLabelValues(ctrl.fork.GetTopicBaseName(topicName)).Inc()
+
+		if ssvMsg, ok := msg.ValidatorData.(spectypes.SSVMessage); ok {
+			metricPubsubInbound.WithLabelValues(
+				ctrl.fork.GetTopicBaseName(topicName),
+				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
+			).Inc()
+		}
+
 		if err := ctrl.msgHandler(topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}

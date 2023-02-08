@@ -1,9 +1,10 @@
 package topics
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"log"
 )
 
 var (
@@ -22,7 +23,7 @@ var (
 	metricPubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
-	}, []string{"topic"})
+	}, []string{"topic", "msg_type"})
 	metricPubsubActiveMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:msg:val:active",
 		Help: "Count active message validation",
