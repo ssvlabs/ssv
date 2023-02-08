@@ -294,11 +294,12 @@ func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indi
 	// populate syncCommitteeDutiesMap
 	syncPeriod := dc.ethNetwork.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	for _, duty := range syncCommitteeDuties {
-		periodMap, found := dc.syncCommitteeDutiesMap.Get(syncPeriod)
-		periodMap.Set(duty.ValidatorIndex, duty)
+		dutiesMap, found := dc.syncCommitteeDutiesMap.Get(syncPeriod)
 		if !found {
-			dc.syncCommitteeDutiesMap.Set(syncPeriod, periodMap)
+			dutiesMap = hashmap.New[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]()
 		}
+		dutiesMap.Set(duty.ValidatorIndex, duty)
+		dc.syncCommitteeDutiesMap.Set(syncPeriod, dutiesMap)
 	}
 }
 
