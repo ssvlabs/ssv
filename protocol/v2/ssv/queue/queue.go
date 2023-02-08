@@ -77,8 +77,8 @@ func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessag
 
 func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox, if enough time has passed.
-	// The frequency is a tradeoff between responsiveness and computational cost,
-	// since checking the inbox is more expensive than just checking the head.
+	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
+	// since reading the inbox is more expensive than just reading the head.
 	if time.Since(q.lastRead) > inboxReadFrequency {
 		q.readInbox()
 	}
