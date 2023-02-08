@@ -78,7 +78,8 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Should pop nil after context cancellation.
 	{
-		ctx, _ := context.WithTimeout(context.Background(), contextTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+		defer cancel()
 		expectedEnd := time.Now().Add(contextTimeout)
 		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
 		require.Nil(t, popped)
