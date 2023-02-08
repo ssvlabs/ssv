@@ -32,7 +32,7 @@ Build stage Docker image:
   tags:
     - blox-infra-stage
   script:
-    - apk add --no-cache curl jq python py-pip
+    - apk add --no-cache py-pip
     - pip install pyyaml==5.3.1
     - pip install awscli
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
