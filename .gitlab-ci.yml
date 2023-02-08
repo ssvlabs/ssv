@@ -31,7 +31,7 @@ Build stage Docker image:
   stage: build
   tags:
     - blox-infra-stage
-  script
+  script:
     - apk add --no-cache curl jq python py-pip
     - pip install pyyaml==5.3.1
     - pip install awscli
