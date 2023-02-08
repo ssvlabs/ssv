@@ -200,7 +200,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 						queue.Push(m)
 					}
 					pushedCount.Add(1)
-					time.Sleep(time.Duration(rand.Intn(5)) * time.Microsecond)
+					time.Sleep(time.Duration(rand.Intn(300)) * time.Microsecond)
 				}
 			}()
 		}
