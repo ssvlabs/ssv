@@ -27,6 +27,7 @@ variables:
 # | STAGE |
 # ---------
 Build stage Docker image:
+  image: docker:20.10.23
   stage: build
   tags:
     - blox-infra-stage
@@ -36,7 +37,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - stage
+    - docker-build-cache
 
 Deploy ssv exporter to blox-infra-stage cluster:
   stage: deploy
