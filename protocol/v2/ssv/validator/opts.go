@@ -10,6 +10,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+const (
+	DefaultQueueSize = 32
+)
+
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           specqbft.Network
@@ -21,10 +25,13 @@ type Options struct {
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool
+	QueueSize         int
 }
 
 func (o *Options) defaults() {
-	// Nothing to set yet.
+	if o.QueueSize == 0 {
+		o.QueueSize = DefaultQueueSize
+	}
 }
 
 // State of the validator

@@ -60,7 +60,7 @@ type ControllerOptions struct {
 	Logger                     *zap.Logger
 	SignatureCollectionTimeout time.Duration `yaml:"SignatureCollectionTimeout" env:"SIGNATURE_COLLECTION_TIMEOUT" env-default:"5s" env-description:"Timeout for signature collection after consensus"`
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
-	HistorySyncRateLimit       time.Duration `yaml:"HistorySyncRateLimit" env:"HISTORY_SYNC_BACKOFF" env-default:"200ms" env-description:"Interval for updating metadata"`
+	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
@@ -119,11 +119,12 @@ type controller struct {
 	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
 
-	operatorsIDs  *sync.Map
-	network       network.P2PNetwork
-	forkVersion   forksprotocol.ForkVersion
-	messageRouter *messageRouter
-	messageWorker *worker.Worker
+	operatorsIDs         *sync.Map
+	network              network.P2PNetwork
+	forkVersion          forksprotocol.ForkVersion
+	messageRouter        *messageRouter
+	messageWorker        *worker.Worker
+	historySyncBatchSize int
 
 	// nonCommitteeLocks is a map of locks for non committee validators, used to ensure
 	// messages with identical public key and role are processed one at a time.
@@ -171,6 +172,15 @@ func NewController(options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 	}
 
+	// If full node, increase queue size to make enough room
+	// for history sync batches to be pushed whole.
+	if options.FullNode {
+		size := options.HistorySyncBatchSize * 2
+		if size > validator.DefaultQueueSize {
+			validatorOptions.QueueSize = size
+		}
+	}
+
 	ctrl := controller{
 		collection:                 collection,
 		storage:                    options.RegistryStorage,
@@ -192,8 +202,9 @@ func NewController(options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter: newMessageRouter(options.Logger, msgID),
-		messageWorker: worker.NewWorker(workerCfg),
+		messageRouter:        newMessageRouter(options.Logger, msgID),
+		messageWorker:        worker.NewWorker(workerCfg),
+		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		nonCommitteeLocks: make(map[spectypes.MessageID]*sync.Mutex),
 	}
@@ -219,11 +230,15 @@ func (c *controller) setupNetworkHandlers() error {
 			p2pprotocol.WithHandler(
 				p2pprotocol.DecidedHistoryProtocol,
 				// TODO: extract maxBatch to config
-				handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, 25),
+				handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, c.historySyncBatchSize),
 			),
 		)
 	}
-	c.logger.Debug("Setting up network handlers", zap.Int("count", len(syncHandlers)), zap.Bool("full_node", c.validatorOptions.FullNode))
+	c.logger.Debug("setting up network handlers",
+		zap.Int("count", len(syncHandlers)),
+		zap.Bool("full_node", c.validatorOptions.FullNode),
+		zap.Bool("exporter", c.validatorOptions.Exporter),
+		zap.Int("queue_size", c.validatorOptions.QueueSize))
 	c.network.RegisterHandlers(syncHandlers...)
 	return nil
 }
