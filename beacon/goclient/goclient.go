@@ -80,6 +80,7 @@ type Client interface {
 	eth2client.SyncCommitteeContributionsSubmitter
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
+	eth2client.EventsProvider
 }
 
 // goClient implementing Beacon struct
@@ -158,4 +159,8 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
+}
+
+func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
+	return gc.client.Events(ctx, topics, handler)
 }

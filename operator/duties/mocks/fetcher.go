@@ -5,8 +5,11 @@
 package mocks
 
 import (
+	context "context"
 	reflect "reflect"
 
+	client "github.com/attestantio/go-eth2-client"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
@@ -72,6 +75,20 @@ func (m *MockDutyFetcher) EXPECT() *MockDutyFetcherMockRecorder {
 	return m.recorder
 }
 
+// Events mocks base method.
+func (m *MockDutyFetcher) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Events indicates an expected call of Events.
+func (mr *MockDutyFetcherMockRecorder) Events(ctx, topics, handler interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockDutyFetcher)(nil).Events), ctx, topics, handler)
+}
+
 // GetDuties mocks base method.
 func (m *MockDutyFetcher) GetDuties(slot phase0.Slot) ([]types.Duty, error) {
 	m.ctrl.T.Helper()
@@ -85,4 +102,19 @@ func (m *MockDutyFetcher) GetDuties(slot phase0.Slot) ([]types.Duty, error) {
 func (mr *MockDutyFetcherMockRecorder) GetDuties(slot interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockDutyFetcher)(nil).GetDuties), slot)
+}
+
+// SyncCommitteeDuties mocks base method.
+func (m *MockDutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
+func (mr *MockDutyFetcherMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockDutyFetcher)(nil).SyncCommitteeDuties), epoch, indices)
 }

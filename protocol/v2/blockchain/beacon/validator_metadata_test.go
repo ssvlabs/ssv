@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -25,7 +25,7 @@ func init() {
 func TestValidatorMetadata_Status(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
 		meta := &ValidatorMetadata{
-			Status: v1.ValidatorStateActiveOngoing,
+			Status: eth2apiv1.ValidatorStateActiveOngoing,
 		}
 		require.True(t, meta.Activated())
 		require.False(t, meta.Exiting())
@@ -35,7 +35,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 
 	t.Run("exited", func(t *testing.T) {
 		meta := &ValidatorMetadata{
-			Status: v1.ValidatorStateWithdrawalPossible,
+			Status: eth2apiv1.ValidatorStateWithdrawalPossible,
 		}
 		require.True(t, meta.Exiting())
 		require.True(t, meta.Activated())
@@ -45,7 +45,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 
 	t.Run("exitedSlashed", func(t *testing.T) {
 		meta := &ValidatorMetadata{
-			Status: v1.ValidatorStateExitedSlashed,
+			Status: eth2apiv1.ValidatorStateExitedSlashed,
 		}
 		require.True(t, meta.Slashed())
 		require.True(t, meta.Exiting())
@@ -55,7 +55,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 
 	t.Run("pending", func(t *testing.T) {
 		meta := &ValidatorMetadata{
-			Status: v1.ValidatorStatePendingQueued,
+			Status: eth2apiv1.ValidatorStatePendingQueued,
 		}
 		require.True(t, meta.Pending())
 		require.False(t, meta.Slashed())
@@ -87,21 +87,21 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	defer ctrl.Finish()
 
 	bc := NewMockBeacon(ctrl)
-	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*v1.Validator, error) {
-		validatorsData := map[phase0.BLSPubKey]*v1.Validator{
+	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
+		validatorsData := map[phase0.BLSPubKey]*eth2apiv1.Validator{
 			blsPubKeys[0]: {
 				Index:     phase0.ValidatorIndex(210961),
-				Status:    v1.ValidatorStateWithdrawalPossible,
+				Status:    eth2apiv1.ValidatorStateWithdrawalPossible,
 				Validator: &phase0.Validator{PublicKey: blsPubKeys[0]},
 			},
 			blsPubKeys[1]: {
 				Index:     phase0.ValidatorIndex(213820),
-				Status:    v1.ValidatorStateActiveOngoing,
+				Status:    eth2apiv1.ValidatorStateActiveOngoing,
 				Validator: &phase0.Validator{PublicKey: blsPubKeys[1]},
 			},
 		}
 
-		results := map[phase0.ValidatorIndex]*v1.Validator{}
+		results := map[phase0.ValidatorIndex]*eth2apiv1.Validator{}
 		for _, pk := range validatorPubKeys {
 			if data, ok := validatorsData[pk]; ok {
 				results[data.Index] = data

@@ -56,7 +56,7 @@ func (t *ticker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 // listenToTicker loop over the given slot channel
 func (t *ticker) listenToTicker(slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)))
+		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Uint64("position", uint64(currentSlot%32+1)))
 		if !t.genesisEpochEffective() {
 			continue
 		}
