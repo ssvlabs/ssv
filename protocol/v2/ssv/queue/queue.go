@@ -6,43 +6,54 @@ import (
 
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
 type Queue interface {
-	// Push inserts a message to the queue
+	// Push blocks until the message is pushed to the queue.
 	Push(*DecodedSSVMessage)
 
-	// TryPop returns immediately with the next message in the queue, or nil if there is none.
-	TryPop(MessagePrioritizer) *DecodedSSVMessage
+	// TryPush returns immediately with true if the message was pushed to the queue,
+	// or false if the queue is full.
+	TryPush(*DecodedSSVMessage) bool
 
 	// Pop returns and removes the next message in the queue, or blocks until a message is available.
 	// When the context is canceled, Pop returns immediately with any leftover message or nil.
 	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
+
+	// TryPop returns immediately with the next message in the queue, or nil if there is none.
+	TryPop(MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
 }
 
 type priorityQueue struct {
-	head   *item
-	inbox  chan *DecodedSSVMessage
-	pusher Pusher
+	head  *item
+	inbox chan *DecodedSSVMessage
 }
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
 // Pops aren't thread-safe, so don't call Pop from multiple goroutines.
-func New(capacity int, pusher Pusher) Queue {
+func New(capacity int) Queue {
 	return &priorityQueue{
-		pusher: pusher,
-		inbox:  make(chan *DecodedSSVMessage, capacity),
+		inbox: make(chan *DecodedSSVMessage, capacity),
 	}
 }
 
 // NewDefault returns an implementation of Queue optimized for concurrent push and sequential pop,
 // with a capacity of 32 and a PusherDropping.
 func NewDefault() Queue {
-	return New(32, PusherDropping)
+	return New(32)
 }
 
 func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
-	q.pusher(q.inbox, msg)
+	q.inbox <- msg
+}
+
+func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
+	select {
+	case q.inbox <- msg:
+		return true
+	default:
+		return false
+	}
 }
 
 func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {

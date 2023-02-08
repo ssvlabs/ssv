@@ -1,4 +1,4 @@
-package queue
+package validator
 
 import (
 	"github.com/prometheus/client_golang/prometheus"

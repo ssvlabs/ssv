@@ -31,12 +31,18 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 		if err != nil {
 			v.logger.Warn("failed to decode message",
 				zap.Error(err),
-				zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msgID", msg.MsgID.String()),
+				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_id", msg.MsgID.String()),
 			)
 			return
 		}
-		q.Q.Push(decodedMsg)
+		if pushed := q.Q.TryPush(decodedMsg); !pushed {
+			msgID := msg.MsgID.String()
+			metricMessageDropped.WithLabelValues(msgID).Inc()
+			v.logger.Warn("dropping message because queue is full",
+				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_id", msgID))
+		}
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}

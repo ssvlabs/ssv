@@ -57,7 +57,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		pushDelay      = 50 * time.Millisecond
 		precision      = 5 * time.Millisecond
 	)
-	queue := New(capacity, PusherDropping)
+	queue := New(capacity)
 	require.True(t, queue.Empty())
 
 	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
@@ -65,7 +65,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Push messages.
 	for i := 0; i < capacity; i++ {
-		queue.Push(msg)
+		queue.TryPush(msg)
 	}
 	require.False(t, queue.Empty())
 
@@ -90,7 +90,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	go func() {
 		for i := 0; i < capacity; i++ {
 			time.Sleep(pushDelay)
-			queue.Push(msg)
+			queue.TryPush(msg)
 		}
 	}()
 
@@ -137,7 +137,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
-		return New(32, PusherBlocking)
+		return New(32)
 	}, false)
 }
 
@@ -194,7 +194,11 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 			go func() {
 				defer pushersWg.Done()
 				for m := range messageStream {
-					queue.Push(m)
+					if lossy {
+						queue.TryPush(m)
+					} else {
+						queue.Push(m)
+					}
 					pushedCount.Add(1)
 					time.Sleep(time.Duration(rand.Intn(5)) * time.Microsecond)
 				}
