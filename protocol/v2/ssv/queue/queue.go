@@ -2,6 +2,12 @@ package queue
 
 import (
 	"context"
+	"time"
+)
+
+const (
+	// inboxReadFrequency is the minimum time between reads from the inbox.
+	inboxReadFrequency = 1 * time.Millisecond
 )
 
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
@@ -25,8 +31,9 @@ type Queue interface {
 }
 
 type priorityQueue struct {
-	head  *item
-	inbox chan *DecodedSSVMessage
+	head     *item
+	inbox    chan *DecodedSSVMessage
+	lastRead time.Time
 }
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
@@ -57,29 +64,25 @@ func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
 }
 
 func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
-	// Consume any pending messages from the inbox.
-	for {
-		select {
-		case msg := <-q.inbox:
-			if q.head == nil {
-				q.head = &item{message: msg}
-			} else {
-				q.head = &item{message: msg, next: q.head}
-			}
-		default:
-			goto done
-		}
-	}
-done:
-	if q.head == nil {
-		return nil
-	}
+	// Read any pending messages from the inbox.
+	q.readInbox()
 
 	// Pop the highest priority message.
-	return q.pop(prioritizer)
+	if q.head != nil {
+		return q.pop(prioritizer)
+	}
+
+	return nil
 }
 
 func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
+	// Read any pending messages from the inbox, if enough time has passed.
+	// The frequency is a tradeoff between responsiveness and computational cost,
+	// since checking the inbox is more expensive than just checking the head.
+	if time.Since(q.lastRead) > inboxReadFrequency {
+		q.readInbox()
+	}
+
 	// Try to pop immediately.
 	if q.head != nil {
 		return q.pop(prioritizer)
@@ -92,7 +95,20 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer)
 	case <-ctx.Done():
 	}
 
-	// Consume any messages that were pushed while waiting.
+	// Read any messages that were pushed while waiting.
+	q.readInbox()
+
+	// Pop the highest priority message.
+	if q.head != nil {
+		return q.pop(prioritizer)
+	}
+
+	return nil
+}
+
+func (q *priorityQueue) readInbox() {
+	q.lastRead = time.Now()
+
 	for {
 		select {
 		case msg := <-q.inbox:
@@ -102,16 +118,9 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer)
 				q.head = &item{message: msg, next: q.head}
 			}
 		default:
-			goto done
+			return
 		}
 	}
-done:
-	if q.head == nil {
-		return nil
-	}
-
-	// Pop the highest priority message.
-	return q.pop(prioritizer)
 }
 
 func (q *priorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
