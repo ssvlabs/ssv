@@ -8,12 +8,12 @@ import (
 	"net/http"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	logging "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
@@ -265,6 +265,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorPubKey string, db b
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
+	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db, logger)
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.Logger = logger
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion

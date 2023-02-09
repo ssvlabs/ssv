@@ -1,11 +1,13 @@
 package p2pv1
 
 import (
+	"log"
+	"strconv"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
 )
 
 var (
@@ -23,7 +25,7 @@ var (
 	MetricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
-	}, []string{"pubKey", "v", "pid", "type"})
+	}, []string{"pubKey", "operatorID", "operatorName", "v", "pid", "type"})
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
@@ -83,31 +85,40 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
-	oid, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown
+	opPubKey, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
-		oid = unknown
+		opPubKey = unknown
 		nodeVersion = unknown
 		forkv = ni.ForkVersion.String()
 		if ni.Metadata != nil {
-			oid = ni.Metadata.OperatorID
+			opPubKey = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"
-		if len(oid) == 0 && nodeVersion != unknown {
+		if len(opPubKey) == 0 && nodeVersion != unknown {
 			nodeType = "exporter"
 		}
 	}
+
+	operatorData, found, err := n.nodeStorage.GetOperatorDataByPubKey(opPubKey)
+	if err == nil && found {
+		opIndex = strconv.FormatUint(operatorData.Index, 10)
+		opName = operatorData.Name
+	}
+
 	nodeState := n.idx.State(pid)
 	n.logger.Debug("peer identity",
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
-		zap.String("oid", oid),
+		zap.String("opPubKey", opPubKey),
+		zap.String("opIndex", opName),
+		zap.String("opName", opIndex),
 		zap.String("nodeType", nodeType),
-		zap.String("nodeState", nodeState.String()))
-	MetricsPeersIdentity.WithLabelValues(oid, nodeVersion,
-		pid.String(), nodeType).Set(1)
+		zap.String("nodeState", nodeState.String()),
+	)
+	MetricsPeersIdentity.WithLabelValues(opPubKey, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //
