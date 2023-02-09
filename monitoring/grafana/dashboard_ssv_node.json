@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675856836887,
+  "iteration": 1675953338336,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1740,18 +1740,27 @@
                 "value": null
               }
             ]
-          }
+          },
+          "unit": "index"
         },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "Index"
+              "options": "Index (last)"
             },
             "properties": [
               {
                 "id": "custom.width",
                 "value": 83
+              },
+              {
+                "id": "displayName",
+                "value": "Index"
+              },
+              {
+                "id": "unit",
+                "value": "short"
               }
             ]
           },
@@ -1900,16 +1909,16 @@
               "pubKey": true
             },
             "indexByName": {
-              "Time": 5,
+              "Time": 6,
               "Value": 9,
-              "instance": 6,
-              "job": 7,
-              "operatorID": 8,
-              "operatorName": 0,
-              "pid": 4,
-              "pubKey": 3,
-              "type": 2,
-              "v": 1
+              "instance": 7,
+              "job": 8,
+              "operatorID": 0,
+              "operatorName": 1,
+              "pid": 5,
+              "pubKey": 4,
+              "type": 3,
+              "v": 2
             },
             "renameByName": {
               "Time": "Last Seen",
@@ -1936,7 +1945,7 @@
                 "aggregations": [
                   "last"
                 ],
-                "operation": "groupby"
+                "operation": "aggregate"
               },
               "Last Seen": {
                 "aggregations": [
@@ -1966,9 +1975,35 @@
                 "aggregations": [
                   "last"
                 ],
-                "operation": "aggregate"
+                "operation": "groupby"
               }
             }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "Index (last)": 1,
+              "Last Seen (last)": 5,
+              "Name (last)": 0,
+              "Node Type (last)": 3,
+              "Node Version (last)": 2,
+              "Peer ID": 4
+            },
+            "renameByName": {}
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Index (last)"
+              }
+            ]
           }
         }
       ],
@@ -2751,6 +2786,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 56,
+  "version": 58,
   "weekStart": ""
 }
