@@ -118,7 +118,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}
 
 	t.Run("valid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
@@ -127,7 +127,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("invalid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
@@ -135,17 +135,26 @@ func TestHandleDecidedQuery(t *testing.T) {
 		require.Equal(t, 0, len(data))
 	})
 
-	t.Run("non-exist validator", func(t *testing.T) {
-		nm := newDecidedAPIMsg("xxx", 400, 404)
+	t.Run("non-existing validator", func(t *testing.T) {
+		nm := newDecidedAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
 		require.Equal(t, "internal error - could not read validator key", errs[0])
 	})
+
+	t.Run("non-existing role", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), -1, 0, 250)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "role doesn't exist", errs[0])
+	})
 }
 
-func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
+func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *NetworkMessage {
 	return &NetworkMessage{
 		Msg: Message{
 			Type: TypeDecided,
@@ -153,7 +162,7 @@ func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
 				PublicKey: pk,
 				From:      from,
 				To:        to,
-				Role:      RoleAttester,
+				Role:      role.String(),
 			},
 		},
 		Err:  nil,

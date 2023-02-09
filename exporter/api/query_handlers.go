@@ -22,7 +22,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		zap.Uint64("from", nm.Msg.Filter.From),
 		zap.Uint64("to", nm.Msg.Filter.To),
 		zap.String("pk", nm.Msg.Filter.PublicKey),
-		zap.String("role", string(nm.Msg.Filter.Role)))
+		zap.String("role", nm.Msg.Filter.Role))
 	res := Message{
 		Type:   nm.Msg.Type,
 		Filter: nm.Msg.Filter,
@@ -36,10 +36,10 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	beaconRole, err := message.BeaconRoleFromString(string(nm.Msg.Filter.Role))
+	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
 	if err != nil {
 		logger.Warn("failed to parse role", zap.Error(err))
-		res.Data = []string{"malformed role"}
+		res.Data = []string{"role doesn't exist"}
 		nm.Msg = res
 		return
 	}
