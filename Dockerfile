@@ -35,7 +35,10 @@ COPY . .
 
 ARG APP_VERSION
 
-RUN git fetch --tags
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  --mount=type=cache,mode=0755,target=/go/pkg \
+  git fetch --tags
+
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   CGO_ENABLED=1 GOOS=linux go install \
