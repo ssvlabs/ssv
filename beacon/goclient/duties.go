@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	api "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
@@ -15,9 +15,8 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	type FetchFunc func(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 
 	fetchers := map[spectypes.BeaconRole]FetchFunc{
-		spectypes.BNRoleAttester:      gc.fetchAttesterDuties,
-		spectypes.BNRoleProposer:      gc.fetchProposerDuties,
-		spectypes.BNRoleSyncCommittee: gc.fetchSyncCommitteeDuties,
+		spectypes.BNRoleAttester: gc.AttesterDuties,
+		spectypes.BNRoleProposer: gc.ProposerDuties,
 	}
 	duties := make([]*spectypes.Duty, 0)
 	var lock sync.Mutex
@@ -43,14 +42,14 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	return duties, nil
 }
 
-// fetchAttesterDuties applies attester + aggregator duties
-func (gc *goClient) fetchAttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+// AttesterDuties applies attester + aggregator duties
+func (gc *goClient) AttesterDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	var duties []*spectypes.Duty
 	attesterDuties, err := gc.client.AttesterDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {
 		return duties, err
 	}
-	toBeaconDuty := func(duty *api.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
+	toBeaconDuty := func(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
 		return &spectypes.Duty{
 			Type:                    role,
 			PubKey:                  duty.PubKey,
@@ -70,8 +69,8 @@ func (gc *goClient) fetchAttesterDuties(epoch phase0.Epoch, validatorIndices []p
 	return duties, nil
 }
 
-// fetchProposerDuties applies proposer duties
-func (gc *goClient) fetchProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+// ProposerDuties applies proposer duties
+func (gc *goClient) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	var duties []*spectypes.Duty
 	proposerDuties, err := gc.client.ProposerDuties(gc.ctx, epoch, validatorIndices)
 	if err != nil {
@@ -88,32 +87,7 @@ func (gc *goClient) fetchProposerDuties(epoch phase0.Epoch, validatorIndices []p
 	return duties, nil
 }
 
-// fetchSyncCommitteeDuties applies sync committee + sync committee contributor duties
-func (gc *goClient) fetchSyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
-	var duties []*spectypes.Duty
-	syncCommitteeDuties, err := gc.client.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
-	if err != nil {
-		return duties, err
-	}
-	toBeaconDuty := func(duty *api.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
-		return &spectypes.Duty{
-			Type:                          role,
-			PubKey:                        duty.PubKey,
-			Slot:                          slot, // in order for the duty ctrl to execute
-			ValidatorIndex:                duty.ValidatorIndex,
-			ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
-		}
-	}
-
-	startSlot := uint64(epoch) * gc.network.SlotsPerEpoch()
-	endSlot := startSlot + (gc.network.SlotsPerEpoch() - 1)
-	// loop all slots in epoch and add the duties to each slot as sync committee is for each slot
-	for slot := startSlot; slot <= endSlot; slot++ {
-		for _, syncCommitteeDuty := range syncCommitteeDuties {
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, phase0.Slot(slot), spectypes.BNRoleSyncCommittee))
-			duties = append(duties, toBeaconDuty(syncCommitteeDuty, phase0.Slot(slot), spectypes.BNRoleSyncCommitteeContribution)) // always trigger contributor as well
-		}
-	}
-
-	return duties, nil
+// SyncCommitteeDuties applies sync committee + sync committee contributor duties
+func (gc *goClient) SyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+	return gc.client.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
 }
