@@ -5,8 +5,10 @@
 package beacon
 
 import (
+	context "context"
 	reflect "reflect"
 
+	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
@@ -39,6 +41,20 @@ func (m *MockbeaconDuties) EXPECT() *MockbeaconDutiesMockRecorder {
 	return m.recorder
 }
 
+// Events mocks base method.
+func (m *MockbeaconDuties) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Events indicates an expected call of Events.
+func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), ctx, topics, handler)
+}
+
 // GetDuties mocks base method.
 func (m *MockbeaconDuties) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
 	m.ctrl.T.Helper()
@@ -52,6 +68,21 @@ func (m *MockbeaconDuties) GetDuties(epoch phase0.Epoch, validatorIndices []phas
 func (mr *MockbeaconDutiesMockRecorder) GetDuties(epoch, validatorIndices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockbeaconDuties)(nil).GetDuties), epoch, validatorIndices)
+}
+
+// SyncCommitteeDuties mocks base method.
+func (m *MockbeaconDuties) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
+func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockbeaconDuties)(nil).SyncCommitteeDuties), epoch, indices)
 }
 
 // MockbeaconSubscriber is a mock of beaconSubscriber interface.
@@ -269,6 +300,20 @@ func (m *MockBeacon) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (p
 func (mr *MockBeaconMockRecorder) DomainData(epoch, domain interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DomainData", reflect.TypeOf((*MockBeacon)(nil).DomainData), epoch, domain)
+}
+
+// Events mocks base method.
+func (m *MockBeacon) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Events", ctx, topics, handler)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Events indicates an expected call of Events.
+func (mr *MockBeaconMockRecorder) Events(ctx, topics, handler interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockBeacon)(nil).Events), ctx, topics, handler)
 }
 
 // GetAttestationData mocks base method.
@@ -544,6 +589,21 @@ func (m *MockBeacon) SubscribeToCommitteeSubnet(subscription []*v1.BeaconCommitt
 func (mr *MockBeaconMockRecorder) SubscribeToCommitteeSubnet(subscription interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToCommitteeSubnet", reflect.TypeOf((*MockBeacon)(nil).SubscribeToCommitteeSubnet), subscription)
+}
+
+// SyncCommitteeDuties mocks base method.
+func (m *MockBeacon) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
+func (mr *MockBeaconMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockBeacon)(nil).SyncCommitteeDuties), epoch, indices)
 }
 
 // SyncCommitteeSubnetID mocks base method.
