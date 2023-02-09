@@ -97,10 +97,6 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
-		nodeType = "operator"
-		if len(opPKHash) == 0 && nodeVersion != unknown {
-			nodeType = "exporter"
-		}
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
@@ -123,6 +119,12 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 				opName = operator.Name
 			}
 		}
+	}
+
+	nodeType = "operator"
+	// TODO: make sure it's correct check
+	if opIndex == unknown && opName == unknown && nodeVersion != unknown {
+		nodeType = "exporter"
 	}
 
 	nodeState := n.idx.State(pid)
