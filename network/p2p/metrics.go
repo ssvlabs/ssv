@@ -109,10 +109,10 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		opName = operatorData.Name
 	}
 
+	// TODO: consider adding cache
 	operators, err := n.nodeStorage.ListOperators(0, 0)
 	if err != nil {
 		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
-		return
 	}
 
 	allOperatorPubKeys := make([]string, 0)
