@@ -15,7 +15,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -84,7 +83,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	db, l, done := newDBAndLoggerForTest()
 	defer done()
-	_, ibftStorage := newStorageForTest(db, l)
+
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
+	}
+	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := GenerateNodes(4)
@@ -93,6 +100,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		oids = append(oids, oid)
 	}
 
+	role := spectypes.BNRoleAttester
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
 		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
@@ -101,7 +109,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 			panic(err)
 		}
 
-		id := spectypes.NewMsgID(pk.Serialize(), spectypes.BNRoleAttester)
+		id := spectypes.NewMsgID(pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -114,11 +122,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	// save decided
 	for _, d := range decided250Seq {
-		require.NoError(t, ibftStorage.SaveInstance(d))
+		require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
 	}
 
 	t.Run("valid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
@@ -127,7 +135,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("invalid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), 400, 404)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
@@ -135,17 +143,35 @@ func TestHandleDecidedQuery(t *testing.T) {
 		require.Equal(t, 0, len(data))
 	})
 
-	t.Run("non-exist validator", func(t *testing.T) {
-		nm := newDecidedAPIMsg("xxx", 400, 404)
+	t.Run("non-existing validator", func(t *testing.T) {
+		nm := newDecidedAPIMsg("xxx", spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
 		require.Equal(t, "internal error - could not read validator key", errs[0])
 	})
+
+	t.Run("non-existing role", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), -1, 0, 250)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "role doesn't exist", errs[0])
+	})
+
+	t.Run("non-existing storage", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "internal error - role storage doesn't exist", errs[0])
+	})
 }
 
-func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
+func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *NetworkMessage {
 	return &NetworkMessage{
 		Msg: Message{
 			Type: TypeDecided,
@@ -153,7 +179,7 @@ func newDecidedAPIMsg(pk string, from, to uint64) *NetworkMessage {
 				PublicKey: pk,
 				From:      from,
 				To:        to,
-				Role:      RoleAttester,
+				Role:      role.String(),
 			},
 		},
 		Err:  nil,
@@ -176,10 +202,15 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, qbftstorageprotocol.QBFTStore) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter := storage.NewNodeStorage(db, logger)
-	sIbft := qbftstorage.New(db, logger, "attestation", forksprotocol.GenesisForkVersion)
-	return sExporter, sIbft
+
+	storageMap := qbftstorage.NewStores()
+	for _, role := range roles {
+		storageMap.Add(role, qbftstorage.New(db, logger, role.String(), forksprotocol.GenesisForkVersion))
+	}
+
+	return sExporter, storageMap
 }
 
 // GenerateNodes generates randomly nodes

@@ -2,9 +2,9 @@ package api
 
 import (
 	"encoding/hex"
-	"github.com/pkg/errors"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
 )
 
 // Message represents an exporter message
@@ -37,7 +37,7 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 			PublicKey: hex.EncodeToString(pkv),
 			From:      uint64(msgs[0].Message.Height),
 			To:        uint64(msgs[len(msgs)-1].Message.Height),
-			Role:      DutyRole(role.String()),
+			Role:      role.String(),
 		},
 		Data: data,
 	}
@@ -57,8 +57,8 @@ type MessageFilter struct {
 	From uint64 `json:"from"`
 	// To is the ending index of the desired data
 	To uint64 `json:"to"`
-	// Role is the duty type enum, optional as it's relevant for IBFT data
-	Role DutyRole `json:"role,omitempty"`
+	// Role is the duty type, optional as it's relevant for IBFT data
+	Role string `json:"role,omitempty"`
 	// PublicKey is optional, used for fetching decided messages or information about specific validator/operator
 	PublicKey string `json:"publicKey,omitempty"`
 }
@@ -75,16 +75,4 @@ const (
 	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
-)
-
-// DutyRole is the role of the duty
-type DutyRole string
-
-const (
-	// RoleAttester is an enum for attester role
-	RoleAttester DutyRole = "ATTESTER"
-	// RoleAggregator is an enum for aggregator role
-	RoleAggregator DutyRole = "AGGREGATOR"
-	// RoleProposer is an enum for proposer role
-	RoleProposer DutyRole = "PROPOSER"
 )
