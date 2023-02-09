@@ -66,16 +66,18 @@ func init() {
 
 // ConsensusMetrics defines metrics for consensus process.
 type ConsensusMetrics struct {
-	preConsensus            prometheus.Observer
-	consensus               prometheus.Observer
-	postConsensus           prometheus.Observer
-	beaconSubmission        prometheus.Observer
-	dutyFullFlow            prometheus.Observer
-	rolesSubmitted          prometheus.Counter
-	rolesSubmissionFailures prometheus.Counter
-	preConsensusStart       time.Time
-	consensusStart          time.Time
-	postConsensusStart      time.Time
+	preConsensus                   prometheus.Observer
+	consensus                      prometheus.Observer
+	postConsensus                  prometheus.Observer
+	beaconSubmission               prometheus.Observer
+	dutyFullFlow                   prometheus.Observer
+	rolesSubmitted                 prometheus.Counter
+	rolesSubmissionFailures        prometheus.Counter
+	preConsensusStart              time.Time
+	consensusStart                 time.Time
+	postConsensusStart             time.Time
+	dutyFullFlowStart              time.Time
+	dutyFullFlowCumulativeDuration time.Duration
 }
 
 func NewConsensusMetrics(pk []byte, role spectypes.BeaconRole) ConsensusMetrics {
@@ -97,10 +99,26 @@ func (cm *ConsensusMetrics) StartPreConsensus() {
 	}
 }
 
+// EndPreConsensus sends metrics for pre-consensus duration.
+func (cm *ConsensusMetrics) EndPreConsensus() {
+	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
+		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
+		cm.preConsensusStart = time.Time{}
+	}
+}
+
 // StartConsensus stores consensus start time.
 func (cm *ConsensusMetrics) StartConsensus() {
 	if cm != nil {
 		cm.consensusStart = time.Now()
+	}
+}
+
+// EndConsensus sends metrics for consensus duration.
+func (cm *ConsensusMetrics) EndConsensus() {
+	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
+		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
+		cm.consensusStart = time.Time{}
 	}
 }
 
@@ -111,24 +129,45 @@ func (cm *ConsensusMetrics) StartPostConsensus() {
 	}
 }
 
-// EndPreConsensus sends metrics for pre-consensus duration.
-func (cm *ConsensusMetrics) EndPreConsensus() {
-	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
-		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
-	}
-}
-
-// EndConsensus sends metrics for consensus duration.
-func (cm *ConsensusMetrics) EndConsensus() {
-	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
-		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
-	}
-}
-
 // EndPostConsensus sends metrics for post-consensus duration.
 func (cm *ConsensusMetrics) EndPostConsensus() {
 	if cm != nil && cm.postConsensus != nil && !cm.postConsensusStart.IsZero() {
 		cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
+		cm.postConsensusStart = time.Time{}
+	}
+}
+
+// StartDutyFullFlow stores duty full flow start time.
+func (cm *ConsensusMetrics) StartDutyFullFlow() {
+	if cm != nil {
+		cm.dutyFullFlowStart = time.Now()
+		cm.dutyFullFlowCumulativeDuration = 0
+	}
+}
+
+// PauseDutyFullFlow stores duty full flow cumulative duration with ability to continue the flow.
+func (cm *ConsensusMetrics) PauseDutyFullFlow() {
+	if cm != nil {
+		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
+		cm.dutyFullFlowStart = time.Time{}
+	}
+}
+
+// ContinueDutyFullFlow continues measuring duty full flow duration.
+func (cm *ConsensusMetrics) ContinueDutyFullFlow() {
+	if cm != nil {
+		cm.dutyFullFlowStart = time.Now()
+	}
+}
+
+// EndDutyFullFlow sends metrics for duty full flow duration.
+func (cm *ConsensusMetrics) EndDutyFullFlow() {
+	if cm != nil && cm.dutyFullFlow != nil && !cm.dutyFullFlowStart.IsZero() {
+		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
+		cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
+
+		cm.dutyFullFlowStart = time.Time{}
+		cm.dutyFullFlowCumulativeDuration = 0
 	}
 }
 
@@ -141,19 +180,6 @@ func (cm *ConsensusMetrics) StartBeaconSubmission() (endBeaconSubmission func())
 	start := time.Now()
 	return func() {
 		cm.beaconSubmission.Observe(time.Since(start).Seconds())
-	}
-}
-
-// EndDutyFullFlow sends metrics for duty full flow duration.
-func (cm *ConsensusMetrics) EndDutyFullFlow() {
-	if cm != nil && cm.dutyFullFlow != nil {
-		start := cm.consensusStart
-		if !cm.preConsensusStart.IsZero() {
-			start = cm.preConsensusStart
-		}
-		if !start.IsZero() {
-			cm.dutyFullFlow.Observe(time.Since(start).Seconds())
-		}
 	}
 }
 

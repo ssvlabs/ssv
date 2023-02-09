@@ -111,10 +111,15 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee subnet ID")
 		}
+
+		r.metrics.PauseDutyFullFlow()
+
 		contribution, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, subnet)
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee contribution")
 		}
+
+		r.metrics.ContinueDutyFullFlow()
 
 		input.SyncCommitteeContribution[blsSigSelectionProof] = contribution
 	}
@@ -301,6 +306,7 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 
 	// sign selection proofs

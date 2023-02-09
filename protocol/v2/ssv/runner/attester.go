@@ -199,12 +199,14 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
+
 	input := &spectypes.ConsensusData{
 		Duty:            duty,
 		AttestationData: attData,
 	}
 
-	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

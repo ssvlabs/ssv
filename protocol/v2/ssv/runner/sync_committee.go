@@ -182,12 +182,14 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
 
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
+
 	input := &spectypes.ConsensusData{
 		Duty:                   duty,
 		SyncCommitteeBlockRoot: root,
 	}
 
-	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
