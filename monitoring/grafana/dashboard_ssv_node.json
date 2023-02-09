@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675700243386,
+  "iteration": 1675856836887,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1619,7 +1619,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "The discovery rate of the subnet peers",
+      "description": "The discovery rate of the subnet peers.\nFound is rate per second of nodes that were found with discovery. Rejected is rate per second of nodes that were found with discovery but rejected because of limit or subnet",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1746,27 +1746,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Public Key (Hash)"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "",
-                    "url": "$explorer/operators/${__data.fields[\"Public Key (Hash)\"]}"
-                  }
-                ]
-              },
-              {
-                "id": "custom.width",
-                "value": 549
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "Index"
             },
             "properties": [
@@ -1779,7 +1758,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Time"
+              "options": "Last Seen (last)"
             },
             "properties": [
               {
@@ -1791,36 +1770,72 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Name"
+              "options": "Name (last)"
             },
             "properties": [
               {
                 "id": "custom.width",
                 "value": 159
+              },
+              {
+                "id": "displayName",
+                "value": "Name"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Node Version"
+              "options": "Node Version (last)"
             },
             "properties": [
               {
                 "id": "custom.width",
                 "value": 153
+              },
+              {
+                "id": "displayName",
+                "value": "Node Version"
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "Node Type"
+              "options": "Node Type (last)"
             },
             "properties": [
               {
                 "id": "custom.width",
                 "value": 159
+              },
+              {
+                "id": "displayName",
+                "value": "Node Type"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Peer ID (last)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Peer ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Last Seen (last)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Last Seen"
               }
             ]
           }
@@ -1843,12 +1858,7 @@
         },
         "frameIndex": 1,
         "showHeader": true,
-        "sortBy": [
-          {
-            "desc": false,
-            "displayName": "Index"
-          }
-        ]
+        "sortBy": []
       },
       "pluginVersion": "8.3.4",
       "targets": [
@@ -1858,42 +1868,22 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "(ssv:network:peers_identity{instance=~\"$instance.*\"}) + on(pubKey, instance, job) group_left() sum without (name) (ssv:exporter:operator_index)",
+          "expr": "rate(ssv:network:peers_identity{instance=~\"$instance.*\"}[5m])",
           "format": "table",
           "hide": false,
           "instant": false,
           "interval": "",
           "legendFormat": "",
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": false,
-          "expr": "ssv:exporter:operator_index{}",
-          "format": "table",
-          "hide": false,
-          "instant": true,
-          "interval": "",
-          "legendFormat": "",
-          "refId": "B"
         }
       ],
       "title": "Node Info",
       "transformations": [
         {
-          "id": "seriesToColumns",
-          "options": {
-            "byField": "pubKey"
-          }
-        },
-        {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time 1": true,
+              "Time 1": false,
               "Time 2": true,
               "Value": true,
               "Value #A": true,
@@ -1906,36 +1896,78 @@
               "instance 2": true,
               "job": true,
               "job 1": true,
-              "job 2": true
+              "job 2": true,
+              "pubKey": true
             },
             "indexByName": {
-              "Time 1": 6,
-              "Time 2": 8,
-              "Value #A": 7,
-              "Value #B": 0,
-              "__name__ 1": 9,
-              "__name__ 2": 12,
-              "instance 1": 10,
-              "instance 2": 13,
-              "job 1": 11,
-              "job 2": 14,
-              "name": 1,
-              "pid": 5,
-              "pubKey": 4,
-              "type": 3,
-              "v": 2
+              "Time": 5,
+              "Value": 9,
+              "instance": 6,
+              "job": 7,
+              "operatorID": 8,
+              "operatorName": 0,
+              "pid": 4,
+              "pubKey": 3,
+              "type": 2,
+              "v": 1
             },
             "renameByName": {
-              "Time 1": "",
+              "Time": "Last Seen",
+              "Time 1": "Last Seen",
               "Time 2": "",
               "Value #B": "Index",
               "__name__ 1": "",
               "job 2": "",
               "name": "Name",
+              "operatorID": "Index",
+              "operatorName": "Name",
               "pid": "Peer ID",
               "pubKey": "Public Key (Hash)",
               "type": "Node Type",
               "v": "Node Version"
+            }
+          }
+        },
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Index": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "groupby"
+              },
+              "Last Seen": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "Name": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "Node Type": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "Node Version": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "Peer ID": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              }
             }
           }
         }
@@ -2050,6 +2082,48 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"0\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "inbound SSVConsensusMsgType",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"1\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "inbound SSVPartialSignatureMsgType",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"2\"}[2m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "inbound DKGMsgType",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
           "expr": "sum (rate(ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m]))",
           "format": "time_series",
           "hide": false,
@@ -2059,7 +2133,7 @@
           "refId": "B"
         }
       ],
-      "title": "Pubsub Messages (2m rate)",
+      "title": "Pubsub Messages RPS (2m rate)",
       "type": "timeseries"
     },
     {
@@ -2154,7 +2228,7 @@
           "refId": "A"
         }
       ],
-      "title": "Incoming Pubsub Messages (2m rate)",
+      "title": "Incoming Pubsub Messages RPS (2m rate)",
       "type": "timeseries"
     },
     {
@@ -2162,7 +2236,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Rate per second of outgoing topic messages for every topic over the last 2 minutes",
+      "description": "Rate per second of outgoing topic messages for every topic over the last 2 minutes.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive are outgoing requests.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2248,7 +2322,7 @@
           "refId": "A"
         }
       ],
-      "title": "Outgoing Pubsub Messages (2m rate)",
+      "title": "Outgoing Pubsub Messages RPS (2m rate)",
       "type": "timeseries"
     },
     {
@@ -2256,7 +2330,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Table breakdown for each stream protocol",
+      "description": "Table breakdown for each stream protocol.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive Requests are outgoing.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2334,7 +2408,7 @@
           "format": "table",
           "instant": true,
           "interval": "",
-          "legendFormat": "Responses",
+          "legendFormat": "Outgoing Responses",
           "refId": "A"
         },
         {
@@ -2362,7 +2436,7 @@
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "Successful Requests",
+          "legendFormat": "Successful Outgoing Requests",
           "refId": "C"
         },
         {
@@ -2376,7 +2450,7 @@
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "Active",
+          "legendFormat": "Active Outgoing Requests",
           "refId": "D"
         }
       ],
@@ -2427,7 +2501,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Rate per second of requests,  responses and active requests",
+      "description": "Rate per second of requests,  responses and active requests.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive are outgoing requests.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2666,33 +2740,6 @@
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
-      },
-      {
-        "current": {
-          "selected": false,
-          "text": "https://explorer.stage.ssv.network",
-          "value": "https://explorer.stage.ssv.network"
-        },
-        "description": "SSV explorer link",
-        "hide": 1,
-        "includeAll": false,
-        "multi": false,
-        "name": "explorer",
-        "options": [
-          {
-            "selected": true,
-            "text": "https://explorer.stage.ssv.network",
-            "value": "https://explorer.stage.ssv.network"
-          },
-          {
-            "selected": false,
-            "text": "https://explorer.ssv.network",
-            "value": "https://explorer.ssv.network"
-          }
-        ],
-        "query": "https://explorer.stage.ssv.network,https://explorer.ssv.network",
-        "skipUrlSync": false,
-        "type": "custom"
       }
     ]
   },
@@ -2704,6 +2751,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 47,
+  "version": 56,
   "weekStart": ""
 }

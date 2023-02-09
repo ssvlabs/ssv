@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 117,
-  "iteration": 1675781536504,
+  "iteration": 1675871143168,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -131,11 +131,35 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "count(ssv:validator:v2:status{instance=~\"$instance.*\"})",
+          "expr": "count(ssv:validator:v2:status{instance=~\"$instance.*\"} != 9)",
           "hide": false,
           "interval": "",
           "legendFormat": "Total",
           "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "count(ssv:validator:v2:status{instance=~\"$instance.*\"} == 6)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Slashed",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "count(ssv:validator:v2:status{instance=~\"$instance.*\"} == 9)",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "Removed",
+          "refId": "D"
         }
       ],
       "title": "Validator Status",
@@ -222,7 +246,7 @@
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "round >1",
+          "legendFormat": "Round >1",
           "refId": "B"
         },
         {
@@ -235,7 +259,7 @@
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "round >2",
+          "legendFormat": "Round >2",
           "refId": "C"
         },
         {
@@ -248,7 +272,7 @@
           "hide": false,
           "instant": true,
           "interval": "",
-          "legendFormat": "round {{ round }}",
+          "legendFormat": "Round {{ round }}",
           "refId": "D"
         }
       ],
@@ -6530,13 +6554,13 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Operator Performance Dashboard",
   "uid": "w-fXrOo4k",
-  "version": 88,
+  "version": 90,
   "weekStart": ""
 }
