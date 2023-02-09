@@ -83,7 +83,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 
 	db, l, done := newDBAndLoggerForTest()
 	defer done()
-	_, ibftStorage := newStorageForTest(db, l)
+
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
+	}
+	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
 	sks, _ := GenerateNodes(4)
@@ -152,6 +160,15 @@ func TestHandleDecidedQuery(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "role doesn't exist", errs[0])
 	})
+
+	t.Run("non-existing storage", func(t *testing.T) {
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
+		HandleDecidedQuery(l, ibftStorage, nm)
+		require.NotNil(t, nm.Msg.Data)
+		errs, ok := nm.Msg.Data.([]string)
+		require.True(t, ok)
+		require.Equal(t, "internal error - role storage doesn't exist", errs[0])
+	})
 }
 
 func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *NetworkMessage {
@@ -185,15 +202,13 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger) (storage.Storage, *qbftstorage.QBFTStores) {
+func newStorageForTest(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter := storage.NewNodeStorage(db, logger)
 
 	storageMap := qbftstorage.NewStores()
-	storageMap.Add(spectypes.BNRoleAttester, qbftstorage.New(db, logger, spectypes.BNRoleAttester.String(), forksprotocol.GenesisForkVersion))
-	storageMap.Add(spectypes.BNRoleProposer, qbftstorage.New(db, logger, spectypes.BNRoleProposer.String(), forksprotocol.GenesisForkVersion))
-	storageMap.Add(spectypes.BNRoleAggregator, qbftstorage.New(db, logger, spectypes.BNRoleAggregator.String(), forksprotocol.GenesisForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommittee, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommittee.String(), forksprotocol.GenesisForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, qbftstorage.New(db, logger, spectypes.BNRoleSyncCommitteeContribution.String(), forksprotocol.GenesisForkVersion))
+	for _, role := range roles {
+		storageMap.Add(role, qbftstorage.New(db, logger, role.String(), forksprotocol.GenesisForkVersion))
+	}
 
 	return sExporter, storageMap
 }
