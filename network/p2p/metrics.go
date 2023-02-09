@@ -8,6 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 var (
@@ -107,7 +109,7 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		opName = operatorData.Name
 	}
 
-	operators, err := n.nodeStorage.ListOperators(0, 1000) // TODO more than 1000?
+	operators, err := n.nodeStorage.ListOperators(0, 0)
 	if err != nil {
 		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		return
@@ -115,7 +117,12 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 
 	allOperatorPubKeys := make([]string, 0)
 	for _, operator := range operators {
-		allOperatorPubKeys = append(allOperatorPubKeys, operator.PublicKey)
+		pubKeyHash := format.OperatorID(operator.PublicKey)
+		allOperatorPubKeys = append(allOperatorPubKeys, pubKeyHash)
+		if pubKeyHash == opPubKey {
+			opIndex = strconv.FormatUint(operatorData.Index, 10)
+			opName = operatorData.Name
+		}
 	}
 
 	nodeState := n.idx.State(pid)
