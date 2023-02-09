@@ -3,9 +3,8 @@ package api
 import (
 	"encoding/hex"
 
-	"github.com/pkg/errors"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
 )
 
 // Message represents an exporter message
