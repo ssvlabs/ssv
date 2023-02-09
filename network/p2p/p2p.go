@@ -75,6 +75,7 @@ type p2pNetwork struct {
 	libConnManager   connmgrcore.ConnManager
 	syncer           syncing.Syncer
 	nodeStorage      operatorstorage.Storage
+	operatorPKCache  sync.Map
 }
 
 // New creates a new p2p network
@@ -97,6 +98,7 @@ func New(cfg *Config) network.P2PNetwork {
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
 		nodeStorage:          cfg.NodeStorage,
+		operatorPKCache:      sync.Map{},
 	}
 }
 

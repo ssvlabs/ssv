@@ -87,42 +87,41 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
-	n.logger.Info("collecting info to report peer identity")
-	opPubKey, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
+	opPKHash, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
-		opPubKey = unknown
+		opPKHash = unknown
 		nodeVersion = unknown
 		forkv = ni.ForkVersion.String()
 		if ni.Metadata != nil {
-			opPubKey = ni.Metadata.OperatorID
+			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"
-		if len(opPubKey) == 0 && nodeVersion != unknown {
+		if len(opPKHash) == 0 && nodeVersion != unknown {
 			nodeType = "exporter"
 		}
 	}
 
-	operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(opPubKey)
-	if opDataErr == nil && found {
-		opIndex = strconv.FormatUint(operatorData.Index, 10)
-		opName = operatorData.Name
-	}
+	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(pubKey.(string))
+		if opDataErr == nil && found {
+			opIndex = strconv.FormatUint(operatorData.Index, 10)
+			opName = operatorData.Name
+		}
+	} else {
+		operators, err := n.nodeStorage.ListOperators(0, 0)
+		if err != nil {
+			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		}
 
-	// TODO: consider adding cache
-	operators, err := n.nodeStorage.ListOperators(0, 1000) // TODO: fix 1000
-	if err != nil {
-		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
-	}
-
-	allOperatorPubKeys := make([]string, 0)
-	for _, operator := range operators {
-		pubKeyHash := format.OperatorID(operator.PublicKey)
-		allOperatorPubKeys = append(allOperatorPubKeys, pubKeyHash)
-		if pubKeyHash == opPubKey {
-			opIndex = strconv.FormatUint(operator.Index, 10)
-			opName = operator.Name
+		for _, operator := range operators {
+			pubKeyHash := format.OperatorID(operator.PublicKey)
+			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
+			if pubKeyHash == opPKHash {
+				opIndex = strconv.FormatUint(operator.Index, 10)
+				opName = operator.Name
+			}
 		}
 	}
 
@@ -131,17 +130,13 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
-		zap.String("opPubKey", opPubKey),
+		zap.String("opPKHash", opPKHash),
 		zap.String("opIndex", opName),
 		zap.String("opName", opIndex),
 		zap.String("nodeType", nodeType),
 		zap.String("nodeState", nodeState.String()),
-		zap.Strings("allOpPubKeys", allOperatorPubKeys),
-		zap.Bool("opFound", found),
-		zap.NamedError("opDataErr", opDataErr),
-		zap.Any("foundOpData", operatorData),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPubKey, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //
