@@ -16,7 +16,9 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	if err != nil {
 		return nil, err
 	}
-	metricsAttestationDataRequest.WithLabelValues().Observe(time.Since(startTime).Seconds())
+
+	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String()).
+		Observe(time.Since(startTime).Seconds())
 
 	return attestationData, nil
 }
