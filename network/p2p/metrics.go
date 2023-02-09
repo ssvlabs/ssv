@@ -101,14 +101,25 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		}
 	}
 
-	operatorData, found, err := n.nodeStorage.GetOperatorDataByPubKey(opPubKey)
-	if err == nil && found {
+	operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(opPubKey)
+	if opDataErr == nil && found {
 		opIndex = strconv.FormatUint(operatorData.Index, 10)
 		opName = operatorData.Name
 	}
 
+	operators, err := n.nodeStorage.ListOperators(0, 1000) // TODO more than 1000?
+	if err != nil {
+		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		return
+	}
+
+	allOperatorPubKeys := make([]string, 0)
+	for _, operator := range operators {
+		allOperatorPubKeys = append(allOperatorPubKeys, operator.PublicKey)
+	}
+
 	nodeState := n.idx.State(pid)
-	n.logger.Debug("peer identity",
+	n.logger.Info("peer identity",
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
@@ -117,6 +128,10 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 		zap.String("opName", opIndex),
 		zap.String("nodeType", nodeType),
 		zap.String("nodeState", nodeState.String()),
+		zap.Strings("allOpPubKeys", allOperatorPubKeys),
+		zap.Bool("opFound", found),
+		zap.NamedError("opDataErr", opDataErr),
+		zap.Any("foundOpData", operatorData),
 	)
 	MetricsPeersIdentity.WithLabelValues(opPubKey, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
 }
