@@ -133,6 +133,7 @@ func (w *Worker) Size() int {
 func (w *Worker) process(msg *spectypes.SSVMessage) {
 	if w.handler == nil {
 		w.logger.Warn("no handler for worker")
+		return
 	}
 	if err := w.handler(msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
