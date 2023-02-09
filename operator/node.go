@@ -79,11 +79,17 @@ type operatorNode struct {
 // New is the constructor of operatorNode
 func New(opts Options) Node {
 	storageMap := qbftstorage.NewStores()
-	storageMap.Add(spectypes.BNRoleAttester, qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion))
-	storageMap.Add(spectypes.BNRoleProposer, qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleProposer.String(), opts.ForkVersion))
-	storageMap.Add(spectypes.BNRoleAggregator, qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAggregator.String(), opts.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommittee, qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleSyncCommittee.String(), opts.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), opts.ForkVersion))
+
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+	}
+	for _, role := range roles {
+		storageMap.Add(role, qbftstorage.New(opts.DB, opts.Logger, role.String(), opts.ForkVersion))
+	}
 
 	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
 
