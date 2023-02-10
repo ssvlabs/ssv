@@ -25,8 +25,8 @@ The dashboard consists of the following sections:
 * Health of the SSV node: `ssv_node_status{}` (time-series)
 
 **Row 2:**
-* Last ETH1 synced block: `ssv_eth1_last_synced_block{} = <block_number>` (gauge)
-* ETH1 registry events: `ssv_eth1_registry_event{name=<event_name>} = <counter>` (gauge bar with counters)
+* TODO: Last ETH1 synced block: `ssv_eth1_last_synced_block{} = <block_number>` (gauge)
+* TODO: ETH1 registry events: `ssv_eth1_registry_event{name=<event_name>} = <counter>` (gauge bar with counters)
 
 ### Process Health
 
@@ -46,21 +46,21 @@ The dashboard consists of the following sections:
 
 **Row 1:**
 * Amount of connected peers: `ssv_p2p_connected_peers{} = <gauge>` (time-series)
-* Distriubution of the topic peers (pubsub): `ssv_p2p_pubsub_topic_peers{topic} = <gauge>` (time-series)
+* Distribution of the topic peers (pubsub): `ssv_p2p_pubsub_topic_peers{topic} = <gauge>` (time-series)
 
 **Row 2:**
 * Subnet peers count: `ssv_p2p_dht_subnet_peers{topic} = <gauge>` (table - subnet, subscribed, known peers, connected peers)
 * Peers discovery rates: `ssv_p2p_dht_peers_found{} = <counter>`, `ssv_p2p_dht_peers_rejected{} = <counter>` (time-series)
 
 **Row 3:**
-* Node info: `ssv_p2p_node_info` (table - index, name, node version, node type, public key, peer id)
+* Node info: `ssv_p2p_node_info` (table - index, name, node version, node type, peer ID, last seen)
 
 ### Network Messaging
 
 **Row 1:**
-* Amount of pubsub messages (in / out / invalid): `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, `ssv_p2p_pubsub_msg_invalid{topic}` (time-series)
-* Rate of outgoing topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>` (time-series)
+* Amount of pubsub messages (in / in by message type / out): `ssv_p2p_pubsub_msg{dir=out|in,topic=*}`, `ssv_p2p_pubsub_msg_invalid{topic}` (time-series)
 * Rate of incoming topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=in,topic=<topic_name>} = <counter>` (time-series)
+* Rate of outgoing topic messages (pubsub): `ssv_p2p_pubsub_msg{dir=out,topic=<topic_name>} = <counter>` (time-series)
 
 **Row 2:**
 * Stream messages (table) (requests | responses | active): `ssv_p2p_stream_msg{dir=out|in,protocol=*}` (table)
