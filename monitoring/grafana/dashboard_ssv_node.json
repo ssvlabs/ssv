@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1675953338336,
+  "iteration": 1676023992743,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -1756,7 +1756,7 @@
               },
               {
                 "id": "displayName",
-                "value": "Index"
+                "value": "Operator Id's"
               },
               {
                 "id": "unit",
@@ -1845,6 +1845,30 @@
               {
                 "id": "displayName",
                 "value": "Last Seen"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Operator Id's"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 137
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Peer ID"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 841
               }
             ]
           }
@@ -2786,6 +2810,6 @@
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 58,
+  "version": 59,
   "weekStart": ""
 }
