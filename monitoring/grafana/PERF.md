@@ -16,53 +16,105 @@ The dashboard consists of the following sections:
 
 **Row 1:**
 * Validators status: `ssv_validators_status{mode=off|idle|working} = <counter>` (gauge bar)
-* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
 * **To do**: Operator data (effectiveness)
 
 **Row 2:**
-* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
-* Failed submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
 
 ### Attester Role
 
 **Row 1:**
-* Attestation data request duration: `ssv_beacon_attestation_data_request_duration_seconds{}` (time-series)
-* Duty full flow duration (without attestation data): `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Failed role submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
+* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
 
 **Row 2:**
-* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}` (time-series)
-* Proposal stage duration: `ssv_qbft_instance_stage_duration_seconds{stage,identifier}` (time-series)
+* Duty full flow duration (excluding attestation data request): `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
 
 **Row 3:**
+* Proposal stage duration: `ssv_qbft_instance_stage_duration_seconds{stage,identifier}` (time-series)
 * Prepare stage duration: `ssv_qbft_instance_stage_duration_seconds{stage,identifier}` (time-series)
 * Commit stage duration: `ssv_qbft_instance_stage_duration_seconds{stage,identifier}` (time-series)
 
 **Row 4:**
+* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}` (time-series)
 * Post-consensus duration (Signature collection duration): `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
+
+**Row 5:**
+* Attestation data request duration: `ssv_beacon_data_request_duration_seconds{role}` (time-series)
 * Attestation submission duration: `ssv_validator_beacon_submission_duration_seconds{role,identifier}` (time-series)
 
 ### Proposer Role
 
 **Row 1:**
-* Duty full flow duration: `ssv_beacon_duty_full_flow_duration_seconds{role}`
-* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}`
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Failed role submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
+* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
 
 **Row 2:**
-* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
-* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
+* Duty full flow duration: `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
 
 **Row 3:**
+* Beacon block request duration: `ssv_beacon_data_request_duration_seconds{role}` (time-series)
 * Block submission duration: `ssv_validator_beacon_submission_duration_seconds{role,identifier}` (time-series)
+
+**Row 4:**
+* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
+* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}`
+* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
 
 ### Aggregator Role
 
 **Row 1:**
-* Duty full flow duration `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
-* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}` (time-series)
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Failed role submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
+* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
 
 **Row 2:**
-* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
-* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
+* Duty full flow duration (excluding attestation data and aggregate attestation requests): `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
 
 **Row 3:**
+* Aggregate attestation request duration: `ssv_beacon_data_request_duration_seconds{role}` (time-series)
 * Proof submission duration: `ssv_validator_beacon_submission_duration_seconds{role,identifier}` (time-series)
+
+**Row 4:**
+* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
+* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}`
+* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
+
+### Sync Committee Role
+
+**Row 1:**
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Failed role submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
+* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
+
+**Row 2:**
+* Duty full flow duration (excluding beacon block root request): `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
+
+**Row 3:**
+* Beacon block root request duration: `ssv_beacon_data_request_duration_seconds{role}` (time-series)
+* Sync message submission duration: `ssv_validator_beacon_submission_duration_seconds{role,identifier}` (time-series)
+
+**Row 4:**
+* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
+* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}`
+* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
+
+### Sync Committee Aggregator Role
+
+**Row 1:**
+* Instance round distribution: (off|idle|working|change-round): `ssv_qbft_instance_round{identifier} = <counter>` (time-series)
+* Failed role submissions: `ssv_validator_roles_failed{role=<beacon role>} = <counter>` (time-series)
+* Submitted roles: `ssv_validator_roles_submitted{role=<beacon role>} = <counter>` (time-series)
+
+**Row 2:**
+* Duty full flow duration (excluding beacon block root and sync committee contribution requests): `ssv_beacon_duty_full_flow_duration_seconds{role}` (time-series)
+
+**Row 3:**
+* Sync committee contribution request duration: `ssv_beacon_data_request_duration_seconds{role}` (time-series)
+* Signed contribution and proof submission duration: `ssv_validator_beacon_submission_duration_seconds{role,identifier}` (time-series)
+
+**Row 4:**
+* Pre-consensus duration: `ssv_validator_pre_consensus_duration_seconds{role,identifier}` (time-series)
+* Consensus duration: `ssv_beacon_consensus_duration_seconds{role}`
+* Post-consensus duration: `ssv_validator_post_consensus_duration_seconds{role,identifier}` (time-series)
