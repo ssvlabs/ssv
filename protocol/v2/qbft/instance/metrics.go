@@ -44,11 +44,12 @@ type metrics struct {
 }
 
 func newMetrics(msgID spectypes.MessageID) *metrics {
+	hexPubKey := hex.EncodeToString(msgID.GetPubKey())
 	return &metrics{
-		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hex.EncodeToString(msgID.GetPubKey())),
-		prepareDuration:  metricsStageDuration.WithLabelValues("prepare", hex.EncodeToString(msgID.GetPubKey())),
-		commitDuration:   metricsStageDuration.WithLabelValues("commit", hex.EncodeToString(msgID.GetPubKey())),
-		round:            metricsRound.WithLabelValues("validator", hex.EncodeToString(msgID.GetPubKey())),
+		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hexPubKey),
+		prepareDuration:  metricsStageDuration.WithLabelValues("prepare", hexPubKey),
+		commitDuration:   metricsStageDuration.WithLabelValues("commit", hexPubKey),
+		round:            metricsRound.WithLabelValues("validator", hexPubKey),
 	}
 }
 
