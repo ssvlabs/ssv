@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -25,8 +24,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 	if err != nil {
 		return nil, err
 	}
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleProposer.String()).
-		Observe(time.Since(reqStart).Seconds())
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 
 	switch beaconBlockRoot.Version {
 	case spec.DataVersionBellatrix:

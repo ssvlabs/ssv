@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -34,8 +33,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.New("attestation data is nil")
 	}
 
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String()).
-		Observe(time.Since(attDataReqStart).Seconds())
+	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 
 	// Get aggregate attestation data.
 	root, err := data.HashTreeRoot()
@@ -52,8 +50,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.New("aggregation data is nil")
 	}
 
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String()).
-		Observe(time.Since(aggDataReqStart).Seconds())
+	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)

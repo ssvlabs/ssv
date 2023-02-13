@@ -5,7 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -23,8 +22,7 @@ func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, erro
 		return phase0.Root{}, errors.New("root is nil")
 	}
 
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String()).
-		Observe(time.Since(reqStart).Seconds())
+	metricsSyncCommitteeDataRequest.Observe(time.Since(reqStart).Seconds())
 
 	return *root, nil
 }

@@ -8,7 +8,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 )
 
@@ -44,8 +43,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 		return nil, errors.New("block root is nil")
 	}
 
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String()).
-		Observe(time.Since(scDataReqStart).Seconds())
+	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
 
 	gc.waitToSlotTwoThirds(slot)
 
@@ -55,8 +53,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 		return nil, err
 	}
 
-	metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String()).
-		Observe(time.Since(sccDataReqStart).Seconds())
+	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
 
 	return contribution, nil
 }
