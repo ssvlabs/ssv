@@ -67,12 +67,10 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	v.mu.Lock()
 	q, ok := v.Queues[msgID.GetRoleType()]
 	if !ok {
 		return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 	}
-	v.mu.Unlock()
 
 	logger := v.logger.With(zap.String("identifier", msgID.String()))
 	logger.Debug("queue consumer is running")

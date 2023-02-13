@@ -43,9 +43,7 @@ func (v *Validator) Start() error {
 func (v *Validator) Stop() error {
 	v.cancel()
 	// clear the msg q
-	v.mu.Lock()
 	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
-	v.mu.Unlock()
 
 	return nil
 }

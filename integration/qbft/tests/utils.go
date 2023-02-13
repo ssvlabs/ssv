@@ -13,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
@@ -28,9 +27,8 @@ type Delay time.Duration
 type Slot phase0.Slot
 
 const (
-	NoDelay            = Delay(0)
-	OneRoundDelay      = Delay(2 * time.Second)
-	AfterOneRoundDelay = Delay(3 * time.Second)
+	NoDelay       = Delay(0)
+	OneRoundDelay = Delay(2 * time.Second)
 
 	DefaultSlot = Slot(phase0.Slot(spectestingutils.TestingDutySlot + 0)) //ZeroSlot
 )
@@ -105,61 +103,12 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	}
 }
 
-func createInstance(
-	t *testing.T,
-	keySet *spectestingutils.TestKeySet,
-	id spectypes.OperatorID,
-	height specqbft.Height,
-	role spectypes.BeaconRole,
-) *protocolstorage.StoredInstance {
-	msgID := spectypes.NewMsgID(keySet.ValidatorPK.Serialize(), role)
-
-	commitData := &specqbft.CommitData{
-		Data: []byte("value"),
-	}
-	encodedCommitData, err := commitData.Encode()
-	require.NoError(t, err)
-
-	msg := &specqbft.Message{
-		MsgType:    specqbft.CommitMsgType,
-		Height:     height,
-		Round:      specqbft.FirstRound,
-		Identifier: msgID[:],
-		Data:       encodedCommitData,
-	}
-	signedMsg1 := signMsg(t, keySet, msg, 1)
-	signedMsg2 := signMsg(t, keySet, msg, 2)
-	signedMsg3 := signMsg(t, keySet, msg, 3)
-
-	require.NoError(t, signedMsg1.Aggregate(signedMsg2))
-	require.NoError(t, signedMsg1.Aggregate(signedMsg3))
-
-	return &protocolstorage.StoredInstance{ //clean up this
-		State: &specqbft.State{
-			Share:                testingShare(keySet, id),
-			ID:                   msgID[:],
-			Round:                1,
-			Height:               height,
-			LastPreparedRound:    1,
-			LastPreparedValue:    []byte("value"),
-			Decided:              true,
-			DecidedValue:         []byte("value"),
-			ProposeContainer:     specqbft.NewMsgContainer(),
-			PrepareContainer:     specqbft.NewMsgContainer(),
-			CommitContainer:      specqbft.NewMsgContainer(),
-			RoundChangeContainer: specqbft.NewMsgContainer(),
-		},
-		DecidedMessage: signedMsg1,
-	}
-}
-
 func createValidator(
 	t *testing.T,
 	pCtx context.Context,
 	id spectypes.OperatorID,
 	keySet *spectestingutils.TestKeySet,
 	pLogger *zap.Logger,
-	storage *qbftstorage.QBFTStores,
 	node network.P2PNetwork,
 ) *protocolvalidator.Validator {
 	ctx, cancel := context.WithCancel(pCtx)
@@ -170,7 +119,7 @@ func createValidator(
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: storage,
+		Storage: newStores(logger),
 		Network: node,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),
@@ -192,17 +141,6 @@ func createValidator(
 	require.NoError(t, val.Start())
 
 	return val
-}
-
-func signMsg(t *testing.T, keySet *spectestingutils.TestKeySet, msg *specqbft.Message, id spectypes.OperatorID) *specqbft.SignedMessage {
-	sig, err := spectestingutils.NewTestingKeyManager().SignRoot(msg, spectypes.QBFTSignatureType, keySet.Shares[id].GetPublicKey().Serialize())
-	require.NoError(t, err)
-
-	return &specqbft.SignedMessage{
-		Signature: sig,
-		Signers:   []spectypes.OperatorID{id},
-		Message:   msg,
-	}
 }
 
 func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) *spectypes.Share { //TODO: check dead-locks

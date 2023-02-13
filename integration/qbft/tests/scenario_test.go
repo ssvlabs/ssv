@@ -5,25 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/operator/duties"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"testing"
 	"time"
 )
 
 type Scenario struct {
 	Committee           int
-	ExpectedHeight      qbft.Height
-	InitialInstances    map[spectypes.OperatorID]*StoredInstanceProperties
-	Duties              map[spectypes.OperatorID][]DutyProperties
+	ExpectedHeight      int
+	Duties              map[spectypes.OperatorID]DutyProperties
 	ValidationFunctions map[spectypes.OperatorID]func(t *testing.T, committee int, actual *protocolstorage.StoredInstance)
 	shared              SharedData
 	validators          map[spectypes.OperatorID]*protocolvalidator.Validator
@@ -41,53 +34,18 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
-			func(id spectypes.OperatorID) {
-				storage := newStores(s.shared.Logger)
-
-				var initialInstance *protocolstorage.StoredInstance
-				if s.InitialInstances != nil && s.InitialInstances[id] != nil {
-					initialInstance = createInstance(t, getKeySet(s.Committee), id, s.InitialInstances[id].Height, role)
-					require.NoError(t, storage.Get(role).SaveHighestInstance(initialInstance))
-				}
-
-				s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, storage, s.shared.Nodes[id])
-
-				s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
-					protocolp2p.LastDecidedProtocol,
-					handlers.LastDecidedHandler(s.shared.Logger.With(zap.String("who", fmt.Sprintf("decided-handler-%d", id))), storage, s.shared.Nodes[id]),
-				), protocolp2p.WithHandler(
-					protocolp2p.DecidedHistoryProtocol,
-					handlers.HistoryHandler(s.shared.Logger.With(zap.String("who", fmt.Sprintf("history-handler-%d", id))), storage, s.shared.Nodes[id], 25),
-				))
-
-				for {
-					peers, err := s.shared.Nodes[id].Peers(getKeySet(s.Committee).ValidatorPK.Serialize())
-					require.NoError(t, err)
-					if len(peers) >= 1 { // TODO: make sure that this check is not redundant. if really - remove all goroutine stuff related to creating validator
-						break
-					}
-
-					s.shared.Logger.Debug("didn't connect any peers, trying again")
-					time.Sleep(200 * time.Millisecond)
-				}
-			}(spectypes.OperatorID(id))
+			id := spectypes.OperatorID(id)
+			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
 		}
 
 		//invoking duties
-		for id, dutiesForOneValidator := range s.Duties {
-			func(id spectypes.OperatorID, dutiesForOneValidator []DutyProperties) { //launching goroutine for every validator
-				for _, dutyProp := range dutiesForOneValidator {
-					time.Sleep(time.Duration(dutyProp.Delay))
+		for id, dutyProp := range s.Duties {
+			go func(id spectypes.OperatorID, dutyProp DutyProperties) { //launching goroutine for every validator
+				time.Sleep(time.Duration(dutyProp.Delay))
 
-					duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), spec.Slot(dutyProp.Slot), dutyProp.Idx, role)
-					ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
-					require.NoError(t, err)
-					dec, err := queue.DecodeSSVMessage(ssvMsg)
-					require.NoError(t, err)
-
-					s.validators[id].Queues[role].Q.Push(dec)
-				}
-			}(id, dutiesForOneValidator)
+				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), spec.Slot(dutyProp.Slot), dutyProp.Idx, role)
+				require.NoError(t, s.validators[id].StartDuty(duty))
+			}(id, dutyProp)
 		}
 
 		//validating state of validator after invoking duties
@@ -100,7 +58,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				storedInstance, err = s.validators[id].Storage.Get(spectypes.MessageIDFromBytes(identifier[:]).GetRoleType()).GetHighestInstance(identifier[:])
 				require.NoError(t, err)
 
-				if storedInstance != nil && storedInstance.State.Height == s.ExpectedHeight {
+				if storedInstance != nil {
 					break
 				}
 

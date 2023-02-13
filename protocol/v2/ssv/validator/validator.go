@@ -3,8 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-	"sync"
-
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -40,7 +38,6 @@ type Validator struct {
 	Queues  map[spectypes.BeaconRole]queueContainer
 
 	state uint32
-	mu    *sync.Mutex
 }
 
 // NewValidator creates a new instance of Validator.
@@ -61,7 +58,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
-		mu:          &sync.Mutex{},
 	}
 
 	for _, dutyRunner := range options.DutyRunners {

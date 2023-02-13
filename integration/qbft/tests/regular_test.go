@@ -10,13 +10,12 @@ import (
 
 func TestRegular4CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
-		Committee:      4,
-		ExpectedHeight: qbft.FirstHeight,
-		Duties: map[spectypes.OperatorID][]DutyProperties{
-			1: {{DefaultSlot, 1, NoDelay}},
-			2: {{DefaultSlot, 1, NoDelay}},
-			3: {{DefaultSlot, 1, NoDelay}},
-			4: {{DefaultSlot, 1, NoDelay}},
+		Committee: 4,
+		Duties: map[spectypes.OperatorID]DutyProperties{
+			1: {DefaultSlot, 1, NoDelay},
+			2: {DefaultSlot, 1, NoDelay},
+			3: {DefaultSlot, 1, NoDelay},
+			4: {DefaultSlot, 1, NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: regularValidator(),
@@ -35,16 +34,15 @@ func TestRegular4CommitteeScenario(t *testing.T) {
 
 func TestRegular7CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
-		Committee:      7,
-		ExpectedHeight: qbft.FirstHeight,
-		Duties: map[spectypes.OperatorID][]DutyProperties{
-			1: {{DefaultSlot, 1, NoDelay}},
-			2: {{DefaultSlot, 1, NoDelay}},
-			3: {{DefaultSlot, 1, NoDelay}},
-			4: {{DefaultSlot, 1, NoDelay}},
-			5: {{DefaultSlot, 1, NoDelay}},
-			6: {{DefaultSlot, 1, NoDelay}},
-			7: {{DefaultSlot, 1, NoDelay}},
+		Committee: 7,
+		Duties: map[spectypes.OperatorID]DutyProperties{
+			1: {DefaultSlot, 1, NoDelay},
+			2: {DefaultSlot, 1, NoDelay},
+			3: {DefaultSlot, 1, NoDelay},
+			4: {DefaultSlot, 1, NoDelay},
+			5: {DefaultSlot, 1, NoDelay},
+			6: {DefaultSlot, 1, NoDelay},
+			7: {DefaultSlot, 1, NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: regularValidator(),
@@ -66,19 +64,18 @@ func TestRegular7CommitteeScenario(t *testing.T) {
 
 func TestRegular10CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
-		Committee:      10,
-		ExpectedHeight: qbft.FirstHeight,
-		Duties: map[spectypes.OperatorID][]DutyProperties{
-			1:  {{DefaultSlot, 1, NoDelay}},
-			2:  {{DefaultSlot, 1, NoDelay}},
-			3:  {{DefaultSlot, 1, NoDelay}},
-			4:  {{DefaultSlot, 1, NoDelay}},
-			5:  {{DefaultSlot, 1, NoDelay}},
-			6:  {{DefaultSlot, 1, NoDelay}},
-			7:  {{DefaultSlot, 1, NoDelay}},
-			8:  {{DefaultSlot, 1, NoDelay}},
-			9:  {{DefaultSlot, 1, NoDelay}},
-			10: {{DefaultSlot, 1, NoDelay}},
+		Committee: 10,
+		Duties: map[spectypes.OperatorID]DutyProperties{
+			1:  {DefaultSlot, 1, NoDelay},
+			2:  {DefaultSlot, 1, NoDelay},
+			3:  {DefaultSlot, 1, NoDelay},
+			4:  {DefaultSlot, 1, NoDelay},
+			5:  {DefaultSlot, 1, NoDelay},
+			6:  {DefaultSlot, 1, NoDelay},
+			7:  {DefaultSlot, 1, NoDelay},
+			8:  {DefaultSlot, 1, NoDelay},
+			9:  {DefaultSlot, 1, NoDelay},
+			10: {DefaultSlot, 1, NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1:  regularValidator(),
@@ -103,8 +100,8 @@ func TestRegular10CommitteeScenario(t *testing.T) {
 
 func regularValidator() func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {
 	return func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {
-		require.Equal(t, qbft.FirstHeight, actual.State.Height, "height not matching")
-		require.Equal(t, qbft.FirstRound, actual.State.Round, "round not matching")
+		require.Equal(t, int(qbft.FirstHeight), int(actual.State.Height), "height not matching") //int conversion needs to show correct output from require
+		require.Equal(t, int(qbft.FirstRound), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
 		if quorum(committee) > len(actual.DecidedMessage.Signers) {
