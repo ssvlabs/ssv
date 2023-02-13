@@ -81,14 +81,15 @@ type ConsensusMetrics struct {
 }
 
 func NewConsensusMetrics(pk []byte, role spectypes.BeaconRole) ConsensusMetrics {
+	values := []string{hex.EncodeToString(pk), role.String()}
 	return ConsensusMetrics{
-		preConsensus:            metricsPreConsensusDuration.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		consensus:               metricsConsensusDuration.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		postConsensus:           metricsPostConsensusDuration.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(hex.EncodeToString(pk), role.String()),
-		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(hex.EncodeToString(pk), role.String()),
+		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
+		consensus:               metricsConsensusDuration.WithLabelValues(values...),
+		postConsensus:           metricsPostConsensusDuration.WithLabelValues(values...),
+		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
+		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
+		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
+		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
 	}
 }
 

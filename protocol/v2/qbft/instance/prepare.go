@@ -2,7 +2,6 @@ package instance
 
 import (
 	"bytes"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -42,8 +41,7 @@ func (i *Instance) uponPrepare(
 	i.State.LastPreparedValue = proposedValue
 	i.State.LastPreparedRound = i.State.Round
 
-	i.observeStageDurationMetric("prepare", time.Since(i.stageStart).Seconds())
-	i.stageStart = time.Now()
+	i.metrics.EndStagePrepare()
 
 	commitMsg, err := CreateCommit(i.State, i.config, proposedValue)
 	if err != nil {

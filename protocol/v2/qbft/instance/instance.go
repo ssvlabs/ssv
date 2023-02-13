@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -27,9 +26,8 @@ type Instance struct {
 	startOnce   sync.Once
 	StartValue  []byte
 
-	logger *zap.Logger
-
-	stageStart time.Time
+	metrics *metrics
+	logger  *zap.Logger
 }
 
 func NewInstance(
@@ -53,6 +51,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
+		metrics:     newMetrics(msgId),
 		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
 			zap.Uint64("height", uint64(height))),
 	}
@@ -64,7 +63,7 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.stageStart = time.Now()
+		i.metrics.StartStage()
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
@@ -231,6 +230,5 @@ func (i *Instance) Decode(data []byte) error {
 // bumpToRound sets round and sends current round metrics.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.State.Round = round
-	messageID := specqbft.ControllerIdToMessageID(i.State.ID)
-	metricsQBFTInstanceRound.WithLabelValues(messageID.GetRoleType().String(), hex.EncodeToString(messageID.GetPubKey())).Set(float64(round))
+	i.metrics.SetRound(round)
 }

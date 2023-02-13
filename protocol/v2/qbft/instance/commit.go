@@ -3,7 +3,6 @@ package instance
 import (
 	"bytes"
 	"sort"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -44,8 +43,7 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			zap.Any("commit-signers", signedCommit.Signers),
 			zap.Any("agg-signers", agg.Signers))
 
-		i.observeStageDurationMetric("commit", time.Since(i.stageStart).Seconds())
-		i.stageStart = time.Now()
+		i.metrics.EndStageCommit()
 
 		return true, msgCommitData.Data, agg, nil
 	}
