@@ -25,6 +25,9 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 	if err != nil {
 		return err
 	}
+	if highestInstance == nil {
+		return nil
+	}
 	c.Height = highestInstance.GetHeight()
 	c.StoredInstances.reset()
 	c.StoredInstances.addNewInstance(highestInstance)
