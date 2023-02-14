@@ -42,41 +42,72 @@ Build stage Docker image:
   only:
     - stage
 
-Deploy ssv exporter to blox-infra-stage cluster:
+
+Helm deploy on stage:
   stage: deploy
   tags:
     - blox-infra-stage
+  image: devth/helm:v3.3.4
   script:
-    - apk add bash
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_EXPORTER_CPU_LIMIT=$STAGE_SSV_EXPORTER_CPU_LIMIT
-    - export SSV_EXPORTER_MEM_LIMIT=$STAGE_SSV_EXPORTER_MEM_LIMIT
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-    - chmod 755 kubectl
-    - mv kubectl /usr/bin/
-    - .k8/scripts/deploy-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+    - mkdir ~/.kube/
+    - echo $STAGE_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
+    - IMAGE_TAG=$CI_BUILD_REF
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-cluster-a/stage-values.yaml
+      --wait
+      ssv-cluster-a
+      .k8/helm3/ssv-cluster-a/
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-cluster-b/stage-values.yaml
+      --wait
+      ssv-cluster-b
+      .k8/helm3/ssv-cluster-b/
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-cluster-c/stage-values.yaml
+      --wait
+      ssv-cluster-c
+      .k8/helm3/ssv-cluster-c/
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-cluster-d/stage-values.yaml
+      --wait
+      ssv-cluster-d
+      .k8/helm3/ssv-cluster-d/
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-cluster-d/stage-values.yaml
+      --wait
+      ssv-cluster-d
+      .k8/helm3/ssv-cluster-d/
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-exporters/stage-values.yaml
+      --wait
+      ssv-exporters
+      .k8/helm3/ssv-exporters/      
   only:
     - stage
 
-Deploy ssv nodes to blox-infra-stage cluster:
-  stage: deploy
-  tags:
-    - blox-infra-stage
-  script:
-    - apk add bash
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_NODES_CPU_LIMIT=$STAGE_SSV_NODES_CPU_LIMIT
-    - export SSV_NODES_MEM_LIMIT=$STAGE_SSV_NODES_MEM_LIMIT
-    - export SSV_NODES_CPU_LIMIT_V1=$STAGE_SSV_NODES_CPU_LIMIT_V1
-    - export SSV_NODES_MEM_LIMIT_V1=$STAGE_SSV_NODES_MEM_LIMIT_V1
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-    - chmod 755 kubectl
-    - mv kubectl /usr/bin/
-    - .k8/scripts/deploy-ssv-nodes-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/scripts/deploy-ssv-node-v1-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
-    - .k8/scripts/deploy-ssv-node-v3-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-  only:
-    - stage
+
+
 
 # ---------
 # | Prod  |

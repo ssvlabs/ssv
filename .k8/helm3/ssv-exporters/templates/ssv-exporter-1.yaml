@@ -1,0 +1,202 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-exporter-1
+  namespace: {{ .Values.namespace }}
+spec:
+  hosts:
+  - "ws-exporter.{{ .Values.domain }}"
+  gateways:
+  - ssv-exporter-1
+  http:
+  - route:
+    - destination:
+        host: ssv-exporter-1
+        port:
+          number: 14000
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-exporter-1
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-exporter.{{ .Values.domain }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-exporter-1
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ssv-exporter-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12000
+      protocol: UDP
+      targetPort: 12000
+      name: port-12000
+    - port: 13000
+      protocol: TCP
+      targetPort: 13000
+      name: port-13000
+    - port: 14000
+      protocol: TCP
+      targetPort: 14000
+      name: port-14000
+    - port: 15000
+      protocol: TCP
+      targetPort: 15000
+      name: port-15000
+  selector:
+    app: ssv-exporter-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-exporter-1
+  name: ssv-exporter-1
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas:  {{ .Values.replicaCount.ssv_exporter_1 }} 
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-exporter-1
+  template:
+    metadata:
+      labels:
+        app: ssv-exporter-1
+    spec:
+      containers:
+      - name: ssv-exporter-1
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits_exporter_1.cpu }}
+            memory: {{ .Values.resources.limits_exporter_1.mem }}
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12000
+          name: port-12000
+          hostPort: 12000
+          protocol: UDP
+        - containerPort: 13000
+          name: port-13000
+          hostPort: 13000
+        - containerPort: 14000
+          name: port-14000
+          hostPort: 14000
+        - containerPort: 15000
+          name: port-15000
+          hostPort: 15000
+        env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
+          - name: ETH_1_ADDR
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: eth1_addr
+          - name: CONFIG_PATH
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: config_path
+          - name: BOOTNODES
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node
+          - name: REGISTRY_CONTRACT_ADDR_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: smart_contract_addr_key
+          - name: ETH_1_SYNC_OFFSET
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: eth_1_sync_offset
+                optional: true
+          - name: ABI_VERSION
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: abi_version
+                optional: true
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: DEBUG_SERVICES
+            value: "ssv.*"
+          - name: DISCOVERY_TYPE_KEY
+            value: "discv5"
+          - name: NETWORK
+            value: "prater"
+          - name: DB_PATH
+            value: "./data/db-full-node--2023-jan-18--18-20"
+          - name: DB_REPORTING
+            value: "false"
+          - name: METRICS_API_PORT
+            value: "15000"
+          - name: ENABLE_PROFILE
+            value: "true"
+          - name: GENERATE_OPERATOR_KEY
+            value: "true"
+          - name: UDP_PORT
+            value: "12000"
+          - name: TCP_PORT
+            value: "13000"
+          - name: WS_API_PORT
+            value: "14000"
+          - name: FULLNODE
+            value: "true"
+          - name: EXPORTER
+            value: "true"
+          - name: GENESIS_EPOCH
+            value: "1"
+          - name: NETWORK_ID
+            value: "shifu-v2-stage"
+          - name: P2P_LOG
+            value: "false"
+          - name: DISCOVERY_TRACE
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-exporter
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-exporter-1-cm
+      volumes:
+      - name: ssv-exporter
+        persistentVolumeClaim:
+          claimName: ssv-exporter
+      - name: ssv-exporter-1-cm
+        configMap:
+          name: ssv-exporter-1-cm
+      hostNetwork: true
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

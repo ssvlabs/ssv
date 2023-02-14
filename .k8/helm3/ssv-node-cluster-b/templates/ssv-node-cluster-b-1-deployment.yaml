@@ -1,0 +1,153 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-cluster-b-1-svc
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: ssv-node-cluster-b-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12005
+      protocol: UDP
+      targetPort: 12005
+      name: port-12005
+    - port: 13005
+      protocol: TCP
+      targetPort: 13005
+      name: port-13005
+    - port: 15005
+      protocol: TCP
+      targetPort: 15005
+      name: port-15005
+  selector:
+    app: ssv-node-cluster-b-1
+---
+apiVersion: apps/v1 
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-cluster-b-1
+  name: ssv-node-cluster-b-1
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-cluster-b-1
+  template:
+    metadata:
+      labels:
+        app: ssv-node-cluster-b-1
+    spec:
+      containers:
+      - name: ssv-node-cluster-b-1
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.limits_node_1.cpu }}
+            memory: {{ .Values.resources.limits_node_1.mem }}        
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12005
+          name: port-12005
+          protocol: UDP
+          hostPort: 12005            
+        - containerPort: 13005
+          name: port-13005
+          hostPort: 13005
+        - containerPort: 15005
+          name: port-15005
+          hostPort: 15005
+        env:
+        - name: SHARE_CONFIG
+          value: "./data/share.yaml"
+        - name: CONFIG_PATH
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: config_path
+        - name: BOOTNODES
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node
+        - name: REGISTRY_CONTRACT_ADDR_KEY
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: smart_contract_addr_key
+        - name: ETH_1_SYNC_OFFSET
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: eth_1_sync_offset
+              optional: true
+        - name: ABI_VERSION
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: abi_version
+              optional: true
+        - name: LOG_LEVEL
+          value: "debug"
+        - name: DEBUG_SERVICES
+          value: "ssv/*."
+        - name: DISCOVERY_TYPE_KEY
+          value: "discv5"
+        - name: NETWORK
+          value: "prater"
+        - name: CONSENSUS_TYPE
+          value: "validation"
+        - name: HOST_DNS
+          value: ""
+        - name: HOST_ADDRESS
+          value: ""
+        - name: LOGGER_LEVEL
+          value: "debug"
+        - name: DB_PATH
+          value: "./data/db-v3"
+        - name: DB_REPORTING
+          value: "false"
+        - name: METRICS_API_PORT
+          value: "15005"
+        - name: ENABLE_PROFILE
+          value: "true"
+        - name: P2P_LOG
+          value: "false"
+        - name: DISCOVERY_TRACE
+          value: 'false'
+        - name: PUBSUB_TRACE
+          value: 'false'
+        - name: NETWORK_ID
+          value: "shifu-v2-stage"
+        - name: GENESIS_EPOCH
+          value: "152834"
+        - name: CLEAN_REGISTRY_DATA
+          value: "false"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-node-v2-5
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-cm-validator-options-ssv-node-cluster-b-1
+      volumes:
+      - name: ssv-node-v2-5
+        persistentVolumeClaim:
+          claimName: ssv-node-v2-5
+      - name: ssv-cm-validator-options-ssv-node-cluster-b-1
+        configMap:
+          name: ssv-cm-validator-options-ssv-node-cluster-b-1
+      hostNetwork: true
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,35 @@
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 
+  ssv_exporter_1: 0
+  ssv_exporter_2: 1
+
+namespace: blockchain
+
+domain: ssv.network
+
+image:
+  repository: 764289642555.dkr.ecr.us-west-2.amazonaws.com/ssv-node
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+resources:
+  limits_exporter:
+    cpu: 4000m
+    mem: 6000Mi
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/role
+              operator: In
+              values:
+                - ssv-main
+tolerations:
+  - effect: NoSchedule
+    key: kubernetes.io/role
+    operator: Exists
