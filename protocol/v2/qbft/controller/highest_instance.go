@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"encoding/hex"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 
@@ -18,6 +20,7 @@ var (
 	alreadyLoaded = hashmap.New[string, bool]()
 	sizeLock      sync.Mutex
 	total         atomic.Int64
+	runID         = rand.Int63()
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -52,7 +55,12 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		total.Add(int64(sizeOfInstance))
 	}
 
-	c.logger.Debug("loadedhighestinstance", zap.String("identifier", string(identifier)), zap.Int64("total", total.Load()), zap.Int("size", sizeOfInstance))
+	c.logger.Debug("loadedhighestinstance",
+		zap.String("identifier", hex.EncodeToString(identifier)),
+		zap.Int64("total", total.Load()),
+		zap.Int("size", sizeOfInstance),
+		zap.Int64("runID", runID),
+	)
 
 	// ii := deepcopy.Copy(highestInstance)
 	// highestInstance = ii.(*qbftstorage.StoredInstance)
