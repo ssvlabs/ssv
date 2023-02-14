@@ -91,14 +91,6 @@ Helm deploy on stage:
       --install
       --namespace ssv
       --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/ssv-cluster-d/stage-values.yaml
-      --wait
-      ssv-cluster-d
-      .k8/helm3/ssv-cluster-d/
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
       --values .k8/helm3/ssv-exporters/stage-values.yaml
       --wait
       ssv-exporters
