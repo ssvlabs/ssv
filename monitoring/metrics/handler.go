@@ -14,8 +14,10 @@ import (
 	"strings"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -103,13 +105,19 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			http.Error(w, "invalid public key", http.StatusBadRequest)
 			return
 		}
-		role := r.URL.Query().Get("role")
-		if role == "" {
+		roleStr := r.URL.Query().Get("role")
+		if roleStr == "" {
 			http.Error(w, "role is required", http.StatusBadRequest)
 			return
 		}
-		st := storage.New(mh.db, mh.logger, role, forksprotocol.GenesisForkVersion)
-		highest, err := st.GetHighestInstance(publicKey)
+		role, err := message.BeaconRoleFromString(roleStr)
+		if err != nil {
+			http.Error(w, "invalid role", http.StatusBadRequest)
+			return
+		}
+		st := storage.New(mh.db, mh.logger, role.String(), forksprotocol.GenesisForkVersion)
+		msgID := spectypes.NewMsgID(publicKey, role)
+		highest, err := st.GetHighestInstance(msgID[:])
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -120,7 +128,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			Instance  *qbftstorage.StoredInstance `json:"instance"`
 		}{
 			PublicKey: hex.EncodeToString(publicKey),
-			Role:      role,
+			Role:      role.String(),
 			Instance:  highest,
 		}
 		if err := json.NewEncoder(w).Encode(response); err != nil {
