@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -12,7 +13,10 @@ import (
 // Start starts a Validator.
 func (v *Validator) Start() error {
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
-
+		n, ok := v.Network.(p2p.Subscriber)
+		if !ok {
+			return nil
+		}
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
