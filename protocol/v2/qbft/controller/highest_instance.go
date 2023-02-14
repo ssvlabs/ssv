@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/cornelk/hashmap"
-	deepcopy "github.com/mohae/deepcopy"
+	"github.com/mohae/deepcopy"
 	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
@@ -26,23 +26,6 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 	if err != nil {
 		return err
 	}
-
-	strIdentifier := string(identifier)
-	sizeLock.Lock()
-	sizeOfInstance := size.Of(highestInstance)
-	sizeLock.Unlock()
-	if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
-		alreadyLoaded.Set(strIdentifier, true)
-		total.Add(int64(sizeOfInstance))
-	}
-
-	c.logger.Debug("loadedhighestinstance", zap.String("identifier", string(identifier)), zap.Int64("total", total.Load()), zap.Int("size", sizeOfInstance))
-
-	i := deepcopy.Copy(highestInstance)
-	highestInstance = i.(*instance.Instance)
-	if highestInstance == nil {
-		return nil
-	}
 	c.Height = highestInstance.GetHeight()
 	c.StoredInstances.reset()
 	c.StoredInstances.addNewInstance(highestInstance)
@@ -57,6 +40,21 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	if highestInstance == nil {
 		return nil, nil
 	}
+
+	strIdentifier := string(identifier)
+	sizeLock.Lock()
+	sizeOfInstance := size.Of(highestInstance)
+	sizeLock.Unlock()
+	if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
+		alreadyLoaded.Set(strIdentifier, true)
+		total.Add(int64(sizeOfInstance))
+	}
+
+	c.logger.Debug("loadedhighestinstance", zap.String("identifier", string(identifier)), zap.Int64("total", total.Load()), zap.Int("size", sizeOfInstance))
+
+	ii := deepcopy.Copy(highestInstance)
+	highestInstance = ii.(*qbftstorage.StoredInstance)
+
 	i := instance.NewInstance(
 		c.config,
 		highestInstance.State.Share,
@@ -64,6 +62,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		highestInstance.State.Height,
 	)
 	i.State = highestInstance.State
+
 	return i, nil
 }
 
