@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/DmitriyVTitov/size"
@@ -16,6 +17,7 @@ import (
 
 var (
 	alreadyLoaded = hashmap.New[string, bool]()
+	sizeLock      sync.Mutex
 	total         atomic.Int64
 )
 
@@ -26,7 +28,9 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 	}
 
 	strIdentifier := string(identifier)
+	sizeLock.Lock()
 	sizeOfInstance := size.Of(highestInstance)
+	sizeLock.Unlock()
 	if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
 		alreadyLoaded.Set(strIdentifier, true)
 		total.Add(int64(sizeOfInstance))
