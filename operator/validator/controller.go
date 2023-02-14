@@ -309,6 +309,7 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 }
 
 func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
+	return nil
 	share, err := c.getShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
@@ -410,6 +411,7 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			started++
 		}
 	}
+	storage.FinishedSettingUpValidators.Store(true)
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))

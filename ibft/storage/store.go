@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log"
 	"sync"
+	"sync/atomic"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -68,6 +69,8 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
+var FinishedSettingUpValidators atomic.Bool
+
 // GetHighestInstance returns the StoredInstance for the highest instance.
 func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
 	val, found, err := i.get(highestInstanceKey, identifier[:])
@@ -77,7 +80,9 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	if err != nil {
 		return nil, err
 	}
-	i.logger.Debug("got highest instance", zap.Int("len", len(val)))
+	if !FinishedSettingUpValidators.Load() {
+		i.logger.Debug("got highest instance", zap.Int("len", len(val)))
+	}
 	ret := &qbftstorage.StoredInstance{}
 	if err := ret.Decode(val); err != nil {
 		return nil, errors.Wrap(err, "could not decode instance")
