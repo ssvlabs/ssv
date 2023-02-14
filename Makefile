@@ -97,8 +97,8 @@ ifdef DEBUG_PORT
 	 ${BUILD_PATH} start-node -- ${NODE_COMMAND}
 else
 	@echo "Running node on address: ${HOST_ADDRESS})"
-	@${BUILD_PATH} start-node ${NODE_COMMAND}
 	sleep 100000000
+	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
 .PHONY: docker
