@@ -1,12 +1,22 @@
 package controller
 
 import (
-	"github.com/barkimedes/go-deepcopy"
+	"sync/atomic"
+
+	"github.com/DmitriyVTitov/size"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/cornelk/hashmap"
+	deepcopy "github.com/mohae/deepcopy"
+	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
+)
+
+var (
+	alreadyLoaded = hashmap.New[string, bool]()
+	total         atomic.Int64
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -14,10 +24,17 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 	if err != nil {
 		return err
 	}
-	i, err := deepcopy.Anything(highestInstance)
-	if err != nil {
-		return errors.Wrap(err, "could not deepcopy highest instance")
+
+	strIdentifier := string(identifier)
+	sizeOfInstance := size.Of(highestInstance)
+	if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
+		alreadyLoaded.Set(strIdentifier, true)
+		total.Add(int64(sizeOfInstance))
 	}
+
+	c.logger.Debug("loadedhighestinstance", zap.String("identifier", string(identifier)), zap.Int64("total", total.Load()), zap.Int("size", sizeOfInstance))
+
+	i := deepcopy.Copy(highestInstance)
 	highestInstance = i.(*instance.Instance)
 	if highestInstance == nil {
 		return nil
