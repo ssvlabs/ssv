@@ -61,7 +61,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		zap.String("identifier", hex.EncodeToString(identifier)),
 		zap.Int64("total", total.Load()),
 		zap.Int("size", sizeOfInstance),
-		zap.Int64("runID", runID),
+		zap.String("runID", runID),
 	)
 
 	// ii := deepcopy.Copy(highestInstance)
