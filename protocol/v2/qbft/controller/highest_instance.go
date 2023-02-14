@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/cornelk/hashmap"
-	"github.com/mohae/deepcopy"
 	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
@@ -52,8 +51,8 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 
 	c.logger.Debug("loadedhighestinstance", zap.String("identifier", string(identifier)), zap.Int64("total", total.Load()), zap.Int("size", sizeOfInstance))
 
-	ii := deepcopy.Copy(highestInstance)
-	highestInstance = ii.(*qbftstorage.StoredInstance)
+	// ii := deepcopy.Copy(highestInstance)
+	// highestInstance = ii.(*qbftstorage.StoredInstance)
 
 	i := instance.NewInstance(
 		c.config,
