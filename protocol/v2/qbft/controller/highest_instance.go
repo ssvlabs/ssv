@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/barkimedes/go-deepcopy"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -13,6 +14,11 @@ func (c *Controller) LoadHighestInstance(identifier []byte) error {
 	if err != nil {
 		return err
 	}
+	i, err := deepcopy.Anything(highestInstance)
+	if err != nil {
+		return errors.Wrap(err, "could not deepcopy highest instance")
+	}
+	highestInstance = i.(*instance.Instance)
 	if highestInstance == nil {
 		return nil
 	}
