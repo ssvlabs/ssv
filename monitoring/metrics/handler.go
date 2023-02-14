@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -113,7 +114,16 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if err := json.NewEncoder(w).Encode(highest); err != nil {
+		var response = struct {
+			PublicKey string                      `json:"publicKey"`
+			Role      string                      `json:"role"`
+			Instance  *qbftstorage.StoredInstance `json:"instance"`
+		}{
+			PublicKey: hex.EncodeToString(publicKey),
+			Role:      role,
+			Instance:  highest,
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	})
