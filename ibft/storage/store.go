@@ -77,6 +77,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	if err != nil {
 		return nil, err
 	}
+	i.logger.Debug("got highest instance", zap.Int("len", len(val)))
 	ret := &qbftstorage.StoredInstance{}
 	if err := ret.Decode(val); err != nil {
 		return nil, errors.Wrap(err, "could not decode instance")

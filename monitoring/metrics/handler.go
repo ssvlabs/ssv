@@ -9,7 +9,10 @@ import (
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+	"runtime/debug"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -85,6 +88,26 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	))
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
+
+	mux.HandleFunc("/gc", func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		runtime.GC()
+		fmt.Fprintf(w, "GC took %s", time.Since(start))
+	})
+
+	mux.HandleFunc("/set-gc-percent", func(w http.ResponseWriter, r *http.Request) {
+		gcPercent := r.URL.Query().Get("gcPercent")
+		if gcPercent == "" {
+			http.Error(w, "gcPercent is required", http.StatusBadRequest)
+			return
+		}
+		percent, err := strconv.Atoi(gcPercent)
+		if err != nil {
+			http.Error(w, "gcPercent must be an integer", http.StatusBadRequest)
+			return
+		}
+		debug.SetGCPercent(percent)
+	})
 
 	go func() {
 		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
