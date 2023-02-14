@@ -115,7 +115,7 @@ spec:
         - name: PUBSUB_TRACE
           value: "false"
         - name: P2P_LOG
-          value: "false"
+          value: "true"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
         - name: NETWORK
