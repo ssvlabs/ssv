@@ -69,7 +69,14 @@ func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
 	return nil
 }
 
-var FinishedSettingUpValidators atomic.Bool
+var (
+	FinishedSettingUpValidators atomic.Bool
+	totalLen                    atomic.Int64
+)
+
+func init() {
+	// os.Mkdir("/tmp/ibft_storage", 0755)
+}
 
 // GetHighestInstance returns the StoredInstance for the highest instance.
 func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.StoredInstance, error) {
@@ -81,7 +88,12 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 		return nil, err
 	}
 	if !FinishedSettingUpValidators.Load() {
-		i.logger.Debug("got highest instance", zap.Int("len", len(val)))
+		// err = ioutil.WriteFile("/tmp/ibft_storage/"+hex.EncodeToString(identifier)+".json", val, 0644)
+		// if err != nil {
+		// 	i.logger.Error("could not write file", zap.Error(err))
+		// }
+		totalLen.Add(int64(len(val)))
+		i.logger.Debug("got highest instance", zap.Int("len", len(val)), zap.Int64("total", totalLen.Load()))
 	}
 	ret := &qbftstorage.StoredInstance{}
 	if err := ret.Decode(val); err != nil {

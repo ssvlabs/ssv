@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/DmitriyVTitov/size"
+	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -21,6 +22,7 @@ var (
 	alreadyLoaded = hashmap.New[string, bool]()
 	sizeLock      sync.Mutex
 	total         atomic.Int64
+	totalTrimmed  atomic.Int64
 	// runID is a random string
 	runID = fmt.Sprintf("%#x", rand.Int63())
 )
@@ -52,15 +54,46 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	sizeLock.Lock()
 	sizeOfInstance := size.Of(highestInstance)
 	sizeLock.Unlock()
+
+	// Trim the messages to only the highest round.
+	for _, container := range []*qbft.MsgContainer{
+		highestInstance.State.CommitContainer,
+		highestInstance.State.PrepareContainer,
+		highestInstance.State.ProposeContainer,
+		highestInstance.State.RoundChangeContainer,
+	} {
+		if container == nil {
+			continue
+		}
+		var highestRound qbft.Round
+		for round := range container.Msgs {
+			if round > highestRound {
+				highestRound = round
+			}
+		}
+		if highestRound > 0 {
+			container.Msgs = map[qbft.Round][]*specqbft.SignedMessage{
+				highestRound: container.Msgs[highestRound],
+			}
+		}
+	}
+
+	sizeLock.Lock()
+	sizeOfInstanceTrimmed := size.Of(highestInstance)
+	sizeLock.Unlock()
+
 	if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
 		alreadyLoaded.Set(strIdentifier, true)
 		total.Add(int64(sizeOfInstance))
+		totalTrimmed.Add(int64(size.Of(highestInstance)))
 	}
 
 	c.logger.Debug("loadedhighestinstance",
 		zap.String("identifier", hex.EncodeToString(identifier)),
 		zap.Int64("total", total.Load()),
+		zap.Int64("totalTrimmed", totalTrimmed.Load()),
 		zap.Int("size", sizeOfInstance),
+		zap.Int("sizeTrimmed", sizeOfInstanceTrimmed),
 		zap.String("runID", runID),
 	)
 
