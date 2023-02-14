@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -20,7 +21,8 @@ var (
 	alreadyLoaded = hashmap.New[string, bool]()
 	sizeLock      sync.Mutex
 	total         atomic.Int64
-	runID         = rand.Int63()
+	// runID is a random string
+	runID = fmt.Sprintf("%#x", rand.Int63())
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
