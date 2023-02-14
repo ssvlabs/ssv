@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/ibft/storage"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -88,6 +90,33 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	))
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
+
+	mux.HandleFunc("/highest-instance/", func(w http.ResponseWriter, r *http.Request) {
+		publicKeyStr := strings.TrimPrefix(r.URL.Path, "/highest-instance/")
+		if publicKeyStr == "" {
+			http.Error(w, "public key is required", http.StatusBadRequest)
+			return
+		}
+		publicKey, err := hex.DecodeString(publicKeyStr)
+		if err != nil {
+			http.Error(w, "invalid public key", http.StatusBadRequest)
+			return
+		}
+		role := r.URL.Query().Get("role")
+		if role == "" {
+			http.Error(w, "role is required", http.StatusBadRequest)
+			return
+		}
+		st := storage.New(mh.db, mh.logger, role, forksprotocol.GenesisForkVersion)
+		highest, err := st.GetHighestInstance(publicKey)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(highest); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
 
 	mux.HandleFunc("/gc", func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
