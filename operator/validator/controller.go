@@ -216,6 +216,7 @@ func NewController(options ControllerOptions) Controller {
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
 func (c *controller) setupNetworkHandlers() error {
+	return nil
 	syncHandlers := []*p2pprotocol.SyncHandler{
 		p2pprotocol.WithHandler(
 			p2pprotocol.LastDecidedProtocol,
