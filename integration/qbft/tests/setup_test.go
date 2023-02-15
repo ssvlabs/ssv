@@ -38,7 +38,9 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 }
 
 func TestMain(m *testing.M) {
-	_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
+	if err := logging.SetLogLevelRegex("ssv/.*", "debug"); err != nil { // for debugging TODO: ssv/.* or ssv/*. ?
+		panic(err)
+	}
 
 	ctx := context.Background()
 	logger := logex.Build("integration-tests", zapcore.DebugLevel, nil)
@@ -56,10 +58,10 @@ func TestMain(m *testing.M) {
 		storage := newStores(logger)
 		ln.Nodes[i].RegisterHandlers(protocolp2p.WithHandler(
 			protocolp2p.LastDecidedProtocol,
-			handlers.LastDecidedHandler(logger.With(zap.String("who", fmt.Sprintf("decided-handler-%d", i+1))), storage, ln.Nodes[i]),
+			handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", i+1)), storage, ln.Nodes[i]),
 		), protocolp2p.WithHandler(
 			protocolp2p.DecidedHistoryProtocol,
-			handlers.HistoryHandler(logger.With(zap.String("who", fmt.Sprintf("history-handler-%d", i+1))), storage, ln.Nodes[i], 25),
+			handlers.HistoryHandler(logger.Named(fmt.Sprintf("history-handler-%d", i+1)), storage, ln.Nodes[i], 25),
 		))
 
 		nodes[spectypes.OperatorID(i+1)] = ln.Nodes[i]

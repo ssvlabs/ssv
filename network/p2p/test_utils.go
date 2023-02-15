@@ -165,8 +165,6 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 	ln.NodeKeys = keys
 	ln.Nodes = nodes
 
-	<-time.After(time.Millisecond * 500)
-
 	return ln, nil
 }
 

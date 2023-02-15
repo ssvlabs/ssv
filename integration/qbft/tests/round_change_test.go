@@ -3,6 +3,7 @@ package tests
 import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -12,10 +13,10 @@ func TestRoundChange4CommitteeScenario(t *testing.T) {
 	roundChange := &Scenario{
 		Committee: 4,
 		Duties: map[spectypes.OperatorID]DutyProperties{
-			1: {DefaultSlot, 1, NoDelay},
-			2: {DefaultSlot, 1, NoDelay},
-			3: {DefaultSlot, 1, OneRoundDelay},
-			4: {DefaultSlot, 1, OneRoundDelay},
+			2: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			1: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
+			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: roundChangeValidator(),
@@ -26,10 +27,10 @@ func TestRoundChange4CommitteeScenario(t *testing.T) {
 	}
 
 	roundChange.Run(t, spectypes.BNRoleAttester)
-	//roundChange.Run(t, spectypes.BNRoleAggregator)
-	//roundChange.Run(t, spectypes.BNRoleProposer)
+	//roundChange.Run(t, spectypes.BNRoleAggregator) todo implement aggregator role support
+	//roundChange.Run(t, spectypes.BNRoleProposer) todo implement proposer role support
 	roundChange.Run(t, spectypes.BNRoleSyncCommittee)
-	//roundChange.Run(t, spectypes.BNRoleSyncCommitteeContribution)
+	//roundChange.Run(t, spectypes.BNRoleSyncCommitteeContribution) todo implement sync committee contribution role support
 }
 
 func roundChangeValidator() func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {

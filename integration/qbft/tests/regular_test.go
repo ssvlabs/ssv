@@ -12,10 +12,10 @@ func TestRegular4CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
 		Committee: 4,
 		Duties: map[spectypes.OperatorID]DutyProperties{
-			1: {DefaultSlot, 1, NoDelay},
-			2: {DefaultSlot, 1, NoDelay},
-			3: {DefaultSlot, 1, NoDelay},
-			4: {DefaultSlot, 1, NoDelay},
+			1: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			2: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: regularValidator(),
@@ -36,13 +36,13 @@ func TestRegular7CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
 		Committee: 7,
 		Duties: map[spectypes.OperatorID]DutyProperties{
-			1: {DefaultSlot, 1, NoDelay},
-			2: {DefaultSlot, 1, NoDelay},
-			3: {DefaultSlot, 1, NoDelay},
-			4: {DefaultSlot, 1, NoDelay},
-			5: {DefaultSlot, 1, NoDelay},
-			6: {DefaultSlot, 1, NoDelay},
-			7: {DefaultSlot, 1, NoDelay},
+			1: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			2: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			5: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			6: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			7: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: regularValidator(),
@@ -66,16 +66,16 @@ func TestRegular10CommitteeScenario(t *testing.T) {
 	regular := &Scenario{
 		Committee: 10,
 		Duties: map[spectypes.OperatorID]DutyProperties{
-			1:  {DefaultSlot, 1, NoDelay},
-			2:  {DefaultSlot, 1, NoDelay},
-			3:  {DefaultSlot, 1, NoDelay},
-			4:  {DefaultSlot, 1, NoDelay},
-			5:  {DefaultSlot, 1, NoDelay},
-			6:  {DefaultSlot, 1, NoDelay},
-			7:  {DefaultSlot, 1, NoDelay},
-			8:  {DefaultSlot, 1, NoDelay},
-			9:  {DefaultSlot, 1, NoDelay},
-			10: {DefaultSlot, 1, NoDelay},
+			1:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			2:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			3:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			4:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			5:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			6:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			7:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			8:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			9:  {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
+			10: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1:  regularValidator(),
