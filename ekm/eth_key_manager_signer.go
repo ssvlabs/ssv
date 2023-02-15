@@ -11,13 +11,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager"
+	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ferranbt/fastssz"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -62,7 +62,8 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		}
 	}
 
-	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	// slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	slashingProtector := &slashingprotection.NoProtection{}
 	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Network)
 
 	return &ethKeyManagerSigner{
