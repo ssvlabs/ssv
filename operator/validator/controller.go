@@ -310,7 +310,6 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 }
 
 func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
-	return nil
 	share, err := c.getShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
