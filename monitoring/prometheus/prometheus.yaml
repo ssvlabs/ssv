@@ -9,15 +9,15 @@ scrape_configs:
       - targets:
         # change the targets according to your setup
         # - <container_name>:15000
-        - ssv-node-1:15000
-        - ssv-node-2:15000
-        - ssv-node-3:15000
-        - ssv-node-4:15000
+        - ssv-node-1:15001
+        - ssv-node-2:15002
+        - ssv-node-3:15003
+        - ssv-node-4:15004
   - job_name: ssv_health
     metrics_path: /health
     static_configs:
       - targets:
-        - ssv-node-1:15000
-        - ssv-node-2:15000
-        - ssv-node-3:15000
-        - ssv-node-4:15000
+        - ssv-node-1:15001
+        - ssv-node-2:15002
+        - ssv-node-3:15003
+        - ssv-node-4:15004

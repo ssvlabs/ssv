@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -43,7 +44,7 @@ type Options struct {
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
 	// genesis epoch
-	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-default:"156113" env-description:"Genesis Epoch SSV node will start"`
+	GenesisEpoch string `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-default:"156113" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
@@ -78,6 +79,11 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
+	genesisEpoch, err := strconv.ParseUint(opts.GenesisEpoch, 10, 64)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse non-numeric GenesisEpoch %q: %s", opts.GenesisEpoch, err))
+	}
+
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
@@ -91,7 +97,7 @@ func New(opts Options) Node {
 		storageMap.Add(role, qbftstorage.New(opts.DB, opts.Logger, role.String(), opts.ForkVersion))
 	}
 
-	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
+	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, phase0.Epoch(genesisEpoch))
 
 	node := &operatorNode{
 		context:        opts.Context,
