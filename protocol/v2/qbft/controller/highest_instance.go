@@ -57,7 +57,6 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 
 	// Trim the messages to only the highest round.
 	for _, container := range []*qbft.MsgContainer{
-		highestInstance.State.CommitContainer,
 		highestInstance.State.PrepareContainer,
 		highestInstance.State.ProposeContainer,
 		highestInstance.State.RoundChangeContainer,
@@ -65,16 +64,12 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		if container == nil {
 			continue
 		}
-		var highestRound qbft.Round
-		for round := range container.Msgs {
-			if round > highestRound {
-				highestRound = round
-			}
-		}
-		if highestRound > 0 {
-			container.Msgs = map[qbft.Round][]*specqbft.SignedMessage{
-				highestRound: container.Msgs[highestRound],
-			}
+		container.Msgs = map[qbft.Round][]*specqbft.SignedMessage{}
+	}
+
+	if len(highestInstance.DecidedMessage.Signers) == 4 {
+		highestInstance.State.CommitContainer = &qbft.MsgContainer{
+			Msgs: map[qbft.Round][]*specqbft.SignedMessage{},
 		}
 	}
 
