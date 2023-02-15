@@ -5,116 +5,40 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth1 "github.com/bloxapp/ssv/eth1"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
-	reflect "reflect"
 )
 
-// MockController is a mock of Controller interface
+// MockController is a mock of Controller interface.
 type MockController struct {
 	ctrl     *gomock.Controller
 	recorder *MockControllerMockRecorder
 }
 
-// MockControllerMockRecorder is the mock recorder for MockController
+// MockControllerMockRecorder is the mock recorder for MockController.
 type MockControllerMockRecorder struct {
 	mock *MockController
 }
 
-// NewMockController creates a new mock instance
+// NewMockController creates a new mock instance.
 func NewMockController(ctrl *gomock.Controller) *MockController {
 	mock := &MockController{ctrl: ctrl}
 	mock.recorder = &MockControllerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// ListenToEth1Events mocks base method
-func (m *MockController) ListenToEth1Events(feed *event.Feed) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ListenToEth1Events", feed)
-}
-
-// ListenToEth1Events indicates an expected call of ListenToEth1Events
-func (mr *MockControllerMockRecorder) ListenToEth1Events(feed interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenToEth1Events", reflect.TypeOf((*MockController)(nil).ListenToEth1Events), feed)
-}
-
-// StartValidators mocks base method
-func (m *MockController) StartValidators() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartValidators")
-}
-
-// StartValidators indicates an expected call of StartValidators
-func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators))
-}
-
-// GetValidatorsIndices mocks base method
-func (m *MockController) GetValidatorsIndices() []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidatorsIndices")
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// GetValidatorsIndices indicates an expected call of GetValidatorsIndices
-func (mr *MockControllerMockRecorder) GetValidatorsIndices() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorsIndices", reflect.TypeOf((*MockController)(nil).GetValidatorsIndices))
-}
-
-// GetValidator mocks base method
-func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidator", pubKey)
-	ret0, _ := ret[0].(*validator.Validator)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
-}
-
-// GetValidator indicates an expected call of GetValidator
-func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
-}
-
-// UpdateValidatorMetaDataLoop mocks base method
-func (m *MockController) UpdateValidatorMetaDataLoop() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateValidatorMetaDataLoop")
-}
-
-// UpdateValidatorMetaDataLoop indicates an expected call of UpdateValidatorMetaDataLoop
-func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
-}
-
-// StartNetworkHandlers mocks base method
-func (m *MockController) StartNetworkHandlers() {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartNetworkHandlers")
-}
-
-// StartNetworkHandlers indicates an expected call of StartNetworkHandlers
-func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
-}
-
-// Eth1EventHandler mocks base method
+// Eth1EventHandler mocks base method.
 func (m *MockController) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Eth1EventHandler", ongoingSync)
@@ -122,13 +46,13 @@ func (m *MockController) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandle
 	return ret0
 }
 
-// Eth1EventHandler indicates an expected call of Eth1EventHandler
+// Eth1EventHandler indicates an expected call of Eth1EventHandler.
 func (mr *MockControllerMockRecorder) Eth1EventHandler(ongoingSync interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Eth1EventHandler", reflect.TypeOf((*MockController)(nil).Eth1EventHandler), ongoingSync)
 }
 
-// GetAllValidatorShares mocks base method
+// GetAllValidatorShares mocks base method.
 func (m *MockController) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllValidatorShares")
@@ -137,13 +61,28 @@ func (m *MockController) GetAllValidatorShares() ([]*types.SSVShare, error) {
 	return ret0, ret1
 }
 
-// GetAllValidatorShares indicates an expected call of GetAllValidatorShares
+// GetAllValidatorShares indicates an expected call of GetAllValidatorShares.
 func (mr *MockControllerMockRecorder) GetAllValidatorShares() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidatorShares", reflect.TypeOf((*MockController)(nil).GetAllValidatorShares))
 }
 
-// GetValidatorStats mocks base method
+// GetValidator mocks base method.
+func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidator", pubKey)
+	ret0, _ := ret[0].(*validator.Validator)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// GetValidator indicates an expected call of GetValidator.
+func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
+}
+
+// GetValidatorStats mocks base method.
 func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidatorStats")
@@ -154,8 +93,70 @@ func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	return ret0, ret1, ret2, ret3
 }
 
-// GetValidatorStats indicates an expected call of GetValidatorStats
+// GetValidatorStats indicates an expected call of GetValidatorStats.
 func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
+}
+
+// GetValidatorsIndices mocks base method.
+func (m *MockController) GetValidatorsIndices() []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetValidatorsIndices")
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// GetValidatorsIndices indicates an expected call of GetValidatorsIndices.
+func (mr *MockControllerMockRecorder) GetValidatorsIndices() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorsIndices", reflect.TypeOf((*MockController)(nil).GetValidatorsIndices))
+}
+
+// ListenToEth1Events mocks base method.
+func (m *MockController) ListenToEth1Events(feed *event.Feed) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ListenToEth1Events", feed)
+}
+
+// ListenToEth1Events indicates an expected call of ListenToEth1Events.
+func (mr *MockControllerMockRecorder) ListenToEth1Events(feed interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenToEth1Events", reflect.TypeOf((*MockController)(nil).ListenToEth1Events), feed)
+}
+
+// StartNetworkHandlers mocks base method.
+func (m *MockController) StartNetworkHandlers() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartNetworkHandlers")
+}
+
+// StartNetworkHandlers indicates an expected call of StartNetworkHandlers.
+func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
+}
+
+// StartValidators mocks base method.
+func (m *MockController) StartValidators() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartValidators")
+}
+
+// StartValidators indicates an expected call of StartValidators.
+func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators))
+}
+
+// UpdateValidatorMetaDataLoop mocks base method.
+func (m *MockController) UpdateValidatorMetaDataLoop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateValidatorMetaDataLoop")
+}
+
+// UpdateValidatorMetaDataLoop indicates an expected call of UpdateValidatorMetaDataLoop.
+func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
 }

@@ -7,7 +7,6 @@ package mocks
 import (
 	reflect "reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -35,13 +34,13 @@ func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder 
 }
 
 // Start mocks base method.
-func (m *MockRecipientController) Start(ticker <-chan phase0.Slot) {
+func (m *MockRecipientController) Start() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start", ticker)
+	m.ctrl.Call(m, "Start")
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockRecipientControllerMockRecorder) Start(ticker interface{}) *gomock.Call {
+func (mr *MockRecipientControllerMockRecorder) Start() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), ticker)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start))
 }
