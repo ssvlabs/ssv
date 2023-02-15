@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 
 	"github.com/DmitriyVTitov/size"
-	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -56,22 +55,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	sizeLock.Unlock()
 
 	// Trim the messages to only the highest round.
-	for _, container := range []*qbft.MsgContainer{
-		highestInstance.State.PrepareContainer,
-		highestInstance.State.ProposeContainer,
-		highestInstance.State.RoundChangeContainer,
-	} {
-		if container == nil {
-			continue
-		}
-		container.Msgs = map[qbft.Round][]*specqbft.SignedMessage{}
-	}
-
-	if len(highestInstance.DecidedMessage.Signers) == 4 {
-		highestInstance.State.CommitContainer = &qbft.MsgContainer{
-			Msgs: map[qbft.Round][]*specqbft.SignedMessage{},
-		}
-	}
+	instance.Compact(highestInstance.State)
 
 	sizeLock.Lock()
 	sizeOfInstanceTrimmed := size.Of(highestInstance)
