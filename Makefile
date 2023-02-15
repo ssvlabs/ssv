@@ -147,7 +147,7 @@ docker-monitor:
 mock:
 	go generate ./...
 
-.PHONY: mock
+.PHONY: mockgen-install
 mockgen-install:
 	go install github.com/golang/mock/mockgen@v1.6.0
 	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"
