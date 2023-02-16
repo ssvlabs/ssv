@@ -59,9 +59,9 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		//invoking duties
 		for id, dutyProp := range s.Duties {
 			go func(id spectypes.OperatorID, dutyProp DutyProperties) { //launching goroutine for every validator
-				time.Sleep(time.Duration(dutyProp.Delay))
+				time.Sleep(dutyProp.Delay)
 
-				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), spec.Slot(dutyProp.Slot), dutyProp.ValidatorIndex, role)
+				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				require.NoError(t, s.validators[id].StartDuty(duty))
 			}(id, dutyProp)
 		}
