@@ -38,7 +38,7 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 }
 
 func TestMain(m *testing.M) {
-	if err := logging.SetLogLevelRegex("ssv/.*", "debug"); err != nil { // for debugging TODO: ssv/.* or ssv/*. ?
+	if err := logging.SetLogLevelRegex("ssv/.*", "debug"); err != nil {
 		panic(err)
 	}
 
