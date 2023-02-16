@@ -16,7 +16,10 @@ image:
   tag: latest
 
 resources:
-  limits_exporter:
+  limits_exporter_1:
+    cpu: 1000m
+    mem: 1024Mi
+  limits_exporter_2:
     cpu: 1000m
     mem: 1024Mi
 

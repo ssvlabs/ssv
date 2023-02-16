@@ -1,3 +1,5 @@
+---
+apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
   name: ssv-exporter-2
@@ -84,8 +86,8 @@ spec:
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         resources:
           limits:
-            cpu:  {{ .Values.resources.limits_exporter.cpu }}
-            memory: {{ .Values.resources.limits_exporter.mem }}
+            cpu:  {{ .Values.resources.limits_exporter_2.cpu }}
+            memory: {{ .Values.resources.limits_exporter_2.mem }}
         command: ["make", "start-node"]
         ports:
         - containerPort: 12007
