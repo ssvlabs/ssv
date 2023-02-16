@@ -2,13 +2,10 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	logging "github.com/ipfs/go-log"
@@ -55,15 +52,6 @@ func TestMain(m *testing.M) {
 
 	nodes := map[spectypes.OperatorID]network.P2PNetwork{}
 	for i := 0; i < len(ln.Nodes); i++ {
-		storage := newStores(logger)
-		ln.Nodes[i].RegisterHandlers(protocolp2p.WithHandler(
-			protocolp2p.LastDecidedProtocol,
-			handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", i+1)), storage, ln.Nodes[i]),
-		), protocolp2p.WithHandler(
-			protocolp2p.DecidedHistoryProtocol,
-			handlers.HistoryHandler(logger.Named(fmt.Sprintf("history-handler-%d", i+1)), storage, ln.Nodes[i], 25),
-		))
-
 		nodes[spectypes.OperatorID(i+1)] = ln.Nodes[i]
 	}
 

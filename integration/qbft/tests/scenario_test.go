@@ -10,11 +10,15 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -53,7 +57,16 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
 			id := spectypes.OperatorID(id)
-			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
+			s.validators[id] = createValidator(t, ctx, id, role, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
+
+			storage := newStores(s.shared.Logger, role)
+			s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
+				protocolp2p.LastDecidedProtocol,
+				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), storage, s.shared.Nodes[id]),
+			), protocolp2p.WithHandler(
+				protocolp2p.DecidedHistoryProtocol,
+				handlers.HistoryHandler(s.shared.Logger.Named(fmt.Sprintf("history-handler-%d", id)), storage, s.shared.Nodes[id], 25),
+			))
 		}
 
 		//invoking duties
@@ -62,7 +75,13 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				time.Sleep(dutyProp.Delay)
 
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
-				require.NoError(t, s.validators[id].StartDuty(duty))
+
+				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
+				require.NoError(t, err)
+				dec, err := queue.DecodeSSVMessage(ssvMsg)
+				require.NoError(t, err)
+
+				s.validators[id].Queues[role].Q.Push(dec)
 			}(id, dutyProp)
 		}
 
@@ -131,7 +150,7 @@ func quorum(committee int) int {
 	return (committee*2 + 1) / 3 // committee = 3f+1; quorum = 2f+1 // https://drive.google.com/file/d/1bP_MLq0MM7ZBSR0Ddh7HUPcc42vVUKwz/view?usp=share_link
 }
 
-func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
+func newStores(logger *zap.Logger, role spectypes.BeaconRole) *qbftstorage.QBFTStores {
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",
@@ -141,7 +160,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		panic(err)
 	}
 
-	store := qbftstorage.New(db, logger, "integration-tests", protocolforks.GenesisForkVersion)
+	store := qbftstorage.New(db, logger, role.String(), protocolforks.GenesisForkVersion)
 
 	stores := qbftstorage.NewStores()
 	stores.Add(spectypes.BNRoleAttester, store)
@@ -157,6 +176,7 @@ func createValidator(
 	t *testing.T,
 	pCtx context.Context,
 	id spectypes.OperatorID,
+	role spectypes.BeaconRole,
 	keySet *spectestingutils.TestKeySet,
 	pLogger *zap.Logger,
 	node network.P2PNetwork,
@@ -169,7 +189,7 @@ func createValidator(
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: newStores(logger),
+		Storage: newStores(logger, role),
 		Network: node,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),
