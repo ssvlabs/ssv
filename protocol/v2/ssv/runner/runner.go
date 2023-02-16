@@ -109,7 +109,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 
 	// Compact the instance if it was decided.
 	if controller.IsDecidedMsg(b.Share, msg) {
-		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
+		if inst := b.QBFTController.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
 			instance.Compact(inst.State)
 		}
 	}
