@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
 var logger = logging.Logger("ssv/protocol/ssv/runner").Desugar()
@@ -104,6 +105,13 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
 		return false, nil, err
+	}
+
+	// Compact the instance if it was decided.
+	if controller.IsDecidedMsg(b.Share, decidedMsg) {
+		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
+			instance.Compact(inst.State)
+		}
 	}
 
 	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
