@@ -216,7 +216,6 @@ func NewController(options ControllerOptions) Controller {
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
 func (c *controller) setupNetworkHandlers() error {
-	return nil
 	syncHandlers := []*p2pprotocol.SyncHandler{
 		p2pprotocol.WithHandler(
 			p2pprotocol.LastDecidedProtocol,
@@ -411,7 +410,6 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			started++
 		}
 	}
-	storage.FinishedSettingUpValidators.Store(true)
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
