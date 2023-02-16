@@ -18,7 +18,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -122,14 +122,31 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		encoded, err := json.Marshal(highest)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		instance.Compact(highest.State)
+		encodedCompact, err := json.Marshal(highest)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		var response = struct {
-			PublicKey string                      `json:"publicKey"`
-			Role      string                      `json:"role"`
-			Instance  *qbftstorage.StoredInstance `json:"instance"`
+			PublicKey       string `json:"publicKey"`
+			Role            string `json:"role"`
+			Size            int    `json:"size"`
+			CompactSize     int    `json:"compactSize"`
+			Instance        string `json:"instance"`
+			CompactInstance string `json:"compactInstance"`
 		}{
-			PublicKey: hex.EncodeToString(publicKey),
-			Role:      role.String(),
-			Instance:  highest,
+			PublicKey:       hex.EncodeToString(publicKey),
+			Role:            role.String(),
+			Size:            len(encoded),
+			CompactSize:     len(encodedCompact),
+			Instance:        string(encoded),
+			CompactInstance: string(encodedCompact),
 		}
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

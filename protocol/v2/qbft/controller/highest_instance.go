@@ -6,7 +6,6 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/DmitriyVTitov/size"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -19,12 +18,12 @@ import (
 )
 
 var (
-	stopCountingAt = time.Now().Add(50 * time.Second)
-	alreadyLoaded  = hashmap.New[string, bool]()
-	sizeLock       sync.Mutex
-	total          atomic.Int64
-	totalTrimmed   atomic.Int64
-	runID          = fmt.Sprintf("%#x", rand.Int63())
+	FinishedLoadingHighests atomic.Bool
+	alreadyLoaded           = hashmap.New[string, bool]()
+	sizeLock                sync.Mutex
+	total                   atomic.Int64
+	totalTrimmed            atomic.Int64
+	runID                   = fmt.Sprintf("%#x", rand.Int63())
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -62,7 +61,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	sizeOfInstanceTrimmed := size.Of(highestInstance)
 	sizeLock.Unlock()
 
-	if time.Now().Before(stopCountingAt) {
+	if FinishedLoadingHighests.Load() {
 		if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
 			alreadyLoaded.Set(strIdentifier, true)
 			total.Add(int64(sizeOfInstance))
