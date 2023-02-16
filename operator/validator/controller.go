@@ -410,7 +410,6 @@ func (c *controller) setupValidators(shares []*types.SSVShare) {
 			started++
 		}
 	}
-	qbftcontroller.FinishedLoadingHighests.Store(true)
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))

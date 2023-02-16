@@ -3,7 +3,6 @@ module github.com/bloxapp/ssv
 go 1.19
 
 require (
-	github.com/DmitriyVTitov/size v1.5.0
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.15.2
 	github.com/bloxapp/eth2-key-manager v1.2.0
@@ -25,7 +24,6 @@ require (
 	github.com/libp2p/go-libp2p v0.24.2
 	github.com/libp2p/go-libp2p-kad-dht v0.20.0
 	github.com/libp2p/go-libp2p-pubsub v0.8.2
-	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/multiformats/go-multiaddr v0.8.0
 	github.com/multiformats/go-multistream v0.3.3
 	github.com/patrickmn/go-cache v2.1.0+incompatible

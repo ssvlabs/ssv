@@ -1,29 +1,11 @@
 package controller
 
 import (
-	"encoding/hex"
-	"fmt"
-	"math/rand"
-	"sync"
-	"sync/atomic"
-
-	"github.com/DmitriyVTitov/size"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/cornelk/hashmap"
-	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
-)
-
-var (
-	FinishedLoadingHighests atomic.Bool
-	alreadyLoaded           = hashmap.New[string, bool]()
-	sizeLock                sync.Mutex
-	total                   atomic.Int64
-	totalTrimmed            atomic.Int64
-	runID                   = fmt.Sprintf("%#x", rand.Int63())
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -49,37 +31,8 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		return nil, nil
 	}
 
-	strIdentifier := string(identifier)
-	sizeLock.Lock()
-	sizeOfInstance := size.Of(highestInstance)
-	sizeLock.Unlock()
-
-	// Trim the messages to only the highest round.
+	// Compact the instance to reduce it's memory footprint.
 	instance.Compact(highestInstance.State, highestInstance.DecidedMessage)
-
-	sizeLock.Lock()
-	sizeOfInstanceTrimmed := size.Of(highestInstance)
-	sizeLock.Unlock()
-
-	if FinishedLoadingHighests.Load() {
-		if _, ok := alreadyLoaded.Get(strIdentifier); !ok {
-			alreadyLoaded.Set(strIdentifier, true)
-			total.Add(int64(sizeOfInstance))
-			totalTrimmed.Add(int64(size.Of(highestInstance)))
-
-			c.logger.Debug("loadedhighestinstance",
-				zap.String("identifier", hex.EncodeToString(identifier)),
-				zap.Int64("total", total.Load()),
-				zap.Int64("totalTrimmed", totalTrimmed.Load()),
-				zap.Int("size", sizeOfInstance),
-				zap.Int("sizeTrimmed", sizeOfInstanceTrimmed),
-				zap.String("runID", runID),
-			)
-		}
-	}
-
-	// ii := deepcopy.Copy(highestInstance)
-	// highestInstance = ii.(*qbftstorage.StoredInstance)
 
 	i := instance.NewInstance(
 		c.config,
@@ -88,7 +41,6 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		highestInstance.State.Height,
 	)
 	i.State = highestInstance.State
-
 	return i, nil
 }
 
