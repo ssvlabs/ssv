@@ -127,7 +127,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		instance.Compact(highest.State)
+		instance.Compact(highest.State, highest.DecidedMessage)
 		encodedCompact, err := json.Marshal(highest)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -55,7 +55,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	sizeLock.Unlock()
 
 	// Trim the messages to only the highest round.
-	instance.Compact(highestInstance.State)
+	instance.Compact(highestInstance.State, highestInstance.DecidedMessage)
 
 	sizeLock.Lock()
 	sizeOfInstanceTrimmed := size.Of(highestInstance)
