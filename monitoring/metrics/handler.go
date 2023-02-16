@@ -134,19 +134,19 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			return
 		}
 		var response = struct {
-			PublicKey       string `json:"publicKey"`
-			Role            string `json:"role"`
-			Size            int    `json:"size"`
-			CompactSize     int    `json:"compactSize"`
-			Instance        string `json:"instance"`
-			CompactInstance string `json:"compactInstance"`
+			PublicKey       string          `json:"publicKey"`
+			Role            string          `json:"role"`
+			Size            int             `json:"size"`
+			CompactSize     int             `json:"compactSize"`
+			Instance        json.RawMessage `json:"instance"`
+			CompactInstance json.RawMessage `json:"compactInstance"`
 		}{
 			PublicKey:       hex.EncodeToString(publicKey),
 			Role:            role.String(),
 			Size:            len(encoded),
 			CompactSize:     len(encodedCompact),
-			Instance:        string(encoded),
-			CompactInstance: string(encodedCompact),
+			Instance:        json.RawMessage(encoded),
+			CompactInstance: json.RawMessage(encodedCompact),
 		}
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
