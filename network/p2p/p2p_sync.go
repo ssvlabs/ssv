@@ -34,10 +34,16 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 	if !n.cfg.FullNode {
 		return
 	}
-	if from < to {
-		n.logger.Warn("failed to sync decided by range: from is greater than to",
-			zap.String("pubkey", hex.EncodeToString(mid.GetPubKey())),
-			zap.String("role", mid.GetRoleType().String()),
+	// if from < to {
+	// 	n.logger.Warn("failed to sync decided by range: from is greater than to",
+	// 		zap.String("pubkey", hex.EncodeToString(mid.GetPubKey())),
+	// 		zap.String("role", mid.GetRoleType().String()),
+	// 		zap.Uint64("from", uint64(from)),
+	// 		zap.Uint64("to", uint64(to)))
+	// 	return
+	// }
+	if to > from {
+		n.logger.Warn("failed to sync decided by range: to is higher than from",
 			zap.Uint64("from", uint64(from)),
 			zap.Uint64("to", uint64(to)))
 		return
