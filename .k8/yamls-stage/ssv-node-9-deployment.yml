@@ -75,11 +75,6 @@ spec:
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
-        - name: ETH_1_ADDR
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: eth1_addr
         - name: CONFIG_PATH
           valueFrom:
             secretKeyRef:
