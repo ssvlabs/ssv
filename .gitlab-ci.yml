@@ -40,7 +40,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - stage
+    - instance-compaction
 
 Deploy ssv exporter to blox-infra-stage cluster:
   stage: deploy
@@ -56,7 +56,7 @@ Deploy ssv exporter to blox-infra-stage cluster:
     - mv kubectl /usr/bin/
     - .k8/scripts/deploy-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - stage
+    - instance-compaction
 
 Deploy ssv nodes to blox-infra-stage cluster:
   stage: deploy
@@ -76,7 +76,7 @@ Deploy ssv nodes to blox-infra-stage cluster:
     - .k8/scripts/deploy-ssv-node-v1-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
     # - .k8/scripts/deploy-ssv-node-v3-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
   only:
-    - stage
+    - instance-compaction
 
 # ---------
 # | Prod  |
