@@ -9,16 +9,8 @@ import (
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
-	"runtime/debug"
-	"strconv"
 	"strings"
-	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/ibft/storage"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -93,85 +85,6 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	))
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
-
-	mux.HandleFunc("/highest-instance/", func(w http.ResponseWriter, r *http.Request) {
-		publicKeyStr := strings.TrimPrefix(r.URL.Path, "/highest-instance/")
-		if publicKeyStr == "" {
-			http.Error(w, "public key is required", http.StatusBadRequest)
-			return
-		}
-		publicKey, err := hex.DecodeString(publicKeyStr)
-		if err != nil {
-			http.Error(w, "invalid public key", http.StatusBadRequest)
-			return
-		}
-		roleStr := r.URL.Query().Get("role")
-		if roleStr == "" {
-			http.Error(w, "role is required", http.StatusBadRequest)
-			return
-		}
-		role, err := message.BeaconRoleFromString(roleStr)
-		if err != nil {
-			http.Error(w, "invalid role", http.StatusBadRequest)
-			return
-		}
-		st := storage.New(mh.db, mh.logger, role.String(), forksprotocol.GenesisForkVersion)
-		msgID := spectypes.NewMsgID(publicKey, role)
-		highest, err := st.GetHighestInstance(msgID[:])
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		encoded, err := json.Marshal(highest)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		instance.Compact(highest.State, highest.DecidedMessage)
-		encodedCompact, err := json.Marshal(highest)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		var response = struct {
-			PublicKey       string          `json:"publicKey"`
-			Role            string          `json:"role"`
-			Size            int             `json:"size"`
-			CompactSize     int             `json:"compactSize"`
-			Instance        json.RawMessage `json:"instance"`
-			CompactInstance json.RawMessage `json:"compactInstance"`
-		}{
-			PublicKey:       hex.EncodeToString(publicKey),
-			Role:            role.String(),
-			Size:            len(encoded),
-			CompactSize:     len(encodedCompact),
-			Instance:        json.RawMessage(encoded),
-			CompactInstance: json.RawMessage(encodedCompact),
-		}
-		if err := json.NewEncoder(w).Encode(response); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})
-
-	mux.HandleFunc("/gc", func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		runtime.GC()
-		fmt.Fprintf(w, "GC took %s", time.Since(start))
-	})
-
-	mux.HandleFunc("/set-gc-percent", func(w http.ResponseWriter, r *http.Request) {
-		gcPercent := r.URL.Query().Get("gcPercent")
-		if gcPercent == "" {
-			http.Error(w, "gcPercent is required", http.StatusBadRequest)
-			return
-		}
-		percent, err := strconv.Atoi(gcPercent)
-		if err != nil {
-			http.Error(w, "gcPercent must be an integer", http.StatusBadRequest)
-			return
-		}
-		debug.SetGCPercent(percent)
-	})
 
 	go func() {
 		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
