@@ -9,8 +9,8 @@ import (
 // for consensus to proceed.
 //
 // Compact always discards message from previous rounds.
-// Compact discards non-commit messages from the current round only if it's decided.
-// Compact discards commit messages from the current round only if the whole committee decided.
+// Compact discards non-commit messages from below the current round, only if it's decided.
+// Compact discards commit messages from the current round (and up), only if the whole committee decided.
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
@@ -19,7 +19,7 @@ func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
 	compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
 	// Only discard commit messages if the whole committee decided,
-	// otherwise just trim down to the highest round.
+	// otherwise just trim down to the current round (and up).
 	var signers []spectypes.OperatorID
 	if decidedMessage != nil {
 		signers = decidedMessage.Signers
@@ -38,9 +38,11 @@ func compactContainer(container *specqbft.MsgContainer, round specqbft.Round, di
 		// Discard all messages.
 		container.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{}
 	default:
-		// Trim down to only the highest round.
-		container.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{
-			round: container.Msgs[round],
+		// Trim down to the current round (and up).
+		for r := range container.Msgs {
+			if r < round {
+				delete(container.Msgs, r)
+			}
 		}
 	}
 }
