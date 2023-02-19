@@ -2,7 +2,6 @@ package instance
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Compact trims the given qbft.State down to the minimum required
@@ -14,20 +13,20 @@ import (
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
-	compactContainer(state.ProposeContainer, state.Round, state.Decided)
-	compactContainer(state.PrepareContainer, state.Round, state.Decided)
+	// compactContainer(state.ProposeContainer, state.Round, state.Decided)
+	// compactContainer(state.PrepareContainer, state.Round, state.Decided)
 	compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
 	// Only discard commit messages if the whole committee decided,
 	// otherwise just trim down to the current round (and up).
-	var signers []spectypes.OperatorID
-	if decidedMessage != nil {
-		signers = decidedMessage.Signers
-	} else if state.Decided {
-		signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
-	}
-	wholeCommitteeDecided := len(signers) == len(state.Share.Committee)
-	compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
+	// var signers []spectypes.OperatorID
+	// if decidedMessage != nil {
+	// 	signers = decidedMessage.Signers
+	// } else if state.Decided {
+	// 	signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+	// }
+	// wholeCommitteeDecided := len(signers) == len(state.Share.Committee)
+	// compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
 func compactContainer(container *specqbft.MsgContainer, round specqbft.Round, discard bool) {
