@@ -14,9 +14,9 @@ import (
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
-	compactContainer(state.ProposeContainer, state.Decided)
-	compactContainer(state.PrepareContainer, state.Decided)
-	compactContainer(state.RoundChangeContainer, state.Decided)
+	compactContainer(state.ProposeContainer, state.Round, state.Decided)
+	compactContainer(state.PrepareContainer, state.Round, state.Decided)
+	compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
 	// Only discard commit messages if the whole committee decided,
 	// otherwise just trim down to the highest round.
@@ -27,10 +27,10 @@ func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
 		signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
 	}
 	wholeCommitteeDecided := len(signers) == len(state.Share.Committee)
-	compactContainer(state.CommitContainer, wholeCommitteeDecided)
+	compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
-func compactContainer(container *specqbft.MsgContainer, discard bool) {
+func compactContainer(container *specqbft.MsgContainer, round specqbft.Round, discard bool) {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
@@ -39,14 +39,8 @@ func compactContainer(container *specqbft.MsgContainer, discard bool) {
 		container.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{}
 	default:
 		// Trim down to only the highest round.
-		var highestRound specqbft.Round
-		for round := range container.Msgs {
-			if round > highestRound {
-				highestRound = round
-			}
-		}
 		container.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{
-			highestRound: container.Msgs[highestRound],
+			round: container.Msgs[round],
 		}
 	}
 }
