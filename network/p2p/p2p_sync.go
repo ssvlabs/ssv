@@ -34,6 +34,7 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 	if !n.cfg.FullNode {
 		return
 	}
+	// TODO: uncomment to fix syncing bug!
 	// if from < to {
 	// 	n.logger.Warn("failed to sync decided by range: from is greater than to",
 	// 		zap.String("pubkey", hex.EncodeToString(mid.GetPubKey())),
