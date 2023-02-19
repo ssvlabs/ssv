@@ -24,6 +24,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.New("validator is not an aggregator")
 	}
 
+	attDataReqStart := time.Now()
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
 		return nil, err
@@ -32,11 +33,15 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, errors.New("attestation data is nil")
 	}
 
+	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+
 	// Get aggregate attestation data.
 	root, err := data.HashTreeRoot()
 	if err != nil {
 		return nil, errors.Wrap(err, "AttestationData.HashTreeRoot")
 	}
+
+	aggDataReqStart := time.Now()
 	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get aggregate attestation")
@@ -44,6 +49,8 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if aggregateData == nil {
 		return nil, errors.New("aggregation data is nil")
 	}
+
+	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)

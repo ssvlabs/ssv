@@ -145,7 +145,6 @@ func (c *controller) handleValidatorRegistrationEvent(
 		}
 	}
 
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 	validatorShare, found, err := c.collection.GetValidatorShare(validatorRegistrationEvent.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
@@ -218,6 +217,8 @@ func (c *controller) handleValidatorRemovalEvent(
 	logFields := make([]zap.Field, 0)
 	isOperatorShare := share.BelongsToOperator(c.operatorPubKey)
 	if isOperatorShare {
+		pubKey := hex.EncodeToString(validatorRemovalEvent.PublicKey)
+		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
 		if ongoingSync {
 			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
 				return nil, err
