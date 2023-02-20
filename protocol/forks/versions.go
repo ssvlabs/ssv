@@ -2,6 +2,7 @@ package forksprotocol
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 )
 
 // ForkVersion represents a fork version
@@ -21,7 +22,7 @@ const (
 // ForkHandler handles a fork event
 type ForkHandler interface {
 	// OnFork is called upon a ForkVersion change
-	OnFork(forkVersion ForkVersion) error
+	OnFork(logger *zap.Logger, forkVersion ForkVersion) error
 }
 
 // GetCurrentForkVersion returns the current fork version

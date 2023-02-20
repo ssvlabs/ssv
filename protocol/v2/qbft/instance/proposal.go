@@ -13,7 +13,7 @@ import (
 
 // uponProposal process proposal message
 // Assumes proposal message is valid!
-func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
+func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.SignedMessage, proposeMsgContainer *specqbft.MsgContainer) error {
 	addedMsg, err := proposeMsgContainer.AddFirstMsgForSignerAndRound(signedProposal)
 	if err != nil {
 		return errors.Wrap(err, "could not add proposal msg to container")
@@ -40,7 +40,7 @@ func (i *Instance) uponProposal(signedProposal *specqbft.SignedMessage, proposeM
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
-	i.logger.Debug("got proposal, broadcasting prepare message",
+	logger.Debug("got proposal, broadcasting prepare message",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))

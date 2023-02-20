@@ -2,6 +2,7 @@ package qbftstorage
 
 import (
 	"encoding/json"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
@@ -43,7 +44,7 @@ type InstanceStore interface {
 	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
 
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
-	CleanAllInstances(msgID []byte) error
+	CleanAllInstances(logger *zap.Logger, msgID []byte) error
 }
 
 // QBFTStore is the store used by QBFT components

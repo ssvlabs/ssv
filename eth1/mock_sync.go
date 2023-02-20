@@ -5,48 +5,35 @@
 package eth1
 
 import (
-	gomock "github.com/golang/mock/gomock"
 	reflect "reflect"
+
+	gomock "github.com/golang/mock/gomock"
 )
 
-// MockSyncOffsetStorage is a mock of SyncOffsetStorage interface
+// MockSyncOffsetStorage is a mock of SyncOffsetStorage interface.
 type MockSyncOffsetStorage struct {
 	ctrl     *gomock.Controller
 	recorder *MockSyncOffsetStorageMockRecorder
 }
 
-// MockSyncOffsetStorageMockRecorder is the mock recorder for MockSyncOffsetStorage
+// MockSyncOffsetStorageMockRecorder is the mock recorder for MockSyncOffsetStorage.
 type MockSyncOffsetStorageMockRecorder struct {
 	mock *MockSyncOffsetStorage
 }
 
-// NewMockSyncOffsetStorage creates a new mock instance
+// NewMockSyncOffsetStorage creates a new mock instance.
 func NewMockSyncOffsetStorage(ctrl *gomock.Controller) *MockSyncOffsetStorage {
 	mock := &MockSyncOffsetStorage{ctrl: ctrl}
 	mock.recorder = &MockSyncOffsetStorageMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockSyncOffsetStorage) EXPECT() *MockSyncOffsetStorageMockRecorder {
 	return m.recorder
 }
 
-// SaveSyncOffset mocks base method
-func (m *MockSyncOffsetStorage) SaveSyncOffset(offset *SyncOffset) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveSyncOffset", offset)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SaveSyncOffset indicates an expected call of SaveSyncOffset
-func (mr *MockSyncOffsetStorageMockRecorder) SaveSyncOffset(offset interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSyncOffset", reflect.TypeOf((*MockSyncOffsetStorage)(nil).SaveSyncOffset), offset)
-}
-
-// GetSyncOffset mocks base method
+// GetSyncOffset mocks base method.
 func (m *MockSyncOffsetStorage) GetSyncOffset() (*SyncOffset, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSyncOffset")
@@ -56,8 +43,22 @@ func (m *MockSyncOffsetStorage) GetSyncOffset() (*SyncOffset, bool, error) {
 	return ret0, ret1, ret2
 }
 
-// GetSyncOffset indicates an expected call of GetSyncOffset
+// GetSyncOffset indicates an expected call of GetSyncOffset.
 func (mr *MockSyncOffsetStorageMockRecorder) GetSyncOffset() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncOffset", reflect.TypeOf((*MockSyncOffsetStorage)(nil).GetSyncOffset))
+}
+
+// SaveSyncOffset mocks base method.
+func (m *MockSyncOffsetStorage) SaveSyncOffset(offset *SyncOffset) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveSyncOffset", offset)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SaveSyncOffset indicates an expected call of SaveSyncOffset.
+func (mr *MockSyncOffsetStorageMockRecorder) SaveSyncOffset(offset interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSyncOffset", reflect.TypeOf((*MockSyncOffsetStorage)(nil).SaveSyncOffset), offset)
 }

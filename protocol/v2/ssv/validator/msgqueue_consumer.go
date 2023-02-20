@@ -25,11 +25,11 @@ type queueContainer struct {
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
-func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
+func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			v.logger.Warn("failed to decode message",
+			logger.Warn("failed to decode message",
 				zap.Error(err),
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()),
@@ -39,31 +39,31 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 		if pushed := q.Q.TryPush(decodedMsg); !pushed {
 			msgID := msg.MsgID.String()
 			metricMessageDropped.WithLabelValues(msgID).Inc()
-			v.logger.Warn("dropping message because queue is full",
+			logger.Warn("dropping message because queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
 	} else {
-		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
+		logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
 }
 
 // StartQueueConsumer start ConsumeQueue with handler
-func (v *Validator) StartQueueConsumer(msgID spectypes.MessageID, handler MessageHandler) {
+func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
 	for ctx.Err() == nil {
-		err := v.ConsumeQueue(msgID, handler)
+		err := v.ConsumeQueue(logger, msgID, handler)
 		if err != nil {
-			v.logger.Debug("failed consuming queue", zap.Error(err))
+			logger.Debug("failed consuming queue", zap.Error(err))
 		}
 	}
 }
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandler) error {
+func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -72,7 +72,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
 	}
 
-	logger := v.logger.With(zap.String("identifier", msgID.String()))
+	logger = logger.With(zap.String("identifier", msgID.String()))
 	logger.Debug("queue consumer is running")
 
 	for ctx.Err() == nil {
@@ -102,7 +102,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 
 		// Handle the message.
 		if err := handler(msg); err != nil {
-			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
+			v.logMsg(logger, msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
 
@@ -110,7 +110,7 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	return nil
 }
 
-func (v *Validator) logMsg(msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
 	fields = append([]zap.Field{
 		zap.String("role", msg.MsgID.GetRoleType().String()),
 	}, fields...)
@@ -125,7 +125,7 @@ func (v *Validator) logMsg(msg *queue.DecodedSSVMessage, logMsg string, fields .
 		psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
 		fields = append([]zap.Field{zap.Int64("signer", int64(psm.Signer))}, fields...)
 	}
-	v.logger.Debug(logMsg, fields...)
+	logger.Debug(logMsg, fields...)
 }
 
 // GetLastHeight returns the last height for the given identifier

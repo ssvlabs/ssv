@@ -23,11 +23,11 @@ func TestConn_Send_FullQueue(t *testing.T) {
 
 func TestBroadcaster(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	b := newBroadcaster(logger)
+	b := newBroadcaster()
 
 	feed := new(event.Feed)
 	go func() {
-		require.NoError(t, b.FromFeed(feed))
+		require.NoError(t, b.FromFeed(logger, feed))
 	}()
 	bm1 := newBroadcastedMock("1")
 	bm2 := newBroadcastedMock("2")

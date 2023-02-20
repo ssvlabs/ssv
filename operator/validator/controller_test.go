@@ -30,11 +30,11 @@ func init() {
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logex.GetLogger()
 	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
-	go ctr.handleRouterMessages()
+	go ctr.handleRouterMessages(logger)
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(msg *spectypes.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
 		wg.Done()
 		return nil
 	})
@@ -43,25 +43,25 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{
+	ctr.messageRouter.Route(logger, spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   identifier,
 		Data:    generateDecidedMessage(t, identifier),
 	})
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{
+	ctr.messageRouter.Route(logger, spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   identifier,
 		Data:    generateChangeRoundMsg(t, identifier),
 	})
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
+	ctr.messageRouter.Route(logger, spectypes.SSVMessage{ // checks that not process unnecessary message
 		MsgType: message.SSVSyncMsgType,
 		MsgID:   identifier,
 		Data:    []byte("data"),
 	})
 
-	ctr.messageRouter.Route(spectypes.SSVMessage{ // checks that not process unnecessary message
+	ctr.messageRouter.Route(logger, spectypes.SSVMessage{ // checks that not process unnecessary message
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   identifier,
 		Data:    []byte("data"),
@@ -133,7 +133,7 @@ func TestGetIndices(t *testing.T) {
 
 	logger := logex.GetLogger()
 	ctr := setupController(logger, validators)
-	indices := ctr.GetValidatorsIndices()
+	indices := ctr.GetValidatorsIndices(logger)
 	logger.Info("result", zap.Any("indices", indices))
 	require.Equal(t, 1, len(indices)) // should return only active indices
 }
@@ -142,7 +142,6 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 	return controller{
 		context:                    context.Background(),
 		collection:                 nil,
-		logger:                     logger,
 		beacon:                     nil,
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
@@ -154,10 +153,9 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger, genesis.New().MsgID()),
-		messageWorker: worker.NewWorker(&worker.Config{
+		messageRouter:          newMessageRouter(genesis.New().MsgID()),
+		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
-			Logger:       logger,
 			WorkersCount: 1,
 			Buffer:       100,
 		}),

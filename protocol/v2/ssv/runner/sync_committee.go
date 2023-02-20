@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -24,7 +23,6 @@ type SyncCommitteeRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
 }
 
 func NewSyncCommitteeRunner(
@@ -36,21 +34,18 @@ func NewSyncCommitteeRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleSyncCommittee,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "SyncCommitteeRunner")),
 	}
 }
 
@@ -110,7 +105,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -137,7 +132,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPart
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
-		r.logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
+		logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height))
 	}
 	r.GetState().Finished = true

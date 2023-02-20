@@ -25,8 +25,8 @@ import (
 const extremelyLowPeerCount = 32
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	return n.syncer.SyncHighestDecided(context.Background(), mid, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(msg)
+	return n.syncer.SyncHighestDecided(context.Background(), n.logger, mid, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(n.logger, msg)
 	})
 }
 
@@ -51,8 +51,8 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 		return
 	}
 
-	err := n.syncer.SyncDecidedByRange(context.Background(), mid, from, to, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(msg)
+	err := n.syncer.SyncDecidedByRange(context.Background(), n.logger, mid, from, to, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(n.logger, msg)
 	})
 	if err != nil {
 		n.logger.Error("failed to sync decided by range", zap.Error(err))
@@ -60,16 +60,16 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 }
 
 // LastDecided fetches last decided from a random set of peers
-func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, allPeersFilter)
+	peers, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
-	return n.makeSyncRequest(peers, mid, pid, &message.SyncMessage{
+	return n.makeSyncRequest(logger, peers, mid, pid, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Identifier: mid,
 		},
@@ -78,7 +78,7 @@ func (n *p2pNetwork) LastDecided(mid spectypes.MessageID) ([]p2pprotocol.SyncRes
 }
 
 // GetHistory sync the given range from a set of peers that supports history for the given identifier
-func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error) {
+func (n *p2pNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error) {
 	if from >= to {
 		return nil, 0, nil
 	}
@@ -97,7 +97,7 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
+		random, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
@@ -111,7 +111,7 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 	if to-from > maxBatchRes {
 		currentEnd = from + maxBatchRes
 	}
-	results, err = n.makeSyncRequest(peers, mid, protocolID, &message.SyncMessage{
+	results, err = n.makeSyncRequest(logger, peers, mid, protocolID, &message.SyncMessage{
 		Params: &message.SyncParams{
 			Height:     []specqbft.Height{from, currentEnd},
 			Identifier: mid,
@@ -125,7 +125,7 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 }
 
 // RegisterHandlers registers the given handlers
-func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
+func (n *p2pNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler) {
 	m := make(map[libp2p_protocol.ID][]p2pprotocol.RequestHandler)
 	for _, handler := range handlers {
 		pid, _ := n.fork.ProtocolID(handler.Protocol)
@@ -138,24 +138,24 @@ func (n *p2pNetwork) RegisterHandlers(handlers ...*p2pprotocol.SyncHandler) {
 	}
 
 	for pid, phandlers := range m {
-		n.registerHandlers(pid, phandlers...)
+		n.registerHandlers(logger, pid, phandlers...)
 	}
 }
 
-func (n *p2pNetwork) registerHandlers(pid libp2p_protocol.ID, handlers ...p2pprotocol.RequestHandler) {
+func (n *p2pNetwork) registerHandlers(logger *zap.Logger, pid libp2p_protocol.ID, handlers ...p2pprotocol.RequestHandler) {
 	handler := p2pprotocol.CombineRequestHandlers(handlers...)
-	streamHandler := n.handleStream(handler)
+	streamHandler := n.handleStream(logger, handler)
 	n.host.SetStreamHandler(pid, func(stream libp2pnetwork.Stream) {
 		err := streamHandler(stream)
 		if err != nil {
-			n.logger.Debug("stream handler failed", zap.Error(err))
+			logger.Debug("stream handler failed", zap.Error(err))
 		}
 	})
 }
 
-func (n *p2pNetwork) handleStream(handler p2pprotocol.RequestHandler) func(stream libp2pnetwork.Stream) error {
+func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.RequestHandler) func(stream libp2pnetwork.Stream) error {
 	return func(stream libp2pnetwork.Stream) error {
-		req, respond, done, err := n.streamCtrl.HandleStream(stream)
+		req, respond, done, err := n.streamCtrl.HandleStream(logger, stream)
 		defer done()
 
 		if err != nil {
@@ -181,7 +181,7 @@ func (n *p2pNetwork) handleStream(handler p2pprotocol.RequestHandler) func(strea
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
@@ -214,7 +214,7 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 		}
 
 		if len(peers) == 0 {
-			n.logger.Debug("could not find peers", zap.Any("topics", topics))
+			logger.Debug("could not find peers", zap.Any("topics", topics))
 			return nil, nil
 		}
 	}
@@ -226,7 +226,7 @@ func (n *p2pNetwork) getSubsetOfPeers(vpk spectypes.ValidatorPK, peerCount int, 
 	return peers[:peerCount], nil
 }
 
-func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
+func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
 	var results []p2pprotocol.SyncResult
 	data, err := syncMsg.Encode()
 	if err != nil {
@@ -241,12 +241,12 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 	if err != nil {
 		return nil, err
 	}
-	logger := n.logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	logger = logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
 	msgID := n.fork.MsgID()
 	distinct := make(map[string]struct{})
 	for _, pid := range peers {
 		logger := logger.With(zap.String("peer", pid.String()))
-		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
+		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
 			if err != multistream.ErrNotSupported {
 				logger.Debug("could not make stream request", zap.Error(err))

@@ -142,3 +142,12 @@ MONITOR_NODES=prometheus grafana
 docker-monitor:
 	@echo $(MONITOR_NODES)
 	@docker-compose up --build $(MONITOR_NODES)
+
+.PHONY: mock
+mock:
+	go generate ./...
+
+.PHONY: mockgen-install
+mockgen-install:
+	go install github.com/golang/mock/mockgen@v1.6.0
+	@which mockgen || echo "Error: ensure `go env GOPATH` is added to PATH"

@@ -25,6 +25,8 @@ var (
 )
 
 func TestSetupPrivateKey(t *testing.T) {
+	logger := logex.GetLogger()
+
 	tests := []struct {
 		name      string
 		existKey  string
@@ -56,18 +58,16 @@ func TestSetupPrivateKey(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			options := basedb.Options{
-				Type:   "badger-memory",
-				Logger: logex.Build("test", zapcore.DebugLevel, nil),
-				Path:   "",
+				Type: "badger-memory",
+				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(options)
+			db, err := ssvstorage.GetStorageFactory(logex.Build("test", zapcore.DebugLevel, nil), options)
 			require.NoError(t, err)
 			defer db.Close()
 
 			p2pStorage := identityStore{
-				db:     db,
-				logger: zap.L(),
+				db: db,
 			}
 
 			if test.existKey != "" { // mock exist key
@@ -86,7 +86,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, test.existKey, hex.EncodeToString(b))
 			}
 
-			_, err = p2pStorage.SetupNetworkKey(test.passedKey)
+			_, err = p2pStorage.SetupNetworkKey(logger, test.passedKey)
 			require.NoError(t, err)
 			privateKey, found, err := p2pStorage.GetNetworkKey()
 			require.NoError(t, err)

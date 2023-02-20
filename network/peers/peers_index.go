@@ -26,8 +26,6 @@ type NetworkKeyProvider func() crypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
-	logger *zap.Logger
-
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
@@ -48,12 +46,11 @@ type peersIndex struct {
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) Index {
 	return &peersIndex{
-		logger:         logger,
 		network:        network,
 		states:         newNodeStates(pruneTTL),
 		scoreIdx:       newScoreIndex(),
 		subnets:        newSubnetsIndex(subnetsCount),
-		nodeInfoStore:  newNodeInfoStore(logger, network),
+		nodeInfoStore:  newNodeInfoStore(network),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
@@ -65,8 +62,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // a peer is considered to be bad if one of the following applies:
 // - pruned (that was not expired)
 // - bad score
-func (pi *peersIndex) IsBad(id peer.ID) bool {
-	logger := pi.logger.With(zap.String("id", id.String()))
+func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 	if pi.states.pruned(id.String()) {
 		logger.Debug("bad peer (pruned)")
 		return true
@@ -137,7 +133,7 @@ func (pi *peersIndex) SelfSealed() ([]byte, error) {
 }
 
 // AddNodeInfo adds a new node info
-func (pi *peersIndex) AddNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+func (pi *peersIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
 	switch pi.states.State(id) {
 	case StateReady:
 		return true, nil
@@ -151,7 +147,7 @@ func (pi *peersIndex) AddNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) (bool,
 	}
 	pid := id.String()
 	pi.states.setState(pid, StateIndexing)
-	added, err := pi.nodeInfoStore.Add(id, nodeInfo)
+	added, err := pi.nodeInfoStore.Add(logger, id, nodeInfo)
 	if err != nil || !added {
 		pi.states.setState(pid, StateUnknown)
 	} else {

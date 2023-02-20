@@ -43,8 +43,8 @@ type Conn interface {
 	ID() string
 	ReadNext() []byte
 	Send(msg []byte)
-	WriteLoop()
-	ReadLoop()
+	WriteLoop(logger *zap.Logger)
+	ReadLoop(logger *zap.Logger)
 	Close() error
 	RemoteAddr() net.Addr
 }
@@ -109,7 +109,7 @@ func (c *conn) Send(msg []byte) {
 }
 
 // WriteLoop a loop to activate writes on the socket
-func (c *conn) WriteLoop() {
+func (c *conn) WriteLoop(logger *zap.Logger) {
 	defer func() {
 		_ = c.ws.Close()
 	}()
@@ -122,7 +122,7 @@ func (c *conn) WriteLoop() {
 		defer t.Stop()
 		go func() {
 			defer cancel()
-			c.pingLoop(ctx)
+			c.pingLoop(ctx, logger)
 		}()
 	}
 
@@ -130,11 +130,11 @@ func (c *conn) WriteLoop() {
 		select {
 		case <-ctx.Done():
 			c.writeLock.Lock()
-			c.logger.Debug("context done, sending close message")
+			logger.Debug("context done, sending close message")
 			err := c.ws.WriteControl(websocket.CloseMessage, []byte{}, time.Now().Add(c.writeTimeout))
 			c.writeLock.Unlock()
 			if err != nil {
-				c.logger.Error("could not send close message", zap.Error(err))
+				logger.Error("could not send close message", zap.Error(err))
 				return
 			}
 		case message := <-c.send:
@@ -143,16 +143,16 @@ func (c *conn) WriteLoop() {
 			c.writeLock.Unlock()
 			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
 			if err != nil {
-				c.logger.Warn("failed to send message", zap.Error(err))
+				logger.Warn("failed to send message", zap.Error(err))
 				return
 			}
-			c.logMsg(message, n)
+			c.logMsg(logger, message, n)
 		}
 	}
 }
 
 // ReadLoop is a loop to read messages from the socket
-func (c *conn) ReadLoop() {
+func (c *conn) ReadLoop(logger *zap.Logger) {
 	defer func() {
 		_ = c.ws.Close()
 	}()
@@ -168,17 +168,17 @@ func (c *conn) ReadLoop() {
 	}
 	for {
 		if c.ctx.Err() != nil {
-			c.logger.Error("read loop stopped by context")
+			logger.Error("read loop stopped by context")
 			break
 		}
 		mt, msg, err := c.ws.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				c.logger.Error("unexpected close error", zap.Error(err))
+				logger.Error("unexpected close error", zap.Error(err))
 			} else if isCloseError(err) {
-				c.logger.Warn("connection closed error", zap.Error(err))
+				logger.Warn("connection closed error", zap.Error(err))
 			} else {
-				c.logger.Error("could not read message", zap.Error(err))
+				logger.Error("could not read message", zap.Error(err))
 			}
 			break
 		}
@@ -190,7 +190,7 @@ func (c *conn) ReadLoop() {
 }
 
 // pingLoop sends ping messages according to configured interval
-func (c *conn) pingLoop(ctx context.Context) {
+func (c *conn) pingLoop(ctx context.Context, logger *zap.Logger) {
 	t := time.NewTimer(pingInterval)
 	for {
 		if ctx.Err() != nil {
@@ -199,11 +199,11 @@ func (c *conn) pingLoop(ctx context.Context) {
 		t.Reset(pingInterval)
 		<-t.C
 		c.writeLock.Lock()
-		c.logger.Debug("sending ping message")
+		logger.Debug("sending ping message")
 		err := c.ws.WriteControl(websocket.PingMessage, pingMsg(c.ID()), time.Now().Add(c.writeTimeout))
 		c.writeLock.Unlock()
 		if err != nil {
-			c.logger.Error("could not send ping message", zap.Error(err))
+			logger.Error("could not send ping message", zap.Error(err))
 			return
 		}
 	}
@@ -227,13 +227,13 @@ func (c *conn) sendMsg(msg []byte) (int, error) {
 	return n, nil
 }
 
-func (c *conn) logMsg(message []byte, byteWritten int) {
+func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
 	if byteWritten == 0 {
 		return
 	}
 	j := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(message, &j); err != nil {
-		c.logger.Error("could not parse msg", zap.Error(err))
+		logger.Error("could not parse msg", zap.Error(err))
 	}
 	fraw, ok := j["filter"]
 	if !ok {
@@ -241,9 +241,9 @@ func (c *conn) logMsg(message []byte, byteWritten int) {
 	}
 	filter, err := fraw.MarshalJSON()
 	if err != nil {
-		c.logger.Error("could not parse filter", zap.Error(err))
+		logger.Error("could not parse filter", zap.Error(err))
 	}
-	c.logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
+	logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
 }
 
 // isCloseError determines whether the given error is of CloseError type

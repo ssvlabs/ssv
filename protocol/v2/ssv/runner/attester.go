@@ -25,7 +25,6 @@ type AttesterRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
 }
 
 func NewAttesterRunnner(
@@ -37,22 +36,18 @@ func NewAttesterRunnner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleAttester,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-
-		logger: logger.With(zap.String("who", "AttesterRunner")),
 	}
 }
 
@@ -112,12 +107,12 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	return nil
 }
 
-func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-	r.logger.Debug("got partial signatures",
+	logger.Debug("got partial signatures",
 		zap.Any("signer", signedMsg.Signer),
 		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
 
@@ -135,7 +130,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		duty := r.GetState().DecidedValue.Duty
 
-		r.logger.Debug("reconstructed partial signatures",
+		logger.Debug("reconstructed partial signatures",
 			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
 			zap.Int64("slot", int64(duty.Slot)))
 
@@ -149,12 +144,12 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
-			r.logger.Error("failed to submit attestation to Beacon node",
+			logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		r.logger.Debug("successfully submitted attestation",
+		logger.Debug("successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))

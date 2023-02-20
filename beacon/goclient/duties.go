@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (gc *goClient) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	type FetchFunc func(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 
 	fetchers := map[spectypes.BeaconRole]FetchFunc{
@@ -32,13 +32,13 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 				duties = append(duties, fetchedDuties...)
 				lock.Unlock()
 			} else {
-				gc.logger.Warn(fmt.Sprintf("failed to get %s duties", role.String()), zap.Error(err))
+				logger.Warn(fmt.Sprintf("failed to get %s duties", role.String()), zap.Error(err))
 			}
 		}(role, fetcher)
 	}
 	wg.Wait()
 
-	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration (sec)", time.Since(start).Seconds()))
+	logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration (sec)", time.Since(start).Seconds()))
 	return duties, nil
 }
 

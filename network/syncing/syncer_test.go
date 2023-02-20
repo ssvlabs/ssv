@@ -2,6 +2,7 @@ package syncing_test
 
 import (
 	"context"
+	"go.uber.org/zap"
 	"testing"
 	"time"
 
@@ -13,11 +14,11 @@ import (
 
 type mockSyncer struct{}
 
-func (m *mockSyncer) SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler syncing.MessageHandler) error {
+func (m *mockSyncer) SyncHighestDecided(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, handler syncing.MessageHandler) error {
 	return nil
 }
 
-func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
+func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
 	return nil
 }
 

@@ -27,7 +27,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 		return opts.Ttl, nil
 	}
 
-	if err := dvs.RegisterSubnets(subnet); err != nil {
+	if err := dvs.RegisterSubnets(dvs.logger, subnet); err != nil {
 		return 0, err
 	}
 
@@ -46,7 +46,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 
 	dvs.discover(ctx, func(e PeerEvent) {
 		cn <- e.AddrInfo
-	}, time.Millisecond, dvs.badNodeFilter, dvs.subnetFilter(uint64(subnet)))
+	}, time.Millisecond, dvs.badNodeFilter(dvs.logger), dvs.subnetFilter(uint64(subnet)))
 
 	return cn, nil
 }

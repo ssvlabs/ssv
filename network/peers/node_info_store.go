@@ -12,25 +12,23 @@ import (
 // nodeInfoStore stores records.NodeInfo.
 // libp2p's Peerstore (github.com/libp2p/go-libp2p-peerstore) is used for the persistence of node info.
 type nodeInfoStore struct {
-	logger  *zap.Logger
 	network libp2pnetwork.Network
 }
 
-func newNodeInfoStore(logger *zap.Logger, network libp2pnetwork.Network) *nodeInfoStore {
+func newNodeInfoStore(network libp2pnetwork.Network) *nodeInfoStore {
 	return &nodeInfoStore{
-		logger:  logger.With(zap.String("where", "nodeInfoStore")),
 		network: network,
 	}
 }
 
 // Add saves the given node info
-func (pi *nodeInfoStore) Add(pid peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
+func (pi *nodeInfoStore) Add(logger *zap.Logger, pid peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
 	raw, err := nodeInfo.MarshalRecord()
 	if err != nil {
 		return false, errors.Wrap(err, "could not marshal node info record")
 	}
 	if err := pi.network.Peerstore().Put(pid, formatInfoKey(nodeInfoKey), raw); err != nil {
-		pi.logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", pid.String()))
+		logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", pid.String()))
 		return false, err
 	}
 	return true, nil

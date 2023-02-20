@@ -3,12 +3,15 @@ package tests
 import (
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/integration/qbft/scenarios"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
 
 func Test_Integration_QBFTScenarios(t *testing.T) {
 	//_ = logging.SetLogLevelRegex("ssv/.*", "debug") // for debugging TODO: ssv/.* or ssv/*. ?
+
+	logger := logex.GetLogger()
 
 	tests := []*scenarios.IntegrationTest{
 		scenarios.RegularAggregator(),
@@ -24,7 +27,7 @@ func Test_Integration_QBFTScenarios(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.Name, func(t *testing.T) {
-			require.NoError(t, test.Run())
+			require.NoError(t, test.Run(logger))
 		})
 	}
 }

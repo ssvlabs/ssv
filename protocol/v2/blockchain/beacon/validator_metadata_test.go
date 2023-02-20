@@ -65,6 +65,8 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
+	logger := zap.L()
+
 	var updateCount uint64
 	pks := []string{
 		"a17bb48a3f8f558e29d08ede97d6b7b73823d8dc2e0530fe8b747c93d7d6c2755957b7ffb94a7cec830456fd5492ba19",
@@ -115,7 +117,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(logger, gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 
@@ -124,7 +126,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(pk string, meta *ValidatorMetadata) {
+	onUpdated := func(logger *zap.Logger, pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
 		require.True(t, strings.Contains(joined, pk))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))

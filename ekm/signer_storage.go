@@ -120,7 +120,7 @@ func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 
 	ret := make([]core.ValidatorAccount, 0)
 
-	err := s.db.GetAll(s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		acc, err := s.decodeAccount(obj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to list accounts")

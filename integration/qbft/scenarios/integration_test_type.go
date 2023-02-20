@@ -55,7 +55,6 @@ type scheduledDuty struct {
 
 type scenarioContext struct {
 	ctx         context.Context
-	logger      *zap.Logger
 	ln          *p2pv1.LocalNet
 	operatorIDs []spectypes.OperatorID
 	nodes       map[spectypes.OperatorID]network.P2PNetwork      // 1 per operator, pass same to each instance
@@ -75,7 +74,7 @@ func (sctx *scenarioContext) Close() error {
 	return nil
 }
 
-func (it *IntegrationTest) Run() error {
+func (it *IntegrationTest) Run(logger *zap.Logger) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	sharesSet := getShareSetFromCommittee(len(it.OperatorIDs))
@@ -89,7 +88,7 @@ func (it *IntegrationTest) Run() error {
 		<-time.After(time.Second)
 	}()
 
-	validators, err := it.createValidators(sCtx, sharesSet)
+	validators, err := it.createValidators(logger, sCtx, sharesSet)
 	if err != nil {
 		return fmt.Errorf("could not create share: %w", err)
 	}
@@ -118,7 +117,7 @@ func (it *IntegrationTest) Run() error {
 
 			<-time.After(it.ValidatorDelays[val.Share.OperatorID])
 
-			if err := val.Start(); err != nil {
+			if err := val.Start(logger); err != nil {
 				mu.Lock()
 				startErr = fmt.Errorf("could not start validator: %w", err)
 				mu.Unlock()
@@ -144,10 +143,10 @@ func (it *IntegrationTest) Run() error {
 				lastDutyTime = scheduledDuty.Delay
 			}
 
-			sCtx.logger.Debug("about to start duty", zap.Duration("delay", scheduledDuty.Delay))
+			logger.Debug("about to start duty", zap.Duration("delay", scheduledDuty.Delay))
 
 			time.AfterFunc(scheduledDuty.Delay, func() {
-				sCtx.logger.Info("starting duty")
+				logger.Info("starting duty")
 				startDutyErr := val.StartDuty(scheduledDuty.Duty)
 				actualErrMap.Store(val.Share.OperatorID, startDutyErr)
 			})
@@ -219,7 +218,7 @@ func (it *IntegrationTest) Run() error {
 	return nil
 }
 
-func (it *IntegrationTest) createValidators(sCtx *scenarioContext, sharesSet *spectestingutils.TestKeySet) (map[spectypes.OperatorID]*protocolvalidator.Validator, error) {
+func (it *IntegrationTest) createValidators(logger *zap.Logger, sCtx *scenarioContext, sharesSet *spectestingutils.TestKeySet) (map[spectypes.OperatorID]*protocolvalidator.Validator, error) {
 	validators := make(map[spectypes.OperatorID]*protocolvalidator.Validator)
 	operators := make([][]byte, 0)
 	for _, k := range sCtx.nodeKeys {
@@ -254,7 +253,7 @@ func (it *IntegrationTest) createValidators(sCtx *scenarioContext, sharesSet *sp
 			Signer: sCtx.keyManagers[operatorID],
 		}
 
-		l := sCtx.logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
+		l := logger.With(zap.String("w", fmt.Sprintf("node-%d", operatorID)))
 
 		ctx, cancel := context.WithCancel(sCtx.ctx)
 		options.DutyRunners = validator.SetupRunners(ctx, l, options)
@@ -319,8 +318,8 @@ type msgRouter struct {
 	validator *protocolvalidator.Validator
 }
 
-func (m *msgRouter) Route(message spectypes.SSVMessage) {
-	m.validator.HandleMessage(&message)
+func (m *msgRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
+	m.validator.HandleMessage(logger, &message)
 }
 
 func newMsgRouter(v *protocolvalidator.Validator) *msgRouter {
@@ -383,10 +382,9 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 
 	dbs := make(map[spectypes.OperatorID]basedb.IDb)
 	for _, operatorID := range operatorIDs {
-		db, err := storage.GetStorageFactory(basedb.Options{
-			Type:   "badger-memory",
-			Path:   "",
-			Logger: zap.L(),
+		db, err := storage.GetStorageFactory(logger, basedb.Options{
+			Type: "badger-memory",
+			Path: "",
 		})
 		if err != nil {
 			return nil, err
@@ -423,7 +421,7 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 	stores := make(map[spectypes.OperatorID]*qbftstorage.QBFTStores)
 	kms := make(map[spectypes.OperatorID]spectypes.KeyManager)
 	for _, operatorID := range operatorIDs {
-		store := qbftstorage.New(dbs[operatorID], loggerFactory(fmt.Sprintf("qbft-store-%d", operatorID)), "attestations", protocolforks.GenesisForkVersion)
+		store := qbftstorage.New(dbs[operatorID], "attestations", protocolforks.GenesisForkVersion)
 
 		storageMap := qbftstorage.NewStores()
 		storageMap.Add(spectypes.BNRoleAttester, store)
@@ -435,7 +433,7 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 		stores[operatorID] = storageMap
 		km := spectestingutils.NewTestingKeyManager()
 		kms[operatorID] = km
-		nodes[operatorID].RegisterHandlers(protocolp2p.WithHandler(
+		nodes[operatorID].RegisterHandlers(logger, protocolp2p.WithHandler(
 			protocolp2p.LastDecidedProtocol,
 			handlers.LastDecidedHandler(loggerFactory(fmt.Sprintf("decided-handler-%d", operatorID)), storageMap, nodes[operatorID]),
 		), protocolp2p.WithHandler(
@@ -446,7 +444,6 @@ func Bootstrap(ctx context.Context, operatorIDs []spectypes.OperatorID) (*scenar
 
 	return &scenarioContext{
 		ctx:         ctx,
-		logger:      logger,
 		ln:          localNet,
 		operatorIDs: operatorIDs,
 		nodes:       nodes,

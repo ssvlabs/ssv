@@ -47,29 +47,29 @@ const (
 )
 
 // Setup is used to setup the network
-func (n *p2pNetwork) Setup() error {
+func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
 	// set a seed for rand values
 	rand.Seed(time.Now().UnixNano())
 
-	n.logger.Info("configuring p2p network service")
+	logger.Info("configuring p2p network service")
 
 	n.initCfg()
 
-	err := n.SetupHost()
+	err := n.SetupHost(logger)
 	if err != nil {
 		return err
 	}
-	n.logger = n.logger.With(zap.String("selfPeer", n.host.ID().String()))
-	n.logger.Debug("p2p host was configured")
+	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
+	logger.Debug("p2p host was configured")
 
-	err = n.SetupServices()
+	err = n.SetupServices(logger)
 	if err != nil {
 		return err
 	}
-	n.logger.Info("p2p services were configured")
+	logger.Info("p2p services were configured")
 
 	return nil
 }
@@ -99,8 +99,8 @@ func (n *p2pNetwork) initCfg() {
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
-func (n *p2pNetwork) SetupHost() error {
-	opts, err := n.cfg.Libp2pOptions(n.fork)
+func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
+	opts, err := n.cfg.Libp2pOptions(logger, n.fork)
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
@@ -130,30 +130,30 @@ func (n *p2pNetwork) SetupHost() error {
 }
 
 // SetupServices configures the required services
-func (n *p2pNetwork) SetupServices() error {
-	if err := n.setupStreamCtrl(); err != nil {
+func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
+	if err := n.setupStreamCtrl(logger); err != nil {
 		return errors.Wrap(err, "could not setup stream controller")
 	}
-	if err := n.setupPeerServices(); err != nil {
+	if err := n.setupPeerServices(logger); err != nil {
 		return errors.Wrap(err, "could not setup peer services")
 	}
-	if err := n.setupDiscovery(); err != nil {
+	if err := n.setupDiscovery(logger); err != nil {
 		return errors.Wrap(err, "could not setup discovery service")
 	}
-	if err := n.setupPubsub(); err != nil {
+	if err := n.setupPubsub(logger); err != nil {
 		return errors.Wrap(err, "could not setup topic controller")
 	}
 
 	return nil
 }
 
-func (n *p2pNetwork) setupStreamCtrl() error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.logger, n.host, n.fork, n.cfg.RequestTimeout)
-	n.logger.Debug("stream controller is ready")
+func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout)
+	logger.Debug("stream controller is ready")
 	return nil
 }
 
-func (n *p2pNetwork) setupPeerServices() error {
+func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	libPrivKey, err := p2pcommons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
@@ -169,8 +169,8 @@ func (n *p2pNetwork) setupPeerServices() error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(n.logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
-	n.logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
+	logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
 
 	var ids identify.IDService
 	if bh, ok := n.host.(*basichost.BasicHost); ok {
@@ -189,7 +189,6 @@ func (n *p2pNetwork) setupPeerServices() error {
 		connections.NetworkIDFilter(n.cfg.NetworkID),
 	}
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
-		Logger:          n.logger,
 		Streams:         n.streamCtrl,
 		NodeInfoIdx:     n.idx,
 		States:          n.idx,
@@ -199,16 +198,16 @@ func (n *p2pNetwork) setupPeerServices() error {
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
 	}, filters...)
-	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler())
-	n.logger.Debug("handshaker is ready")
+	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
+	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, n.logger, handshaker, subnetsProvider, n.idx, n.idx)
-	n.host.Network().Notify(n.connHandler.Handle())
-	n.logger.Debug("connection handler is ready")
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx)
+	n.host.Network().Notify(n.connHandler.Handle(logger))
+	logger.Debug("connection handler is ready")
 	return nil
 }
 
-func (n *p2pNetwork) setupDiscovery() error {
+func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	ipAddr, err := p2pcommons.IPAddr()
 	if err != nil {
 		return errors.Wrap(err, "could not get ip addr")
@@ -224,18 +223,14 @@ func (n *p2pNetwork) setupDiscovery() error {
 			Bootnodes:  n.cfg.TransformBootnodes(),
 			OperatorID: n.cfg.OperatorID,
 		}
-		if n.cfg.DiscoveryTrace {
-			discV5Opts.Logger = n.logger
-		}
 		if len(n.subnets) > 0 {
 			discV5Opts.Subnets = n.subnets
 		}
-		n.logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
+		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
-		n.logger.Info("discovery: using mdns (local)")
+		logger.Info("discovery: using mdns (local)")
 	}
 	discOpts := discovery.Options{
-		Logger:      n.logger,
 		Host:        n.host,
 		DiscV5Opts:  discV5Opts,
 		ConnIndex:   n.idx,
@@ -244,32 +239,31 @@ func (n *p2pNetwork) setupDiscovery() error {
 		HostDNS:     n.cfg.HostDNS,
 		ForkVersion: n.cfg.ForkVersion,
 	}
-	disc, err := discovery.NewService(n.ctx, discOpts)
+	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
 		return err
 	}
 	n.disc = disc
 
-	n.logger.Debug("discovery is ready")
+	logger.Debug("discovery is ready")
 
 	return nil
 }
 
-func (n *p2pNetwork) setupPubsub() error {
+func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	if n.cfg.PubSubTrace {
 		if err := logging.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
 			return errors.Wrap(err, "could not set pubsub logger level")
 		}
 	}
 	cfg := &topics.PububConfig{
-		Logger:   n.logger,
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := n.logger.With(zap.String("who", "MsgValidator"))
+			logger := logger.With(zap.String("who", "MsgValidator"))
 			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
 		},
-		MsgHandler: n.handlePubsubMessages,
+		MsgHandler: n.handlePubsubMessages(logger),
 		ScoreIndex: n.idx,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
@@ -284,19 +278,18 @@ func (n *p2pNetwork) setupPubsub() error {
 	}
 
 	if n.fork.MsgID() != nil {
-		midHandler := topics.NewMsgIDHandler(n.ctx,
-			n.logger.With(zap.String("who", "msgIDHandler")), n.fork, time.Minute*2)
+		midHandler := topics.NewMsgIDHandler(n.ctx, n.fork, time.Minute*2)
 		n.msgResolver = midHandler
 		cfg.MsgIDHandler = midHandler
 		go cfg.MsgIDHandler.Start()
 		// run GC every 3 minutes to clear old messages
 		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 	}
-	_, tc, err := topics.NewPubsub(n.ctx, cfg, n.fork)
+	_, tc, err := topics.NewPubsub(n.ctx, logger, cfg, n.fork)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
 	n.topicsCtrl = tc
-	n.logger.Debug("topics controller is ready")
+	logger.Debug("topics controller is ready")
 	return nil
 }

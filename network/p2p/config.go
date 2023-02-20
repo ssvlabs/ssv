@@ -65,8 +65,6 @@ type Config struct {
 	UserAgent string
 	// ForkVersion to use
 	ForkVersion forksprotocol.ForkVersion
-	// Logger to used by network services
-	Logger *zap.Logger
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
@@ -83,7 +81,7 @@ type Config struct {
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
+func (c *Config) Libp2pOptions(logger *zap.Logger, fork forks.Fork) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -98,7 +96,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 		libp2p.UserAgent(c.UserAgent),
 	}
 
-	opts, err = c.configureAddrs(opts)
+	opts, err = c.configureAddrs(logger, opts)
 	if err != nil {
 		return opts, errors.Wrap(err, "could not setup addresses")
 	}
@@ -110,7 +108,7 @@ func (c *Config) Libp2pOptions(fork forks.Fork) ([]libp2p.Option, error) {
 	return opts, nil
 }
 
-func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
+func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]libp2p.Option, error) {
 	addrs := make([]ma.Multiaddr, 0)
 	maZero, err := commons.BuildMultiAddress("0.0.0.0", "tcp", uint(c.TCPPort), "")
 	if err != nil {
@@ -136,7 +134,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			external, err := commons.BuildMultiAddress(c.HostAddress, "tcp", uint(c.TCPPort), "")
 			if err != nil {
-				c.Logger.Error("unable to create external multiaddress", zap.Error(err))
+				logger.Error("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}
@@ -148,7 +146,7 @@ func (c *Config) configureAddrs(opts []libp2p.Option) ([]libp2p.Option, error) {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			external, err := ma.NewMultiaddr(fmt.Sprintf("/dns4/%s/tcp/%d", c.HostDNS, c.TCPPort))
 			if err != nil {
-				c.Logger.Warn("unable to create external multiaddress", zap.Error(err))
+				logger.Warn("unable to create external multiaddress", zap.Error(err))
 			} else {
 				addrs = append(addrs, external)
 			}

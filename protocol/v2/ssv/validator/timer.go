@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
+func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		hasDuty := dr.HasRunningDuty()
@@ -21,12 +21,12 @@ func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.He
 
 		msg, err := v.createTimerMessage(identifier, height)
 		if err != nil {
-			v.logger.Debug("failed to create timer msg", zap.Error(err))
+			logger.Debug("failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			v.logger.Debug("failed to decode timer msg", zap.Error(err))
+			logger.Debug("failed to decode timer msg", zap.Error(err))
 			return
 		}
 		v.Queues[identifier.GetRoleType()].Q.Push(dec)

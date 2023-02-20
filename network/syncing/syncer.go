@@ -43,9 +43,10 @@ func Throttle(handler MessageHandler, throttle time.Duration) MessageHandler {
 
 // Syncer handles the syncing of decided messages.
 type Syncer interface {
-	SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler MessageHandler) error
+	SyncHighestDecided(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, handler MessageHandler) error
 	SyncDecidedByRange(
 		ctx context.Context,
+		logger *zap.Logger,
 		id spectypes.MessageID,
 		from, to specqbft.Height,
 		handler MessageHandler,
@@ -54,8 +55,9 @@ type Syncer interface {
 
 // Network is a subset of protocolp2p.Syncer, required by Syncer to retrieve messages from peers.
 type Network interface {
-	LastDecided(id spectypes.MessageID) ([]protocolp2p.SyncResult, error)
+	LastDecided(logger *zap.Logger, id spectypes.MessageID) ([]protocolp2p.SyncResult, error)
 	GetHistory(
+		logger *zap.Logger,
 		id spectypes.MessageID,
 		from, to specqbft.Height,
 		targets ...string,
@@ -64,19 +66,18 @@ type Network interface {
 
 type syncer struct {
 	network Network
-	logger  *zap.Logger
 }
 
 // New returns a standard implementation of Syncer.
-func New(logger *zap.Logger, network Network) Syncer {
+func New(network Network) Syncer {
 	return &syncer{
-		logger:  logger.With(zap.String("who", "Syncer")),
 		network: network,
 	}
 }
 
 func (s *syncer) SyncHighestDecided(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	handler MessageHandler,
 ) error {
@@ -84,12 +85,12 @@ func (s *syncer) SyncHighestDecided(
 		return ctx.Err()
 	}
 
-	logger := s.logger.With(
+	logger = logger.With(
 		zap.String("what", "SyncHighestDecided"),
 		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
 		zap.String("role", id.GetRoleType().String()))
 
-	lastDecided, err := s.network.LastDecided(id)
+	lastDecided, err := s.network.LastDecided(logger, id)
 	if err != nil {
 		logger.Debug("sync failed", zap.Error(err))
 		return errors.Wrap(err, "could not sync last decided")
@@ -121,6 +122,7 @@ func (s *syncer) SyncHighestDecided(
 
 func (s *syncer) SyncDecidedByRange(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	from, to qbft.Height,
 	handler MessageHandler,
@@ -129,7 +131,7 @@ func (s *syncer) SyncDecidedByRange(
 		return ctx.Err()
 	}
 
-	logger := s.logger.With(
+	logger = logger.With(
 		zap.String("what", "SyncDecidedByRange"),
 		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
 		zap.String("role", id.GetRoleType().String()),
@@ -186,7 +188,7 @@ func (s *syncer) getDecidedByRange(
 		}
 		err := tasks.RetryWithContext(ctx, func() error {
 			start := time.Now()
-			msgs, tail, err = s.network.GetHistory(mid, tail, to)
+			msgs, tail, err = s.network.GetHistory(logger, mid, tail, to)
 			if err != nil {
 				return err
 			}

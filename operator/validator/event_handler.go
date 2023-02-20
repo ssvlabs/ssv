@@ -15,36 +15,36 @@ import (
 )
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
-func (c *controller) Eth1EventHandler(ongoingSync bool) eth1.SyncEventHandler {
+func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) ([]zap.Field, error) {
 		switch e.Name {
 		case abiparser.OperatorRegistration:
 			ev := e.Data.(abiparser.OperatorRegistrationEvent)
-			return c.handleOperatorRegistrationEvent(ev)
+			return c.handleOperatorRegistrationEvent(logger, ev)
 		case abiparser.OperatorRemoval:
 			ev := e.Data.(abiparser.OperatorRemovalEvent)
-			return c.handleOperatorRemovalEvent(ev, ongoingSync)
+			return c.handleOperatorRemovalEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorRegistration:
 			ev := e.Data.(abiparser.ValidatorRegistrationEvent)
-			return c.handleValidatorRegistrationEvent(ev, ongoingSync)
+			return c.handleValidatorRegistrationEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorRemoval:
 			ev := e.Data.(abiparser.ValidatorRemovalEvent)
-			return c.handleValidatorRemovalEvent(ev, ongoingSync)
+			return c.handleValidatorRemovalEvent(logger, ev, ongoingSync)
 		case abiparser.AccountLiquidation:
 			ev := e.Data.(abiparser.AccountLiquidationEvent)
-			return c.handleAccountLiquidationEvent(ev, ongoingSync)
+			return c.handleAccountLiquidationEvent(logger, ev, ongoingSync)
 		case abiparser.AccountEnable:
 			ev := e.Data.(abiparser.AccountEnableEvent)
-			return c.handleAccountEnableEvent(ev, ongoingSync)
+			return c.handleAccountEnableEvent(logger, ev, ongoingSync)
 		default:
-			c.logger.Debug("could not handle unknown event")
+			logger.Debug("could not handle unknown event")
 		}
 		return nil, nil
 	}
 }
 
 // handleOperatorRegistrationEvent parses the given event and saves operator data
-func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorRegistrationEvent) ([]zap.Field, error) {
+func (c *controller) handleOperatorRegistrationEvent(logger *zap.Logger, event abiparser.OperatorRegistrationEvent) ([]zap.Field, error) {
 	eventOperatorPubKey := string(event.PublicKey)
 	od := registrystorage.OperatorData{
 		PublicKey:    eventOperatorPubKey,
@@ -52,7 +52,7 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 		OwnerAddress: event.OwnerAddress,
 		Index:        uint64(event.Id),
 	}
-	if err := c.storage.SaveOperatorData(&od); err != nil {
+	if err := c.storage.SaveOperatorData(logger, &od); err != nil {
 		return nil, errors.Wrap(err, "could not save operator data")
 	}
 
@@ -65,12 +65,13 @@ func (c *controller) handleOperatorRegistrationEvent(event abiparser.OperatorReg
 			zap.String("ownerAddress", od.OwnerAddress.String()),
 		)
 	}
-	exporter.ReportOperatorIndex(c.logger, &od)
+	exporter.ReportOperatorIndex(logger, &od)
 	return logFields, nil
 }
 
 // handleOperatorRemovalEvent parses the given event and removing operator data
 func (c *controller) handleOperatorRemovalEvent(
+	logger *zap.Logger,
 	event abiparser.OperatorRemovalEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
@@ -108,7 +109,7 @@ func (c *controller) handleOperatorRemovalEvent(
 		return logFields, nil
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(ByOperatorID(spectypes.OperatorID(event.OperatorId)))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorID(spectypes.OperatorID(event.OperatorId)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
@@ -134,13 +135,14 @@ func (c *controller) handleOperatorRemovalEvent(
 
 // handleValidatorRegistrationEvent handles registry contract event for validator added
 func (c *controller) handleValidatorRegistrationEvent(
+	logger *zap.Logger,
 	validatorRegistrationEvent abiparser.ValidatorRegistrationEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	pubKey := hex.EncodeToString(validatorRegistrationEvent.PublicKey)
 	if ongoingSync {
 		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-			c.logger.Debug("validator was loaded already")
+			logger.Debug("validator was loaded already")
 			return nil, nil
 		}
 	}
@@ -151,7 +153,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		validatorShare, _, err = c.onShareCreate(validatorRegistrationEvent)
+		validatorShare, _, err = c.onShareCreate(logger, validatorRegistrationEvent)
 		if err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
@@ -163,7 +165,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 	if isOperatorShare {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
-			c.onShareStart(validatorShare)
+			c.onShareStart(logger, validatorShare)
 		}
 	}
 
@@ -180,6 +182,7 @@ func (c *controller) handleValidatorRegistrationEvent(
 
 // handleValidatorRemovalEvent handles registry contract event for validator removed
 func (c *controller) handleValidatorRemovalEvent(
+	logger *zap.Logger,
 	validatorRemovalEvent abiparser.ValidatorRemovalEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
@@ -205,7 +208,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
 	store := c.ibftStorageMap.Get(messageID.GetRoleType())
 	if store != nil {
-		if err := store.CleanAllInstances(messageID[:]); err != nil { // TODO need to delete for multi duty as well
+		if err := store.CleanAllInstances(logger, messageID[:]); err != nil { // TODO need to delete for multi duty as well
 			return nil, errors.Wrap(err, "could not clean all decided messages")
 		}
 	}
@@ -237,11 +240,12 @@ func (c *controller) handleValidatorRemovalEvent(
 
 // handleAccountLiquidationEvent handles registry contract event for account liquidated
 func (c *controller) handleAccountLiquidationEvent(
+	logger *zap.Logger,
 	event abiparser.AccountLiquidationEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	ownerAddress := event.OwnerAddress.String()
-	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(ownerAddress))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(ownerAddress))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}
@@ -256,7 +260,7 @@ func (c *controller) handleAccountLiquidationEvent(
 			share.Liquidated = true
 
 			// save validator data
-			if err := c.collection.SaveValidatorShare(share); err != nil {
+			if err := c.collection.SaveValidatorShare(logger, share); err != nil {
 				return nil, errors.Wrap(err, "could not save validator share")
 			}
 
@@ -284,10 +288,11 @@ func (c *controller) handleAccountLiquidationEvent(
 
 // handle AccountEnableEvent handles registry contract event for account enabled
 func (c *controller) handleAccountEnableEvent(
+	logger *zap.Logger,
 	event abiparser.AccountEnableEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(event.OwnerAddress.String()))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(event.OwnerAddress.String()))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}
@@ -302,13 +307,13 @@ func (c *controller) handleAccountEnableEvent(
 			share.Liquidated = false
 
 			// save validator data
-			if err := c.collection.SaveValidatorShare(share); err != nil {
+			if err := c.collection.SaveValidatorShare(logger, share); err != nil {
 				return nil, errors.Wrap(err, "could not save validator share")
 			}
 			// TODO: update km with minimal slashing protection
 
 			if ongoingSync {
-				c.onShareStart(share)
+				c.onShareStart(logger, share)
 			}
 		}
 	}

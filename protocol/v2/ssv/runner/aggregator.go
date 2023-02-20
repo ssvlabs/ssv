@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -22,7 +21,6 @@ type AggregatorRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
 }
 
 func NewAggregatorRunner(
@@ -34,21 +32,18 @@ func NewAggregatorRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleAggregator,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "AggregatorRunner")),
 	}
 }
 
@@ -142,7 +137,7 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 	return nil
 }
 
-func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -167,7 +162,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartial
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
-		r.logger.Debug("successful submitted aggregate")
+		logger.Debug("successful submitted aggregate")
 	}
 	r.GetState().Finished = true
 

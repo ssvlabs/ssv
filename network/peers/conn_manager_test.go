@@ -13,13 +13,13 @@ import (
 )
 
 func TestTagBestPeers(t *testing.T) {
-	l := zap.L()
+	logger := zap.L()
 	connMgrMock := newConnMgr()
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	si := newSubnetsIndex(len(allSubs))
 
-	cm := NewConnManager(l, connMgrMock, si).(*connManager)
+	cm := NewConnManager(connMgrMock, si).(*connManager)
 
 	pids, err := createPeerIDs(50)
 	require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestTagBestPeers(t *testing.T) {
 	best := cm.getBestPeers(40, mySubnets, pids, 10)
 	require.Len(t, best, 40)
 
-	cm.TagBestPeers(20, mySubnets, pids, 10)
+	cm.TagBestPeers(logger, 20, mySubnets, pids, 10)
 	require.Equal(t, 20, len(connMgrMock.tags))
 }
 

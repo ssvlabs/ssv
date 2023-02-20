@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"math/rand"
 	"net"
 	"net/http"
@@ -20,7 +21,7 @@ func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, logger, func(nm *NetworkMessage) {
+	ws := NewWsServer(ctx, logger, func(logger *zap.Logger, nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
 		}
@@ -34,12 +35,12 @@ func TestHandleQuery(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 			wg.Done()
 		}()
-		require.NoError(t, ws.Start(addr))
+		require.NoError(t, ws.Start(logger, addr))
 	}()
 	wg.Wait()
 
 	clientCtx, cancelClientCtx := context.WithCancel(ctx)
-	client := NewWSClient(clientCtx, logger)
+	client := NewWSClient(clientCtx)
 	wg.Add(1)
 	go func() {
 		// sleep so client setup will be finished
@@ -60,7 +61,7 @@ func TestHandleQuery(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}()
-		require.NoError(t, client.StartQuery(addr, "/query"))
+		require.NoError(t, client.StartQuery(logger, addr, "/query"))
 	}()
 
 	wg.Wait()
@@ -77,16 +78,16 @@ func TestHandleStream(t *testing.T) {
 	ws := NewWsServer(ctx, logger, nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
-		require.NoError(t, ws.Start(addr))
+		require.NoError(t, ws.Start(logger, addr))
 	}()
 
 	testCtx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
-	client := NewWSClient(testCtx, logger)
+	client := NewWSClient(testCtx)
 	go func() {
 		// sleep so setup will be finished
 		time.Sleep(100 * time.Millisecond)
-		require.NoError(t, client.StartStream(addr, "/stream"))
+		require.NoError(t, client.StartStream(logger, addr, "/stream"))
 	}()
 
 	go func() {
