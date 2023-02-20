@@ -105,6 +105,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
 	if err != nil {
+		if msg.Message.MsgType == specqbft.RoundChangeMsgType {
+			b.logger.Debug("quitting after processing change round msg", zap.Error(err))
+		}
 		return false, nil, err
 	}
 
@@ -149,6 +152,21 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 				zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
 				zap.Int("before", before),
 				zap.Int("after", after),
+			)
+		} else {
+			if msg.Message.MsgType == specqbft.RoundChangeMsgType {
+				b.logger.Debug("not compacting instance",
+					zap.Uint64("height", uint64(msg.Message.Height)),
+					zap.Bool("decided", inst.State.Decided),
+					zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
+				)
+			}
+		}
+	} else {
+		if msg.Message.MsgType == specqbft.RoundChangeMsgType {
+			b.logger.Debug("could not find instance to compact",
+				zap.Uint64("height", uint64(msg.Message.Height)),
+				zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
 			)
 		}
 	}
