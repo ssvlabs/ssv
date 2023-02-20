@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -59,13 +58,13 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 			id := spectypes.OperatorID(id)
 			s.validators[id] = createValidator(t, ctx, id, role, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
 
-			storage := newStores(s.shared.Logger, role)
+			stores := newStores(s.shared.Logger, role)
 			s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
-				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), storage, s.shared.Nodes[id]),
+				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
 			), protocolp2p.WithHandler(
 				protocolp2p.DecidedHistoryProtocol,
-				handlers.HistoryHandler(s.shared.Logger.Named(fmt.Sprintf("history-handler-%d", id)), storage, s.shared.Nodes[id], 25),
+				handlers.HistoryHandler(s.shared.Logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
 			))
 		}
 
@@ -102,11 +101,6 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				time.Sleep(500 * time.Millisecond) // waiting for duty will be done and storedInstance would be saved
 			}
 
-			// logging stored instance
-			jsonInstance, err := json.Marshal(storedInstance)
-			require.NoError(t, err)
-			fmt.Println(string(jsonInstance))
-
 			//validating stored state of validator
 			validationFunc(t, s.Committee, storedInstance)
 		}
@@ -119,14 +113,14 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 }
 
 func getKeySet(committee int) *spectestingutils.TestKeySet {
-	switch committee {
-	case 1, 2, 3, 4, 5, 6:
+	switch committee { //sometimes we need different number of participants than 4, 7, 10, 13
+	case 1, 2, 3, 4:
 		return KeySet4Committee
-	case 7, 8, 9:
+	case 5, 6, 7:
 		return KeySet7Committee
-	case 10, 11, 12:
+	case 8, 9, 10:
 		return KeySet10Committee
-	case 13, 14, 15:
+	case 11, 12, 13:
 		return KeySet13Committee
 	default:
 		panic("unsupported committee size")
@@ -147,7 +141,7 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 }
 
 func quorum(committee int) int {
-	return (committee*2 + 1) / 3 // committee = 3f+1; quorum = 2f+1 // https://drive.google.com/file/d/1bP_MLq0MM7ZBSR0Ddh7HUPcc42vVUKwz/view?usp=share_link
+	return (committee*2 + 1) / 3 // committee = 3f+1; quorum = 2f+1
 }
 
 func newStores(logger *zap.Logger, role spectypes.BeaconRole) *qbftstorage.QBFTStores {
