@@ -9,8 +9,8 @@ import (
 // for consensus to proceed.
 //
 // Compact always discards message from previous rounds.
-// Compact discards non-commit messages from below the current round, only if it's decided.
-// Compact discards commit messages from the current round (and up), only if the whole committee decided.
+// Compact discards non-commit messages from below their current round, only if the state is decided.
+// Compact discards commit messages from below the current round, only if the whole committee has signed.
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
@@ -18,27 +18,27 @@ func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
 	compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
-	// Only discard commit messages if the whole committee decided,
-	// otherwise just trim down to the current round (and up).
+	// Only discard commit messages if the whole committee has signed,
+	// otherwise just trim down to the current round and future rounds.
 	var signers []spectypes.OperatorID
 	if decidedMessage != nil {
 		signers = decidedMessage.Signers
-	} else if state.Decided {
+	} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
 		signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
 	}
 	wholeCommitteeDecided := len(signers) == len(state.Share.Committee)
 	compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
-func compactContainer(container *specqbft.MsgContainer, currentRound specqbft.Round, discard bool) {
+func compactContainer(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
-	case discard:
+	case clear:
 		// Discard all messages.
 		container.Msgs = map[specqbft.Round][]*specqbft.SignedMessage{}
 	default:
-		// Trim down to the current round (and up).
+		// Trim down to the current and future rounds.
 		for r := range container.Msgs {
 			if r < currentRound {
 				delete(container.Msgs, r)

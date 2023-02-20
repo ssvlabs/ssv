@@ -96,6 +96,7 @@ func (df *dutyFetcher) GetDuties(slot phase0.Slot) ([]spectypes.Duty, error) {
 
 // updateDutiesFromBeacon will be called once in an epoch to update the cache with all the epoch's slots
 func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
+	start := time.Now()
 	duties, err := df.fetchDuties(slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
@@ -108,7 +109,10 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
 	for _, d := range duties {
 		toPrint = append(toPrint, toSerialized(d))
 	}
-	df.logger.Debug("got duties", zap.Int("count", len(duties)), zap.Any("duties", toPrint))
+	df.logger.Debug("got duties",
+		zap.Int("count", len(duties)),
+		zap.Any("duties", toPrint),
+		zap.Duration("duration", time.Since(start)))
 
 	if err := df.processFetchedDuties(duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
