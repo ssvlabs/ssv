@@ -7,6 +7,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -17,14 +24,9 @@ import (
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
-	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
-	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // network states
@@ -72,6 +74,8 @@ type p2pNetwork struct {
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
 	syncer           syncing.Syncer
+	nodeStorage      operatorstorage.Storage
+	operatorPKCache  sync.Map
 }
 
 // New creates a new p2p network
@@ -93,6 +97,8 @@ func New(cfg *Config) network.P2PNetwork {
 		state:                stateClosed,
 		activeValidators:     make(map[string]int32),
 		activeValidatorsLock: &sync.Mutex{},
+		nodeStorage:          cfg.NodeStorage,
+		operatorPKCache:      sync.Map{},
 	}
 }
 

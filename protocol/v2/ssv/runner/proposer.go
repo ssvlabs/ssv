@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ProposerRunner struct {
@@ -28,6 +29,7 @@ type ProposerRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(
@@ -54,6 +56,7 @@ func NewProposerRunner(
 		signer:   signer,
 		valCheck: valCheck,
 		logger:   logger.With(zap.String("who", "ProposerRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
 	}
 }
 
@@ -76,6 +79,8 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 	if !quorum {
 		return nil
 	}
+
+	r.metrics.EndPreConsensus()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -106,6 +111,7 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 		input.BlockData = blk
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -123,6 +129,9 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if !decided {
 		return nil
 	}
+
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
@@ -177,6 +186,8 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	r.metrics.EndPostConsensus()
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -184,6 +195,8 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+
+		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if r.decidedBlindedBlock() {
 			blk := &apiv1bellatrix.SignedBlindedBeaconBlock{
@@ -198,12 +211,20 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 				Message:   r.GetState().DecidedValue.BlockData,
 				Signature: specSig,
 			}
+
 			if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
+				r.metrics.RoleSubmissionFailed()
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
+
+		blockSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
+
 		r.logger.Info("successfully proposed block!")
 	}
+
 	r.GetState().Finished = true
 
 	return nil
@@ -235,6 +256,9 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartPreConsensus()
+
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
 

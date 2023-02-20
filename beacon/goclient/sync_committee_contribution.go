@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -33,6 +34,7 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint64) (*altair.SyncCommitteeContribution, error) {
 	gc.waitOneThirdOrValidBlock(slot)
 
+	scDataReqStart := time.Now()
 	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
 		return nil, err
@@ -41,12 +43,18 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint
 		return nil, errors.New("block root is nil")
 	}
 
+	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+
 	gc.waitToSlotTwoThirds(slot)
 
+	sccDataReqStart := time.Now()
 	contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
 	if err != nil {
 		return nil, err
 	}
+
+	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
+
 	return contribution, nil
 }
 

@@ -43,6 +43,8 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			zap.Any("commit-signers", signedCommit.Signers),
 			zap.Any("agg-signers", agg.Signers))
 
+		i.metrics.EndStageCommit()
+
 		return true, msgCommitData.Data, agg, nil
 	}
 	return false, nil, nil, nil

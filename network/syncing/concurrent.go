@@ -103,7 +103,7 @@ func NewConcurrent(
 		syncer: syncer,
 		ctx:    ctx,
 		// TODO: make the buffer size configurable or better-yet unbounded?
-		jobs:        make(chan Operation, 1024*1024),
+		jobs:        make(chan Operation, 128*1024),
 		errors:      errors,
 		concurrency: concurrency,
 		timeouts:    timeouts,

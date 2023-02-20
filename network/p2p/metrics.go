@@ -1,29 +1,33 @@
 package p2pv1
 
 import (
+	"log"
+	"strconv"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
-	"log"
+
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 var (
 	// MetricsAllConnectedPeers counts all connected peers
 	MetricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:network:all_connected_peers",
+		Name: "ssv_p2p_all_connected_peers",
 		Help: "Count connected peers",
 	})
 	// MetricsConnectedPeers counts connected peers for a topic
 	MetricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:connected_peers",
+		Name: "ssv_p2p_connected_peers",
 		Help: "Count connected peers for a validator",
 	}, []string{"pubKey"})
 	// MetricsPeersIdentity tracks peers identity
 	MetricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
-	}, []string{"pubKey", "v", "pid", "type"})
+	}, []string{"pubKey", "operatorID", "operatorName", "v", "pid", "type"})
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
@@ -83,31 +87,56 @@ func (n *p2pNetwork) reportTopicPeers(name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
-	oid, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown
+	opPKHash, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
-		oid = unknown
+		opPKHash = unknown
 		nodeVersion = unknown
 		forkv = ni.ForkVersion.String()
 		if ni.Metadata != nil {
-			oid = ni.Metadata.OperatorID
+			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"
-		if len(oid) == 0 && nodeVersion != unknown {
+		if len(opPKHash) == 0 && nodeVersion != unknown {
 			nodeType = "exporter"
 		}
 	}
+
+	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(pubKey.(string))
+		if opDataErr == nil && found {
+			opIndex = strconv.FormatUint(operatorData.Index, 10)
+			opName = operatorData.Name
+		}
+	} else {
+		operators, err := n.nodeStorage.ListOperators(0, 0)
+		if err != nil {
+			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		}
+
+		for _, operator := range operators {
+			pubKeyHash := format.OperatorID(operator.PublicKey)
+			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
+			if pubKeyHash == opPKHash {
+				opIndex = strconv.FormatUint(operator.Index, 10)
+				opName = operator.Name
+			}
+		}
+	}
+
 	nodeState := n.idx.State(pid)
-	n.logger.Debug("peer identity",
+	n.logger.Info("peer identity",
 		zap.String("peer", pid.String()),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
-		zap.String("oid", oid),
+		zap.String("opPKHash", opPKHash),
+		zap.String("opIndex", opName),
+		zap.String("opName", opIndex),
 		zap.String("nodeType", nodeType),
-		zap.String("nodeState", nodeState.String()))
-	MetricsPeersIdentity.WithLabelValues(oid, nodeVersion,
-		pid.String(), nodeType).Set(1)
+		zap.String("nodeState", nodeState.String()),
+	)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //

@@ -73,5 +73,6 @@ var (
 	validatorStatusSlashed      validatorStatus = 6
 	validatorStatusNotFound     validatorStatus = 7
 	validatorStatusPending      validatorStatus = 8
-	validatorStatusUnknown      validatorStatus = 9
+	validatorStatusRemoved      validatorStatus = 9
+	validatorStatusUnknown      validatorStatus = 10
 )

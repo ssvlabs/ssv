@@ -41,6 +41,8 @@ func (i *Instance) uponPrepare(
 	i.State.LastPreparedValue = proposedValue
 	i.State.LastPreparedRound = i.State.Round
 
+	i.metrics.EndStagePrepare()
+
 	commitMsg, err := CreateCommit(i.State, i.config, proposedValue)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
