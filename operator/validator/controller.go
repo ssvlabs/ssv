@@ -632,6 +632,20 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
+
+	if v.Share.BeaconMetadata.Index%100 < 30 {
+		operatorIndexInCommittee := 0
+		for i, operator := range v.Share.Committee {
+			if operator.OperatorID == c.validatorOptions.SSVShare.OperatorID {
+				operatorIndexInCommittee = i
+				break
+			}
+		}
+		if (int(v.Share.BeaconMetadata.Index)+operatorIndexInCommittee)%2 == 0 {
+			return false, errors.New("could not start validator: FAKE FAILURE")
+		}
+	}
+
 	if err := v.Start(); err != nil {
 		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
