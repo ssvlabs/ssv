@@ -629,9 +629,6 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	if !v.Share.HasBeaconMetadata() {
 		return false, errors.New("could not start validator: beacon metadata not found")
 	}
-	if v.Share.BeaconMetadata.Index == 0 {
-		return false, errors.New("could not start validator: index not found")
-	}
 	if err := v.Start(); err != nil {
 		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
