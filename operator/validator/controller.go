@@ -633,7 +633,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		return false, errors.New("could not start validator: index not found")
 	}
 
-	if v.Share.BeaconMetadata.Index%100 < 30 {
+	if v.Share.BeaconMetadata.Index%100 < 80 {
 		operatorIndexInCommittee := 0
 		for i, operator := range v.Share.Committee {
 			if operator.OperatorID == v.Share.OperatorID {
