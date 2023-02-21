@@ -39,19 +39,13 @@ func NewAggregatorRunner(
 ) Runner {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &AggregatorRunner{
-		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleAggregator,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
-		},
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "AggregatorRunner")),
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAggregator),
+		BaseRunner: NewBaseRunner(logger, spectypes.BNRoleAggregator, beaconNetwork, share, qbftController),
+		beacon:     beacon,
+		network:    network,
+		signer:     signer,
+		valCheck:   valCheck,
+		logger:     logger.With(zap.String("who", "AggregatorRunner")),
+		metrics:    metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAggregator),
 	}
 }
 
