@@ -636,6 +636,12 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	if v.Share.BeaconMetadata.Index%100 < 30 {
 		operatorIndexInCommittee := 0
 		for i, operator := range v.Share.Committee {
+			if operator == nil {
+				c.logger.Warn("committee operator is nil!!", zap.Any("committee", v.Share.Committee), zap.Int("index", i))
+			}
+			if c.validatorOptions.SSVShare == nil {
+				c.logger.Warn("SSVShare is nil!!", zap.Any("SSVShare", c.validatorOptions.SSVShare))
+			}
 			if operator.OperatorID == c.validatorOptions.SSVShare.OperatorID {
 				operatorIndexInCommittee = i
 				break
