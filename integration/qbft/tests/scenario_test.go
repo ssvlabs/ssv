@@ -111,9 +111,10 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		}
 	})
 }
-
+// getKeySet returns the keyset for a given committee size. Some tests have a
+// committee size smaller than 3f+1 in order to simulate cases where operators are offline
 func getKeySet(committee int) *spectestingutils.TestKeySet {
-	switch committee { //sometimes we need different number of participants than 4, 7, 10, 13
+	switch committee { 
 	case 1, 2, 3, 4:
 		return KeySet4Committee
 	case 5, 6, 7:
