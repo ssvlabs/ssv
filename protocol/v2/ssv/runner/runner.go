@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"sync"
+
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
 
@@ -49,6 +51,7 @@ type Runner interface {
 }
 
 type BaseRunner struct {
+	mtx            *sync.RWMutex
 	State          *State
 	Share          *spectypes.Share
 	QBFTController *controller.Controller
@@ -60,14 +63,22 @@ type BaseRunner struct {
 	TimeoutF TimeoutF `json:"-"`
 }
 
-func NewBaseRunner(logger *zap.Logger) *BaseRunner {
+func NewBaseRunner(logger *zap.Logger, beaconRoleType spectypes.BeaconRole, beaconNetwork spectypes.BeaconNetwork, share *spectypes.Share, qbftController *controller.Controller) *BaseRunner {
 	return &BaseRunner{
-		logger: logger,
+		mtx:            &sync.RWMutex{},
+		logger:         logger.With(zap.String("who", "BaseRunner")),
+		BeaconRoleType: beaconRoleType,
+		BeaconNetwork:  beaconNetwork,
+		Share:          share,
+		QBFTController: qbftController,
 	}
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
+	b.mtx.Lock() // writes to b.State
+	defer b.mtx.Unlock()
+
 	if err := b.canStartNewDuty(); err != nil {
 		return err
 	}
@@ -231,6 +242,9 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
+
 	if b.State == nil {
 		return false
 	}
