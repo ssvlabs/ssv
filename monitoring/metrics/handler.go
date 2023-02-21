@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
