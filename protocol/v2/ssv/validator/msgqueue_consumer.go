@@ -26,6 +26,9 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
+	v.mtx.RLock() // read v.Queues
+	defer v.mtx.RUnlock()
+
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
@@ -66,9 +69,19 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
-	q, ok := v.Queues[msgID.GetRoleType()]
-	if !ok {
-		return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+	var q queueContainer
+	err := func() error {
+		v.mtx.RLock() // read v.Queues
+		defer v.mtx.RUnlock()
+		var ok bool
+		q, ok = v.Queues[msgID.GetRoleType()]
+		if !ok {
+			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+		}
+		return nil
+	}()
+	if err != nil {
+		return err
 	}
 
 	logger = logger.With(zap.String("identifier", msgID.String()))

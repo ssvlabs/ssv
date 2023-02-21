@@ -48,7 +48,7 @@ full-test:
 .PHONY: integration-test
 integration-test:
 	@echo "Running integration tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
+	@go test -tags blst_enabled -count=1 -timeout 20m ${COV_CMD} -p 1 -v ./integration/...
 
 .PHONY: unit-test
 unit-test:
@@ -58,7 +58,7 @@ unit-test:
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -p 1 -v `go list ./... | grep spectest`
+	@go test -tags blst_enabled -timeout 15m ${COV_CMD} -race -count=1 -p 1 -v `go list ./... | grep spectest`
 
 #Test
 .PHONY: docker-spec-test

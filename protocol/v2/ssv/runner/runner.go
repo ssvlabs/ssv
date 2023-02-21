@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"sync"
+
 	logging "github.com/ipfs/go-log"
 	"go.uber.org/zap"
 
@@ -49,6 +51,7 @@ type Runner interface {
 }
 
 type BaseRunner struct {
+	mtx            sync.RWMutex
 	State          *State
 	Share          *spectypes.Share
 	QBFTController *controller.Controller
@@ -68,7 +71,15 @@ func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error
 	if err := b.canStartNewDuty(); err != nil {
 		return err
 	}
-	b.State = NewRunnerState(b.Share.Quorum, duty)
+
+	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
+	// b.State but currently this does not happen
+	func() {
+		b.mtx.Lock() // writes to b.State
+		defer b.mtx.Unlock()
+		b.State = NewRunnerState(b.Share.Quorum, duty)
+	}()
+
 	return runner.executeDuty(duty)
 }
 
@@ -228,6 +239,9 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
+
 	if b.State == nil {
 		return false
 	}
