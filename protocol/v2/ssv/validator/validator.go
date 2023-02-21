@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+	"sync"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -24,6 +26,7 @@ var logger = logging.Logger("ssv/protocol/ssv/validator").Desugar()
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
+	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 	logger *zap.Logger
@@ -47,6 +50,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	logger := logger.With(zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 
 	v := &Validator{
+		mtx:         &sync.RWMutex{},
 		ctx:         pctx,
 		cancel:      cancel,
 		logger:      logger,

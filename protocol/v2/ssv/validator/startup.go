@@ -41,6 +41,9 @@ func (v *Validator) Start() error {
 
 // Stop stops a Validator.
 func (v *Validator) Stop() error {
+	v.mtx.Lock() // write to v.Queues
+	defer v.mtx.Unlock()
+
 	v.cancel()
 	// clear the msg q
 	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
