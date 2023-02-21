@@ -43,11 +43,8 @@ func roundChangeValidator() func(t *testing.T, committee int, actual *protocolst
 			require.Fail(t, "no commit qourum")
 		}
 
-		if v, ok := actual.State.ProposeContainer.Msgs[2]; ok {
-			require.Equal(t, int(spectypes.OperatorID(2)), int(v[0].Signers[0])) //on second round proposer is 2
-		} else {
-			require.Fail(t, "no propose message for round 2")
-		}
+		require.Len(t, actual.State.ProposeContainer.Msgs, 2, "no propose messages contains more/less than 2 messages")
+		require.Equal(t, int(spectypes.OperatorID(2)), int(actual.State.ProposeContainer.Msgs[2][0].Signers[0])) //on second round proposer is 2
 	}
 }
 
