@@ -104,6 +104,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
+
+	b.compactInstance(msg)
+
 	if err != nil {
 		if msg.Message.MsgType == specqbft.RoundChangeMsgType {
 			b.logger.Debug("quitting after processing change round msg", zap.Error(err))
@@ -111,6 +114,49 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	}
 
+	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
+	if !b.hasRunningDuty() {
+		return false, nil, err
+	}
+
+	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
+		return false, nil, err
+	} else {
+		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
+			logger := b.logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
+				zap.Any("signers", msg.Signers),
+			)
+			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
+				logger.Debug("failed to save instance", zap.Error(err))
+			} else {
+				logger.Debug("saved instance")
+			}
+		}
+	}
+
+	// get decided value
+	decidedData, err := decidedMsg.Message.GetCommitData()
+	if err != nil {
+		return false, nil, errors.Wrap(err, "failed to get decided data")
+	}
+
+	decidedValue = &spectypes.ConsensusData{}
+	if err := decidedValue.Decode(decidedData.Data); err != nil {
+		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
+	}
+
+	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
+		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
+	}
+
+	runner.GetBaseRunner().State.DecidedValue = decidedValue
+
+	return true, decidedValue, nil
+}
+
+func (b *BaseRunner) compactInstance(msg *specqbft.SignedMessage) {
 	// Compact the current instance if it's either...
 	// - Decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
 	// - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
@@ -170,47 +216,6 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 			)
 		}
 	}
-
-	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
-	if !b.hasRunningDuty() {
-		return false, nil, err
-	}
-
-	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
-		return false, nil, err
-	} else {
-		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			logger := b.logger.With(
-				zap.Uint64("msg_height", uint64(msg.Message.Height)),
-				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-				zap.Any("signers", msg.Signers),
-			)
-			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				logger.Debug("failed to save instance", zap.Error(err))
-			} else {
-				logger.Debug("saved instance")
-			}
-		}
-	}
-
-	// get decided value
-	decidedData, err := decidedMsg.Message.GetCommitData()
-	if err != nil {
-		return false, nil, errors.Wrap(err, "failed to get decided data")
-	}
-
-	decidedValue = &spectypes.ConsensusData{}
-	if err := decidedValue.Decode(decidedData.Data); err != nil {
-		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
-	}
-
-	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
-		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
-	}
-
-	runner.GetBaseRunner().State.DecidedValue = decidedValue
-
-	return true, decidedValue, nil
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
