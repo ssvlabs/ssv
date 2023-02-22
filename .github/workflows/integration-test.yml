@@ -1,10 +1,6 @@
 name: Integration tests
 
 on:
-#  push:
-#    branches:
-#      - "main"
-#      - "stage"
 #  pull_request:
 #    branches:
 #      - "main"

@@ -56,9 +56,9 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
 			id := spectypes.OperatorID(id)
-			s.validators[id] = createValidator(t, ctx, id, role, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
+			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
 
-			stores := newStores(s.shared.Logger, role)
+			stores := newStores(s.shared.Logger)
 			s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
 				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
@@ -146,7 +146,7 @@ func quorum(committee int) int {
 	return (committee*2 + 1) / 3 // committee = 3f+1; quorum = 2f+1
 }
 
-func newStores(logger *zap.Logger, role spectypes.BeaconRole) *qbftstorage.QBFTStores {
+func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 	db, err := storage.GetStorageFactory(basedb.Options{
 		Type:   "badger-memory",
 		Path:   "",
@@ -156,27 +156,23 @@ func newStores(logger *zap.Logger, role spectypes.BeaconRole) *qbftstorage.QBFTS
 		panic(err)
 	}
 
-	store := qbftstorage.New(db, logger, role.String(), protocolforks.GenesisForkVersion)
+	storageMap := qbftstorage.NewStores()
 
-	stores := qbftstorage.NewStores()
-	stores.Add(spectypes.BNRoleAttester, store)
-	stores.Add(spectypes.BNRoleProposer, store)
-	stores.Add(spectypes.BNRoleAggregator, store)
-	stores.Add(spectypes.BNRoleSyncCommittee, store)
-	stores.Add(spectypes.BNRoleSyncCommitteeContribution, store)
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+	}
+	for _, role := range roles {
+		storageMap.Add(role, qbftstorage.New(db, logger, role.String(), protocolforks.GenesisForkVersion))
+	}
 
-	return stores
+	return storageMap
 }
 
-func createValidator(
-	t *testing.T,
-	pCtx context.Context,
-	id spectypes.OperatorID,
-	role spectypes.BeaconRole,
-	keySet *spectestingutils.TestKeySet,
-	pLogger *zap.Logger,
-	node network.P2PNetwork,
-) *protocolvalidator.Validator {
+func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node network.P2PNetwork) *protocolvalidator.Validator {
 	ctx, cancel := context.WithCancel(pCtx)
 	validatorPubKey := keySet.Shares[id].GetPublicKey().Serialize()
 	logger := pLogger.With(zap.Int("operator-id", int(id)), zap.String("validator", hex.EncodeToString(validatorPubKey)))
@@ -185,7 +181,7 @@ func createValidator(
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: newStores(logger, role),
+		Storage: newStores(logger),
 		Network: node,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),

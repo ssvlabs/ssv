@@ -52,7 +52,7 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(msgId),
-		logger: logger.With(zap.Int("operator-id", int(share.OperatorID)), zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
+		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
 			zap.Uint64("height", uint64(height))),
 	}
 }

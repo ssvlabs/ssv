@@ -104,8 +104,6 @@ func regularValidator() func(t *testing.T, committee int, actual *protocolstorag
 		require.Equal(t, int(qbft.FirstRound), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
-		if quorum(committee) > len(actual.DecidedMessage.Signers) {
-			require.Fail(t, "no commit qourum")
-		}
+		require.Greater(t, len(actual.DecidedMessage.Signers), quorum(committee), "no commit qourum")
 	}
 }

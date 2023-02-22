@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	logging "github.com/ipfs/go-log"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"testing"
@@ -27,9 +28,7 @@ type SharedData struct {
 }
 
 func GetSharedData(t *testing.T) SharedData { //singleton B-)
-	if sharedData == nil {
-		t.Fatalf("shared data hadn't setuped, try to run test with -test.main flag")
-	}
+	require.NotNil(t, sharedData, "shared data hadn't set up, try to run test with -test.main flag")
 
 	return *sharedData
 }
