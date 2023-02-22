@@ -85,9 +85,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	return ret, nil
 }
 
-func (i *ibftStorage) SaveInstance(inst *qbftstorage.StoredInstance) error {
-	instance.Compact(inst.State, inst.DecidedMessage)
-
+func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
 	return i.saveInstance(inst, true, false)
 }
 
@@ -99,8 +97,10 @@ func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.Sto
 	return i.saveInstance(instance, true, true)
 }
 
-func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
-	value, err := instance.Encode()
+func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
+	instance.Compact(inst.State, inst.DecidedMessage)
+
+	value, err := inst.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
@@ -109,14 +109,14 @@ func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHisto
 		i.forkLock.RLock()
 		defer i.forkLock.RUnlock()
 
-		err = i.save(value, highestInstanceKey, instance.State.ID)
+		err = i.save(value, highestInstanceKey, inst.State.ID)
 		if err != nil {
 			return errors.Wrap(err, "could not save highest instance")
 		}
 	}
 
 	if toHistory {
-		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
+		err = i.save(value, instanceKey, inst.State.ID, uInt64ToByteSlice(uint64(inst.State.Height)))
 		if err != nil {
 			return errors.Wrap(err, "could not save historical instance")
 		}
