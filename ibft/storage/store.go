@@ -86,7 +86,7 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 }
 
 func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
-	return i.saveInstance(inst, true, false)
+	return i.saveInstance(instance, true, false)
 }
 
 func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
