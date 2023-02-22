@@ -151,11 +151,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 }
 
 // Compacts the given message's associated instance if it's either...
-//   - Decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
+//   - Got a decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
 //   - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
 func (b *BaseRunner) compactInstanceIfNeeded(msg *specqbft.SignedMessage) {
 	if inst := b.QBFTController.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
-		if inst.State.Decided || msg.Message.MsgType == specqbft.RoundChangeMsgType {
+		if controller.IsDecidedMsg(b.Share, msg) || msg.Message.MsgType == specqbft.RoundChangeMsgType {
 			instance.Compact(inst.State, msg)
 		}
 	}
