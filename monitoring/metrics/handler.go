@@ -2,12 +2,14 @@ package metrics
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
+	"strings"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,7 +28,7 @@ type nodeStatus int32
 
 var (
 	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:node_status",
+		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
 	statusNotHealthy nodeStatus = 0
@@ -81,10 +83,8 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 			EnableOpenMetrics: true,
 		},
 	))
-	mux.HandleFunc("/health", mh.handleHealth)
-
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
-	mux.HandleFunc("/database/highest-instance/", mh.handleHighestInstance)
+	mux.HandleFunc("/health", mh.handleHealth)
 
 	go func() {
 		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
@@ -95,6 +95,43 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 	}()
 
 	return nil
+}
+
+// handleCountByCollection responds with the number of key in the database by collection.
+// Prefix can be a string or a 0x-prefixed hex string.
+// Empty prefix returns the total number of keys in the database.
+func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http.Request) {
+	var response struct {
+		Count int64 `json:"count"`
+	}
+
+	// Parse prefix from query. Supports both hex and string.
+	var prefix []byte
+	prefixStr := r.URL.Query().Get("prefix")
+	if prefixStr != "" {
+		if strings.HasPrefix(prefixStr, "0x") {
+			var err error
+			prefix, err = hex.DecodeString(prefixStr[2:])
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else {
+			prefix = []byte(prefixStr)
+		}
+	}
+
+	n, err := mh.db.CountByCollection(prefix)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	response.Count = n
+
+	if err := json.NewEncoder(w).Encode(&response); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
@@ -117,6 +154,6 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 }
 
 func (mh *metricsHandler) configureProfiling() {
-	runtime.SetBlockProfileRate(10000)
-	runtime.SetMutexProfileFraction(5)
+	runtime.SetBlockProfileRate(1000)
+	runtime.SetMutexProfileFraction(1)
 }
