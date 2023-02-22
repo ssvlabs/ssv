@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -153,7 +154,9 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		if err != nil {
 			return err
 		}
-		v.Queues[duty.Type].Q.Push(dec)
+		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
 	} else {
 		logger.Warn("could not find validator")
 	}

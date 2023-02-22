@@ -135,6 +135,32 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
+type mockMetrics struct {
+	dropped int
+}
+
+func (m *mockMetrics) Dropped() { m.dropped++ }
+
+func TestWithMetrics(t *testing.T) {
+	var metrics mockMetrics
+	queue := WithMetrics(New(1), &metrics)
+	require.True(t, queue.Empty())
+
+	// Push 1 message.
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+	pushed := queue.TryPush(msg)
+	require.True(t, pushed)
+	require.False(t, queue.Empty())
+	require.Equal(t, 0, metrics.dropped)
+
+	// Push above capacity.
+	pushed = queue.TryPush(msg)
+	require.False(t, pushed)
+	require.False(t, queue.Empty())
+	require.Equal(t, 1, metrics.dropped)
+}
+
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
 	benchmarkPriorityQueueParallel(b, func() Queue {
 		return New(32)
