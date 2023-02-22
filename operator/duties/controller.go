@@ -145,7 +145,7 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := createDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
 		if err != nil {
 			return err
 		}
@@ -161,8 +161,8 @@ func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
 	return nil
 }
 
-// createDutyExecuteMsg returns ssvMsg with event type of duty execute
-func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+// CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
