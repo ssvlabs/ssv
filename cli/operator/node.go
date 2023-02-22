@@ -260,7 +260,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorPubKey string, db b
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db, logger)
+	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorPubKey)

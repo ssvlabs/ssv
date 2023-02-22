@@ -110,13 +110,13 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(pubKey.(string))
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.(string))
 		if opDataErr == nil && found {
 			opIndex = strconv.FormatUint(operatorData.Index, 10)
 			opName = operatorData.Name
 		}
 	} else {
-		operators, err := n.nodeStorage.ListOperators(0, 0)
+		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
 		if err != nil {
 			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}

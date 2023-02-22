@@ -28,7 +28,7 @@ type ProposerRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
-	metrics  metrics.ConsensusMetrics
+	metrics metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(

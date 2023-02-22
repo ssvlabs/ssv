@@ -26,7 +26,7 @@ type SyncCommitteeAggregatorRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
-	metrics  metrics.ConsensusMetrics
+	metrics metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeAggregatorRunner(
