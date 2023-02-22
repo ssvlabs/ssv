@@ -5,7 +5,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -104,13 +103,8 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
-
-	b.compactInstance(msg)
-
+	b.compactInstanceIfNeeded(msg)
 	if err != nil {
-		if msg.Message.MsgType == specqbft.RoundChangeMsgType {
-			b.logger.Debug("quitting after processing change round msg", zap.Error(err))
-		}
 		return false, nil, err
 	}
 
@@ -156,64 +150,13 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	return true, decidedValue, nil
 }
 
-func (b *BaseRunner) compactInstance(msg *specqbft.SignedMessage) {
-	// Compact the current instance if it's either...
-	// - Decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
-	// - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
+// Compacts the current instance if it's either...
+//   - Decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
+//   - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
+func (b *BaseRunner) compactInstanceIfNeeded(msg *specqbft.SignedMessage) {
 	if inst := b.QBFTController.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
 		if inst.State.Decided || msg.Message.MsgType == specqbft.RoundChangeMsgType {
-			before := 0
-			for _, c := range []*qbft.MsgContainer{
-				inst.State.PrepareContainer,
-				inst.State.ProposeContainer,
-				inst.State.CommitContainer,
-				inst.State.RoundChangeContainer,
-			} {
-				if c != nil {
-					for _, m := range c.Msgs {
-						before += len(m)
-					}
-				}
-			}
-
 			instance.Compact(inst.State, msg)
-
-			after := 0
-			for _, c := range []*qbft.MsgContainer{
-				inst.State.PrepareContainer,
-				inst.State.ProposeContainer,
-				inst.State.CommitContainer,
-				inst.State.RoundChangeContainer,
-			} {
-				if c != nil {
-					for _, m := range c.Msgs {
-						before += len(m)
-					}
-				}
-			}
-
-			b.logger.Debug("compacted instance",
-				zap.Uint64("height", uint64(msg.Message.Height)),
-				zap.Bool("decided", inst.State.Decided),
-				zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
-				zap.Int("before", before),
-				zap.Int("after", after),
-			)
-		} else {
-			if msg.Message.MsgType == specqbft.RoundChangeMsgType {
-				b.logger.Debug("not compacting instance",
-					zap.Uint64("height", uint64(msg.Message.Height)),
-					zap.Bool("decided", inst.State.Decided),
-					zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
-				)
-			}
-		}
-	} else {
-		if msg.Message.MsgType == specqbft.RoundChangeMsgType {
-			b.logger.Debug("could not find instance to compact",
-				zap.Uint64("height", uint64(msg.Message.Height)),
-				zap.Bool("is_round_change", msg.Message.MsgType == specqbft.RoundChangeMsgType),
-			)
 		}
 	}
 }
