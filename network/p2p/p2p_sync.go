@@ -256,7 +256,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		logger := logger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			if errors.Is(err, multistream.ErrNotSupported[string]{}) {
+			if errors.Is(err, multistream.ErrNotSupported[libp2p_protocol.ID]{}) {
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue
