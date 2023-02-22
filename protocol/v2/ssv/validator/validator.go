@@ -8,7 +8,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	logging "github.com/ipfs/go-log"
+	golog "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -18,7 +18,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-var logger = logging.Logger("ssv/protocol/ssv/validator").Desugar()
+var logger = golog.Logger("ssv/protocol/ssv/validator").Desugar()
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.

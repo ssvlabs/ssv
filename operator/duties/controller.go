@@ -3,7 +3,6 @@ package duties
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -331,15 +331,14 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
-	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(zap.Uint64("current slot", currentSlot)).
+		With(logging.CurrentSlot(dc.ethNetwork)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
-		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(duty.Slot)))
+		With(logging.PubKey(duty.PubKey[:])).
+		With(logging.StartTime(dc.ethNetwork, duty.Slot))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
@@ -355,6 +354,6 @@ func (e *readOnlyDutyExec) ExecuteDuty(duty *spectypes.Duty) error {
 	e.logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
 		zap.Uint64("slot", uint64(duty.Slot)),
-		zap.String("pubKey", hex.EncodeToString(duty.PubKey[:])))
+		logging.PubKey(duty.PubKey[:]))
 	return nil
 }

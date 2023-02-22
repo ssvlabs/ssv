@@ -3,6 +3,11 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"net"
+	"sync/atomic"
+	"time"
+
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
@@ -14,9 +19,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"net"
-	"sync/atomic"
-	"time"
 )
 
 var (
@@ -145,18 +147,18 @@ func (dvs *DiscV5Service) Bootstrap(handler HandleNewPeer) error {
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
-			dvs.logger.Debug("could not read subnets", zap.String("enr", e.Node.String()))
+			dvs.logger.Debug("could not read subnets", logging.Enr(e.Node))
 			return
 		}
 		if bytes.Equal(zeroSubnets, nodeSubnets) {
-			dvs.logger.Debug("skipping zero subnets", zap.String("enr", e.Node.String()))
+			dvs.logger.Debug("skipping zero subnets", logging.Enr(e.Node))
 			return
 		}
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 		if updated {
-			dvs.logger.Debug("[discv5] peer subnets were updated", zap.String("enr", e.Node.String()),
-				zap.String("id", e.AddrInfo.ID.String()),
-				zap.String("subnets", records.Subnets(nodeSubnets).String()))
+			dvs.logger.Debug("[discv5] peer subnets were updated", logging.Enr(e.Node),
+				logging.PeerID(e.AddrInfo.ID),
+				logging.Subnets(records.Subnets(nodeSubnets)))
 		}
 		if !dvs.limitNodeFilter(e.Node) {
 			if !dvs.sharedSubnetsFilter(1)(e.Node) {
@@ -201,8 +203,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(discOpts *Options) error {
 	dvs.dv5Listener = dv5Listener
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
-	dvs.logger.Debug("started discv5 listener (UDP)", zap.String("bindIP", bindIP.String()),
-		zap.Int("UdpPort", opts.Port), zap.String("enr", localNode.Node().String()), zap.String("OperatorID", opts.OperatorID))
+	dvs.logger.Debug("started discv5 listener (UDP)", logging.BindIP(bindIP),
+		zap.Int("UdpPort", opts.Port), logging.EnrLocalNode(localNode), zap.String("OperatorID", opts.OperatorID))
 
 	return nil
 }
@@ -263,7 +265,7 @@ func (dvs *DiscV5Service) RegisterSubnets(subnets ...int) error {
 	}
 	if updated != nil {
 		dvs.subnets = updated
-		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		dvs.logger.Debug("updated subnets", logging.UpdatedEnrLocalNode(dvs.dv5Listener.LocalNode()))
 		go dvs.publishENR()
 	}
 	return nil
@@ -280,7 +282,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(subnets ...int) error {
 	}
 	if updated != nil {
 		dvs.subnets = updated
-		dvs.logger.Debug("updated subnets", zap.String("updated_enr", dvs.dv5Listener.LocalNode().Node().String()))
+		dvs.logger.Debug("updated subnets", logging.UpdatedEnrLocalNode(dvs.dv5Listener.LocalNode()))
 		go dvs.publishENR()
 	}
 	return nil
@@ -304,11 +306,11 @@ func (dvs *DiscV5Service) publishENR() {
 				// ignore
 				return
 			}
-			dvs.logger.Warn("could not ping node", zap.String("targetNodeENR", e.Node.String()), zap.Error(err))
+			dvs.logger.Warn("could not ping node", logging.TargetNodeEnr(e.Node), zap.Error(err))
 			return
 		}
 		metricPublishEnrPongs.Inc()
-		// dvs.logger.Debug("ping success", zap.String("targetNodeENR", e.Node.String()))
+		// dvs.logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
 	}, time.Millisecond*100, dvs.badNodeFilter)
 }
 
@@ -330,7 +332,7 @@ func (dvs *DiscV5Service) createLocalNode(discOpts *Options, ipAddr net.IP) (*en
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
-	dvs.logger.Debug("node record is ready", zap.String("enr", localNode.Node().String()), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
+	dvs.logger.Debug("node record is ready", logging.EnrLocalNode(localNode), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
 	return localNode, nil
 }
 

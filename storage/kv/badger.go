@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
@@ -216,8 +218,8 @@ func (b *BadgerDb) report() {
 	indexCache := b.db.IndexCacheMetrics()
 
 	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-		zap.String("BlockCacheMetrics", blockCache.String()),
-		zap.String("IndexCacheMetrics", indexCache.String()))
+		logging.BlockCacheMetrics(blockCache),
+		logging.IndexCacheMetrics(indexCache))
 }
 
 func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {
