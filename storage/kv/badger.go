@@ -20,6 +20,7 @@ const (
 type BadgerDb struct {
 	db     *badger.DB
 	logger *zap.Logger
+	stopGC chan struct{}
 }
 
 // New create new instance of Badger db
@@ -48,14 +49,35 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	_db := BadgerDb{
 		db:     db,
 		logger: options.Logger,
+		stopGC: make(chan struct{}, 1),
 	}
 
 	if options.Reporting && options.Ctx != nil {
 		async.RunEvery(options.Ctx, 1*time.Minute, _db.report)
 	}
 
+	go _db.garbageCollector()
+
 	options.Logger.Info("badger db initialized")
 	return &_db, nil
+}
+
+func (b *BadgerDb) garbageCollector() {
+	for {
+		select {
+		case <-b.stopGC:
+			return
+		case <-time.After(3 * time.Minute):
+			err := b.db.RunValueLogGC(0.7)
+			if err == badger.ErrNoRewrite {
+				// No garbage to collect.
+				err = nil
+			}
+			if err != nil {
+				b.logger.Error("failed to collect garbage", zap.Error(err))
+			}
+		}
+	}
 }
 
 // Set save value with key to storage
@@ -203,6 +225,11 @@ func (b *BadgerDb) RemoveAllByCollection(prefix []byte) error {
 
 // Close close db
 func (b *BadgerDb) Close() {
+	select {
+	case b.stopGC <- struct{}{}:
+	default:
+	}
+
 	if err := b.db.Close(); err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
