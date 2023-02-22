@@ -117,6 +117,6 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 }
 
 func (mh *metricsHandler) configureProfiling() {
-	runtime.SetBlockProfileRate(1000)
-	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(10000)
+	runtime.SetMutexProfileFraction(5)
 }
