@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"testing"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -23,8 +26,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
-	"time"
 )
 
 var (
@@ -109,6 +110,19 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		for _, val := range s.validators {
 			require.NoError(t, val.Stop())
 		}
+
+		// HACK: sleep to wait for function calls to github.com/herumi/bls-eth-go-binary
+		// to return. When val.Stop() is called, the context.Context that controls the procedure to
+		// pop & process messages from by the validator from its queue will stop running new iterations.
+		// But if a procedure to pop & process a message is in progress when val.Stop() is called, the
+		// popped message will still be processed. When a message is processed the  github.com/herumi/bls-eth-go-binary
+		// library is used. When this test function returns, the validator and all of its resources are
+		// garbage collected by the Go test runtime. Because this library is a cgo wrapper of a C/C++ library,
+		// the C/C++ code will continue to try to access the signature data of the message even though it has been garbage
+		// collected already. This causes the C code to receive a SIGSEGV (SIGnal SEGmentation Violation) which
+		// crashes the Go runtime in a way that is not recoverable. A long term fix would involve signaling
+		// when the validator ConsumeQueue() function has returned, as its processing is synchronous.
+		time.Sleep(time.Millisecond * 500)
 	})
 }
 
