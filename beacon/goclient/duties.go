@@ -2,9 +2,10 @@ package goclient
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -89,5 +90,6 @@ func (gc *goClient) ProposerDuties(epoch phase0.Epoch, validatorIndices []phase0
 
 // SyncCommitteeDuties applies sync committee + sync committee contributor duties
 func (gc *goClient) SyncCommitteeDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+	return []*eth2apiv1.SyncCommitteeDuty{}, nil
 	return gc.client.SyncCommitteeDuties(gc.ctx, epoch, validatorIndices)
 }
