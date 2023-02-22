@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -84,8 +85,10 @@ func (i *ibftStorage) GetHighestInstance(identifier []byte) (*qbftstorage.Stored
 	return ret, nil
 }
 
-func (i *ibftStorage) SaveInstance(instance *qbftstorage.StoredInstance) error {
-	return i.saveInstance(instance, true, false)
+func (i *ibftStorage) SaveInstance(inst *qbftstorage.StoredInstance) error {
+	instance.Compact(inst.State, inst.DecidedMessage)
+
+	return i.saveInstance(inst, true, false)
 }
 
 func (i *ibftStorage) SaveHighestInstance(instance *qbftstorage.StoredInstance) error {
