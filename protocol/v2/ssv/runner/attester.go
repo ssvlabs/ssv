@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -27,6 +28,7 @@ type AttesterRunner struct {
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
 
+	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
@@ -154,6 +156,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			Signature:       specSig,
 			AggregationBits: aggregationBitfield,
 		}
+		consensusTime := time.Since(r.started)
 
 		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
 
@@ -172,6 +175,7 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		r.logger.Debug("successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
+			zap.Duration("consensus_time", consensusTime),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true
@@ -207,6 +211,7 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 		AttestationData: attData,
 	}
 
+	r.started = time.Now()
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
