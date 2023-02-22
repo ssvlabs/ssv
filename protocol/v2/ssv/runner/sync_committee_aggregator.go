@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type SyncCommitteeAggregatorRunner struct {
@@ -24,6 +25,8 @@ type SyncCommitteeAggregatorRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
+
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -47,6 +50,7 @@ func NewSyncCommitteeAggregatorRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution),
 	}
 }
 
@@ -69,6 +73,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 	if !quorum {
 		return nil
 	}
+
+	r.metrics.EndPreConsensus()
 
 	duty := r.GetState().StartingDuty
 	input := &spectypes.ConsensusData{
@@ -101,15 +107,21 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(signedMsg *specssv.S
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee subnet ID")
 		}
+
+		r.metrics.PauseDutyFullFlow()
+
 		contribution, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, subnet)
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee contribution")
 		}
 
+		r.metrics.ContinueDutyFullFlow()
+
 		input.SyncCommitteeContribution[blsSigSelectionProof] = contribution
 	}
 
 	if anyIsAggregator {
+		r.metrics.StartConsensus()
 		if err := r.BaseRunner.decide(r, input); err != nil {
 			return errors.Wrap(err, "can't start new duty runner instance for duty")
 		}
@@ -130,6 +142,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(signedMsg *specqbft.Sig
 	if !decided {
 		return nil
 	}
+
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	msgs := make([]*specssv.PartialSignatureMessage, 0)
@@ -183,6 +198,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		return nil
 	}
 
+	r.metrics.EndPostConsensus()
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -212,9 +229,17 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 				Signature: blsSignedContribAndProof,
 			}
 
+			submissionEnd := r.metrics.StartBeaconSubmission()
+
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
+				r.metrics.RoleSubmissionFailed()
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
+
+			submissionEnd()
+			r.metrics.EndDutyFullFlow()
+			r.metrics.RoleSubmitted()
+
 			logger.Debug("submitted successfully sync committee aggregator!")
 			break
 		}
@@ -277,6 +302,9 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartPreConsensus()
+
 	// sign selection proofs
 	msgs := specssv.PartialSignatureMessages{
 		Type:     specssv.ContributionProofs,

@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type SyncCommitteeRunner struct {
@@ -23,6 +24,8 @@ type SyncCommitteeRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
+
+	metrics  metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeRunner(
@@ -46,6 +49,7 @@ func NewSyncCommitteeRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
 	}
 }
 
@@ -72,6 +76,9 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	if !decided {
 		return nil
 	}
+
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
@@ -115,6 +122,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		return nil
 	}
 
+	r.metrics.EndPostConsensus()
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -129,9 +138,18 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 			ValidatorIndex:  r.GetState().DecidedValue.Duty.ValidatorIndex,
 			Signature:       specSig,
 		}
+
+		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
+
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
+			r.metrics.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
+
+		messageSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
+
 		logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height))
 	}
@@ -159,6 +177,9 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
+
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
 
 	input := &spectypes.ConsensusData{
 		Duty:                   duty,

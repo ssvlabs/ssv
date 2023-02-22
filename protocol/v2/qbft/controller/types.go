@@ -11,7 +11,7 @@ import (
 
 const (
 	// InstanceContainerDefaultCapacity is the default capacity for InstanceContainer.
-	InstanceContainerDefaultCapacity int = 5
+	InstanceContainerDefaultCapacity int = 2
 
 	// InstanceContainerTestCapacity is the capacity for InstanceContainer used in tests.
 	InstanceContainerTestCapacity int = 1024

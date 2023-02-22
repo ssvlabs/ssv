@@ -28,7 +28,9 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	if signedProposal.Message.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
 	}
-	i.State.Round = newRound
+	i.bumpToRound(newRound)
+
+	i.metrics.EndStageProposal()
 
 	proposalData, err := signedProposal.Message.GetProposalData()
 	if err != nil {

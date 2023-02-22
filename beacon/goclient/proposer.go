@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"fmt"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
@@ -18,10 +19,12 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
+	reqStart := time.Now()
 	beaconBlockRoot, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
 	if err != nil {
 		return nil, err
 	}
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 
 	switch beaconBlockRoot.Version {
 	case spec.DataVersionBellatrix:

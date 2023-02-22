@@ -14,64 +14,6 @@ Even if prometheus is not configured, the end-point can simply be polled by a si
 
 See the configuration of a [local prometheus service](prometheus/prometheus.yaml).
 
-### Metrics
-
-`MetricsAPIPort` is used to enable prometheus metrics collection:
-
-Example:
-```yaml
-MetricsAPIPort: 15000
-```
-
-Or as env variable:
-```shell
-METRICS_API_PORT=15000
-```
-
-##### Collected Metrics:
-
-* `go_*` metrics by `prometheus`
-* `ssv:node_status` Health check status of operator node
-* `ssv:eth1:node_status` Health check status of eth1 node
-* `ssv:beacon:node_status` Health check status of beacon node
-* `ssv:beacon:attestation_data_request_duration_seconds` Attestation data request duration (seconds)
-* `ssv:network:connected_peers{pubKey}` Count connected peers for a validator
-* `ssv:network:ibft_decided_messages_outbound{topic}` Count IBFT decided messages outbound
-* `ssv:network:ibft_messages_outbound{topic}` Count IBFT messages outbound
-* `ssv:network:net_messages_inbound{topic}` Count incoming network messages
-* `ssv:validator:ibft_highest_decided{identifier}` The highest decided sequence number
-* `ssv:validator:ibft_round{identifier}` IBFTs round
-* `ssv:validator:ibft_stage{identifier}` IBFTs stage
-* `ssv:validator:ibft_current_slot{pubKey}` Current running slot
-* `ssv:validator:running_ibfts_count{pubKey}` Count running IBFTs by validator pub key
-* `ssv:validator:running_ibfts_count_all` Count all running IBFTs
-* `ssv:validator:consensus_duration_seconds{pubKey}` Consensus duration (seconds)
-* `ssv:validator:instance_stage_duration_seconds{stage, pubKey}` Instance stage duration (seconds)
-* `ssv:validator:signature_collection_duration_seconds{pubKey}` Signature collection duration (seconds)
-* `ssv:validator:attestation_submission_duration_seconds{pubKey}` Attestation duration (seconds)
-* `ssv:validator:attestation_full_flow_duration_seconds{pubKey}` Attestation full flow duration (seconds)
-
-
-### Grafana
-
-In order to setup a grafana dashboard do the following:
-1. Enable metrics (`MetricsAPIPort`)
-2. Setup Prometheus as mentioned in the beginning of this document and add as data source
-    * Job name assumed to be '`ssv`'
-3. Import dashboards to Grafana:
-   * [SSV Operator Node dashboard](./grafana/dashboard_ssv_operator.json) 
-   * [SSV Validator dashboard](./grafana/dashboard_ssv_validator.json)
-5. Align dashboard variables:
-    * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
-      In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
-    * `validator_dashboard_id` - exist only in operator dashboard, points to validator dashboard
-
-**Note:** In order to show `Process Health` panels, the following K8S metrics should be exposed:
-* `kubelet_volume_stats_used_bytes`
-* `container_cpu_usage_seconds_total`
-* `container_memory_working_set_bytes`
-
-
 ### Health Check
 
 Health check route is available on `GET /health`. \
@@ -86,6 +28,35 @@ $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
 ```
 
+## Metrics
+
+`MetricsAPIPort` is used to enable prometheus metrics collection:
+
+Example:
+```yaml
+MetricsAPIPort: 15000
+```
+
+Or as env variable:
+```shell
+METRICS_API_PORT=15000
+```
+
+
+## Grafana
+
+In order to setup a grafana dashboard do the following:
+1. Enable metrics (`MetricsAPIPort`)
+2. Setup Prometheus as mentioned in the beginning of this document and add as data source
+    * Job name assumed to be '`ssv`'
+3. Import dashboards to Grafana:
+   * [SSV Node dashboard](./grafana/NODE.md) 
+   * [Operator Performance dashboard](./grafana/PERF.md)
+4. Align dashboard variables:
+    * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
+      In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
+
+<br />
 
 ### Profiling
 

@@ -279,6 +279,7 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 		logger.Debug("user agent is unknown", zap.String("ua", ua))
 		return nil, errUnknownUserAgent
 	}
+
 	// TODO: don't assume network is the same
 	ni := records.NewNodeInfo(forksprotocol.GenesisForkVersion, h.nodeInfoIdx.Self().NetworkID)
 	ni.Metadata = &records.NodeMetadata{

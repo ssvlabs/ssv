@@ -31,17 +31,26 @@ type beaconNodeStatus int32
 var (
 	allMetrics = []prometheus.Collector{
 		metricsBeaconNodeStatus,
-		metricsAttestationDataRequest,
+		metricsBeaconDataRequest,
 	}
 	metricsBeaconNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:beacon:node_status",
+		Name: "ssv_beacon_status",
 		Help: "Status of the connected beacon node",
 	})
-	metricsAttestationDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv:beacon:attestation_data_request_duration_seconds",
-		Help:    "Attestation data request duration (seconds)",
+
+	// metricsBeaconDataRequest is located here to avoid including waiting for 1/3 or 2/3 of slot time into request duration.
+	metricsBeaconDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_beacon_data_request_duration_seconds",
+		Help:    "Beacon data request duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{})
+	}, []string{"role"})
+
+	metricsAttesterDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAttester.String())
+	metricsAggregatorDataRequest                = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String())
+	metricsProposerDataRequest                  = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleProposer.String())
+	metricsSyncCommitteeDataRequest             = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String())
+	metricsSyncCommitteeContributionDataRequest = metricsBeaconDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String())
+
 	statusUnknown beaconNodeStatus = 0
 	statusSyncing beaconNodeStatus = 1
 	statusOK      beaconNodeStatus = 2

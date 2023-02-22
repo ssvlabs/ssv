@@ -218,7 +218,9 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 
 // HealthCheck returns a list of issues regards the state of the operator node
 func (n *operatorNode) HealthCheck() []string {
-	return metrics.ProcessAgents(n.healthAgents())
+	errs := metrics.ProcessAgents(n.healthAgents())
+	metrics.ReportSSVNodeHealthiness(len(errs) == 0)
+	return errs
 }
 
 func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
