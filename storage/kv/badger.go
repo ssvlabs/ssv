@@ -2,12 +2,13 @@ package kv
 
 import (
 	"bytes"
+	"context"
+	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
 )
 
@@ -20,14 +21,16 @@ const (
 type BadgerDb struct {
 	db     *badger.DB
 	logger *zap.Logger
-	stopGC chan struct{}
+
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
 }
 
 // New create new instance of Badger db
 func New(options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
-
 	opt := badger.DefaultOptions(options.Path)
 	opt.Logger = nil // remove default logger (INFO)
 	if options.Type == "badger-memory" {
@@ -35,28 +38,38 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		opt.Dir = ""
 		opt.ValueDir = ""
 	}
-
 	if options.Logger != nil && options.Reporting {
 		opt.Logger = newLogger(options.Logger)
 	}
-
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
-
 	db, err := badger.Open(opt)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open badger")
 	}
+
+	// Set up context to control background goroutines.
+	parentCtx := options.Ctx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
+
 	_db := BadgerDb{
 		db:     db,
 		logger: options.Logger,
-		stopGC: make(chan struct{}, 1),
+		ctx:    ctx,
+		cancel: cancel,
 	}
 
+	// Start periodic reporting.
 	if options.Reporting && options.Ctx != nil {
-		async.RunEvery(options.Ctx, 1*time.Minute, _db.report)
+		_db.wg.Add(1)
+		go _db.periodicallyReport(1 * time.Minute)
 	}
 
-	go _db.garbageCollector()
+	// Start periodic garbage collection.
+	_db.wg.Add(1)
+	go _db.periodicallyCollectGarbage(3 * time.Minute)
 
 	options.Logger.Info("badger db initialized")
 	return &_db, nil
@@ -65,24 +78,6 @@ func New(options basedb.Options) (basedb.IDb, error) {
 // Badger returns the underlying badger.DB
 func (b *BadgerDb) Badger() *badger.DB {
 	return b.db
-}
-
-func (b *BadgerDb) garbageCollector() {
-	for {
-		select {
-		case <-b.stopGC:
-			return
-		case <-time.After(3 * time.Minute):
-			err := b.db.RunValueLogGC(0.7)
-			if err == badger.ErrNoRewrite {
-				// No garbage to collect.
-				err = nil
-			}
-			if err != nil {
-				b.logger.Error("failed to collect garbage", zap.Error(err))
-			}
-		}
-	}
 }
 
 // Set save value with key to storage
@@ -228,16 +223,18 @@ func (b *BadgerDb) RemoveAllByCollection(prefix []byte) error {
 	return b.db.DropPrefix(prefix)
 }
 
-// Close close db
-func (b *BadgerDb) Close() {
-	select {
-	case b.stopGC <- struct{}{}:
-	default:
-	}
+// Close closes the database.
+func (b *BadgerDb) Close() error {
+	// Stop & wait for background goroutines.
+	b.cancel()
+	b.wg.Wait()
 
-	if err := b.db.Close(); err != nil {
+	// Close the database.
+	err := b.db.Close()
+	if err != nil {
 		b.logger.Fatal("failed to close db", zap.Error(err))
 	}
+	return err
 }
 
 // report the db size and metrics
@@ -250,6 +247,20 @@ func (b *BadgerDb) report() {
 	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
 		zap.String("BlockCacheMetrics", blockCache.String()),
 		zap.String("IndexCacheMetrics", indexCache.String()))
+}
+
+func (b *BadgerDb) periodicallyReport(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			b.report()
+		case <-b.ctx.Done():
+			b.wg.Done()
+			return
+		}
+	}
 }
 
 func (b *BadgerDb) listRawKeys(prefix []byte, txn *badger.Txn) [][]byte {

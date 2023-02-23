@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -22,7 +21,6 @@ var migrationCompactInstances = Migration{
 			opt.Logger.Error("skipping migration: database is not Badger")
 			return nil
 		}
-		lsmBefore, vlogBefore := bdb.Badger().Size()
 
 		// Compact each role's instances.
 		var roles = []spectypes.BeaconRole{
@@ -86,28 +84,6 @@ var migrationCompactInstances = Migration{
 			}
 			logger.Debug("compacted instances", zap.Int("count", len(messageIDs)))
 		}
-
-		// Run GC to reclaim unused space.
-		deadline := time.Now().Add(120 * time.Second)
-		runs := 0
-		for time.Now().Before(deadline) {
-			err := bdb.Badger().RunValueLogGC(0.1)
-			if err == badger.ErrNoRewrite {
-				break
-			}
-			if err != nil {
-				return errors.Wrap(err, "failed to collect garbage")
-			}
-			runs++
-		}
-		opt.Logger.Debug("collected garbage", zap.Int("gc_runs", runs))
-
-		// Log storage savings.
-		lsmAfter, vlogAfter := bdb.Badger().Size()
-		opt.Logger.Debug("storage size after compaction",
-			zap.String("lsm_savings", fmt.Sprintf("%.2fMB -> %.2fMB", float64(lsmBefore)/1024/1024, float64(lsmAfter)/1024/1024)),
-			zap.String("vlog_savings", fmt.Sprintf("%.2fMB -> %.2fMB", float64(vlogBefore)/1024/1024, float64(vlogAfter)/1024/1024)))
-
 		return nil
 	},
 }

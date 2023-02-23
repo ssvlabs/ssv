@@ -35,7 +35,18 @@ type IDb interface {
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error
 	Update(fn func(Txn) error) error
-	Close()
+	Close() error
+}
+
+// GarbageCollector is an interface implemented by storage engines which demand garbage collection.
+type GarbageCollector interface {
+	// QuickGC runs a short garbage collection cycle to reclaim some unused disk space.
+	// Designed to be called periodically while the database is being used.
+	QuickGC(context.Context) error
+
+	// FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
+	// Designed to be called when the database is not being used.
+	FullGC(context.Context) error
 }
 
 // Obj struct for getting key/value from storage

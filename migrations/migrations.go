@@ -43,7 +43,7 @@ var (
 )
 
 // Run executes the default migrations.
-func Run(ctx context.Context, opt Options) error {
+func Run(ctx context.Context, opt Options) (applied int, err error) {
 	return defaultMigrations.Run(ctx, opt)
 }
 
@@ -92,15 +92,14 @@ func (o Options) ibftStorage(prefix string, fork forksprotocol.ForkVersion) qbft
 }
 
 // Run executes the migrations.
-func (m Migrations) Run(ctx context.Context, opt Options) error {
+func (m Migrations) Run(ctx context.Context, opt Options) (applied int, err error) {
 	logger := opt.Logger
 	logger.Info("Running migrations")
-	count := 0
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
 		if err != nil {
-			return err
+			return applied, err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
 			logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
@@ -112,16 +111,15 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 		opt.Logger = opt.Logger.With(zap.String("migration", migration.Name))
 		err = migration.Run(ctx, opt, []byte(migration.Name))
 		if err != nil {
-			return errors.Wrapf(err, "migration %q failed", migration.Name)
+			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
-		count++
+		applied++
 		logger.Info("migration applied successfully",
 			zap.String("name", migration.Name),
 			zap.Duration("took", time.Since(start)))
 	}
-	if count == 0 {
-		logger.Info("No migrations to apply")
+	if applied == 0 {
+		logger.Info("no migrations to apply")
 	}
-
-	return nil
+	return applied, nil
 }

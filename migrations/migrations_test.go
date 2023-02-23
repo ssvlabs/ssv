@@ -49,8 +49,15 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, migrations.Run(ctx, opt))
-	require.NoError(t, migrations.Run(ctx, opt))
+
+	applied, err := migrations.Run(ctx, opt)
+	require.NoError(t, err)
+	require.Equal(t, applied, 1)
+	require.Equal(t, count, 1) // Only ran once.
+
+	applied, err = migrations.Run(ctx, opt)
+	require.NoError(t, err)
+	require.Equal(t, applied, 0)
 	require.Equal(t, count, 1) // Only ran once.
 }
 
@@ -62,15 +69,17 @@ func Test_Rollback(t *testing.T) {
 	// Test that migration fails and rolls back on error.
 	fakeError := errors.New("fake error")
 	migrationKey := "test_migration"
-	err = Migrations{fakeMigration(migrationKey, fakeError)}.Run(ctx, opt)
-	require.Error(t, err, fakeError)
+	applied, err := Migrations{fakeMigration(migrationKey, fakeError)}.Run(ctx, opt)
+	require.Equal(t, 0, applied)
+	require.Error(t, fakeError, err)
 	_, found, err := opt.Db.Get(migrationsPrefix, []byte(migrationKey))
 	require.NoError(t, err)
 	require.False(t, found)
 
 	// Test that migration doesn't fail without error:
-	err = Migrations{fakeMigration(migrationKey, nil)}.Run(ctx, opt)
+	applied, err = Migrations{fakeMigration(migrationKey, nil)}.Run(ctx, opt)
 	require.NoError(t, err)
+	require.Equal(t, 1, applied)
 	obj, found, err := opt.Db.Get(migrationsPrefix, []byte(migrationKey))
 	require.NoError(t, err)
 	require.True(t, found)
@@ -88,9 +97,10 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 		fakeMigration("first", fakeError),
 		fakeMigration("second", nil),
 	}
-	err = migrations.Run(ctx, opt)
+	applied, err := migrations.Run(ctx, opt)
 	require.Error(t, err)
 	require.EqualError(t, err, fmt.Sprintf("migration \"first\" failed: %s", fakeError.Error()))
+	require.Equal(t, 0, applied)
 	_, found, err := opt.Db.Get(migrationsPrefix, []byte("first"))
 	require.NoError(t, err)
 	require.False(t, found)
@@ -123,8 +133,9 @@ func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 	migrations := Migrations{
 		migrationCleanAllRegistryData,
 	}
-	err = migrations.Run(ctx, opt)
+	applied, err := migrations.Run(ctx, opt)
 	require.NoError(t, err)
+	require.Equal(t, 1, applied)
 
 	// validate that migrationCleanAllRegistryData fake applied
 	obj, found, err := opt.Db.Get(exporterPrefix, exporterKey)
