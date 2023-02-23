@@ -35,7 +35,7 @@ var migrationCompactInstances = Migration{
 			prefix := role.String()
 			logger := opt.Logger.With(zap.String("role", role.String()))
 
-			// Collect all stored MessageIDs.
+			// Collect all stored highest instances for this role.
 			var messageIDs []spectypes.MessageID
 			err := bdb.Badger().View(func(txn *badger.Txn) error {
 				opt := badger.DefaultIteratorOptions
@@ -46,6 +46,9 @@ var migrationCompactInstances = Migration{
 				for it.Rewind(); it.Valid(); it.Next() {
 					item := it.Item()
 					key := item.Key()
+					if !bytes.HasSuffix(key, []byte("highest_instance")) {
+						continue
+					}
 
 					// Skip items that has a prefix of a different role.
 					for _, r := range roles {
@@ -78,7 +81,7 @@ var migrationCompactInstances = Migration{
 				if inst == nil {
 					return fmt.Errorf("instance not found for message ID %x", messageID)
 				}
-				if err := storage.SaveInstance(inst); err != nil {
+				if err := storage.SaveHighestInstance(inst); err != nil {
 					return errors.Wrap(err, "failed to save instance")
 				}
 			}
