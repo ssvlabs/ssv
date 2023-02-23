@@ -60,7 +60,7 @@ type Migration struct {
 // from first to last (order is significant).
 type Migrations []Migration
 
-// Options are configurations for migrations
+// Options is the options for running migrations.
 type Options struct {
 	Db      basedb.IDb
 	Logger  *zap.Logger
