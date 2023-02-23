@@ -26,6 +26,7 @@ type BadgerDb struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// gcMutex is used to ensure that only one GC cycle is running at a time.
 	gcMutex sync.Mutex
 }
 
@@ -49,7 +50,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		return nil, errors.Wrap(err, "failed to open badger")
 	}
 
-	// Set up context to control background goroutines.
+	// Set up context/cancel to control background goroutines.
 	parentCtx := options.Ctx
 	if parentCtx == nil {
 		parentCtx = context.Background()
