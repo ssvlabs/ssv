@@ -5,22 +5,20 @@ import (
 	"net"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
+
+	"github.com/dgraph-io/ristretto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/dgraph-io/ristretto"
-
-	"github.com/libp2p/go-libp2p/core/peer"
-
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -152,34 +150,8 @@ func IndexCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
 	return zap.Stringer(FieldIndexCacheMetrics, metrics)
 }
 
-func Results(msgs []protocolp2p.SyncResult) zapcore.Field {
-	return zap.Stringer(FieldResults, funcStringer{
-		fn: func() string {
-			var v []string
-			for _, m := range msgs {
-				var sm *specqbft.SignedMessage
-				if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-					sm = &specqbft.SignedMessage{}
-					if err := sm.Decode(m.Msg.Data); err != nil {
-						v = append(v, fmt.Sprintf("(%v)", err))
-						continue
-					}
-					v = append(
-						v,
-						fmt.Sprintf(
-							"(type=%d height=%d round=%d)",
-							m.Msg.MsgType,
-							sm.Message.Height,
-							sm.Message.Round,
-						),
-					)
-				}
-				v = append(v, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
-			}
-
-			return strings.Join(v, ", ")
-		},
-	})
+func Results(msgs protocolp2p.SyncResults) zapcore.Field {
+	return zap.Stringer(FieldResults, msgs)
 }
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {

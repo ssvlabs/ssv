@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const (

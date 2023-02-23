@@ -1,9 +1,10 @@
-package message
+package message_test
 
 import (
 	"sort"
 	"testing"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -29,7 +30,7 @@ func TestAggregateSorting(t *testing.T) {
 	signedMessage := generateSignedMsg(1)
 	for i := 2; i <= 4; i++ {
 		sig := generateSignedMsg(spectypes.OperatorID(i))
-		require.NoError(t, Aggregate(signedMessage, sig))
+		require.NoError(t, message.Aggregate(signedMessage, sig))
 	}
 
 	sorted := sort.SliceIsSorted(signedMessage.Signers, func(i, j int) bool {
