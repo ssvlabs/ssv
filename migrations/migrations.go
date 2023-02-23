@@ -38,6 +38,7 @@ var (
 		migrationCleanRegistryData,
 		migrationCleanRegistryDataIncludingSignerStorage,
 		migrationCleanRegistryDataShifuV2,
+		migrationCompactInstances,
 	}
 )
 
