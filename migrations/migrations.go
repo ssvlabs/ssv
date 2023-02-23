@@ -3,15 +3,19 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
+	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -82,9 +86,14 @@ func (o Options) signerStorage() ekm.Storage {
 	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
 }
 
+func (o Options) ibftStorage(prefix string, fork forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+	return ibftstorage.New(o.Db, o.Logger, prefix, fork)
+}
+
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, opt Options) error {
-	opt.Logger.Info("Running migrations:")
+	logger := opt.Logger
+	logger.Info("Running migrations")
 	count := 0
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
@@ -93,20 +102,24 @@ func (m Migrations) Run(ctx context.Context, opt Options) error {
 			return err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
-			opt.Logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
+			logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
 			continue
 		}
 
 		// Execute the migration.
+		start := time.Now()
+		opt.Logger = opt.Logger.With(zap.String("migration", migration.Name))
 		err = migration.Run(ctx, opt, []byte(migration.Name))
 		if err != nil {
 			return errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
 		count++
-		opt.Logger.Info("migration applied successfully", zap.String("name", migration.Name))
+		logger.Info("migration applied successfully",
+			zap.String("name", migration.Name),
+			zap.Duration("took", time.Since(start)))
 	}
 	if count == 0 {
-		opt.Logger.Info("No migrations to apply.")
+		logger.Info("No migrations to apply")
 	}
 
 	return nil

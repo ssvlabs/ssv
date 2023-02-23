@@ -62,6 +62,11 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	return &_db, nil
 }
 
+// Badger returns the underlying badger.DB
+func (b *BadgerDb) Badger() *badger.DB {
+	return b.db
+}
+
 func (b *BadgerDb) garbageCollector() {
 	for {
 		select {
