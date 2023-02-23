@@ -30,6 +30,9 @@ func (b *BadgerDb) periodicallyCollectGarbage(interval time.Duration) {
 // QuickGC runs a short garbage collection cycle to reclaim some unused disk space.
 // Designed to be called periodically while the database is being used.
 func (b *BadgerDb) QuickGC(ctx context.Context) error {
+	b.gcMutex.Lock()
+	defer b.gcMutex.Unlock()
+
 	err := b.db.RunValueLogGC(0.5)
 	if err == badger.ErrNoRewrite {
 		// No garbage to collect.
@@ -41,6 +44,9 @@ func (b *BadgerDb) QuickGC(ctx context.Context) error {
 // FullGC runs a long garbage collection cycle to reclaim (ideally) all unused disk space.
 // Designed to be called when the database is not being used.
 func (b *BadgerDb) FullGC(ctx context.Context) error {
+	b.gcMutex.Lock()
+	defer b.gcMutex.Unlock()
+
 	for ctx.Err() == nil {
 		err := b.db.RunValueLogGC(0.1)
 		if err == badger.ErrNoRewrite {

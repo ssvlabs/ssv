@@ -25,6 +25,8 @@ type BadgerDb struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	gcMutex sync.Mutex
 }
 
 // New create new instance of Badger db
