@@ -20,7 +20,7 @@ func (v *Validator) Start(logger *zap.Logger) error {
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
-				v.logger.Warn("share is missing", zap.String("role", role.String()))
+				logger.Warn("share is missing", zap.String("role", role.String()))
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)

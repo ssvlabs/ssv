@@ -31,7 +31,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
-			v.logger.Warn("dropping timeout message because the queue is full",
+			logger.Warn("dropping timeout message because the queue is full",
 				zap.String("role", identifier.GetRoleType().String()))
 		}
 	}

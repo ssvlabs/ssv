@@ -179,9 +179,6 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
 	logger := zap.L()
-	loggerFactory := func(who string) *zap.Logger {
-		return logger.With(zap.String("who", who))
-	}
 	ln, err := CreateAndStartLocalNet(ctx, logger.With(zap.String("who", "createNetworkAndSubscribe")), forkVersion, n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
