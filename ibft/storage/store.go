@@ -173,7 +173,7 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-	i.logger.Debug("removed decided", zap.Int("count", n), logging.LazyBytesHash("identifier", msgID))
+	i.logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}

@@ -26,7 +26,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	golog "github.com/ipfs/go-log"
+	ipsflog "github.com/ipfs/go-log"
 )
 
 const (
@@ -257,7 +257,7 @@ func (n *p2pNetwork) setupDiscovery() error {
 
 func (n *p2pNetwork) setupPubsub() error {
 	if n.cfg.PubSubTrace {
-		if err := golog.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
+		if err := ipsflog.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
 			return errors.Wrap(err, "could not set pubsub logger level")
 		}
 	}
