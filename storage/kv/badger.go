@@ -250,6 +250,7 @@ func (b *BadgerDb) report() {
 }
 
 func (b *BadgerDb) periodicallyReport(interval time.Duration) {
+	defer b.wg.Done()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -257,7 +258,6 @@ func (b *BadgerDb) periodicallyReport(interval time.Duration) {
 		case <-ticker.C:
 			b.report()
 		case <-b.ctx.Done():
-			b.wg.Done()
 			return
 		}
 	}
