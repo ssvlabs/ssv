@@ -38,8 +38,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 		}
 		if pushed := q.Q.TryPush(decodedMsg); !pushed {
 			msgID := msg.MsgID.String()
-			metricMessageDropped.WithLabelValues(msgID).Inc()
-			logger.Warn("dropping message because queue is full",
+			logger.Warn("dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}

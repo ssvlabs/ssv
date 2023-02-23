@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -143,7 +144,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := createDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
 		if err != nil {
 			return err
 		}
@@ -151,7 +152,9 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		if err != nil {
 			return err
 		}
-		v.Queues[duty.Type].Q.Push(dec)
+		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
 	} else {
 		logger.Warn("could not find validator")
 	}
@@ -159,8 +162,8 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	return nil
 }
 
-// createDutyExecuteMsg returns ssvMsg with event type of duty execute
-func createDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+// CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {

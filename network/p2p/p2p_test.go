@@ -182,7 +182,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 	loggerFactory := func(who string) *zap.Logger {
 		return logger.With(zap.String("who", who))
 	}
-	ln, err := CreateAndStartLocalNet(ctx, loggerFactory, forkVersion, n, n/2-1, false)
+	ln, err := CreateAndStartLocalNet(ctx, logger.With(zap.String("who", "createNetworkAndSubscribe")), forkVersion, n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
 	}

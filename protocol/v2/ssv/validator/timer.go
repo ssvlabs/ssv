@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/json"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -29,7 +30,10 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Debug("failed to decode timer msg", zap.Error(err))
 			return
 		}
-		v.Queues[identifier.GetRoleType()].Q.Push(dec)
+		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
+			v.logger.Warn("dropping timeout message because the queue is full",
+				zap.String("role", identifier.GetRoleType().String()))
+		}
 	}
 }
 
@@ -37,7 +41,7 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	td := types.TimeoutData{Height: height}
 	data, err := json.Marshal(td)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal timout data")
+		return nil, errors.Wrap(err, "failed to marshal timeout data")
 	}
 	eventMsg := &types.EventMsg{
 		Type: types.Timeout,
