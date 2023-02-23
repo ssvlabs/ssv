@@ -233,8 +233,7 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	garbageCollector, ok := db.(basedb.GarbageCollector)
-	if ok {
+	if _, ok := db.(basedb.GarbageCollector); ok {
 		// Close & reopen the database to trigger any unknown internal
 		// startup/shutdown procedures that the storage engine may have.
 		start := time.Now()
@@ -245,7 +244,7 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 		// Run a long garbage collection cycle with a timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
-		if err := garbageCollector.FullGC(ctx); err != nil {
+		if err := db.(basedb.GarbageCollector).FullGC(ctx); err != nil {
 			return nil, errors.Wrap(err, "failed to collect garbage")
 		}
 
