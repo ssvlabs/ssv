@@ -338,7 +338,7 @@ func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *specty
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(logging.PubKey(duty.PubKey[:])).
-		With(logging.StartTime(dc.ethNetwork, duty.Slot))
+		With(logging.StartTimeUnixNano(dc.ethNetwork, duty.Slot))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode

@@ -28,7 +28,7 @@ const (
 	FieldBindIP              = "bindIP"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
 	FieldCurrentSlot         = "currentSlot"
-	FieldDuration            = "duration"
+	FieldDurationNano        = "durationNano"
 	FieldEnr                 = "enr"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
@@ -39,7 +39,7 @@ const (
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
 	FieldResults             = "results"
-	FieldStartTime           = "startTime"
+	FieldStartTimeUnixNano   = "startTimeUnixNano"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
 	FieldTargetNodeEnr       = "targetNodeEnr"
@@ -120,8 +120,8 @@ func MessageID(val spectypes.MessageID) zapcore.Field {
 	return zap.Stringer(FieldMessageID, val)
 }
 
-func Duration(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDuration, int64Stringer{time.Since(val).Nanoseconds()})
+func DurationNano(val time.Time) zapcore.Field {
+	return zap.Stringer(FieldDurationNano, int64Stringer{time.Since(val).Nanoseconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
@@ -136,8 +136,8 @@ func (s funcStringer) String() string {
 	return s.fn()
 }
 
-func StartTime(network beacon.Network, slot spec.Slot) zapcore.Field {
-	return zap.Stringer(FieldStartTime, funcStringer{
+func StartTimeUnixNano(network beacon.Network, slot spec.Slot) zapcore.Field {
+	return zap.Stringer(FieldStartTimeUnixNano, funcStringer{
 		fn: func() string {
 			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixNano()))
 		},

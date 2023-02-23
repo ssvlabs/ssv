@@ -206,7 +206,7 @@ func (s *syncer) getDecidedByRange(
 			})
 			logger.Debug("received and processed history batch",
 				zap.Int64("tail", int64(tail)),
-				logging.Duration(start),
+				logging.DurationNano(start),
 				zap.Int("results_count", len(msgs)),
 				logging.Results(msgs),
 				zap.Int("handled", handled))
