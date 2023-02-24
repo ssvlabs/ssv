@@ -20,13 +20,18 @@ func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
 
 	// Only discard commit messages if the whole committee has signed,
 	// otherwise just trim down to the current round and future rounds.
-	var signers []spectypes.OperatorID
-	if decidedMessage != nil {
-		signers = decidedMessage.Signers
-	} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
-		signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+	var wholeCommitteeDecided bool
+	if state.Share == nil {
+		// Share may be missing in tests.
+	} else {
+		var signers []spectypes.OperatorID
+		if decidedMessage != nil {
+			signers = decidedMessage.Signers
+		} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
+			signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+		}
+		wholeCommitteeDecided = len(signers) == len(state.Share.Committee)
 	}
-	wholeCommitteeDecided := len(signers) == len(state.Share.Committee)
 	compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 

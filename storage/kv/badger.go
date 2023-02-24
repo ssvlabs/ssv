@@ -59,7 +59,7 @@ func New(options basedb.Options) (basedb.IDb, error) {
 
 	_db := BadgerDb{
 		db:     db,
-		logger: options.Logger,
+		logger: options.Logger.With(zap.String("who", "BadgerDb")),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -71,10 +71,11 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	}
 
 	// Start periodic garbage collection.
-	_db.wg.Add(1)
-	go _db.periodicallyCollectGarbage(3 * time.Minute)
+	if options.GCInterval > 0 {
+		_db.wg.Add(1)
+		go _db.periodicallyCollectGarbage(options.GCInterval)
+	}
 
-	options.Logger.Info("badger db initialized")
 	return &_db, nil
 }
 

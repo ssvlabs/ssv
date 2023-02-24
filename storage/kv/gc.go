@@ -20,9 +20,10 @@ func (b *BadgerDb) periodicallyCollectGarbage(interval time.Duration) {
 			start := time.Now()
 			err := b.QuickGC(context.Background())
 			if err != nil {
-				b.logger.Error("failed to collect garbage", zap.Error(err))
+				b.logger.Error("periodic GC cycle failed", zap.Error(err))
+			} else {
+				b.logger.Debug("periodic GC cycle completed", zap.Duration("took", time.Since(start)))
 			}
-			b.logger.Debug("periodic garbage collection cycle completed", zap.Duration("took", time.Since(start)))
 		}
 	}
 }
