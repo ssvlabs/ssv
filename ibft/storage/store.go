@@ -98,7 +98,7 @@ func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.Sto
 }
 
 func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
-	instance.Compact(inst.State, inst.DecidedMessage)
+	inst.State = instance.CompactCopy(inst.State, inst.DecidedMessage)
 
 	value, err := inst.Encode()
 	if err != nil {
