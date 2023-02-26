@@ -15,7 +15,7 @@ import (
 func (v *Validator) onTimeout(identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {
 		v.mtx.RLock() // read-lock for v.Queues, v.state
-		defer v.mtx.Unlock()
+		defer v.mtx.RUnlock()
 
 		// only run if the validator is started
 		if v.state != uint32(Started) {
