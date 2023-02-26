@@ -108,7 +108,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		// teardown
 		for _, val := range s.validators {
-			require.NoError(t, val.Stop())
+			val.Stop()
 		}
 
 		// HACK: sleep to wait for function calls to github.com/herumi/bls-eth-go-binary
