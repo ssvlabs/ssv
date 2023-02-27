@@ -5,6 +5,7 @@ stages:
 variables:
   #GLOBAL
   IMAGE_NAME: ssv-node
+  DOCKER_BUILDKIT: 1
 
   #STAGE
   ACCOUNT_ID_INFRA_STAGE: 121827225315
@@ -26,10 +27,14 @@ variables:
 # | STAGE |
 # ---------
 Build stage Docker image:
+  image: docker:20.10.23
   stage: build
   tags:
     - blox-infra-stage
   script:
+    - apk add --no-cache py-pip
+    - pip install pyyaml==5.3.1
+    - pip install awscli
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
@@ -77,10 +82,14 @@ Deploy ssv nodes to blox-infra-stage cluster:
 # | Prod  |
 # ---------
 Build prod Docker image:
+  image: docker:20.10.23
   stage: build
   tags:
     - blox-infra-prod
   script:
+    - apk add --no-cache py-pip
+    - pip install pyyaml==5.3.1
+    - pip install awscli
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF

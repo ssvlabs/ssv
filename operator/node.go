@@ -6,23 +6,22 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/operator/fee_recipient"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/fee_recipient"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	qbftstorageprotocol "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -65,7 +64,7 @@ type operatorNode struct {
 	beacon           beaconprotocol.Beacon
 	net              network.P2PNetwork
 	storage          storage.Storage
-	qbftStorage      qbftstorageprotocol.QBFTStore
+	qbftStorage      *qbftstorage.QBFTStores
 	eth1Client       eth1.Client
 	dutyCtrl         duties.DutyController
 	feeRecipientCtrl fee_recipient.RecipientController
@@ -79,7 +78,19 @@ type operatorNode struct {
 
 // New is the constructor of operatorNode
 func New(opts Options) Node {
-	qbftStorage := qbftstorage.New(opts.DB, opts.Logger, spectypes.BNRoleAttester.String(), opts.ForkVersion)
+	storageMap := qbftstorage.NewStores()
+
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+	}
+	for _, role := range roles {
+		storageMap.Add(role, qbftstorage.New(opts.DB, opts.Logger, role.String(), opts.ForkVersion))
+	}
+
 	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
 
 	node := &operatorNode{
@@ -92,7 +103,7 @@ func New(opts Options) Node {
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
 		storage:        storage.NewNodeStorage(opts.DB, opts.Logger),
-		qbftStorage:    qbftStorage,
+		qbftStorage:    storageMap,
 
 		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
 			Logger:              opts.Logger,
@@ -212,7 +223,9 @@ func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
 
 // HealthCheck returns a list of issues regards the state of the operator node
 func (n *operatorNode) HealthCheck() []string {
-	return metrics.ProcessAgents(n.healthAgents())
+	errs := metrics.ProcessAgents(n.healthAgents())
+	metrics.ReportSSVNodeHealthiness(len(errs) == 0)
+	return errs
 }
 
 func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {

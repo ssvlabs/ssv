@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"encoding/hex"
-
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -62,10 +61,15 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
-		// set timeout F
+		// Set timeout function.
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
-		v.Queues[dutyRunner.GetBaseRunner().BeaconRoleType] = queueContainer{
-			Q: queue.New(),
+
+		// Setup the queue.
+		role := dutyRunner.GetBaseRunner().BeaconRoleType
+		msgID := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, role).String()
+
+		v.Queues[role] = queueContainer{
+			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,

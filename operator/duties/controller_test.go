@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"sync"
 	"testing"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -38,8 +40,9 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 	dutyCtrl := &dutyController{
 		logger: zap.L(), ctx: context.Background(), ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
-		executor: mockExecutor,
-		fetcher:  mockFetcher,
+		executor:               mockExecutor,
+		fetcher:                mockFetcher,
+		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
 	}
 
 	cn := make(chan phase0.Slot)

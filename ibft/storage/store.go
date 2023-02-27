@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -96,8 +97,10 @@ func (i *ibftStorage) SaveHighestAndHistoricalInstance(instance *qbftstorage.Sto
 	return i.saveInstance(instance, true, true)
 }
 
-func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
-	value, err := instance.Encode()
+func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, asHighest bool) error {
+	inst.State = instance.CompactCopy(inst.State, inst.DecidedMessage)
+
+	value, err := inst.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode instance")
 	}
@@ -106,14 +109,14 @@ func (i *ibftStorage) saveInstance(instance *qbftstorage.StoredInstance, toHisto
 		i.forkLock.RLock()
 		defer i.forkLock.RUnlock()
 
-		err = i.save(value, highestInstanceKey, instance.State.ID)
+		err = i.save(value, highestInstanceKey, inst.State.ID)
 		if err != nil {
 			return errors.Wrap(err, "could not save highest instance")
 		}
 	}
 
 	if toHistory {
-		err = i.save(value, instanceKey, instance.State.ID, uInt64ToByteSlice(uint64(instance.State.Height)))
+		err = i.save(value, instanceKey, inst.State.ID, uInt64ToByteSlice(uint64(inst.State.Height)))
 		if err != nil {
 			return errors.Wrap(err, "could not save historical instance")
 		}

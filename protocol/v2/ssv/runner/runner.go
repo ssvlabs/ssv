@@ -102,6 +102,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 	}
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
+	b.compactInstanceIfNeeded(msg)
 	if err != nil {
 		return false, nil, err
 	}

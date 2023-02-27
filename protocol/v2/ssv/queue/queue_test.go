@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -12,6 +11,8 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 var mockState = &State{
@@ -21,78 +22,211 @@ var mockState = &State{
 	Quorum:             4,
 }
 
-func TestPriorityQueuePushAndPop(t *testing.T) {
-	queue := New()
+func TestPriorityQueue_TryPop(t *testing.T) {
+	queue := NewDefault()
 
-	require.True(t, queue.IsEmpty())
+	require.True(t, queue.Empty())
 
 	// Push 2 messages.
 	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
 	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
-	require.False(t, queue.IsEmpty())
+	require.False(t, queue.Empty())
 
 	// Pop 1st message.
-	popped := queue.Pop(NewMessagePrioritizer(mockState))
+	popped := queue.TryPop(NewMessagePrioritizer(mockState))
 	require.Equal(t, msg, popped)
 
 	// Pop 2nd message.
-	popped = queue.Pop(NewMessagePrioritizer(mockState))
-	require.True(t, queue.IsEmpty())
+	popped = queue.TryPop(NewMessagePrioritizer(mockState))
+	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.Pop(NewMessagePrioritizer(mockState))
+	popped = queue.TryPop(NewMessagePrioritizer(mockState))
 	require.Nil(t, popped)
 }
 
-func TestPriorityQueueParallelism(t *testing.T) {
-	// TODO: this test fails because of a race condition in the queue.
-	// Re-enable this test after it's fixed!
-	t.SkipNow()
+func TestPriorityQueue_Pop(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
 
-	totalStart := time.Now()
-	n := 10
-	for i := 0; i < n; i++ {
-		start := time.Now()
-		const (
-			pushers      = 10
-			poppers      = 1
-			messageCount = 1000
-		)
-		queue := New()
+	const (
+		capacity       = 3
+		contextTimeout = 50 * time.Millisecond
+		pushDelay      = 50 * time.Millisecond
+		precision      = 5 * time.Millisecond
+	)
+	queue := New(capacity)
+	require.True(t, queue.Empty())
 
-		// Spawn a printer to allow for non-blocking logging.
-		print := make(chan []any, 2048)
-		go func() {
-			for msg := range print {
-				t.Logf(msg[0].(string), msg[1:]...)
-				_ = msg
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+
+	// Push messages.
+	for i := 0; i < capacity; i++ {
+		queue.TryPush(msg)
+	}
+	require.False(t, queue.Empty())
+
+	// Should pop everything immediately.
+	for i := 0; i < capacity; i++ {
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Equal(t, msg, popped)
+	}
+	require.True(t, queue.Empty())
+
+	// Should pop nil after context cancellation.
+	{
+		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
+		defer cancel()
+		expectedEnd := time.Now().Add(contextTimeout)
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Nil(t, popped)
+		require.WithinDuration(t, expectedEnd, time.Now(), precision)
+	}
+
+	// Push messages in a goroutine.
+	go func() {
+		for i := 0; i < capacity; i++ {
+			time.Sleep(pushDelay)
+			queue.TryPush(msg)
+		}
+	}()
+
+	// Should wait for the messages to be pushed.
+	expectedEnd := time.Now().Add(pushDelay * time.Duration(capacity))
+	for i := 0; i < capacity; i++ {
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		require.Equal(t, msg, popped)
+	}
+	require.True(t, queue.Empty())
+	require.WithinDuration(t, expectedEnd, time.Now(), precision)
+}
+
+// TestPriorityQueue_Order tests that the queue returns the messages in the correct order.
+func TestPriorityQueue_Order(t *testing.T) {
+	for _, test := range messagePriorityTests {
+		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
+			// Create the PriorityQueue and populate it with messages.
+			q := NewDefault()
+
+			// Decode messages.
+			messages := make(messageSlice, len(test.messages))
+			for i, m := range test.messages {
+				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
+				require.NoError(t, err)
+				messages[i] = mm
 			}
+
+			for i := 0; i < 20; i++ {
+				// Push shuffled messages to the queue.
+				for _, msg := range messages.shuffle() {
+					q.Push(msg)
+				}
+
+				// Pop messages from the queue and compare to the expected order.
+				for i, excepted := range messages {
+					actual := q.TryPop(NewMessagePrioritizer(test.state))
+					require.Equal(t, excepted, actual, "incorrect message at index %d", i)
+				}
+			}
+		})
+	}
+}
+
+type mockMetrics struct {
+	dropped int
+}
+
+func (m *mockMetrics) Dropped() { m.dropped++ }
+
+func TestWithMetrics(t *testing.T) {
+	var metrics mockMetrics
+	queue := WithMetrics(New(1), &metrics)
+	require.True(t, queue.Empty())
+
+	// Push 1 message.
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	require.NoError(t, err)
+	pushed := queue.TryPush(msg)
+	require.True(t, pushed)
+	require.False(t, queue.Empty())
+	require.Equal(t, 0, metrics.dropped)
+
+	// Push above capacity.
+	pushed = queue.TryPush(msg)
+	require.False(t, pushed)
+	require.False(t, queue.Empty())
+	require.Equal(t, 1, metrics.dropped)
+}
+
+func BenchmarkPriorityQueue_Parallel(b *testing.B) {
+	benchmarkPriorityQueueParallel(b, func() Queue {
+		return New(32)
+	}, false)
+}
+
+func BenchmarkPriorityQueue_Parallel_Lossy(b *testing.B) {
+	benchmarkPriorityQueueParallel(b, NewDefault, true)
+}
+
+func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bool) {
+	english := message.NewPrinter(language.English)
+
+	const (
+		pushers      = 16
+		poppers      = 1
+		messageCount = 2080
+	)
+	queue := factory()
+
+	// Prepare messages.
+	messages := make([]*DecodedSSVMessage, messageCount)
+	for i := range messages {
+		var err error
+		msg, err := DecodeSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		require.NoError(b, err)
+		messages[i] = msg
+	}
+
+	// Metrics.
+	var (
+		totalPushed   int
+		totalPopped   int
+		totalDuration time.Duration
+	)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+
+		// Stream messages to pushers.
+		messageStream := make(chan *DecodedSSVMessage)
+		go func() {
+			for _, msg := range messages {
+				messageStream <- msg
+			}
+			close(messageStream)
 		}()
 
 		// Spawn pushers.
-		var pushersWg sync.WaitGroup
-		allMsgs := make([]*DecodedSSVMessage, 0, messageCount)
-		var pushed atomic.Int64
+		var (
+			pushersWg   sync.WaitGroup
+			pushedCount atomic.Int64
+		)
 		for i := 0; i < pushers; i++ {
-			msgs := make([]*DecodedSSVMessage, messageCount/pushers)
-			for i := 0; i < len(msgs); i++ {
-				var err error
-				msgs[i], err = DecodeSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-				require.NoError(t, err)
-			}
-			allMsgs = append(allMsgs, msgs...)
-
 			pushersWg.Add(1)
 			go func() {
 				defer pushersWg.Done()
-				for _, m := range msgs {
-					queue.Push(m)
-					n := pushed.Add(1)
-					_ = n
-					// print <- []any{"pushed message %d/%d", n, messageCount}
-					time.Sleep(time.Duration(rand.Intn(10)) * time.Microsecond)
+				for m := range messageStream {
+					if lossy {
+						queue.TryPush(m)
+					} else {
+						queue.Push(m)
+					}
+					pushedCount.Add(1)
+					time.Sleep(time.Duration(rand.Intn(300)) * time.Microsecond)
 				}
 			}()
 		}
@@ -103,147 +237,74 @@ func TestPriorityQueueParallelism(t *testing.T) {
 		go func() {
 			pushersWg.Wait()
 			defer pushersAssertionWg.Done()
-			require.Equal(t, pushed.Load(), int64(messageCount))
+			totalPushed += messageCount
+			require.Equal(b, int64(messageCount), pushedCount.Load())
 		}()
 
 		// Pop all messages.
 		var poppersWg sync.WaitGroup
 		popped := make(chan *DecodedSSVMessage, messageCount*2)
-		var stopPopping atomic.Bool
+		poppingCtx, stopPopping := context.WithCancel(context.Background())
 		for i := 0; i < poppers; i++ {
 			poppersWg.Add(1)
 			go func() {
 				defer poppersWg.Done()
 				for {
-					if queue.IsEmpty() {
-						if stopPopping.Load() {
-							return
-						}
-						time.Sleep(5 * time.Microsecond)
-						continue
+					msg := queue.Pop(poppingCtx, NewMessagePrioritizer(mockState))
+					if msg == nil {
+						return
 					}
-					msg := queue.Pop(NewMessagePrioritizer(mockState))
-					if msg != nil {
-						popped <- msg
-					} else {
-						if stopPopping.Load() {
-							return
-						}
-					}
-					// print <- []any{"popped message %d/%d", len(popped), messageCount}
-					if time.Since(start).Seconds() > 10 {
-						t.Logf("timeout")
-						t.Fail()
-					}
+					popped <- msg
 				}
 			}()
 		}
 
 		// Wait for pushed messages assertion.
 		pushersAssertionWg.Wait()
-		stopPopping.Store(true)
+		stopPopping()
 
 		// Wait for poppers.
 		go func() {
 			poppersWg.Wait()
 			close(popped)
 		}()
+
 		allPopped := make(map[*DecodedSSVMessage]struct{})
 		for msg := range popped {
 			allPopped[msg] = struct{}{}
 		}
-		log.Printf("popped %d messages in %s", len(allPopped), time.Since(start))
+		totalPopped += len(allPopped)
+		totalDuration += time.Since(start)
 
-		// Assert that all messages were popped.
-		for _, msg := range allMsgs {
-			if _, ok := allPopped[msg]; !ok {
-				t.Log("message not popped")
-				t.Fail()
+		if !lossy {
+			// Assert that all messages were popped.
+			require.Equal(b, messageCount, len(allPopped), "popped messages count mismatch")
+
+			for _, msg := range messages {
+				if _, ok := allPopped[msg]; !ok {
+					b.Log("message not popped")
+					b.Fail()
+				}
 			}
 		}
 	}
+	b.StopTimer()
 
-	log.Printf("finished %d iterations in %s", n, time.Since(totalStart))
+	// Log metrics.
+	b.Log(english.Sprintf(
+		"popped %d/%d (%.3f%% loss) messages at %d messages/sec",
+		totalPopped,
+		totalPushed,
+		100*(1-float64(totalPopped)/float64(totalPushed)),
+		int64(float64(totalPopped)/totalDuration.Seconds()),
+	))
 }
 
-func TestPriorityQueueWaitAndPop(t *testing.T) {
-	ctx := context.Background()
-
-	for i := 0; i < 10; i++ {
-		queue := New()
-		require.True(t, queue.IsEmpty())
-
-		msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
-		require.NoError(t, err)
-
-		// Push 2 message.
-		queue.Push(msg)
-		queue.Push(msg)
-
-		// WaitAndPop immediately.
-		popped := queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// WaitAndPop immediately.
-		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// Push 1 message in a goroutine.
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-			queue.Push(msg)
-
-			time.Sleep(100 * time.Millisecond)
-			queue.Push(msg)
-		}()
-
-		// WaitAndPop should wait for the message to be pushed.
-		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-
-		// WaitAndPop should wait for the message to be pushed.
-		popped = queue.WaitAndPop(ctx, NewMessagePrioritizer(mockState))
-		require.NotNil(t, popped)
-		require.Equal(t, msg, popped)
-	}
-}
-
-// TestPriorityQueueOrder tests that the queue returns the messages in the correct order.
-func TestPriorityQueueOrder(t *testing.T) {
-	for _, test := range messagePriorityTests {
-		t.Run(fmt.Sprintf("PriorityQueue: %s", test.name), func(t *testing.T) {
-			// Create the PriorityQueue and populate it with messages.
-			q := New()
-
-			decodedMessages := make([]*DecodedSSVMessage, len(test.messages))
-			for i, m := range test.messages {
-				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
-				require.NoError(t, err)
-
-				q.Push(mm)
-
-				// Keep track of the messages we push so we can
-				// effortlessly compare to them later.
-				decodedMessages[i] = mm
-			}
-
-			// Pop messages from the queue and compare to the expected order.
-			for i, excepted := range decodedMessages {
-				actual := q.Pop(NewMessagePrioritizer(test.state))
-				require.Equal(t, excepted, actual, "incorrect message at index %d", i)
-			}
-		})
-	}
-}
-
-func BenchmarkPriorityQueueConcurrent(b *testing.B) {
+func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	prioritizer := NewMessagePrioritizer(mockState)
-	queue := New()
+	queue := NewDefault()
 
-	messageCount := 500
+	messageCount := 10_000
 	types := []qbft.MessageType{qbft.PrepareMsgType, qbft.CommitMsgType, qbft.RoundChangeMsgType}
 	msgs := make(chan *DecodedSSVMessage, messageCount*len(types))
 	for _, i := range rand.Perm(messageCount) {
@@ -258,25 +319,47 @@ func BenchmarkPriorityQueueConcurrent(b *testing.B) {
 	b.ResetTimer()
 	b.StartTimer()
 
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			select {
-			case msg := <-msgs:
-				queue.Push(msg)
-			default:
+	var pushersWg sync.WaitGroup
+	var pushed atomic.Int32
+	for i := 0; i < 16; i++ {
+		pushersWg.Add(1)
+		go func() {
+			defer pushersWg.Done()
+			for n := b.N; n > 0; n-- {
+				select {
+				case msg := <-msgs:
+					queue.Push(msg)
+					pushed.Add(1)
+				default:
+				}
 			}
-		}
-	})
-
-	popped := 0
-	for n := b.N; n > 0; n-- {
-		msg := queue.Pop(prioritizer)
-		if msg != nil {
-			popped++
-		}
+		}()
 	}
 
+	pushersCtx, cancel := context.WithCancel(context.Background())
+	go func() {
+		pushersWg.Wait()
+		cancel()
+	}()
+
+	var popperWg sync.WaitGroup
+	popperWg.Add(1)
+	popped := 0
+	go func() {
+		defer popperWg.Done()
+		for n := b.N; n > 0; n-- {
+			msg := queue.Pop(pushersCtx, prioritizer)
+			if msg == nil {
+				return
+			}
+			popped++
+		}
+	}()
+
+	popperWg.Wait()
+
 	b.Logf("popped %d messages", popped)
+	b.Logf("pushed %d messages", pushed.Load())
 }
 
 func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *DecodedSSVMessage {

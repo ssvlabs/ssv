@@ -30,6 +30,10 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 	if highestInstance == nil {
 		return nil, nil
 	}
+
+	// Compact the instance to reduce it's memory footprint.
+	instance.Compact(highestInstance.State, highestInstance.DecidedMessage)
+
 	i := instance.NewInstance(
 		c.config,
 		highestInstance.State.Share,

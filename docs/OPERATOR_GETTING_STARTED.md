@@ -165,7 +165,7 @@ The current version is available through logs or a cmd:
 $ docker run --rm -it 'bloxstaking/ssv-node:latest' /go/bin/ssvnode version
 ```
 
-In order to updtae, kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
+In order to update, kill running container and pull the latest image or a specific version (`bloxstaking/ssv-node:<version>`)
 ```shell
 $ docker rm -f ssv_node && docker pull bloxstaking/ssv-node:latest
 ```

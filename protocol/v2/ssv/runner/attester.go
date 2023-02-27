@@ -9,13 +9,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
-
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type AttesterRunner struct {
@@ -26,6 +26,8 @@ type AttesterRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 	logger   *zap.Logger
+
+	metrics metrics.ConsensusMetrics
 }
 
 func NewAttesterRunnner(
@@ -52,7 +54,8 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		logger: logger.With(zap.String("who", "AttesterRunner")),
+		logger:  logger.With(zap.String("who", "AttesterRunner")),
+		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),
 	}
 }
 
@@ -79,6 +82,9 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if !decided {
 		return nil
 	}
+
+	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
@@ -125,6 +131,8 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 		return nil
 	}
 
+	r.metrics.EndPostConsensus()
+
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -147,12 +155,19 @@ func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 			AggregationBits: aggregationBitfield,
 		}
 
+		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
+
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
+			r.metrics.RoleSubmissionFailed()
 			r.logger.Error("failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
+
+		attestationSubmissionEnd()
+		r.metrics.EndDutyFullFlow()
+		r.metrics.RoleSubmitted()
 
 		r.logger.Debug("successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
@@ -183,6 +198,9 @@ func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
+
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
 
 	input := &spectypes.ConsensusData{
 		Duty:            duty,

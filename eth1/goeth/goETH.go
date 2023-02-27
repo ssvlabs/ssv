@@ -123,6 +123,7 @@ func (ec *eth1Client) HealthCheck() []string {
 	}
 	// eth1 node is connected and synced
 	reportNodeStatus(statusOK)
+
 	return []string{}
 }
 

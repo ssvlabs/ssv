@@ -5,8 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"github.com/pkg/errors"
-	"sync"
+	"golang.org/x/sync/errgroup"
 	"time"
 
 	"github.com/bloxapp/ssv/network"
@@ -21,8 +20,6 @@ import (
 
 	"go.uber.org/zap"
 )
-
-var CouldNotFindEnoughPeersErr = errors.New("could not find enough peers")
 
 // HostProvider holds host instance
 type HostProvider interface {
@@ -69,25 +66,24 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 }
 
 // CreateAndStartLocalNet creates a new local network and starts it
-func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, forkVersion forksprotocol.ForkVersion, n, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-	ln, err := NewLocalNet(pctx, loggerFactory, n, forkVersion, useDiscv5)
-	if err != nil {
-		return nil, err
-	}
-	var wg sync.WaitGroup
-	var peersErr error
-	for i, node := range ln.Nodes {
-		wg.Add(1)
-		go func(node network.P2PNetwork, i int) {
-			logger := loggerFactory(fmt.Sprintf("node-%d", i))
-			if err := node.Start(); err != nil {
-				logger.Warn("could not start node", zap.Error(err))
-				wg.Done()
-				return
-			}
-			go func(node network.P2PNetwork, logger *zap.Logger) {
-				defer wg.Done()
-				ctx, cancel := context.WithTimeout(pctx, 15*time.Second)
+// if any errors occurs during starting local network CreateAndStartLocalNet trying
+// to create and start local net one more time until pCtx is not Done()
+func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersion forksprotocol.ForkVersion, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+	attempt := func(pCtx context.Context, forkVersion forksprotocol.ForkVersion, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, forkVersion, useDiscv5)
+		if err != nil {
+			return nil, err
+		}
+
+		eg, ctx := errgroup.WithContext(pCtx)
+		for i, node := range ln.Nodes {
+			i, node := i, node //hack to avoid closures. price of using error groups
+
+			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
+				if err := node.Start(); err != nil {
+					return fmt.Errorf("could not start node %d: %w", i, err)
+				}
+				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
 				var peers []peer.ID
 				for len(peers) < minConnected && ctx.Err() == nil {
@@ -95,18 +91,34 @@ func CreateAndStartLocalNet(pctx context.Context, loggerFactory LoggerFactory, f
 					time.Sleep(time.Millisecond * 100)
 				}
 				if ctx.Err() != nil {
-					logger.Warn("could not find enough peers, trying again", zap.Int("n", n), zap.Int("found", len(peers)))
-					peersErr = CouldNotFindEnoughPeersErr
-					return
+					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, nodesQuantity, len(peers))
 				}
-				logger.Debug("found enough peers", zap.Int("n", n), zap.Int("found", len(peers)))
-			}(node, logger)
-		}(node, i)
+				logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", nodesQuantity), zap.String("found", fmt.Sprintf("%+v", peers)))
+				return nil
+			})
+		}
+
+		return ln, eg.Wait()
 	}
 
-	wg.Wait()
+	for {
+		select {
+		case <-pCtx.Done():
+			return nil, fmt.Errorf("context is done, network didn't start on time")
+		default:
+			ln, err := attempt(pCtx, forkVersion, nodesQuantity, minConnected, useDiscv5)
+			if err != nil {
+				for _, node := range ln.Nodes {
+					_ = node.Close()
+				}
 
-	return ln, peersErr
+				logger.Debug("trying to relaunch local network", zap.Error(err))
+				continue
+			}
+
+			return ln, nil
+		}
+	}
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
@@ -118,6 +130,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	cfg := NewNetConfig(logger, keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode,
 		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	cfg.Ctx = ctx
+	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+
 	p := New(cfg)
 	err = p.Setup()
 	if err != nil {
@@ -127,18 +141,18 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, forkVersion forksprotocol.ForkVersion, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion forksprotocol.ForkVersion, useDiscv5 bool) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
-		if err := ln.WithBootnode(ctx, loggerFactory("bootnode")); err != nil {
+		if err := ln.WithBootnode(ctx, logger); err != nil {
 			return nil, err
 		}
 	}
 	i := 0
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
-		logger := loggerFactory(fmt.Sprintf("node-%d", i))
+		logger := logger.With(zap.String("who", fmt.Sprintf("node-%d", i)))
 		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
@@ -150,8 +164,6 @@ func NewLocalNet(ctx context.Context, loggerFactory LoggerFactory, n int, forkVe
 	}
 	ln.NodeKeys = keys
 	ln.Nodes = nodes
-
-	<-time.After(time.Millisecond * 500)
 
 	return ln, nil
 }
@@ -185,6 +197,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
-		P2pLog:            true,
+		P2pLog:            false,
 	}
 }

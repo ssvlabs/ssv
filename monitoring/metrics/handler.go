@@ -28,7 +28,7 @@ type nodeStatus int32
 
 var (
 	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv:node_status",
+		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
 	statusNotHealthy nodeStatus = 0
@@ -154,6 +154,6 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 }
 
 func (mh *metricsHandler) configureProfiling() {
-	runtime.SetBlockProfileRate(1000)
-	runtime.SetMutexProfileFraction(1)
+	runtime.SetBlockProfileRate(10000)
+	runtime.SetMutexProfileFraction(5)
 }

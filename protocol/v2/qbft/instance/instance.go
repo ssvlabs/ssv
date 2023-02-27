@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
@@ -26,7 +26,8 @@ type Instance struct {
 	startOnce   sync.Once
 	StartValue  []byte
 
-	logger *zap.Logger
+	metrics *metrics
+	logger  *zap.Logger
 }
 
 func NewInstance(
@@ -50,6 +51,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
+		metrics:     newMetrics(msgId),
 		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
 			zap.Uint64("height", uint64(height))),
 	}
@@ -59,8 +61,9 @@ func NewInstance(
 func (i *Instance) Start(value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.State.Round = specqbft.FirstRound
+		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
+		i.metrics.StartStage()
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
@@ -222,4 +225,10 @@ func (i *Instance) Encode() ([]byte, error) {
 // Decode implementation
 func (i *Instance) Decode(data []byte) error {
 	return json.Unmarshal(data, &i)
+}
+
+// bumpToRound sets round and sends current round metrics.
+func (i *Instance) bumpToRound(round specqbft.Round) {
+	i.State.Round = round
+	i.metrics.SetRound(round)
 }

@@ -1,14 +1,10 @@
 name: Integration tests
 
 on:
-  push:
-    branches:
-      - "main"
-      - "stage"
-  pull_request:
-    branches:
-      - "main"
-      - "stage"
+#  pull_request:
+#    branches:
+#      - "main"
+#      - "stage"
 
   workflow_dispatch:
 

@@ -31,12 +31,17 @@ func (v *Validator) HandleMessage(msg *spectypes.SSVMessage) {
 		if err != nil {
 			v.logger.Warn("failed to decode message",
 				zap.Error(err),
-				zap.String("msgType", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msgID", msg.MsgID.String()),
+				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_id", msg.MsgID.String()),
 			)
 			return
 		}
-		q.Q.Push(decodedMsg)
+		if pushed := q.Q.TryPush(decodedMsg); !pushed {
+			msgID := msg.MsgID.String()
+			v.logger.Warn("dropping message because the queue is full",
+				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_id", msgID))
+		}
 	} else {
 		v.logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
@@ -67,11 +72,9 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 	}
 
 	logger := v.logger.With(zap.String("identifier", msgID.String()))
-
 	logger.Debug("queue consumer is running")
 
 	for ctx.Err() == nil {
-
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -86,15 +89,22 @@ func (v *Validator) ConsumeQueue(msgID spectypes.MessageID, handler MessageHandl
 		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum
 
-		// Pop the highest priority message and handle it.
-		msg := q.Q.WaitAndPop(ctx, queue.NewMessagePrioritizer(&state))
-		if msg == nil {
-			continue
+		// Pop the highest priority message for the current state.
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
+		if ctx.Err() != nil {
+			break
 		}
+		if msg == nil {
+			logger.Error("got nil message from queue, but context is not done!")
+			break
+		}
+
+		// Handle the message.
 		if err := handler(msg); err != nil {
 			v.logMsg(msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
+
 	logger.Debug("queue consumer is closed")
 	return nil
 }
