@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -132,8 +133,8 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	nodeState := n.idx.State(pid)
-	logger.Info("peer identity",
-		zap.String("peer", pid.String()),
+	logger.Debug("peer identity",
+		logging.PeerID(pid),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
 		zap.String("opPKHash", opPKHash),

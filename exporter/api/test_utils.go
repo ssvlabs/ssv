@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -33,7 +34,9 @@ func NewWSClient(ctx context.Context) *WSClient {
 // StartStream initiates stream
 func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
-	logger.Debug("connecting to server", zap.String("addr", u.String()))
+  
+	logger.Debug("connecting to server", logging.Address(u))
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "dial error")
@@ -64,7 +67,9 @@ func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error
 // StartQuery initiates query requests
 func (client *WSClient) StartQuery(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
-	logger.Debug("connecting to server", zap.String("addr", u.String()))
+
+	logger.Debug("connecting to server", logging.Address(u))
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "dial error")

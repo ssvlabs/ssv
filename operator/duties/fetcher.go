@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -88,7 +89,7 @@ func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]specty
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			zap.Duration("duration", time.Since(start)))
+			logging.DurationMilliS(start))
 	}
 
 	return duties, nil

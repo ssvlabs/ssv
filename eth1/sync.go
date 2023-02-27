@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -117,18 +118,15 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 		logger.Warn("failed to get sync offset", zap.Error(err))
 	}
 	if found && syncOffsetFromStorage != nil {
-		logger.Debug("using last sync offset",
-			zap.Uint64("syncOffset", syncOffsetFromStorage.Uint64()))
+		logger.Debug("using last sync offset", logging.SyncOffset(syncOffsetFromStorage))
 		return syncOffsetFromStorage
 	}
 	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
-		logger.Debug("using provided sync offset",
-			zap.Uint64("syncOffset", syncOffset.Uint64()))
+		logger.Debug("using provided sync offset", logging.SyncOffset(syncOffset))
 		return syncOffset
 	}
 	syncOffset = DefaultSyncOffset()
-	logger.Debug("using default sync offset",
-		zap.Uint64("syncOffset", syncOffset.Uint64()))
+	logger.Debug("using default sync offset", logging.SyncOffset(syncOffset))
 	return syncOffset
 }
 

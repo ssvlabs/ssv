@@ -3,14 +3,13 @@ package syncing
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
@@ -209,9 +208,9 @@ func (s *syncer) getDecidedByRange(
 			})
 			logger.Debug("received and processed history batch",
 				zap.Int64("tail", int64(tail)),
-				zap.Duration("duration", time.Since(start)),
+				logging.DurationMilliS(start),
 				zap.Int("results_count", len(msgs)),
-				zap.String("results", s.formatSyncResults(msgs)),
+				logging.SyncResults(msgs),
 				zap.Int("handled", handled))
 			return nil
 		}, maxRetries)
@@ -221,34 +220,4 @@ func (s *syncer) getDecidedByRange(
 	}
 
 	return nil
-}
-
-// Prints msgs as:
-//
-//	"(type=1 height=1 round=1) (type=1 height=2 round=1) ..."
-//
-// TODO: remove this after testing?
-func (s *syncer) formatSyncResults(msgs []protocolp2p.SyncResult) string {
-	var v []string
-	for _, m := range msgs {
-		var sm *specqbft.SignedMessage
-		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm = &specqbft.SignedMessage{}
-			if err := sm.Decode(m.Msg.Data); err != nil {
-				v = append(v, fmt.Sprintf("(%v)", err))
-				continue
-			}
-			v = append(
-				v,
-				fmt.Sprintf(
-					"(type=%d height=%d round=%d)",
-					m.Msg.MsgType,
-					sm.Message.Height,
-					sm.Message.Round,
-				),
-			)
-		}
-		v = append(v, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
-	}
-	return strings.Join(v, ", ")
 }
