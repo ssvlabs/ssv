@@ -118,8 +118,8 @@ func New(logger *zap.Logger, opts Options) Node {
 			ShareStorage: validator.NewCollection(validator.CollectionOptions{
 				DB: opts.DB,
 			}),
-			Ticker:            ticker,
-			OperatorPublicKey: opts.ValidatorOptions.OperatorPubKey,
+			Ticker:       ticker,
+			OperatorData: opts.ValidatorOptions.OperatorData,
 		}),
 		forkVersion: opts.ForkVersion,
 

@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"encoding/hex"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -221,9 +222,13 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 
 	isOperatorShare := share.BelongsToOperator(c.operatorData.ID)
-	if isOperatorShare && ongoingSync {
-		if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
-			return nil, err
+	if isOperatorShare {
+		pubKey := hex.EncodeToString(validatorRemovedEvent.PublicKey)
+		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
+		if ongoingSync {
+			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -233,7 +238,7 @@ func (c *controller) handleValidatorRemovedEvent(
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}
 	if len(shares) == 0 {
-		if err := c.recipientsCollection.DeleteRecipientData(ValidatorRemovedEvent.OwnerAddress); err != nil {
+		if err := c.recipientsCollection.DeleteRecipientData(validatorRemovedEvent.OwnerAddress); err != nil {
 			return nil, errors.Wrap(err, "could not delete recipient")
 		}
 	}
