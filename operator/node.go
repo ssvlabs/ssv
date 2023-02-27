@@ -86,6 +86,7 @@ func New(opts Options) Node {
 		spectypes.BNRoleAggregator,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRoleValidatorRegistration,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, opts.Logger, role.String(), opts.ForkVersion))

@@ -133,7 +133,10 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 	if r == nil {
 		return specqbft.Height(0)
 	}
-	return r.GetBaseRunner().QBFTController.Height
+	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
+		return ctrl.Height
+	}
+	return specqbft.Height(0)
 }
 
 // GetLastRound returns the last height for the given identifier

@@ -48,7 +48,7 @@ type recipientController struct {
 	operatorPublicKey string
 }
 
-func NewController(opts *ControllerOptions) *recipientController {
+func NewController(opts *ControllerOptions) RecipientController {
 	return &recipientController{
 		logger:            opts.Logger,
 		ctx:               opts.Ctx,

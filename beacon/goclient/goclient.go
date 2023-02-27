@@ -90,6 +90,9 @@ type Client interface {
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
+	eth2client.BlindedBeaconBlockProposalProvider
+	eth2client.BlindedBeaconBlockSubmitter
+	eth2client.ValidatorRegistrationsSubmitter
 }
 
 // goClient implementing Beacon struct

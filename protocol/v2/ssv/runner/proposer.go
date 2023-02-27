@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/attestantio/go-eth2-client/api"
+	"github.com/attestantio/go-eth2-client/spec"
 
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -95,12 +97,12 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSig
 	input := &spectypes.ConsensusData{Duty: duty}
 	if r.ProducesBlindedBlocks {
 		// get block data
-		blk, err := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+		blk, err := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
 
-		input.BlindedBlockData = blk
+		input.BlindedBlockData = blk.Bellatrix
 	} else {
 		// get block data
 		blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
@@ -203,7 +205,12 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSi
 				Message:   r.GetState().DecidedValue.BlindedBlockData,
 				Signature: specSig,
 			}
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(blk); err != nil {
+			versionBlk := &api.VersionedSignedBlindedBeaconBlock{ // already implemented on other pr. need to remove
+				Version:   spec.DataVersionBellatrix,
+				Bellatrix: blk,
+				Capella:   nil,
+			}
+			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(versionBlk); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {

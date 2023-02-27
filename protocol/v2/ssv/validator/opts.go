@@ -25,6 +25,7 @@ type Options struct {
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool
+	BlindedSupport    bool
 	QueueSize         int
 }
 

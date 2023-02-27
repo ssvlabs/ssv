@@ -24,11 +24,14 @@ func (v *Validator) Start() error {
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
-			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
-				v.logger.Warn("failed to load highest instance",
-					zap.String("identifier", identifier.String()),
-					zap.Error(err))
+			if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
+				if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
+					v.logger.Warn("failed to load highest instance",
+						zap.String("identifier", identifier.String()),
+						zap.Error(err))
+				}
 			}
+
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 				return err
 			}

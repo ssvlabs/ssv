@@ -67,6 +67,7 @@ type ControllerOptions struct {
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
+	BlindedSupport             bool `yaml:"BlindedSupport" env:"BLINDED_SUPPORT" env-default:"false" env-description:"produce blinded block rather than regular blocks"`
 	KeyManager                 spectypes.KeyManager
 	OperatorPubKey             string
 	RegistryStorage            registrystorage.OperatorsCollection
@@ -137,13 +138,14 @@ func NewController(options ControllerOptions) Controller {
 		Logger: options.Logger,
 	})
 
-	options.Logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode))
+	options.Logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode), zap.Bool("blinded_supported", options.BlindedSupport))
 	storageMap := storage.NewStores()
 	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, options.Logger, spectypes.BNRoleAttester.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, options.Logger, spectypes.BNRoleProposer.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, options.Logger, spectypes.BNRoleAggregator.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleSyncCommittee, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storage.New(options.DB, options.Logger, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
+	storageMap.Add(spectypes.BNRoleValidatorRegistration, storage.New(options.DB, options.Logger, spectypes.BNRoleValidatorRegistration.String(), options.ForkVersion))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -168,6 +170,7 @@ func NewController(options ControllerOptions) Controller {
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
+		BlindedSupport:    options.BlindedSupport,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -674,6 +677,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.BNRoleAggregator,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRoleValidatorRegistration,
 	}
 
 	domainType := types.GetDefaultDomain()
@@ -711,6 +715,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
+			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BlindedSupport // apply blinded block flag
 		case spectypes.BNRoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)
@@ -723,6 +728,9 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			syncCommitteeContributionValueCheckF := specssv.SyncCommitteeContributionValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF)
+		case spectypes.BNRoleValidatorRegistration:
+			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
+			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners

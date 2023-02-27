@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -25,6 +26,7 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
+	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.KeyManager,
@@ -34,6 +36,7 @@ func NewValidatorRegistrationRunner(
 			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
+			QBFTController: qbftController,
 		},
 
 		beacon:  beacon,
@@ -52,7 +55,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, _, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
@@ -61,6 +64,21 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *specssv.Sig
 	if !quorum {
 		return nil
 	}
+
+	// only 1 root, verified in basePreConsensusMsgProcessing
+	root := roots[0]
+	// randao is relevant only for block proposals, no need to check type
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not reconstruct randao sig")
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], fullSig)
+
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		return errors.Wrap(err, "could not submit validator registration")
+	}
+	logger.Debug("validator registration submitted successfully")
 
 	r.GetState().Finished = true
 	return nil
@@ -138,7 +156,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2api
 
 	return &eth2apiv1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     1,
+		GasLimit:     30_000_000,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
