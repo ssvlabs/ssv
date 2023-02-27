@@ -27,43 +27,41 @@ type Storage interface {
 	registrystorage.OperatorsCollection
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error
+	SetupPrivateKey(logger *zap.Logger, generateIfNone bool, operatorKeyBase64 string) error
 }
 
 type storage struct {
-	db     basedb.IDb
-	logger *zap.Logger
+	db basedb.IDb
 
 	operatorStore registrystorage.OperatorsCollection
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(db basedb.IDb, logger *zap.Logger) Storage {
+func NewNodeStorage(db basedb.IDb) Storage {
 	return &storage{
 		db:            db,
-		logger:        logger,
-		operatorStore: registrystorage.NewOperatorsStorage(db, logger, storagePrefix),
+		operatorStore: registrystorage.NewOperatorsStorage(db, storagePrefix),
 	}
 }
 
-func (s *storage) GetOperatorDataByPubKey(operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
-	return s.operatorStore.GetOperatorDataByPubKey(operatorPubKey)
+func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorDataByPubKey(logger, operatorPubKey)
 }
 
 func (s *storage) GetOperatorData(index uint64) (*registrystorage.OperatorData, bool, error) {
 	return s.operatorStore.GetOperatorData(index)
 }
 
-func (s *storage) SaveOperatorData(operatorData *registrystorage.OperatorData) error {
-	return s.operatorStore.SaveOperatorData(operatorData)
+func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) error {
+	return s.operatorStore.SaveOperatorData(logger, operatorData)
 }
 
 func (s *storage) DeleteOperatorData(index uint64) error {
 	return s.operatorStore.DeleteOperatorData(index)
 }
 
-func (s *storage) ListOperators(from uint64, to uint64) ([]registrystorage.OperatorData, error) {
-	return s.operatorStore.ListOperators(from, to)
+func (s *storage) ListOperators(logger *zap.Logger, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
+	return s.operatorStore.ListOperators(logger, from, to)
 }
 
 func (s *storage) GetOperatorsPrefix() []byte {
@@ -128,7 +126,7 @@ func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string) error {
+func (s *storage) SetupPrivateKey(logger *zap.Logger, generateIfNone bool, operatorKeyBase64 string) error {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return errors.Wrap(err, "Failed to decode base64")
@@ -151,7 +149,7 @@ func (s *storage) SetupPrivateKey(generateIfNone bool, operatorKeyBase64 string)
 		return errors.Wrap(err, "failed to extract operator public key")
 	}
 	//TODO change the log to generated/loaded private key to indicate better on the action
-	s.logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
+	logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
 	return nil
 }
 

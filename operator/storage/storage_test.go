@@ -22,19 +22,18 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
+	logger := logex.GetLogger()
 	options := basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
+		Type: "badger-memory",
+		Path: "",
 	}
 
-	db, err := ssvstorage.GetStorageFactory(options)
+	db, err := ssvstorage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
 	defer db.Close()
 
 	operatorStorage := storage{
-		db:     db,
-		logger: nil,
+		db: db,
 	}
 
 	KeyByte, err := base64.StdEncoding.DecodeString(skPem) // passing keys format should be in base64
@@ -49,6 +48,7 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 }
 
 func TestSetupPrivateKey(t *testing.T) {
+	logger := logex.GetLogger()
 	tests := []struct {
 		name           string
 		existKey       string
@@ -111,18 +111,16 @@ func TestSetupPrivateKey(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			options := basedb.Options{
-				Type:   "badger-memory",
-				Logger: logex.Build("test", zapcore.DebugLevel, nil),
-				Path:   "",
+				Type: "badger-memory",
+				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(options)
+			db, err := ssvstorage.GetStorageFactory(logex.Build("test", zapcore.DebugLevel, nil), options)
 			require.NoError(t, err)
 			defer db.Close()
 
 			operatorStorage := storage{
-				db:     db,
-				logger: zap.L(),
+				db: db,
 			}
 
 			if test.existKey != "" { // mock exist key
@@ -139,7 +137,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			err = operatorStorage.SetupPrivateKey(test.generateIfNone, test.passedKey)
+			err = operatorStorage.SetupPrivateKey(logger, test.generateIfNone, test.passedKey)
 			if test.expectedError != "" {
 				require.NotNil(t, err)
 				require.Equal(t, test.expectedError, err.Error())
@@ -174,13 +172,12 @@ func TestSetupPrivateKey(t *testing.T) {
 
 func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
 	logger := zap.L()
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: logger,
-		Path:   "",
+	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	require.NoError(t, err)
-	s := NewNodeStorage(db, logger)
+	s := NewNodeStorage(db)
 
 	offset := new(eth1.SyncOffset)
 	offset.SetString("49e08f", 16)

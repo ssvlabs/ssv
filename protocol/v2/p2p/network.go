@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+  "go.uber.org/zap"
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -22,7 +23,7 @@ var (
 type Subscriber interface {
 	p2p.Subscriber
 	// Unsubscribe unsubscribes from the validator subnet
-	Unsubscribe(pk spectypes.ValidatorPK) error
+	Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 }
@@ -136,14 +137,14 @@ type Syncer interface {
 	specqbft.Syncer
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
 	// it accepts a list of targets for the request.
-	GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
+	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
 
 	// RegisterHandlers registers handler for the given protocol
-	RegisterHandlers(handlers ...*SyncHandler)
+	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)
 
 	// LastDecided fetches last decided from a random set of peers
 	// TODO: replace with specqbft.SyncHighestDecided
-	LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
+	LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]SyncResult, error)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
@@ -165,7 +166,7 @@ const (
 // ValidationReporting is the interface for reporting on message validation results
 type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult)
+	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res MsgValidationResult)
 }
 
 // Network holds the networking layer used to complement the underlying protocols

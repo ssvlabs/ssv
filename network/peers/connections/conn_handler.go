@@ -15,13 +15,12 @@ import (
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
 type ConnHandler interface {
-	Handle() *libp2pnetwork.NotifyBundle
+	Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle
 }
 
 // connHandler implements ConnHandler
 type connHandler struct {
-	ctx    context.Context
-	logger *zap.Logger
+	ctx context.Context
 
 	handshaker      Handshaker
 	subnetsProvider SubnetsProvider
@@ -30,11 +29,9 @@ type connHandler struct {
 }
 
 // NewConnHandler creates a new connection handler
-func NewConnHandler(ctx context.Context, logger *zap.Logger, handshaker Handshaker, subnetsProvider SubnetsProvider,
-	subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex) ConnHandler {
+func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider SubnetsProvider, subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
-		logger:          logger.With(zap.String("who", "ConnHandler")),
 		handshaker:      handshaker,
 		subnetsProvider: subnetsProvider,
 		subnetsIndex:    subnetsIndex,
@@ -43,7 +40,7 @@ func NewConnHandler(ctx context.Context, logger *zap.Logger, handshaker Handshak
 }
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
-func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
+func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 	q := tasks.NewExecutionQueue(time.Millisecond*10, tasks.WithoutErrors())
 
@@ -65,8 +62,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 
 	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		id := conn.RemotePeer()
-		logger := ch.logger.With(zap.String("targetPeer", id.String()))
-		ok, err := ch.handshake(conn)
+		logger := logger.With(zap.String("targetPeer", id.String()))
+		ok, err := ch.handshake(logger, conn)
 		if err != nil {
 			logger.Debug("could not handshake with peer", zap.Error(err))
 		}
@@ -78,7 +75,7 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 			disconnect(net, conn)
 			return errors.New("reached peers limit")
 		}
-		if !ch.checkSubnets(conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
+		if !ch.checkSubnets(logger, conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
 			disconnect(net, conn)
 			return errors.New("peer doesn't share enough subnets")
 		}
@@ -122,8 +119,8 @@ func (ch *connHandler) Handle() *libp2pnetwork.NotifyBundle {
 	}
 }
 
-func (ch *connHandler) handshake(conn libp2pnetwork.Conn) (bool, error) {
-	err := ch.handshaker.Handshake(conn)
+func (ch *connHandler) handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (bool, error) {
+	err := ch.handshaker.Handshake(logger, conn)
 	if err != nil {
 		switch err {
 		case peers.ErrIndexingInProcess, errHandshakeInProcess, peerstore.ErrNotFound:
@@ -139,7 +136,7 @@ func (ch *connHandler) handshake(conn libp2pnetwork.Conn) (bool, error) {
 	return true, nil
 }
 
-func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
+func (ch *connHandler) checkSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
 	subnets := ch.subnetsIndex.GetPeerSubnets(pid)
 	if len(subnets) == 0 {
@@ -148,7 +145,7 @@ func (ch *connHandler) checkSubnets(conn libp2pnetwork.Conn) bool {
 	}
 	mySubnets := ch.subnetsProvider()
 
-	logger := ch.logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
+	logger = logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
 		zap.String("mySubnets", mySubnets.String()))
 
 	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets

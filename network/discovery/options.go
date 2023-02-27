@@ -28,8 +28,6 @@ type DiscV5Options struct {
 	NetworkKey *ecdsa.PrivateKey
 	// Bootnodes is a list of bootstrapper nodes
 	Bootnodes []string
-	// Log
-	Logger *zap.Logger
 	// Subnets is a bool slice represents all the subnets the node is intreseted in
 	Subnets []byte
 	// OperatorID is the operator id (optional)
@@ -81,7 +79,7 @@ func (opts *DiscV5Options) IPs() (net.IP, net.IP, string) {
 }
 
 // DiscV5Cfg creates discv5 config from the options
-func (opts *DiscV5Options) DiscV5Cfg() (*discover.Config, error) {
+func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, error) {
 	dv5Cfg := discover.Config{
 		PrivateKey: opts.NetworkKey,
 	}
@@ -93,11 +91,11 @@ func (opts *DiscV5Options) DiscV5Cfg() (*discover.Config, error) {
 		dv5Cfg.Bootnodes = bootnodes
 	}
 
-	if opts.Logger != nil {
-		opts.Logger.Info("discovery trace is active")
-		logger := log.New()
-		logger.SetHandler(&dv5Logger{opts.Logger.With(zap.String("who", "dv5Logger"))})
-		dv5Cfg.Log = logger
+	if logger != nil {
+		logger.Info("discovery trace is active")
+		newLogger := log.New()
+		newLogger.SetHandler(&dv5Logger{logger.With(zap.String("who", "dv5Logger"))})
+		dv5Cfg.Log = newLogger
 	}
 
 	return &dv5Cfg, nil

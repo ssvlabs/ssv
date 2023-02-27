@@ -17,7 +17,7 @@ import (
 
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
-	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
+	UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error
 }
 
 // ValidatorMetadata represents validator metdata from beacon
@@ -61,7 +61,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(pk string, meta *ValidatorMetadata)
+type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
@@ -76,13 +76,13 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 
 	var errs []error
 	for pk, meta := range results {
-		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
+		if err := collection.UpdateValidatorMetadata(logger, pk, meta); err != nil {
 			logger.Error("failed to update validator metadata",
 				zap.String("validator", pk), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if onUpdated != nil {
-			onUpdated(pk, meta)
+			onUpdated(logger, pk, meta)
 		}
 		logger.Debug("successfully updated validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", meta))

@@ -13,6 +13,7 @@ import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockvalidatorsIndicesFetcher is a mock of validatorsIndicesFetcher interface.
@@ -39,17 +40,17 @@ func (m *MockvalidatorsIndicesFetcher) EXPECT() *MockvalidatorsIndicesFetcherMoc
 }
 
 // GetValidatorsIndices mocks base method.
-func (m *MockvalidatorsIndicesFetcher) GetValidatorsIndices() []phase0.ValidatorIndex {
+func (m *MockvalidatorsIndicesFetcher) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidatorsIndices")
+	ret := m.ctrl.Call(m, "GetValidatorsIndices", logger)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // GetValidatorsIndices indicates an expected call of GetValidatorsIndices.
-func (mr *MockvalidatorsIndicesFetcherMockRecorder) GetValidatorsIndices() *gomock.Call {
+func (mr *MockvalidatorsIndicesFetcherMockRecorder) GetValidatorsIndices(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorsIndices", reflect.TypeOf((*MockvalidatorsIndicesFetcher)(nil).GetValidatorsIndices))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorsIndices", reflect.TypeOf((*MockvalidatorsIndicesFetcher)(nil).GetValidatorsIndices), logger)
 }
 
 // MockDutyFetcher is a mock of DutyFetcher interface.
@@ -90,31 +91,31 @@ func (mr *MockDutyFetcherMockRecorder) Events(ctx, topics, handler interface{}) 
 }
 
 // GetDuties mocks base method.
-func (m *MockDutyFetcher) GetDuties(slot phase0.Slot) ([]types.Duty, error) {
+func (m *MockDutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]types.Duty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDuties", slot)
+	ret := m.ctrl.Call(m, "GetDuties", logger, slot)
 	ret0, _ := ret[0].([]types.Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDuties indicates an expected call of GetDuties.
-func (mr *MockDutyFetcherMockRecorder) GetDuties(slot interface{}) *gomock.Call {
+func (mr *MockDutyFetcherMockRecorder) GetDuties(logger, slot interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockDutyFetcher)(nil).GetDuties), slot)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockDutyFetcher)(nil).GetDuties), logger, slot)
 }
 
 // SyncCommitteeDuties mocks base method.
-func (m *MockDutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+func (m *MockDutyFetcher) SyncCommitteeDuties(logger *zap.Logger, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", logger, epoch, indices)
 	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
-func (mr *MockDutyFetcherMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+func (mr *MockDutyFetcherMockRecorder) SyncCommitteeDuties(logger, epoch, indices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockDutyFetcher)(nil).SyncCommitteeDuties), epoch, indices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockDutyFetcher)(nil).SyncCommitteeDuties), logger, epoch, indices)
 }

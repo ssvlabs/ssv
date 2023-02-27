@@ -52,8 +52,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, &discovery.BootnodeOptions{
-		Logger:     logger.With(zap.String("component", "bootnode")),
+	bn, err := discovery.NewBootnode(ctx, logger, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -80,7 +79,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 			i, node := i, node //hack to avoid closures. price of using error groups
 
 			eg.Go(func() error { //if replace EG to regular goroutines round don't change to second in test
-				if err := node.Start(); err != nil {
+				if err := node.Start(logger); err != nil {
 					return fmt.Errorf("could not start node %d: %w", i, err)
 				}
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -127,13 +126,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(logger, keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode,
-		testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	cfg := NewNetConfig(keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 
-	p := New(cfg)
-	err = p.Setup()
+	p := New(logger, cfg)
+	err = p.Setup(logger)
 	if err != nil {
 		return nil, err
 	}
@@ -169,9 +167,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID string,
-	forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode,
-	tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -192,7 +188,6 @@ func NewNetConfig(logger *zap.Logger, netPrivKey *ecdsa.PrivateKey, operatorID s
 		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
-		Logger:            logger,
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",

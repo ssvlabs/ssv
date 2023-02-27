@@ -24,7 +24,6 @@ const (
 // localDiscovery implements ssv_discovery.Service using mDNS and KAD-DHT
 type localDiscovery struct {
 	ctx        context.Context
-	logger     *zap.Logger
 	svc        mdnsDiscover.Service
 	disc       discovery.Discovery
 	routingTbl routing.Routing
@@ -45,7 +44,6 @@ func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) 
 
 	return &localDiscovery{
 		ctx:        ctx,
-		logger:     logger,
 		host:       host,
 		routingTbl: routingDHT,
 		disc:       disc,
@@ -74,7 +72,7 @@ func handle(host host.Host, handler HandleNewPeer) HandleNewPeer {
 }
 
 // Bootstrap starts to listen to new nodes
-func (md *localDiscovery) Bootstrap(handler HandleNewPeer) error {
+func (md *localDiscovery) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	err := md.svc.Start()
 	if err != nil {
 		return errors.Wrap(err, "could not start mdns service")
@@ -93,19 +91,19 @@ func (md *localDiscovery) FindPeers(ctx context.Context, ns string, opt ...disco
 }
 
 // RegisterSubnets implements Service
-func (md *localDiscovery) RegisterSubnets(subnets ...int) error {
+func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) error {
 	// TODO
 	return nil
 }
 
 // DeregisterSubnets implements Service
-func (md *localDiscovery) DeregisterSubnets(subnets ...int) error {
+func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
 	// TODO
 	return nil
 }
 
 // UpdateForkVersion implements Service
-func (md *localDiscovery) UpdateForkVersion(forkv forksprotocol.ForkVersion) error {
+func (md *localDiscovery) UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error {
 	// TODO
 	return nil
 }

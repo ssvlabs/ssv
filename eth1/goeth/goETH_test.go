@@ -19,6 +19,8 @@ import (
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
+	logger := zap.L()
+
 	tests := []struct {
 		name                  string
 		version               eth1.Version
@@ -71,12 +73,12 @@ func TestEth1Client_handleEvent(t *testing.T) {
 			}()
 
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogOperatorRegistration, contractAbi)
+			_, err = ec.handleEvent(logger, vLogOperatorRegistration, contractAbi)
 			require.NoError(t, err)
 
 			time.Sleep(10 * time.Millisecond)
 			eventsWg.Add(1)
-			_, err = ec.handleEvent(vLogValidatorRegistration, contractAbi)
+			_, err = ec.handleEvent(logger, vLogValidatorRegistration, contractAbi)
 			require.NoError(t, err)
 
 			eventsWg.Wait()
@@ -88,7 +90,6 @@ func newEth1Client(abiVersion eth1.Version) *eth1Client {
 	ec := eth1Client{
 		ctx:        context.TODO(),
 		conn:       nil,
-		logger:     zap.L(),
 		eventsFeed: new(event.Feed),
 		abiVersion: abiVersion,
 	}
