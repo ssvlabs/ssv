@@ -219,8 +219,8 @@ func (b *BadgerDb) report(logger *zap.Logger) func() {
 		indexCache := b.db.IndexCacheMetrics()
 
 		logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-		  logging.BlockCacheMetrics(blockCache),
-		  logging.IndexCacheMetrics(indexCache))
+			logging.BlockCacheMetrics(blockCache),
+			logging.IndexCacheMetrics(indexCache))
 	}
 }
 

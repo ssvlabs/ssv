@@ -34,7 +34,7 @@ func NewWSClient(ctx context.Context) *WSClient {
 // StartStream initiates stream
 func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
-  
+
 	logger.Debug("connecting to server", logging.Address(u))
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
