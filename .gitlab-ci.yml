@@ -82,6 +82,7 @@ Deploy ssv nodes to blox-infra-stage cluster:
 # | Prod  |
 # ---------
 Build prod Docker image:
+  image: docker:20.10.23
   stage: build
   tags:
     - blox-infra-prod
