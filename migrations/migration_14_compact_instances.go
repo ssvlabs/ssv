@@ -75,6 +75,7 @@ var migrationCompactInstances = Migration{
 			if err != nil {
 				return errors.Wrap(err, "failed collecting message IDs")
 			}
+			logger.Debug("found instances", zap.Int("count", len(messageIDs)))
 
 			// Get & save each instance (by MessageID) to trigger on-save compaction.
 			storage := opt.ibftStorage(prefix, forksprotocol.GenesisForkVersion)
