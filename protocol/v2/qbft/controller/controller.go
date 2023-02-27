@@ -13,10 +13,10 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	logging "github.com/ipfs/go-log"
+	ipfslog "github.com/ipfs/go-log"
 )
 
-var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
+var logger = ipfslog.Logger("ssv/protocol/qbft/controller").Desugar()
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues

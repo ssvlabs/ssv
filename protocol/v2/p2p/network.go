@@ -2,6 +2,8 @@ package protocolp2p
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -56,6 +58,33 @@ type SyncResult struct {
 }
 
 type SyncResults []SyncResult
+
+// String method was created for logging purposes
+func (s SyncResults) String() string {
+	var v []string
+	for _, m := range s {
+		var sm *specqbft.SignedMessage
+		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
+			sm = &specqbft.SignedMessage{}
+			if err := sm.Decode(m.Msg.Data); err != nil {
+				v = append(v, fmt.Sprintf("(%v)", err))
+				continue
+			}
+			v = append(
+				v,
+				fmt.Sprintf(
+					"(type=%d height=%d round=%d)",
+					m.Msg.MsgType,
+					sm.Message.Height,
+					sm.Message.Round,
+				),
+			)
+		}
+		v = append(v, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
+	}
+
+	return strings.Join(v, ", ")
+}
 
 func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
 	for _, res := range results {

@@ -1,6 +1,10 @@
 package peers
 
 import (
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -8,9 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"strconv"
-	"sync"
-	"time"
 )
 
 const (

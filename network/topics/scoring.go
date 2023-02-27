@@ -3,6 +3,7 @@ package topics
 import (
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
@@ -36,7 +37,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//		Value: peerScores.IPColocationFactor,
 			//	},
 			//}
-			logger.Debug("peer scores", zap.String("peer", pid.String()),
+			logger.Debug("peer scores", logging.PeerID(pid),
 				zap.Any("peerScores", peerScores))
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 			// err := scoreIdx.Score(pid, scores...)

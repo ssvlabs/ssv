@@ -6,6 +6,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	ssvpeers "github.com/bloxapp/ssv/network/peers"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -25,7 +26,7 @@ func (n *p2pNetwork) ReportValidation(msg *spectypes.SSVMessage, res protocolp2p
 	for _, pi := range peers {
 		err := n.idx.Score(pi, &ssvpeers.NodeScore{Name: "validation", Value: msgValidationScore(res)})
 		if err != nil {
-			n.logger.Warn("could not score peer", zap.String("peer", pi.String()), zap.Error(err))
+			n.logger.Warn("could not score peer", logging.PeerID(pi), zap.Error(err))
 			continue
 		}
 	}
