@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
@@ -224,7 +225,7 @@ func (h *handshaker) updateNodeSubnets(pid peer.ID, ni *records.NodeInfo) {
 		if err == nil && len(subnets) > 0 {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
-				h.logger.Debug("[handshake] peer subnets were updated", zap.String("peerID", pid.String()),
+				h.logger.Debug("[handshake] peer subnets were updated", logging.PeerID(pid),
 					zap.String("subnets", subnets.String()))
 			}
 		}

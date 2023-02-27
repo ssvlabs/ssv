@@ -9,6 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 
@@ -240,7 +241,7 @@ func (ec *eth1Client) listenToSubscription(logs chan types.Log, sub ethereum.Sub
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(fromBlock *big.Int) error {
-	ec.logger.Debug("syncing smart contract events", zap.Uint64("fromBlock", fromBlock.Uint64()))
+	ec.logger.Debug("syncing smart contract events", logging.FromBlock(fromBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
@@ -348,9 +349,9 @@ func (ec *eth1Client) handleEvent(vLog types.Log, contractAbi abi.ABI) (string, 
 	ev, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		ec.logger.Debug("could not read event by ID",
-			zap.String("eventId", vLog.Topics[0].Hex()),
+			logging.EventID(vLog.Topics[0]),
 			zap.Uint64("block", vLog.BlockNumber),
-			zap.String("txHash", vLog.TxHash.Hex()),
+			logging.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
 		return "", nil

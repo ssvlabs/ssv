@@ -2,13 +2,15 @@ package goclient
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 )
 
 func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
@@ -38,7 +40,7 @@ func (gc *goClient) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.Vali
 	}
 	wg.Wait()
 
-	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), zap.Float64("duration (sec)", time.Since(start).Seconds()))
+	gc.logger.Debug("fetched duties", zap.Int("count", len(duties)), logging.DurationMilliS(start))
 	return duties, nil
 }
 
