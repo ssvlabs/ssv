@@ -26,7 +26,7 @@ const (
 	FieldBindIP              = "bindIP"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
 	FieldCurrentSlot         = "currentSlot"
-	FieldDurationNano        = "durationNano"
+	FieldDurationMilliS      = "durationMilliS"
 	FieldEnr                 = "enr"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
@@ -118,8 +118,8 @@ func MessageID(val spectypes.MessageID) zapcore.Field {
 	return zap.Stringer(FieldMessageID, val)
 }
 
-func DurationNano(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDurationNano, int64Stringer{time.Since(val).Nanoseconds()})
+func DurationMilliS(val time.Time) zapcore.Field {
+	return zap.Stringer(FieldDurationMilliS, int64Stringer{time.Since(val).Milliseconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
