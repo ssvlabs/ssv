@@ -69,13 +69,17 @@ var migrationCompactInstances = Migration{
 						return fmt.Errorf("unexpected role type %s in key %x", messageID.GetRoleType(), key)
 					}
 					messageIDs = append(messageIDs, messageID)
+
+					if len(messageIDs)%100 == 0 {
+						logger.Debug("collecting instances", zap.Int("count_so_far", len(messageIDs)))
+					}
 				}
 				return nil
 			})
 			if err != nil {
 				return errors.Wrap(err, "failed collecting message IDs")
 			}
-			logger.Debug("found instances", zap.Int("count", len(messageIDs)))
+			logger.Debug("done collecting instances", zap.Int("count", len(messageIDs)))
 
 			// Get & save each instance (by MessageID) to trigger on-save compaction.
 			storage := opt.ibftStorage(prefix, forksprotocol.GenesisForkVersion)
