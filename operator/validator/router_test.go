@@ -5,8 +5,8 @@ import (
 	"fmt"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"sync"
 	"testing"
 )
@@ -14,7 +14,10 @@ import (
 func TestRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	router := newMessageRouter(zap.L(), genesis.New().MsgID())
+
+	logger := logex.GetLogger()
+
+	router := newMessageRouter(genesis.New().MsgID())
 
 	expectedCount := 1000
 	count := 0
@@ -40,9 +43,9 @@ func TestRouter(t *testing.T) {
 			MsgID:   spectypes.NewMsgID([]byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
 			Data:    []byte(fmt.Sprintf("data-%d", i)),
 		}
-		router.Route(msg)
+		router.Route(logger, msg)
 		if i%2 == 0 {
-			go router.Route(msg)
+			go router.Route(logger, msg)
 		}
 	}
 

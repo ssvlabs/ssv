@@ -3,6 +3,7 @@ package syncing_test
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/logex"
 	"runtime"
 	"testing"
 
@@ -15,6 +16,8 @@ import (
 )
 
 func TestConcurrentSyncer(t *testing.T) {
+	logger := logex.GetLogger()
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -29,25 +32,25 @@ func TestConcurrentSyncer(t *testing.T) {
 	// Run the syncer
 	done := make(chan struct{})
 	go func() {
-		s.Run()
+		s.Run(logger)
 		close(done)
 	}()
 
 	// Test SyncHighestDecided
 	id := spectypes.MessageID{}
 	handler := newMockMessageHandler()
-	syncer.EXPECT().SyncHighestDecided(gomock.Any(), id, gomock.Any()).Return(nil)
-	s.SyncHighestDecided(ctx, id, handler.handler)
+	syncer.EXPECT().SyncHighestDecided(logger, gomock.Any(), id, gomock.Any()).Return(nil)
+	s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 	// Test SyncDecidedByRange
 	from := specqbft.Height(1)
 	to := specqbft.Height(10)
-	syncer.EXPECT().SyncDecidedByRange(gomock.Any(), id, from, to, gomock.Any()).Return(nil)
-	s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
+	syncer.EXPECT().SyncDecidedByRange(logger, gomock.Any(), id, from, to, gomock.Any()).Return(nil)
+	s.SyncDecidedByRange(ctx, logger, id, from, to, handler.handler)
 
 	// Test error handling
-	syncer.EXPECT().SyncHighestDecided(gomock.Any(), id, gomock.Any()).Return(fmt.Errorf("test error"))
-	s.SyncHighestDecided(ctx, id, handler.handler)
+	syncer.EXPECT().SyncHighestDecided(logger, gomock.Any(), id, gomock.Any()).Return(fmt.Errorf("test error"))
+	s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 	// Wait for the syncer to finish
 	cancel()
@@ -65,6 +68,8 @@ func TestConcurrentSyncer(t *testing.T) {
 }
 
 func TestConcurrentSyncerMemoryUsage(t *testing.T) {
+	logger := logex.GetLogger()
+
 	for i := 0; i < 4; i++ {
 		var before runtime.MemStats
 		runtime.ReadMemStats(&before)
@@ -80,7 +85,7 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 		// Run the syncer
 		done := make(chan struct{})
 		go func() {
-			s.Run()
+			s.Run(logger)
 			close(done)
 		}()
 
@@ -88,12 +93,12 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 			// Test SyncHighestDecided
 			id := spectypes.MessageID{}
 			handler := newMockMessageHandler()
-			s.SyncHighestDecided(ctx, id, handler.handler)
+			s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 			// Test SyncDecidedByRange
 			from := specqbft.Height(1)
 			to := specqbft.Height(10)
-			s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
+			s.SyncDecidedByRange(ctx, logger, id, from, to, handler.handler)
 		}
 
 		// Wait for the syncer to finish
@@ -107,6 +112,8 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 }
 
 func BenchmarkConcurrentSyncer(b *testing.B) {
+	logger := logex.GetLogger()
+
 	for i := 0; i < b.N; i++ {
 		// Test setup
 		syncer := &mockSyncer{}
@@ -119,7 +126,7 @@ func BenchmarkConcurrentSyncer(b *testing.B) {
 		// Run the syncer
 		done := make(chan struct{})
 		go func() {
-			s.Run()
+			s.Run(logger)
 			close(done)
 		}()
 
@@ -127,12 +134,12 @@ func BenchmarkConcurrentSyncer(b *testing.B) {
 			// Test SyncHighestDecided
 			id := spectypes.MessageID{}
 			handler := newMockMessageHandler()
-			s.SyncHighestDecided(ctx, id, handler.handler)
+			s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 			// Test SyncDecidedByRange
 			from := specqbft.Height(1)
 			to := specqbft.Height(10)
-			s.SyncDecidedByRange(ctx, id, from, to, handler.handler)
+			s.SyncDecidedByRange(ctx, logger, id, from, to, handler.handler)
 		}
 
 		// Wait for the syncer to finish

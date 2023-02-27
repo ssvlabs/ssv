@@ -18,29 +18,29 @@ const (
 // rather than relaying on libp2p's connection manager.
 type ConnManager interface {
 	// TagBestPeers tags the best n peers from the given list, based on subnets distribution scores.
-	TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
+	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
-	TrimPeers(ctx context.Context, net libp2pnetwork.Network)
+	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
 }
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
+func NewConnManager(connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
 	return &connManager{
-		logger.With(zap.String("w", "ConnManager")), connMgr, subnetsIdx,
+		connManager: connMgr,
+		subnetsIdx:  subnetsIdx,
 	}
 }
 
 // connManager implements ConnManager
 type connManager struct {
-	logger      *zap.Logger
 	connManager connmgrcore.ConnManager
 	subnetsIdx  SubnetsIndex
 }
 
-func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
+func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) {
 	bestPeers := c.getBestPeers(n, mySubnets, allPeers, topicMaxPeers)
-	c.logger.Debug("tagging best peers",
+	logger.Debug("tagging best peers",
 		zap.Int("n", n),
 		zap.Int("allPeers", len(allPeers)),
 		zap.Int("bestPeers", len(bestPeers)))
@@ -56,7 +56,7 @@ func (c connManager) TagBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	}
 }
 
-func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
+func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready
@@ -66,12 +66,12 @@ func (c connManager) TrimPeers(ctx context.Context, net libp2pnetwork.Network) {
 			_ = net.ClosePeer(pid)
 			// err := net.ClosePeer(pid)
 			// if err != nil {
-			//	c.logger.Debug("could not close trimmed peer",
+			//	logger.Debug("could not close trimmed peer",
 			//		zap.String("pid", pid.String()), zap.Error(err))
 			//}
 		}
 	}
-	c.logger.Debug("after trimming of peers", zap.Int("beforeTrim", before),
+	logger.Debug("after trimming of peers", zap.Int("beforeTrim", before),
 		zap.Int("afterTrim", len(net.Peers())))
 }
 
@@ -102,7 +102,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		// adding the number of shared subnets to the score, considering only up to 25% subnets
 		shared := records.SharedSubnets(subnets, mySubnets, len(mySubnets)/4)
 		peerScore += len(shared) / 2
-		// c.logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
+		// logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
 		peerScores[pid] = peerScore
 	}
 

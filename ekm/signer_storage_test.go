@@ -28,10 +28,9 @@ func _byteArray(input string) []byte {
 }
 
 func getBaseStorage() (basedb.IDb, error) {
-	return ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
+	return ssvstorage.GetStorageFactory(zap.L(), basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 }
 

@@ -21,8 +21,9 @@ func init() {
 }
 
 func TestCleanInstances(t *testing.T) {
+	logger := logex.GetLogger()
 	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	generateInstance := func(id spectypes.MessageID, h specqbft.Height) *qbftstorage.StoredInstance {
@@ -75,7 +76,7 @@ func TestCleanInstances(t *testing.T) {
 	require.Equal(t, specqbft.Height(msgsCount), last.State.Height)
 
 	// remove all instances
-	require.NoError(t, storage.CleanAllInstances(msgID[:]))
+	require.NoError(t, storage.CleanAllInstances(logger, msgID[:]))
 	res, err = storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)
 	require.Equal(t, 0, len(res))
@@ -174,14 +175,13 @@ func TestSaveAndFetchState(t *testing.T) {
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
+	db, err := ssvstorage.GetStorageFactory(logger.Named("badger"), basedb.Options{
 		Type:      "badger-memory",
-		Logger:    logger.With(zap.String("who", "badger")),
 		Path:      "",
 		Reporting: true,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return New(db, logger.With(zap.String("who", "ibftStorage")), prefix, forkVersion), nil
+	return New(db, prefix, forkVersion), nil
 }

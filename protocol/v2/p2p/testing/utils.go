@@ -178,7 +178,7 @@ func (m *mockNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	return nil
 }
 
-func (m *mockNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
+func (m *mockNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	m.subscribedLock.Lock()
 	defer m.subscribedLock.Unlock()
 
@@ -233,19 +233,19 @@ func (m *mockNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	return nil
 }
 
-func (m *mockNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]protocolp2p.SyncResult, specqbft.Height, error) {
+func (m *mockNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]protocolp2p.SyncResult, specqbft.Height, error) {
 	return nil, 0, nil
 }
 
-func (m *mockNetwork) RegisterHandlers(handlers ...*protocolp2p.SyncHandler) {
+func (m *mockNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*protocolp2p.SyncHandler) {
 	// TODO?
 }
 
-func (m *mockNetwork) LastDecided(mid spectypes.MessageID) ([]protocolp2p.SyncResult, error) {
+func (m *mockNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]protocolp2p.SyncResult, error) {
 	return nil, nil
 }
 
-func (m *mockNetwork) ReportValidation(message *spectypes.SSVMessage, res protocolp2p.MsgValidationResult) {
+func (m *mockNetwork) ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res protocolp2p.MsgValidationResult) {
 }
 
 func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {

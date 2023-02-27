@@ -2,6 +2,7 @@ package duties
 
 import (
 	"errors"
+	"github.com/bloxapp/ssv/utils/logex"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -17,15 +18,16 @@ import (
 )
 
 func TestDutyFetcher_GetDuties(t *testing.T) {
+	logger := logex.GetLogger()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	t.Run("handles error", func(t *testing.T) {
 		expectedErr := errors.New("test duties")
-		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
-		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
+		mockClient := createBeaconDutiesClient(logger, ctrl, nil, expectedErr)
+		mockFetcher := createIndexFetcher(logger, ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
-		duties, err := dm.GetDuties(893108)
+		duties, err := dm.GetDuties(logger, 893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
 	})
@@ -37,11 +39,11 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: phase0.BLSPubKey{},
 			},
 		}
-		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
+		mockClient := createBeaconDutiesClient(logger, ctrl, beaconDuties, nil)
+		mockFetcher := createIndexFetcher(logger, ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
 
-		duties, err := dm.GetDuties(893108)
+		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 	})
@@ -57,17 +59,17 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: phase0.BLSPubKey{},
 			},
 		}
-		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
+		mockClient := createBeaconDutiesClient(logger, ctrl, fetchedDuties, nil)
+		mockFetcher := createIndexFetcher(logger, ctrl, []phase0.ValidatorIndex{205238})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
-		duties, err := dm.GetDuties(893108)
+		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 		// trying to get duty in another slot, same epoch -> cache should be used
 		// cleanup beacon client so it won't return duties
 		dm.(*dutyFetcher).beaconClient = mockClient
 		// get duties, assuming cache will be used
-		duties, err = dm.GetDuties(893110)
+		duties, err = dm.GetDuties(logger, 893110)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
 	})
@@ -79,10 +81,10 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 				PubKey: phase0.BLSPubKey{},
 			},
 		}
-		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
-		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{})
+		mockClient := createBeaconDutiesClient(logger, ctrl, fetchedDuties, nil)
+		mockFetcher := createIndexFetcher(logger, ctrl, []phase0.ValidatorIndex{})
 		dm := newDutyFetcher(zap.L(), mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
-		duties, err := dm.GetDuties(893108)
+		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
 	})
@@ -118,16 +120,16 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	}
 }
 
-func createIndexFetcher(ctrl *gomock.Controller, result []phase0.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
+func createIndexFetcher(logger *zap.Logger, ctrl *gomock.Controller, result []phase0.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
 	indexFetcher := mocks.NewMockvalidatorsIndicesFetcher(ctrl)
-	indexFetcher.EXPECT().GetValidatorsIndices().Return(result).Times(1)
+	indexFetcher.EXPECT().GetValidatorsIndices(logger).Return(result).Times(1)
 
 	return indexFetcher
 }
 
-func createBeaconDutiesClient(ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeacon {
+func createBeaconDutiesClient(logger *zap.Logger, ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeacon {
 	client := beacon.NewMockBeacon(ctrl)
-	client.EXPECT().GetDuties(gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
+	client.EXPECT().GetDuties(logger, gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
 	client.EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).MaxTimes(1)
 
 	return client

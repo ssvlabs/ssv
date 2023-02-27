@@ -34,8 +34,6 @@ type HandleNewPeer func(e PeerEvent)
 
 // Options represents the options passed to create a service
 type Options struct {
-	Logger *zap.Logger
-
 	Host        host.Host
 	DiscV5Opts  *DiscV5Options
 	ConnIndex   peers.ConnectionIndex
@@ -50,16 +48,16 @@ type Options struct {
 type Service interface {
 	discovery.Discovery
 	io.Closer
-	RegisterSubnets(subnets ...int) error
-	DeregisterSubnets(subnets ...int) error
-	Bootstrap(handler HandleNewPeer) error
-	UpdateForkVersion(forkv forksprotocol.ForkVersion) error
+	RegisterSubnets(logger *zap.Logger, subnets ...int) error
+	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
+	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
+	UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error
 }
 
 // NewService creates new discovery.Service
-func NewService(ctx context.Context, opts Options) (Service, error) {
+func NewService(ctx context.Context, logger *zap.Logger, opts Options) (Service, error) {
 	if opts.DiscV5Opts == nil {
-		return NewLocalDiscovery(ctx, opts.Logger, opts.Host)
+		return NewLocalDiscovery(ctx, logger, opts.Host)
 	}
-	return newDiscV5Service(ctx, &opts)
+	return newDiscV5Service(ctx, logger, &opts)
 }

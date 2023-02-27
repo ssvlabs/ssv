@@ -3,7 +3,6 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,26 +30,24 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // OperatorsCollection is the interface for managing operators data
 type OperatorsCollection interface {
-	GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error)
+	GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error)
 	GetOperatorData(index uint64) (*OperatorData, bool, error)
-	SaveOperatorData(operatorData *OperatorData) error
+	SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error
 	DeleteOperatorData(index uint64) error
-	ListOperators(from uint64, to uint64) ([]OperatorData, error)
+	ListOperators(logger *zap.Logger, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 }
 
 type operatorsStorage struct {
 	db     basedb.IDb
-	logger *zap.Logger
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewOperatorsStorage creates a new instance of Storage
-func NewOperatorsStorage(db basedb.IDb, logger *zap.Logger, prefix []byte) OperatorsCollection {
+func NewOperatorsStorage(db basedb.IDb, prefix []byte) OperatorsCollection {
 	return &operatorsStorage{
 		db:     db,
-		logger: logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
 		prefix: prefix,
 	}
 }
@@ -62,11 +59,11 @@ func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 
 // ListOperators returns data of the all known operators by index range (from, to)
 // when 'to' equals zero, all operators will be returned
-func (s *operatorsStorage) ListOperators(from, to uint64) ([]OperatorData, error) {
+func (s *operatorsStorage) ListOperators(logger *zap.Logger, from, to uint64) ([]OperatorData, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.listOperators(from, to)
+	return s.listOperators(logger, from, to)
 }
 
 // GetOperatorData returns data of the given operator by index
@@ -78,15 +75,15 @@ func (s *operatorsStorage) GetOperatorData(index uint64) (*OperatorData, bool, e
 }
 
 // GetOperatorDataByPubKey returns data of the given operator by public key
-func (s *operatorsStorage) GetOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getOperatorDataByPubKey(operatorPubKey)
+	return s.getOperatorDataByPubKey(logger, operatorPubKey)
 }
 
-func (s *operatorsStorage) getOperatorDataByPubKey(operatorPubKey string) (*OperatorData, bool, error) {
-	operatorsData, err := s.listOperators(0, 0)
+func (s *operatorsStorage) getOperatorDataByPubKey(logger *zap.Logger, operatorPubKey string) (*OperatorData, bool, error) {
+	operatorsData, err := s.listOperators(logger, 0, 0)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "could not get all operators")
 	}
@@ -111,9 +108,9 @@ func (s *operatorsStorage) getOperatorData(index uint64) (*OperatorData, bool, e
 	return &operatorInformation, found, err
 }
 
-func (s *operatorsStorage) listOperators(from, to uint64) ([]OperatorData, error) {
+func (s *operatorsStorage) listOperators(logger *zap.Logger, from, to uint64) ([]OperatorData, error) {
 	var operators []OperatorData
-	err := s.db.GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(logger, append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
 		var od OperatorData
 		if err := json.Unmarshal(obj.Value, &od); err != nil {
 			return err
@@ -128,7 +125,7 @@ func (s *operatorsStorage) listOperators(from, to uint64) ([]OperatorData, error
 }
 
 // SaveOperatorData saves operator data
-func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
+func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -145,7 +142,7 @@ func (s *operatorsStorage) SaveOperatorData(operatorData *OperatorData) error {
 		return errors.Wrap(err, "could not get operator's data")
 	}
 	if found {
-		s.logger.Debug("operator already exist",
+		logger.Debug("operator already exist",
 			zap.String("pubKey", operatorData.PublicKey),
 			zap.Uint64("index", operatorData.Index))
 		return nil
