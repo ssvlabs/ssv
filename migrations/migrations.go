@@ -9,13 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	validatorstorage "github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -86,10 +83,6 @@ func (o Options) nodeStorage() operatorstorage.Storage {
 
 func (o Options) signerStorage() ekm.Storage {
 	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
-}
-
-func (o Options) ibftStorage(prefix string, fork forksprotocol.ForkVersion) qbftstorage.QBFTStore {
-	return ibftstorage.New(o.Db, o.Logger, prefix, fork)
 }
 
 // Run executes the migrations.
