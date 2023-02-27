@@ -118,7 +118,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	} else {
 		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
 		if err != nil {
-			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+			logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}
 
 		for _, operator := range operators {

@@ -187,7 +187,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap:    newValidatorsMap(options.Context, logger, options.DB, validatorOptions),
+		validatorsMap:    newValidatorsMap(options.Context, options.DB, validatorOptions),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -395,7 +395,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 		}
 
 		// Start a committee validator.
-		v := c.validatorsMap.GetOrCreateValidator(validatorShare)
+		v := c.validatorsMap.GetOrCreateValidator(logger.With(zap.String("who", "validatorsMap")), validatorShare)
 		isStarted, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator", zap.Error(err))
@@ -611,7 +611,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 }
 
 func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) {
-	v := c.validatorsMap.GetOrCreateValidator(share)
+	v := c.validatorsMap.GetOrCreateValidator(logger.With(zap.String("who", "validatorsMap")), share)
 	_, err := c.startValidator(logger, v)
 	if err != nil {
 		logger.Warn("could not start validator", zap.Error(err))
@@ -685,7 +685,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			},
 			Storage: options.Storage.Get(role),
 			Network: options.Network,
-			Timer:   roundtimer.New(ctx, logger, nil),
+			Timer:   roundtimer.New(ctx, nil),
 		}
 		config.ValueCheckF = valueCheckF
 

@@ -50,10 +50,9 @@ type Conn interface {
 }
 
 type conn struct {
-	logger *zap.Logger
-	ctx    context.Context
-	id     string
-	ws     *websocket.Conn
+	ctx context.Context
+	id  string
+	ws  *websocket.Conn
 
 	writeTimeout time.Duration
 
@@ -65,10 +64,9 @@ type conn struct {
 	withPing bool
 }
 
-func newConn(ctx context.Context, logger *zap.Logger, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
+func newConn(ctx context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
 	return &conn{
 		ctx:          ctx,
-		logger:       logger.With(zap.String("who", "WSConn")),
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,

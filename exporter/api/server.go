@@ -27,8 +27,6 @@ type WebSocketServer interface {
 type wsServer struct {
 	ctx context.Context
 
-	logger *zap.Logger
-
 	handler QueryMessageHandler
 
 	broadcaster Broadcaster
@@ -40,10 +38,9 @@ type wsServer struct {
 }
 
 // NewWsServer creates a new instance
-func NewWsServer(ctx context.Context, logger *zap.Logger, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
+func NewWsServer(ctx context.Context, handler QueryMessageHandler, mux *http.ServeMux, withPing bool) WebSocketServer {
 	ws := wsServer{
 		ctx:         ctx,
-		logger:      logger.With(zap.String("component", "exporter/api/server")),
 		handler:     handler,
 		router:      mux,
 		broadcaster: newBroadcaster(),
@@ -153,7 +150,7 @@ func (ws *wsServer) handleStream(logger *zap.Logger, wsc *websocket.Conn) {
 	defer logger.Debug("stream handler done")
 
 	ctx, cancel := context.WithCancel(ws.ctx)
-	c := newConn(ctx, logger, wsc, cid, sendTimeout, ws.withPing)
+	c := newConn(ctx, wsc, cid, sendTimeout, ws.withPing)
 	defer cancel()
 
 	if !ws.broadcaster.Register(c) {

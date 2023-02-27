@@ -115,7 +115,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Eth1Client = cl
 
 		if cfg.WsAPIPort != 0 {
-			ws := api.NewWsServer(cmd.Context(), logger, nil, http.NewServeMux(), cfg.WithPing)
+			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)

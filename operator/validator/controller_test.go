@@ -146,7 +146,6 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
 		validatorsMap: &validatorsMap{
-			logger:        logger.With(zap.String("component", "validatorsMap")),
 			ctx:           context.Background(),
 			lock:          sync.RWMutex{},
 			validatorsMap: validators,
