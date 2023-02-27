@@ -255,7 +255,7 @@ func (dc *dutyController) handleValidatorRegistration(slot phase0.Slot) {
 		return
 	}
 	dc.registered = true
-	shares, err := dc.validatorController.GetAllValidatorShares()
+	shares, err := dc.validatorController.GetAllValidatorShares() // TODO better to fetch only active validators
 	if err != nil {
 		dc.logger.Warn("failed to get all validators share", zap.Error(err))
 		return
