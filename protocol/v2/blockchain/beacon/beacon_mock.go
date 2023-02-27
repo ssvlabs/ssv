@@ -2,11 +2,12 @@ package beacon
 
 import (
 	"context"
+
+	"github.com/attestantio/go-eth2-client/api"
 	"go.uber.org/zap"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -29,12 +30,19 @@ func (b beaconMock) Events(ctx context.Context, topics []string, handler eth2cli
 	panic("implement me")
 }
 
-func (b beaconMock) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {
-	return nil, nil
+func (b beaconMock) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	//TODO implement me
+	panic("implement me")
 }
 
-func (b beaconMock) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {
-	return nil
+func (b beaconMock) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*api.VersionedBlindedBeaconBlock, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b beaconMock) SubmitBlindedBeaconBlock(block *api.VersionedSignedBlindedBeaconBlock) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewBeaconMock() Beacon {

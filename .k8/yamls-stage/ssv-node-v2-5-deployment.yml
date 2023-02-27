@@ -138,6 +138,8 @@ spec:
           value: "152834"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
+        - name: BLINDED_SUPPORT
+          value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-5

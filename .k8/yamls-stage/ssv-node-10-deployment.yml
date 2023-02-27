@@ -134,6 +134,8 @@ spec:
           value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
+        - name: BLINDED_SUPPORT
+          value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-10

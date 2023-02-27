@@ -30,6 +30,7 @@ import (
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
+var validatorRegistrationEpochInterval = uint64(4)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -238,6 +239,40 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 		go dc.onDuty(logger, &duties[i])
 	}
 
+	dc.handleSyncCommittee(logger, slot, syncPeriod)
+	dc.handleValidatorRegistration(logger, slot)
+}
+
+func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
+	// push if first time or every 10 epoch at first slot
+	epoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
+	firstSlot := dc.ethNetwork.GetEpochFirstSlot(epoch)
+	if slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0 {
+		return
+	}
+	shares, err := dc.validatorController.GetAllValidatorShares(logger) // TODO better to fetch only active validators
+	if err != nil {
+		logger.Warn("failed to get all validators share", zap.Error(err))
+		return
+	}
+	for _, share := range shares {
+		pk := phase0.BLSPubKey{}
+		copy(pk[:], share.ValidatorPubKey)
+		go dc.onDuty(logger, &spectypes.Duty{
+			Type:   spectypes.BNRoleValidatorRegistration,
+			PubKey: pk,
+			Slot:   slot,
+			// no need for other params
+		})
+	}
+	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)))
+}
+
+// handleSyncCommittee preform the following processes -
+//  1. execute sync committee duties
+//  2. Get next period's sync committee duties, but wait until half-way through the epoch
+//     This allows us to set them up at a time when the beacon node should be less busy.
+func (dc *dutyController) handleSyncCommittee(logger *zap.Logger, slot phase0.Slot, syncPeriod uint64) {
 	// execute sync committee duties
 	if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
 		toSpecDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
