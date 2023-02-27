@@ -21,6 +21,8 @@ func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
 // CompactCopy is guaranteed to not modify the given state, but the returned state may be modified
 // when the given state is modified.
 //
+// TODO: this is a temporary solution to not break spec-tests. Revert this once spec is aligned.
+//
 // See Compact for more details.
 func CompactCopy(state *specqbft.State, decidedMessage *specqbft.SignedMessage) *specqbft.State {
 	copy := *state
