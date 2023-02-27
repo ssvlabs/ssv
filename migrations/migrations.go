@@ -3,6 +3,7 @@ package migrations
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -34,11 +35,13 @@ var (
 		migrationCleanRegistryData,
 		migrationCleanRegistryDataIncludingSignerStorage,
 		migrationCleanRegistryDataShifuV2,
+		migrationCompactInstances,
+		migrationForceFullGC,
 	}
 )
 
 // Run executes the default migrations.
-func Run(ctx context.Context, opt Options) error {
+func Run(ctx context.Context, opt Options) (applied int, err error) {
 	return defaultMigrations.Run(ctx, opt)
 }
 
@@ -55,7 +58,7 @@ type Migration struct {
 // from first to last (order is significant).
 type Migrations []Migration
 
-// Options are configurations for migrations
+// Options is the options for running migrations.
 type Options struct {
 	Db      basedb.IDb
 	Logger  *zap.Logger
@@ -83,31 +86,34 @@ func (o Options) signerStorage() ekm.Storage {
 }
 
 // Run executes the migrations.
-func (m Migrations) Run(ctx context.Context, opt Options) error {
-	opt.Logger.Info("Running migrations:")
-	count := 0
+func (m Migrations) Run(ctx context.Context, opt Options) (applied int, err error) {
+	logger := opt.Logger
+	logger.Info("Running migrations")
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
 		if err != nil {
-			return err
+			return applied, err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
-			opt.Logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
+			logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
 			continue
 		}
 
 		// Execute the migration.
+		start := time.Now()
+		opt.Logger = opt.Logger.With(zap.String("migration", migration.Name))
 		err = migration.Run(ctx, opt, []byte(migration.Name))
 		if err != nil {
-			return errors.Wrapf(err, "migration %q failed", migration.Name)
+			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
-		count++
-		opt.Logger.Info("migration applied successfully", zap.String("name", migration.Name))
+		applied++
+		logger.Info("migration applied successfully",
+			zap.String("name", migration.Name),
+			zap.Duration("took", time.Since(start)))
 	}
-	if count == 0 {
-		opt.Logger.Info("No migrations to apply.")
+	if applied == 0 {
+		logger.Info("no migrations to apply")
 	}
-
-	return nil
+	return applied, nil
 }

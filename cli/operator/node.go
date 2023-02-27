@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	logging "github.com/ipfs/go-log"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
@@ -78,7 +80,10 @@ var StartNodeCmd = &cobra.Command{
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db := setupDb(logger, eth2Network)
+		db, err := setupDb(logger, eth2Network)
+		if err != nil {
+			logger.Fatal("could not setup db", zap.Error(err))
+		}
 		operatorStorage, operatorPubKey := setupOperatorStorage(db)
 
 		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain(), logger)
@@ -197,12 +202,19 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 	return logger
 }
 
-func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) basedb.IDb {
+func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
 	cfg.DBOptions.Logger = logger
 
 	db, err := storage.GetStorageFactory(cfg.DBOptions)
 	if err != nil {
-		logger.Fatal("failed to create db!", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to open db")
+	}
+	reopenDb := func() error {
+		if err := db.Close(); err != nil {
+			return errors.Wrap(err, "failed to close db")
+		}
+		db, err = storage.GetStorageFactory(cfg.DBOptions)
+		return errors.Wrap(err, "failed to reopen db")
 	}
 
 	migrationOpts := migrations.Options{
@@ -211,12 +223,39 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) basedb.IDb 
 		DbPath:  cfg.DBOptions.Path,
 		Network: eth2Network,
 	}
-	err = migrations.Run(cfg.DBOptions.Ctx, migrationOpts)
+	applied, err := migrations.Run(cfg.DBOptions.Ctx, migrationOpts)
 	if err != nil {
-		logger.Fatal("failed to run migrations", zap.Error(err))
+		return nil, errors.Wrap(err, "failed to run migrations")
+	}
+	if applied == 0 {
+		return db, nil
 	}
 
-	return db
+	// If migrations were applied, we run a full garbage collection cycle
+	// to reclaim any space that may have been freed up.
+	if _, ok := db.(basedb.GarbageCollector); ok {
+		// Close & reopen the database to trigger any unknown internal
+		// startup/shutdown procedures that the storage engine may have.
+		start := time.Now()
+		if err := reopenDb(); err != nil {
+			return nil, err
+		}
+
+		// Run a long garbage collection cycle with a timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+		defer cancel()
+		if err := db.(basedb.GarbageCollector).FullGC(ctx); err != nil {
+			return nil, errors.Wrap(err, "failed to collect garbage")
+		}
+
+		// Close & reopen again.
+		if err := reopenDb(); err != nil {
+			return nil, err
+		}
+		logger.Info("post-migrations garbage collection completed", zap.Duration("duration", time.Since(start)))
+	}
+
+	return db, nil
 }
 
 func setupOperatorStorage(db basedb.IDb) (operatorstorage.Storage, string) {
