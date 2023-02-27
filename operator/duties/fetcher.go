@@ -89,7 +89,7 @@ func (df *dutyFetcher) GetDuties(slot phase0.Slot) ([]spectypes.Duty, error) {
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			logging.DurationNano(start))
+			logging.DurationMilliS(start))
 	}
 
 	return duties, nil

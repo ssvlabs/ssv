@@ -36,7 +36,7 @@ const (
 	FieldPeerID              = "peerID"
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
-	FieldResults             = "results"
+	FieldSyncResults         = "syncResults"
 	FieldStartTimeUnixNano   = "startTimeUnixNano"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
@@ -150,8 +150,8 @@ func IndexCacheMetrics(metrics *ristretto.Metrics) zapcore.Field {
 	return zap.Stringer(FieldIndexCacheMetrics, metrics)
 }
 
-func Results(msgs protocolp2p.SyncResults) zapcore.Field {
-	return zap.Stringer(FieldResults, msgs)
+func SyncResults(msgs protocolp2p.SyncResults) zapcore.Field {
+	return zap.Stringer(FieldSyncResults, msgs)
 }
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {
