@@ -59,7 +59,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
 
 			stores := newStores(s.shared.Logger)
-			s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
+			s.shared.Nodes[id].RegisterHandlers(s.shared.Logger, protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
 				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
 			), protocolp2p.WithHandler(
@@ -147,10 +147,9 @@ func quorum(committee int) int {
 }
 
 func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := storage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Path:   "",
-		Logger: logger,
+	db, err := storage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	if err != nil {
 		panic(err)
@@ -166,7 +165,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleSyncCommitteeContribution,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, logger, role.String(), protocolforks.GenesisForkVersion))
+		storageMap.Add(role, qbftstorage.New(db, role.String(), protocolforks.GenesisForkVersion))
 	}
 
 	return storageMap
@@ -200,7 +199,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(val))
-	require.NoError(t, val.Start())
+	require.NoError(t, val.Start(logger))
 
 	return val
 }

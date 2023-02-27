@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 	"sync"
 	"testing"
 	"time"
@@ -12,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func init() {
@@ -20,14 +20,14 @@ func init() {
 }
 
 func TestWorker(t *testing.T) {
-	worker := NewWorker(&Config{
+	logger := logex.GetLogger()
+	worker := NewWorker(logger, &Config{
 		Ctx:          context.Background(),
-		Logger:       zap.L(),
 		WorkersCount: 1,
 		Buffer:       2,
 	})
 
-	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		return nil
 	})
@@ -38,17 +38,17 @@ func TestWorker(t *testing.T) {
 }
 
 func TestManyWorkers(t *testing.T) {
+	logger := logex.GetLogger()
 	var wg sync.WaitGroup
 
-	worker := NewWorker(&Config{
+	worker := NewWorker(logger, &Config{
 		Ctx:          context.Background(),
-		Logger:       zap.L(),
 		WorkersCount: 10,
 		Buffer:       0,
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		return nil
@@ -62,17 +62,17 @@ func TestManyWorkers(t *testing.T) {
 }
 
 func TestBuffer(t *testing.T) {
+	logger := logex.GetLogger()
 	var wg sync.WaitGroup
 
-	worker := NewWorker(&Config{
+	worker := NewWorker(logger, &Config{
 		Ctx:          context.Background(),
-		Logger:       logex.GetLogger(),
 		WorkersCount: 1,
 		Buffer:       10,
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		time.Sleep(time.Millisecond * 100)

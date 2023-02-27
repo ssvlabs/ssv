@@ -19,10 +19,10 @@ import (
 type ICollection interface {
 	eth1.RegistryStore
 
-	SaveValidatorShare(share *types.SSVShare) error
+	SaveValidatorShare(logger *zap.Logger, share *types.SSVShare) error
 	GetValidatorShare(key []byte) (*types.SSVShare, bool, error)
-	GetAllValidatorShares() ([]*types.SSVShare, error)
-	GetFilteredValidatorShares(f func(share *types.SSVShare) bool) ([]*types.SSVShare, error)
+	GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
+	GetFilteredValidatorShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error)
 	DeleteValidatorShare(key []byte) error
 }
 
@@ -32,43 +32,40 @@ func collectionPrefix() []byte {
 
 // CollectionOptions struct
 type CollectionOptions struct {
-	DB     basedb.IDb
-	Logger *zap.Logger
+	DB basedb.IDb
 }
 
 // Collection struct
 type Collection struct {
-	db     basedb.IDb
-	logger *zap.Logger
-	lock   sync.RWMutex
+	db   basedb.IDb
+	lock sync.RWMutex
 }
 
 // NewCollection creates new share storage
 func NewCollection(options CollectionOptions) ICollection {
 	collection := Collection{
-		db:     options.DB,
-		logger: options.Logger,
-		lock:   sync.RWMutex{},
+		db:   options.DB,
+		lock: sync.RWMutex{},
 	}
 	return &collection
 }
 
 // SaveValidatorShare save validator share to db
-func (s *Collection) SaveValidatorShare(share *types.SSVShare) error {
+func (s *Collection) SaveValidatorShare(logger *zap.Logger, share *types.SSVShare) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	err := s.saveUnsafe(share)
+	err := s.saveUnsafe(logger, share)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *Collection) saveUnsafe(share *types.SSVShare) error {
+func (s *Collection) saveUnsafe(logger *zap.Logger, share *types.SSVShare) error {
 	value, err := share.Encode()
 	if err != nil {
-		s.logger.Error("failed to serialize share", zap.Error(err))
+		logger.Error("failed to serialize share", zap.Error(err))
 		return err
 	}
 	return s.db.Set(collectionPrefix(), share.ValidatorPubKey, value)
@@ -105,13 +102,13 @@ func (s *Collection) cleanAllShares() error {
 }
 
 // GetAllValidatorShares returns all shares
-func (s *Collection) GetAllValidatorShares() ([]*types.SSVShare, error) {
+func (s *Collection) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var res []*types.SSVShare
 
-	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(logger, collectionPrefix(), func(i int, obj basedb.Obj) error {
 		val := &types.SSVShare{}
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
@@ -152,13 +149,13 @@ func ByOwnerAddress(ownerAddress string) func(share *types.SSVShare) bool {
 }
 
 // GetFilteredValidatorShares returns shares by a filter.
-func (s *Collection) GetFilteredValidatorShares(filter func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
+func (s *Collection) GetFilteredValidatorShares(logger *zap.Logger, filter func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	var res []*types.SSVShare
 
-	err := s.db.GetAll(collectionPrefix(), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(logger, collectionPrefix(), func(i int, obj basedb.Obj) error {
 		share := &types.SSVShare{}
 		if err := share.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize validator: %w", err)
@@ -185,7 +182,7 @@ func (s *Collection) DeleteValidatorShare(key []byte) error {
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *Collection) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (s *Collection) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -201,5 +198,5 @@ func (s *Collection) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return nil
 	}
 	share.BeaconMetadata = metadata
-	return s.saveUnsafe(share)
+	return s.saveUnsafe(logger, share)
 }

@@ -14,29 +14,29 @@ import (
 
 // WSClient represents a client connection to be used in tests
 type WSClient struct {
-	ctx    context.Context
-	logger *zap.Logger
-	mut    sync.Mutex
-	msgs   []Message
+	ctx  context.Context
+	mut  sync.Mutex
+	msgs []Message
 
 	out chan Message
 }
 
 // NewWSClient creates a new instance of ws client
-func NewWSClient(ctx context.Context, logger *zap.Logger) *WSClient {
+func NewWSClient(ctx context.Context) *WSClient {
 	return &WSClient{
-		ctx:    ctx,
-		logger: logger,
-		mut:    sync.Mutex{},
-		msgs:   make([]Message, 0),
-		out:    make(chan Message),
+		ctx:  ctx,
+		mut:  sync.Mutex{},
+		msgs: make([]Message, 0),
+		out:  make(chan Message),
 	}
 }
 
 // StartStream initiates stream
-func (client *WSClient) StartStream(addr, path string) error {
+func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
-	client.logger.Debug("connecting to server", logging.Address(u))
+  
+	logger.Debug("connecting to server", logging.Address(u))
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "dial error")
@@ -55,7 +55,7 @@ func (client *WSClient) StartStream(addr, path string) error {
 		}
 		var msg Message
 		if err := json.Unmarshal(raw, &msg); err != nil {
-			client.logger.Error("failed to parse message", zap.Error(err))
+			logger.Error("failed to parse message", zap.Error(err))
 			continue
 		}
 		client.mut.Lock()
@@ -65,9 +65,11 @@ func (client *WSClient) StartStream(addr, path string) error {
 }
 
 // StartQuery initiates query requests
-func (client *WSClient) StartQuery(addr, path string) error {
+func (client *WSClient) StartQuery(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
-	client.logger.Debug("connecting to server", logging.Address(u))
+
+	logger.Debug("connecting to server", logging.Address(u))
+
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		return errors.Wrap(err, "dial error")
@@ -91,7 +93,7 @@ msgLoop:
 			}
 			var msg Message
 			if err := json.Unmarshal(raw, &msg); err != nil {
-				client.logger.Error("failed to parse message", zap.Error(err))
+				logger.Error("failed to parse message", zap.Error(err))
 				continue msgLoop
 			}
 			client.mut.Lock()

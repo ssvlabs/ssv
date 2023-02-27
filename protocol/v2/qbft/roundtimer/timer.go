@@ -6,7 +6,6 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"go.uber.org/zap"
 )
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
@@ -29,8 +28,7 @@ func RoundTimeout(r specqbft.Round) time.Duration {
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
-	logger *zap.Logger
-	ctx    context.Context
+	ctx context.Context
 	// cancelCtx cancels the current context, will be called from Kill()
 	cancelCtx context.CancelFunc
 	// timer is the underlying time.Timer
@@ -44,12 +42,11 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
+func New(pctx context.Context, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		ctx:          ctx,
 		cancelCtx:    cancelCtx,
-		logger:       logger,
 		timer:        nil,
 		done:         done,
 		roundTimeout: RoundTimeout,

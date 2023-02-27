@@ -8,7 +8,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestRoundTimer_TimeoutForRound(t *testing.T) {
@@ -17,7 +16,7 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		onTimeout := func() {
 			atomic.AddInt32(&count, 1)
 		}
-		timer := New(context.Background(), zap.L(), onTimeout)
+		timer := New(context.Background(), onTimeout)
 		timer.roundTimeout = func(round specqbft.Round) time.Duration {
 			return 1100 * time.Millisecond
 		}
@@ -32,7 +31,7 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		onTimeout := func() {
 			atomic.AddInt32(&count, 1)
 		}
-		timer := New(context.Background(), zap.L(), onTimeout)
+		timer := New(context.Background(), onTimeout)
 		timer.roundTimeout = func(round specqbft.Round) time.Duration {
 			return 1100 * time.Millisecond
 		}

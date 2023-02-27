@@ -41,12 +41,12 @@ var (
 )
 
 // Run executes the default migrations.
-func Run(ctx context.Context, opt Options) (applied int, err error) {
-	return defaultMigrations.Run(ctx, opt)
+func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
+	return defaultMigrations.Run(ctx, logger, opt)
 }
 
 // MigrationFunc is a function that performs a migration.
-type MigrationFunc func(ctx context.Context, opt Options, key []byte) error
+type MigrationFunc func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error
 
 // Migration is a named MigrationFunc.
 type Migration struct {
@@ -61,33 +61,30 @@ type Migrations []Migration
 // Options is the options for running migrations.
 type Options struct {
 	Db      basedb.IDb
-	Logger  *zap.Logger
 	DbPath  string
 	Network beacon.Network
 }
 
-func (o Options) getRegistryStores() []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(), o.signerStorage()}
+func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
+	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(logger), o.signerStorage(logger)}
 }
 
 func (o Options) validatorStorage() validatorstorage.ICollection {
 	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
-		DB:     o.Db,
-		Logger: o.Logger,
+		DB: o.Db,
 	})
 }
 
-func (o Options) nodeStorage() operatorstorage.Storage {
-	return operatorstorage.NewNodeStorage(o.Db, o.Logger)
+func (o Options) nodeStorage(logger *zap.Logger) operatorstorage.Storage {
+	return operatorstorage.NewNodeStorage(o.Db)
 }
 
-func (o Options) signerStorage() ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network, o.Logger)
+func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
+	return ekm.NewSignerStorage(o.Db, o.Network, logger)
 }
 
 // Run executes the migrations.
-func (m Migrations) Run(ctx context.Context, opt Options) (applied int, err error) {
-	logger := opt.Logger
+func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	logger.Info("Running migrations")
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
@@ -102,8 +99,8 @@ func (m Migrations) Run(ctx context.Context, opt Options) (applied int, err erro
 
 		// Execute the migration.
 		start := time.Now()
-		opt.Logger = opt.Logger.With(zap.String("migration", migration.Name))
-		err = migration.Run(ctx, opt, []byte(migration.Name))
+		logger = logger.With(zap.String("migration", migration.Name))
+		err = migration.Run(ctx, logger, opt, []byte(migration.Name))
 		if err != nil {
 			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
 		}

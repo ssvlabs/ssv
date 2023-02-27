@@ -11,7 +11,6 @@ import (
 )
 
 type NonCommitteeValidator struct {
-	logger         *zap.Logger
 	Share          *types.SSVShare
 	Storage        *storage.QBFTStores
 	qbftController *qbftcontroller.Controller
@@ -34,15 +33,14 @@ func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *Non
 	}
 
 	return &NonCommitteeValidator{
-		logger:         logger,
 		Share:          opts.SSVShare,
 		Storage:        opts.Storage,
 		qbftController: ctrl,
 	}
 }
 
-func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
-	logger := ncv.logger.With(zap.String("id", msg.GetID().String()))
+func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
+	logger = logger.With(zap.String("id", msg.GetID().String()))
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("got invalid message", zap.Error(err))
 		return

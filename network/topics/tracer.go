@@ -28,7 +28,7 @@ func newTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
 	if withLogging {
 		state = psTraceStateWithLogging
 	}
-	return &psTracer{logger: logger.With(zap.String("who", "pubsubTrace")), state: state}
+	return &psTracer{logger: logger.Named("pubsubTrace"), state: state}
 }
 
 // Trace handles events, implementation of pubsub.EventTracer
@@ -37,7 +37,7 @@ func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
 	if atomic.LoadUint32(&pst.state) < psTraceStateWithLogging {
 		return
 	}
-	pst.log(evt)
+	pst.log(pst.logger, evt)
 }
 
 // report reports metric
@@ -46,7 +46,7 @@ func (pst *psTracer) report(evt *ps_pb.TraceEvent) {
 }
 
 // log prints event to log
-func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
+func (pst *psTracer) log(logger *zap.Logger, evt *ps_pb.TraceEvent) {
 	if evt == nil {
 		return
 	}
@@ -168,7 +168,7 @@ func (pst *psTracer) log(evt *ps_pb.TraceEvent) {
 	default:
 		return
 	}
-	pst.logger.Debug("pubsub event", fields...)
+	logger.Debug("pubsub event", fields...)
 }
 
 func appendIHave(fields []zap.Field, ihave []*ps_pb.TraceEvent_ControlIHaveMeta) []zap.Field {

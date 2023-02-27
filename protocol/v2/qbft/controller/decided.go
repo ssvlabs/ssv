@@ -11,7 +11,7 @@ import (
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
-func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := ValidateDecided(
 		c.config,
 		msg,
@@ -26,7 +26,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		return nil, errors.Wrap(err, "could not get decided data")
 	}
 
-	inst := c.InstanceForHeight(msg.Message.Height)
+	inst := c.InstanceForHeight(logger, msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.Message.Height > c.Height
 	save := true
@@ -56,7 +56,7 @@ func (c *Controller) UponDecided(msg *specqbft.SignedMessage) (*specqbft.SignedM
 		// Retrieve instance from StoredInstances (in case it was created above)
 		// and save it together with the decided message.
 		if inst := c.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
-			logger := c.logger.With(
+			logger := logger.With(
 				zap.Uint64("msg_height", uint64(msg.Message.Height)),
 				zap.Uint64("ctrl_height", uint64(c.Height)),
 				zap.Any("signers", msg.Signers),

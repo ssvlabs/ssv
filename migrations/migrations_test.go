@@ -7,6 +7,8 @@ import (
 	"path"
 	"testing"
 
+	"github.com/bloxapp/ssv/utils/logex"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
@@ -18,24 +20,23 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
 	options := basedb.Options{
 		Type:      "badger-memory",
-		Logger:    zap.L(),
 		Path:      "",
 		Reporting: true,
 		Ctx:       ctx,
 	}
-	db, err := kv.New(options)
+	db, err := kv.New(zap.L(), options)
 	if err != nil {
 		return Options{}, err
 	}
 	return Options{
 		Db:     db,
-		Logger: zap.L(),
 		DbPath: t.TempDir(),
 	}, nil
 }
 
 func Test_RunNotMigratingTwice(t *testing.T) {
 	ctx := context.Background()
+	logger := logex.GetLogger()
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -43,19 +44,19 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 	migrations := Migrations{
 		{
 			Name: "not_migrating_twice",
-			Run: func(ctx context.Context, opt Options, key []byte) error {
+			Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 				count++
 				return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
 			},
 		},
 	}
 
-	applied, err := migrations.Run(ctx, opt)
+	applied, err := migrations.Run(ctx, logger, opt)
 	require.NoError(t, err)
 	require.Equal(t, applied, 1)
 	require.Equal(t, count, 1) // Only ran once.
 
-	applied, err = migrations.Run(ctx, opt)
+	applied, err = migrations.Run(ctx, logger, opt)
 	require.NoError(t, err)
 	require.Equal(t, applied, 0)
 	require.Equal(t, count, 1) // Only ran once.
@@ -63,13 +64,14 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 
 func Test_Rollback(t *testing.T) {
 	ctx := context.Background()
+	logger := logex.GetLogger()
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
 	// Test that migration fails and rolls back on error.
 	fakeError := errors.New("fake error")
 	migrationKey := "test_migration"
-	applied, err := Migrations{fakeMigration(migrationKey, fakeError)}.Run(ctx, opt)
+	applied, err := Migrations{fakeMigration(migrationKey, fakeError)}.Run(ctx, logger, opt)
 	require.Equal(t, 0, applied)
 	require.Error(t, fakeError, err)
 	_, found, err := opt.Db.Get(migrationsPrefix, []byte(migrationKey))
@@ -77,7 +79,7 @@ func Test_Rollback(t *testing.T) {
 	require.False(t, found)
 
 	// Test that migration doesn't fail without error:
-	applied, err = Migrations{fakeMigration(migrationKey, nil)}.Run(ctx, opt)
+	applied, err = Migrations{fakeMigration(migrationKey, nil)}.Run(ctx, logger, opt)
 	require.NoError(t, err)
 	require.Equal(t, 1, applied)
 	obj, found, err := opt.Db.Get(migrationsPrefix, []byte(migrationKey))
@@ -89,6 +91,7 @@ func Test_Rollback(t *testing.T) {
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	ctx := context.Background()
+	logger := logex.GetLogger()
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -97,7 +100,7 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 		fakeMigration("first", fakeError),
 		fakeMigration("second", nil),
 	}
-	applied, err := migrations.Run(ctx, opt)
+	applied, err := migrations.Run(ctx, logger, opt)
 	require.Error(t, err)
 	require.EqualError(t, err, fmt.Sprintf("migration \"first\" failed: %s", fakeError.Error()))
 	require.Equal(t, 0, applied)
@@ -111,6 +114,7 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 
 func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 	ctx := context.Background()
+	logger := logex.GetLogger()
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -133,7 +137,7 @@ func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 	migrations := Migrations{
 		migrationCleanAllRegistryData,
 	}
-	applied, err := migrations.Run(ctx, opt)
+	applied, err := migrations.Run(ctx, logger, opt)
 	require.NoError(t, err)
 	require.Equal(t, 1, applied)
 
@@ -153,7 +157,7 @@ func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 func fakeMigration(name string, returnErr error) Migration {
 	return Migration{
 		Name: name,
-		Run: func(ctx context.Context, opt Options, key []byte) error {
+		Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 			return opt.Db.Update(func(txn basedb.Txn) error {
 				err := txn.Set(migrationsPrefix, key, migrationCompleted)
 				if err != nil {

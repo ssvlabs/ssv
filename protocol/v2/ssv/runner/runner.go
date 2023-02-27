@@ -39,7 +39,7 @@ type Runner interface {
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
 	ProcessConsensus(msg *specqbft.SignedMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
-	ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
+	ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -54,16 +54,13 @@ type BaseRunner struct {
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
-	logger         *zap.Logger
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
 }
 
-func NewBaseRunner(logger *zap.Logger) *BaseRunner {
-	return &BaseRunner{
-		logger: logger,
-	}
+func NewBaseRunner() *BaseRunner {
+	return &BaseRunner{}
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -116,7 +113,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		return false, nil, err
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			logger := b.logger.With(
+			logger := logger.With(
 				zap.Uint64("msg_height", uint64(msg.Message.Height)),
 				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
 				zap.Any("signers", msg.Signers),
@@ -217,7 +214,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(runner.GetBaseRunner().QBFTController.Height)
+	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}

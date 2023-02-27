@@ -15,13 +15,12 @@ import (
 
 type Ticker interface {
 	// Start ticker process
-	Start()
+	Start(logger *zap.Logger)
 	// Subscribe to ticker chan
 	Subscribe(subscription chan phase0.Slot) event.Subscription
 }
 
 type ticker struct {
-	logger       *zap.Logger
 	ctx          context.Context
 	ethNetwork   beaconprotocol.Network
 	genesisEpoch phase0.Epoch
@@ -31,9 +30,8 @@ type ticker struct {
 }
 
 // NewTicker returns Ticker struct pointer
-func NewTicker(ctx context.Context, logger *zap.Logger, ethNetwork beaconprotocol.Network, genesisEpoch phase0.Epoch) Ticker {
+func NewTicker(ctx context.Context, ethNetwork beaconprotocol.Network, genesisEpoch phase0.Epoch) Ticker {
 	return &ticker{
-		logger:       logger,
 		ctx:          ctx,
 		ethNetwork:   ethNetwork,
 		genesisEpoch: genesisEpoch,
@@ -42,10 +40,10 @@ func NewTicker(ctx context.Context, logger *zap.Logger, ethNetwork beaconprotoco
 }
 
 // Start slot ticker
-func (t *ticker) Start() {
+func (t *ticker) Start(logger *zap.Logger) {
 	genesisTime := time.Unix(int64(t.ethNetwork.MinGenesisTime()), 0)
 	slotTicker := NewSlotTicker(genesisTime, uint64(t.ethNetwork.SlotDurationSec().Seconds()))
-	t.listenToTicker(slotTicker.C())
+	t.listenToTicker(logger, slotTicker.C())
 }
 
 // Subscribe will trigger every slot
@@ -54,10 +52,10 @@ func (t *ticker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 }
 
 // listenToTicker loop over the given slot channel
-func (t *ticker) listenToTicker(slots <-chan phase0.Slot) {
+func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		t.logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Uint64("position", uint64(currentSlot%32+1)))
-		if !t.genesisEpochEffective() {
+		logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Uint64("position", uint64(currentSlot%32+1)))
+		if !t.genesisEpochEffective(logger) {
 			continue
 		}
 		// notify current slot to channel
@@ -65,7 +63,7 @@ func (t *ticker) listenToTicker(slots <-chan phase0.Slot) {
 	}
 }
 
-func (t *ticker) genesisEpochEffective() bool {
+func (t *ticker) genesisEpochEffective(logger *zap.Logger) bool {
 	curSlot := t.ethNetwork.EstimatedCurrentSlot()
 	genSlot := t.ethNetwork.GetEpochFirstSlot(t.genesisEpoch)
 	if curSlot < genSlot {
@@ -73,7 +71,7 @@ func (t *ticker) genesisEpochEffective() bool {
 			// wait until genesis epoch starts
 			curEpoch := t.ethNetwork.EstimatedCurrentEpoch()
 			gnsTime := t.ethNetwork.GetSlotStartTime(genSlot)
-			t.logger.Info("duties paused, will resume duties on genesis epoch",
+			logger.Info("duties paused, will resume duties on genesis epoch",
 				zap.Uint64("genesis_epoch", uint64(t.genesisEpoch)),
 				zap.Uint64("current_epoch", uint64(curEpoch)),
 				zap.String("genesis_time", gnsTime.Format(time.UnixDate)))

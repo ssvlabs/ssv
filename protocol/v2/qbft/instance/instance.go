@@ -1,7 +1,6 @@
 package instance
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"sync"
 
@@ -28,7 +27,6 @@ type Instance struct {
 	StartValue  []byte
 
 	metrics *metrics
-	logger  *zap.Logger
 }
 
 func NewInstance(
@@ -53,13 +51,11 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(msgId),
-		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())), zap.String("role", msgId.GetRoleType().String()),
-			zap.Uint64("height", uint64(height))),
 	}
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(value []byte, height specqbft.Height) {
+func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
@@ -68,19 +64,19 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		i.logger.Debug("starting QBFT instance")
+		logger.Debug("starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				i.logger.Warn("failed to create proposal", zap.Error(err))
+				logger.Warn("failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					i.logger.Warn("failed to broadcast proposal", zap.Error(err))
+					logger.Warn("failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}
@@ -113,18 +109,18 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(msg, i.State.ProposeContainer)
+			return i.uponProposal(logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(msg, i.State.PrepareContainer, i.State.CommitContainer)
+			return i.uponPrepare(logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}

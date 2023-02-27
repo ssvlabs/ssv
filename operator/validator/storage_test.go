@@ -48,19 +48,18 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
+	logger := zap.L()
 	options := basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
+		Type: "badger-memory",
+		Path: "",
 	}
 
-	db, err := storage.GetStorageFactory(options)
+	db, err := storage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
 	defer db.Close()
 
 	collection := NewCollection(CollectionOptions{
-		DB:     db,
-		Logger: options.Logger,
+		DB: db,
 	})
 
 	threshold.Init()
@@ -73,17 +72,17 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, collection.SaveValidatorShare(validatorShare))
+	require.NoError(t, collection.SaveValidatorShare(logger, validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, collection.SaveValidatorShare(validatorShare2))
+	require.NoError(t, collection.SaveValidatorShare(logger, validatorShare2))
 
 	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.ValidatorPubKey)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 
-	validators, err := collection.GetAllValidatorShares()
+	validators, err := collection.GetAllValidatorShares(logger)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 

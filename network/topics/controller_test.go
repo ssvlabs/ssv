@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/logex"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,6 +25,7 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
+	logger := logex.GetLogger()
 	nPeers := 4
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
@@ -39,10 +41,10 @@ func TestTopicManager(t *testing.T) {
 	defer cancel()
 	f := genesis.New()
 	peers := newPeers(ctx, t, nPeers, false, true, f)
-	baseTest(ctx, t, peers, pks, f, 1, 2)
+	baseTest(t, ctx, logger, peers, pks, f, 1, 2)
 }
 
-func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
+func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
 	// nPeers := len(peers)
 
@@ -58,14 +60,14 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 	// listen to topics
 	for _, pk := range pks {
 		for _, p := range peers {
-			require.NoError(t, p.tm.Subscribe(validatorTopic(pk)))
+			require.NoError(t, p.tm.Subscribe(logger, validatorTopic(pk)))
 			// simulate concurrency, by trying to subscribe multiple times
 			go func(tm Controller, pk string) {
-				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
+				require.NoError(t, tm.Subscribe(logger, validatorTopic(pk)))
 			}(p.tm, pk)
 			go func(tm Controller, pk string) {
 				<-time.After(100 * time.Millisecond)
-				require.NoError(t, tm.Subscribe(validatorTopic(pk)))
+				require.NoError(t, tm.Subscribe(logger, validatorTopic(pk)))
 			}(p.tm, pk)
 		}
 	}
@@ -126,16 +128,16 @@ func baseTest(ctx context.Context, t *testing.T, peers []*P, pks []string, f for
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
+				require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				go func(p *P) {
 					<-time.After(time.Millisecond)
-					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
+					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				}(p)
 				wg.Add(1)
 				go func(p *P) {
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
-					require.NoError(t, p.tm.Unsubscribe(validatorTopic(pk), false))
+					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				}(p)
 			}(p, pks[i])
 		}
@@ -211,11 +213,10 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, logger, fork, 2*time.Minute)
+		midHandler = NewMsgIDHandler(ctx, fork, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &PububConfig{
-		Logger:       logger,
 		Host:         h,
 		TraceLog:     true,
 		MsgIDHandler: midHandler,
@@ -237,7 +238,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 				fork, h.ID())
 		}
 	}
-	ps, tm, err := NewPubsub(ctx, cfg, fork)
+	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)
 	require.NoError(t, err)
 
 	p = &P{
@@ -252,7 +253,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 			atomic.AddUint64(&p.connsCount, 1)
 		},
 	})
-	require.NoError(t, ds.Bootstrap(func(e discovery.PeerEvent) {
+	require.NoError(t, ds.Bootstrap(logger, func(e discovery.PeerEvent) {
 		_ = h.Connect(ctx, e.AddrInfo)
 	}))
 
