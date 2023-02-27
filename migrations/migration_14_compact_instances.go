@@ -22,13 +22,6 @@ var migrationCompactInstances = Migration{
 			return nil
 		}
 
-		opt.Logger.Info("pre-migration: counting all keys")
-		beforeKeyCount, err := bdb.CountByCollection(nil)
-		if err != nil {
-			return errors.Wrap(err, "failed counting all keys")
-		}
-		opt.Logger.Info("pre-migration: counted all keys")
-
 		// Compact each role's instances.
 		var roles = []spectypes.BeaconRole{
 			spectypes.BNRoleAttester,
@@ -100,17 +93,6 @@ var migrationCompactInstances = Migration{
 			}
 			logger.Debug("compacted instances", zap.Int("count", len(messageIDs)))
 		}
-
-		afterKeyCount, err := bdb.CountByCollection(nil)
-		if err != nil {
-			return errors.Wrap(err, "failed counting all keys")
-		}
-
-		if beforeKeyCount != afterKeyCount {
-			opt.Logger.Error("migration caused key count to change, this shouldn't happen!", zap.Int64("before", beforeKeyCount), zap.Int64("after", afterKeyCount))
-		}
-
-		opt.Logger.Info("migration completed", zap.Int64("key_count", afterKeyCount))
 
 		return nil
 	},
