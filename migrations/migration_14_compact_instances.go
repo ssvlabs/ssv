@@ -22,10 +22,12 @@ var migrationCompactInstances = Migration{
 			return nil
 		}
 
+		opt.Logger.Info("pre-migration: counting all keys")
 		beforeKeyCount, err := bdb.CountByCollection(nil)
 		if err != nil {
 			return errors.Wrap(err, "failed counting all keys")
 		}
+		opt.Logger.Info("pre-migration: counted all keys")
 
 		// Compact each role's instances.
 		var roles = []spectypes.BeaconRole{
@@ -39,6 +41,7 @@ var migrationCompactInstances = Migration{
 		for _, role := range roles {
 			prefix := role.String()
 			logger := opt.Logger.With(zap.String("role", role.String()))
+			logger.Info("collecting instances")
 
 			// Collect all stored highest instances for this role.
 			var messageIDs []spectypes.MessageID
@@ -58,7 +61,7 @@ var migrationCompactInstances = Migration{
 					// Skip items that has a prefix of a different role.
 					for _, r := range roles {
 						if r.String() != role.String() && bytes.HasPrefix(key, []byte(r.String())) {
-							break Loop
+							continue Loop
 						}
 					}
 
