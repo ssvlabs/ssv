@@ -4,6 +4,8 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
+
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"
@@ -47,9 +49,9 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 		return nil, errors.WithMessage(err, "failed to convert private key to interface")
 	}
 	if privateKey != "" {
-		logger.Debug("Using Private Key from config", zap.String("private-key encoded", hex.EncodeToString(b)), zap.Any("private-key", b))
+		logger.Debug("Using Private Key from config", logging.PrivKey(b), zap.Any("private-key", b))
 	} else {
-		logger.Debug("Private Key generated", zap.String("private-key encoded", hex.EncodeToString(b)), zap.Any("private-key", b))
+		logger.Debug("Private Key generated", logging.PrivKey(b), zap.Any("private-key", b))
 	}
 
 	return privKey, nil

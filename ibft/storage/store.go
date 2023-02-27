@@ -2,7 +2,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"log"
 	"sync"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
+	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -173,8 +173,7 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-	i.logger.Debug("removed decided", zap.Int("count", n),
-		zap.String("identifier", hex.EncodeToString(msgID)))
+	i.logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}

@@ -5,16 +5,17 @@ import (
 	"encoding/json"
 	"sync"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	logging "github.com/ipfs/go-log"
+	ipfslog "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
-var logger = logging.Logger("ssv/protocol/qbft/instance").Desugar()
+var logger = ipfslog.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
