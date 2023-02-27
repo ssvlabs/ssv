@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
@@ -43,14 +44,12 @@ type SubnetsProvider func() records.Subnets
 // NOTE: due to compatibility with v0,
 // we accept nodes with user agent as a fallback when the new protocol is not supported.
 type Handshaker interface {
-	Handshake(conn libp2pnetwork.Conn) error
-	Handler() libp2pnetwork.StreamHandler
+	Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error
+	Handler(logger *zap.Logger) libp2pnetwork.StreamHandler
 }
 
 type handshaker struct {
 	ctx context.Context
-
-	logger *zap.Logger
 
 	filters []HandshakeFilter
 
@@ -67,7 +66,6 @@ type handshaker struct {
 
 // HandshakerCfg is the configuration for creating an handshaker instance
 type HandshakerCfg struct {
-	Logger          *zap.Logger
 	Network         libp2pnetwork.Network
 	Streams         streams.StreamController
 	NodeInfoIdx     peers.NodeInfoIndex
@@ -82,7 +80,6 @@ type HandshakerCfg struct {
 func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...HandshakeFilter) Handshaker {
 	h := &handshaker{
 		ctx:             ctx,
-		logger:          cfg.Logger.With(zap.String("where", "Handshaker")),
 		streams:         cfg.Streams,
 		nodeInfoIdx:     cfg.NodeInfoIdx,
 		connIdx:         cfg.ConnIdx,
@@ -97,19 +94,19 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 }
 
 // Handler returns the handshake handler
-func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
+func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
 		pidStr := pid.String()
 
-		req, res, done, err := h.streams.HandleStream(stream)
+		req, res, done, err := h.streams.HandleStream(logger, stream)
 		defer done()
 		if err != nil {
 			return
 		}
 
-		logger := h.logger.With(zap.String("otherPeer", pidStr))
+		logger := logger.With(zap.String("otherPeer", pidStr))
 
 		var ni records.NodeInfo
 		err = ni.Consume(req)
@@ -119,7 +116,7 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			err := h.processIncomingNodeInfo(pid, ni)
+			err := h.processIncomingNodeInfo(logger, pid, ni)
 			if err != nil {
 				if err == errPeerWasFiltered {
 					logger.Debug("peer was filtered")
@@ -141,12 +138,12 @@ func (h *handshaker) Handler() libp2pnetwork.StreamHandler {
 	}
 }
 
-func (h *handshaker) processIncomingNodeInfo(pid peer.ID, ni records.NodeInfo) error {
-	h.updateNodeSubnets(pid, &ni)
+func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, pid peer.ID, ni records.NodeInfo) error {
+	h.updateNodeSubnets(logger, pid, &ni)
 	if !h.applyFilters(&ni) {
 		return errPeerWasFiltered
 	}
-	if _, err := h.nodeInfoIdx.AddNodeInfo(pid, &ni); err != nil {
+	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, pid, &ni); err != nil {
 		return err
 	}
 	return nil
@@ -167,7 +164,7 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 }
 
 // Handshake initiates handshake with the given conn
-func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
+func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
 	pid := conn.RemotePeer()
 	// check if the peer is known before we continue
 	ni, err := h.getNodeInfo(pid)
@@ -177,10 +174,10 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
-	ni, err = h.nodeInfoFromStream(conn)
+	ni, err = h.nodeInfoFromStream(logger, conn)
 	if err != nil {
 		// fallbacks to user agent
-		ni, err = h.nodeInfoFromUserAgent(conn)
+		ni, err = h.nodeInfoFromUserAgent(logger, conn)
 		if err != nil {
 			return err
 		}
@@ -188,8 +185,8 @@ func (h *handshaker) Handshake(conn libp2pnetwork.Conn) error {
 	if ni == nil {
 		return errors.New("empty node info")
 	}
-	logger := h.logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
-	err = h.processIncomingNodeInfo(pid, *ni)
+	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
+	err = h.processIncomingNodeInfo(logger, pid, *ni)
 	if err != nil {
 		logger.Debug("could not process node info", zap.Error(err))
 		return err
@@ -218,20 +215,20 @@ func (h *handshaker) getNodeInfo(pid peer.ID) (*records.NodeInfo, error) {
 }
 
 // updateNodeSubnets tries to update the subnets of the given peer
-func (h *handshaker) updateNodeSubnets(pid peer.ID, ni *records.NodeInfo) {
+func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *records.NodeInfo) {
 	if ni.Metadata != nil {
 		subnets, err := records.Subnets{}.FromString(ni.Metadata.Subnets)
 		if err == nil && len(subnets) > 0 {
 			updated := h.subnetsIdx.UpdatePeerSubnets(pid, subnets)
 			if updated {
-				h.logger.Debug("[handshake] peer subnets were updated", zap.String("peerID", pid.String()),
+				logger.Debug("[handshake] peer subnets were updated", logging.PeerID(pid),
 					zap.String("subnets", subnets.String()))
 			}
 		}
 	}
 }
 
-func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
+func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
 	res, err := h.net.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
@@ -244,7 +241,7 @@ func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeI
 	if len(res) == 0 {
 		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
-	resBytes, err := h.streams.Request(conn.RemotePeer(), peers.NodeInfoProtocol, data)
+	resBytes, err := h.streams.Request(logger, conn.RemotePeer(), peers.NodeInfoProtocol, data)
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +253,7 @@ func (h *handshaker) nodeInfoFromStream(conn libp2pnetwork.Conn) (*records.NodeI
 	return &ni, nil
 }
 
-func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
+func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
 	pid := conn.RemotePeer()
 	uaRaw, err := h.net.Peerstore().Get(pid, userAgentKey)
 	if err != nil {
@@ -280,7 +277,7 @@ func (h *handshaker) nodeInfoFromUserAgent(conn libp2pnetwork.Conn) (*records.No
 	}
 	parts := strings.Split(ua, ":")
 	if len(parts) < 2 { // too old or unknown
-		h.logger.Debug("user agent is unknown", zap.String("ua", ua))
+		logger.Debug("user agent is unknown", zap.String("ua", ua))
 		return nil, errUnknownUserAgent
 	}
 
@@ -300,7 +297,7 @@ func (h *handshaker) applyFilters(nodeInfo *records.NodeInfo) bool {
 	for _, filter := range h.filters {
 		ok, err := filter(nodeInfo)
 		if err != nil {
-			// h.logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
+			// logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
 			return false
 		}
 		if !ok {

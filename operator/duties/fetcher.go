@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -27,20 +28,20 @@ type cacheEntry struct {
 // validatorsIndicesFetcher represents the interface for retrieving indices.
 // It have a minimal interface instead of working with the complete validator.IController interface
 type validatorsIndicesFetcher interface {
-	GetValidatorsIndices() []phase0.ValidatorIndex
+	GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex
 }
 
 // DutyFetcher represents the component that manages duties
 type DutyFetcher interface {
-	GetDuties(slot phase0.Slot) ([]spectypes.Duty, error)
-	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
+	GetDuties(logger *zap.Logger, slot phase0.Slot) ([]spectypes.Duty, error)
+	SyncCommitteeDuties(logger *zap.Logger, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
 	eth2client.EventsProvider
 }
 
 // newDutyFetcher creates a new instance
 func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
 	df := dutyFetcher{
-		logger:         logger.With(zap.String("component", "operator/dutyFetcher")),
+		logger:         logger.Named("operator/dutyFetcher"),
 		ethNetwork:     network,
 		beaconClient:   beaconClient,
 		indicesFetcher: indicesFetcher,
@@ -66,18 +67,18 @@ func (df *dutyFetcher) Events(ctx context.Context, topics []string, handler eth2
 
 // GetDuties tries to get slot's duties from cache, if not available in cache it fetches them from beacon
 // the relevant subnets will be subscribed once duties are fetched
-func (df *dutyFetcher) GetDuties(slot phase0.Slot) ([]spectypes.Duty, error) {
+func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]spectypes.Duty, error) {
 	var duties []spectypes.Duty
 
 	epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
-	logger := df.logger.With(zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(epoch)))
+	logger = logger.With(zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(epoch)))
 	start := time.Now()
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
 		duties = raw.(cacheEntry).Duties
 	} else {
 		// epoch's duties does not exist in cache -> fetch
-		if err := df.updateDutiesFromBeacon(slot); err != nil {
+		if err := df.updateDutiesFromBeacon(logger, slot); err != nil {
 			logger.Warn("failed to get duties", zap.Error(err))
 			return nil, err
 		}
@@ -88,16 +89,16 @@ func (df *dutyFetcher) GetDuties(slot phase0.Slot) ([]spectypes.Duty, error) {
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			zap.Duration("duration", time.Since(start)))
+			logging.DurationMilliS(start))
 	}
 
 	return duties, nil
 }
 
 // updateDutiesFromBeacon will be called once in an epoch to update the cache with all the epoch's slots
-func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
+func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Slot) error {
 	start := time.Now()
-	duties, err := df.fetchDuties(slot)
+	duties, err := df.fetchDuties(logger, slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get duties from beacon")
 	}
@@ -109,12 +110,12 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
 	for _, d := range duties {
 		toPrint = append(toPrint, toSerialized(d))
 	}
-	df.logger.Debug("got duties",
+	logger.Debug("got duties",
 		zap.Int("count", len(duties)),
 		zap.Any("duties", toPrint),
 		zap.Duration("duration", time.Since(start)))
 
-	if err := df.processFetchedDuties(duties); err != nil {
+	if err := df.processFetchedDuties(logger, duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")
 	}
 
@@ -122,20 +123,20 @@ func (df *dutyFetcher) updateDutiesFromBeacon(slot phase0.Slot) error {
 }
 
 // fetchDuties fetches duties for the epoch of the given slot
-func (df *dutyFetcher) fetchDuties(slot phase0.Slot) ([]*spectypes.Duty, error) {
-	if indices := df.indicesFetcher.GetValidatorsIndices(); len(indices) > 0 {
-		df.logger.Debug("got indices for existing validators",
+func (df *dutyFetcher) fetchDuties(logger *zap.Logger, slot phase0.Slot) ([]*spectypes.Duty, error) {
+	if indices := df.indicesFetcher.GetValidatorsIndices(logger); len(indices) > 0 {
+		logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
 		epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
-		results, err := df.beaconClient.GetDuties(epoch, indices)
+		results, err := df.beaconClient.GetDuties(logger, epoch, indices)
 		return results, err
 	}
-	df.logger.Debug("no indices, duties won't be fetched")
+	logger.Debug("no indices, duties won't be fetched")
 	return []*spectypes.Duty{}, nil
 }
 
 // processFetchedDuties loop over fetched duties and process them
-func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) error {
+func (df *dutyFetcher) processFetchedDuties(logger *zap.Logger, fetchedDuties []*spectypes.Duty) error {
 	if len(fetchedDuties) > 0 {
 		var subscriptions []*eth2apiv1.BeaconCommitteeSubscription
 		// entries holds all the new duties to add
@@ -148,7 +149,7 @@ func (df *dutyFetcher) processFetchedDuties(fetchedDuties []*spectypes.Duty) err
 		df.populateCache(entries)
 
 		if err := df.beaconClient.SubscribeToCommitteeSubnet(subscriptions); err != nil {
-			df.logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
+			logger.Warn("failed to subscribe committee to subnet", zap.Error(err))
 		}
 	}
 	return nil

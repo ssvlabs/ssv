@@ -36,9 +36,8 @@ var StartBootNodeCmd = &cobra.Command{
 			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
 		}
 
-		cfg.Options.Logger = Logger
 		bootNode := bootnode.New(cfg.Options)
-		if err := bootNode.Start(cmd.Context()); err != nil {
+		if err := bootNode.Start(cmd.Context(), Logger); err != nil {
 			Logger.Fatal("failed to start boot node", zap.Error(err))
 		}
 	},

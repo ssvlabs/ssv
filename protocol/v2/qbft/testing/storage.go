@@ -18,11 +18,10 @@ var dbOnce sync.Once
 func getDB() basedb.IDb {
 	dbOnce.Do(func() {
 		logger := zap.L()
-		dbInstance, err := storage.GetStorageFactory(basedb.Options{
+		dbInstance, err := storage.GetStorageFactory(logger, basedb.Options{
 			Type:      "badger-memory",
 			Path:      "",
 			Reporting: false,
-			Logger:    logger,
 			Ctx:       context.TODO(),
 		})
 		if err != nil {
@@ -42,5 +41,5 @@ var allRoles = []spectypes.BeaconRole{
 }
 
 func TestingStores() *qbftstorage.QBFTStores {
-	return qbftstorage.NewStoresFromRoles(getDB(), zap.L(), allRoles...)
+	return qbftstorage.NewStoresFromRoles(getDB(), allRoles...)
 }

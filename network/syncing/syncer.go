@@ -3,14 +3,13 @@ package syncing
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
@@ -43,9 +42,10 @@ func Throttle(handler MessageHandler, throttle time.Duration) MessageHandler {
 
 // Syncer handles the syncing of decided messages.
 type Syncer interface {
-	SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler MessageHandler) error
+	SyncHighestDecided(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, handler MessageHandler) error
 	SyncDecidedByRange(
 		ctx context.Context,
+		logger *zap.Logger,
 		id spectypes.MessageID,
 		from, to specqbft.Height,
 		handler MessageHandler,
@@ -54,8 +54,9 @@ type Syncer interface {
 
 // Network is a subset of protocolp2p.Syncer, required by Syncer to retrieve messages from peers.
 type Network interface {
-	LastDecided(id spectypes.MessageID) ([]protocolp2p.SyncResult, error)
+	LastDecided(logger *zap.Logger, id spectypes.MessageID) ([]protocolp2p.SyncResult, error)
 	GetHistory(
+		logger *zap.Logger,
 		id spectypes.MessageID,
 		from, to specqbft.Height,
 		targets ...string,
@@ -64,19 +65,18 @@ type Network interface {
 
 type syncer struct {
 	network Network
-	logger  *zap.Logger
 }
 
 // New returns a standard implementation of Syncer.
-func New(logger *zap.Logger, network Network) Syncer {
+func New(network Network) Syncer {
 	return &syncer{
-		logger:  logger.With(zap.String("who", "Syncer")),
 		network: network,
 	}
 }
 
 func (s *syncer) SyncHighestDecided(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	handler MessageHandler,
 ) error {
@@ -84,12 +84,12 @@ func (s *syncer) SyncHighestDecided(
 		return ctx.Err()
 	}
 
-	logger := s.logger.With(
+	logger = logger.With(
 		zap.String("what", "SyncHighestDecided"),
 		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
 		zap.String("role", id.GetRoleType().String()))
 
-	lastDecided, err := s.network.LastDecided(id)
+	lastDecided, err := s.network.LastDecided(logger, id)
 	if err != nil {
 		logger.Debug("sync failed", zap.Error(err))
 		return errors.Wrap(err, "could not sync last decided")
@@ -121,6 +121,7 @@ func (s *syncer) SyncHighestDecided(
 
 func (s *syncer) SyncDecidedByRange(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	from, to qbft.Height,
 	handler MessageHandler,
@@ -129,7 +130,7 @@ func (s *syncer) SyncDecidedByRange(
 		return ctx.Err()
 	}
 
-	logger := s.logger.With(
+	logger = logger.With(
 		zap.String("what", "SyncDecidedByRange"),
 		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
 		zap.String("role", id.GetRoleType().String()),
@@ -186,7 +187,7 @@ func (s *syncer) getDecidedByRange(
 		}
 		err := tasks.RetryWithContext(ctx, func() error {
 			start := time.Now()
-			msgs, tail, err = s.network.GetHistory(mid, tail, to)
+			msgs, tail, err = s.network.GetHistory(logger, mid, tail, to)
 			if err != nil {
 				return err
 			}
@@ -207,9 +208,9 @@ func (s *syncer) getDecidedByRange(
 			})
 			logger.Debug("received and processed history batch",
 				zap.Int64("tail", int64(tail)),
-				zap.Duration("duration", time.Since(start)),
+				logging.DurationMilliS(start),
 				zap.Int("results_count", len(msgs)),
-				zap.String("results", s.formatSyncResults(msgs)),
+				logging.SyncResults(msgs),
 				zap.Int("handled", handled))
 			return nil
 		}, maxRetries)
@@ -219,34 +220,4 @@ func (s *syncer) getDecidedByRange(
 	}
 
 	return nil
-}
-
-// Prints msgs as:
-//
-//	"(type=1 height=1 round=1) (type=1 height=2 round=1) ..."
-//
-// TODO: remove this after testing?
-func (s *syncer) formatSyncResults(msgs []protocolp2p.SyncResult) string {
-	var v []string
-	for _, m := range msgs {
-		var sm *specqbft.SignedMessage
-		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm = &specqbft.SignedMessage{}
-			if err := sm.Decode(m.Msg.Data); err != nil {
-				v = append(v, fmt.Sprintf("(%v)", err))
-				continue
-			}
-			v = append(
-				v,
-				fmt.Sprintf(
-					"(type=%d height=%d round=%d)",
-					m.Msg.MsgType,
-					sm.Message.Height,
-					sm.Message.Round,
-				),
-			)
-		}
-		v = append(v, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
-	}
-	return strings.Join(v, ", ")
 }

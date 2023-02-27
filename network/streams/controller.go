@@ -21,16 +21,15 @@ type StreamResponder func([]byte) error
 // StreamController simplifies the interaction with libp2p streams.
 type StreamController interface {
 	// Request sends a message to the given stream and returns the response
-	Request(peerID peer.ID, protocol protocol.ID, msg []byte) ([]byte, error)
+	Request(logger *zap.Logger, peerID peer.ID, protocol protocol.ID, msg []byte) ([]byte, error)
 	// HandleStream is called at the beginning of stream handlers to create a wrapper stream and read first message
-	HandleStream(stream core.Stream) ([]byte, StreamResponder, func(), error)
+	HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, StreamResponder, func(), error)
 }
 
 // NewStreamController create a new instance of StreamController
-func NewStreamController(ctx context.Context, logger *zap.Logger, host host.Host, fork forks.Fork, requestTimeout time.Duration) StreamController {
+func NewStreamController(ctx context.Context, host host.Host, fork forks.Fork, requestTimeout time.Duration) StreamController {
 	ctrl := streamCtrl{
 		ctx:            ctx,
-		logger:         logger,
 		host:           host,
 		fork:           fork,
 		requestTimeout: requestTimeout,
@@ -42,8 +41,6 @@ func NewStreamController(ctx context.Context, logger *zap.Logger, host host.Host
 type streamCtrl struct {
 	ctx context.Context
 
-	logger *zap.Logger
-
 	host host.Host
 	fork forks.Fork
 
@@ -51,7 +48,7 @@ type streamCtrl struct {
 }
 
 // Request sends a message to the given stream and returns the response
-func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) ([]byte, error) {
+func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protocol.ID, data []byte) ([]byte, error) {
 	s, err := n.host.NewStream(n.ctx, peerID, protocol)
 	if err != nil {
 		return nil, err
@@ -60,7 +57,7 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 	defer func() {
 		err := stream.Close()
 		if err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
-			n.logger.Debug("failed to close stream (request)", zap.String("s_id", stream.ID()), zap.Error(err))
+			logger.Debug("failed to close stream (request)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}()
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
@@ -83,15 +80,15 @@ func (n *streamCtrl) Request(peerID peer.ID, protocol protocol.ID, data []byte) 
 
 // HandleStream is called at the beginning of stream handlers to create a wrapper stream and read first message
 // it returns functions to respond and close the stream
-func (n *streamCtrl) HandleStream(stream core.Stream) ([]byte, StreamResponder, func(), error) {
+func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byte, StreamResponder, func(), error) {
 	s := NewStream(stream)
 
 	protocolID := stream.Protocol()
 	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
-	// logger := n.logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
+	// logger := logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
 		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
-			n.logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
+			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}
 	data, err := s.ReadWithTimeout(n.requestTimeout)

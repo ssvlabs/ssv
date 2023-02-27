@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
+func (df *dutyFetcher) SyncCommitteeDuties(logger *zap.Logger, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error) {
 	period := uint64(epoch) / goclient.EpochsPerSyncCommitteePeriod
 	firstEpoch := df.ethNetwork.FirstEpochOfSyncPeriod(period)
 	currentEpoch := df.ethNetwork.EstimatedCurrentEpoch()
@@ -28,13 +28,13 @@ func (df *dutyFetcher) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.
 		return nil, nil
 	}
 
-	df.logger.Debug("got sync committee duties", zap.String("period", fmt.Sprintf("%d - %d", firstEpoch, lastEpoch)), zap.Int("count", len(duties)))
+	logger.Debug("got sync committee duties", zap.String("period", fmt.Sprintf("%d - %d", firstEpoch, lastEpoch)), zap.Int("count", len(duties)))
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	syncCommitteeSubscriptions := df.calculateSubscriptions(lastEpoch+1, duties)
 	if len(syncCommitteeSubscriptions) > 0 {
 		if err := df.beaconClient.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
-			df.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+			logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
 	}
 

@@ -23,12 +23,11 @@ import (
 
 // RecipientController submit proposal preparation to beacon node for all committee validators
 type RecipientController interface {
-	Start()
+	Start(logger *zap.Logger)
 }
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-	Logger            *zap.Logger
 	Ctx               context.Context
 	BeaconClient      beaconprotocol.Beacon
 	EthNetwork        beaconprotocol.Network
@@ -39,7 +38,6 @@ type ControllerOptions struct {
 
 // recipientController implementation of RecipientController
 type recipientController struct {
-	logger            *zap.Logger
 	ctx               context.Context
 	beaconClient      beaconprotocol.Beacon
 	ethNetwork        beaconprotocol.Network
@@ -50,7 +48,6 @@ type recipientController struct {
 
 func NewController(opts *ControllerOptions) *recipientController {
 	return &recipientController{
-		logger:            opts.Logger,
 		ctx:               opts.Ctx,
 		beaconClient:      opts.BeaconClient,
 		ethNetwork:        opts.EthNetwork,
@@ -60,14 +57,14 @@ func NewController(opts *ControllerOptions) *recipientController {
 	}
 }
 
-func (rc *recipientController) Start() {
+func (rc *recipientController) Start(logger *zap.Logger) {
 	tickerChan := make(chan phase0.Slot, 32)
 	rc.ticker.Subscribe(tickerChan)
-	rc.listenToTicker(tickerChan)
+	rc.listenToTicker(logger, tickerChan)
 }
 
 // listenToTicker loop over the given slot channel
-func (rc *recipientController) listenToTicker(slots chan phase0.Slot) {
+func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan phase0.Slot) {
 	firstTimeSubmitted := false
 	for currentSlot := range slots {
 		// submit if first time or if first slot in epoch
@@ -78,9 +75,9 @@ func (rc *recipientController) listenToTicker(slots chan phase0.Slot) {
 
 		firstTimeSubmitted = true
 		// submit fee recipient
-		shares, err := rc.shareStorage.GetFilteredValidatorShares(validator.NotLiquidatedAndByOperatorPubKey(rc.operatorPublicKey))
+		shares, err := rc.shareStorage.GetFilteredValidatorShares(logger, validator.NotLiquidatedAndByOperatorPubKey(rc.operatorPublicKey))
 		if err != nil {
-			rc.logger.Warn("failed to get validators share", zap.Error(err))
+			logger.Warn("failed to get validators share", zap.Error(err))
 			continue
 		}
 
@@ -98,7 +95,7 @@ func (rc *recipientController) listenToTicker(slots chan phase0.Slot) {
 				m := make(map[phase0.ValidatorIndex]bellatrix.ExecutionAddress)
 				for _, share := range batch {
 					if err := toProposalPreparation(m, share); err != nil {
-						rc.logger.Warn("failed to create proposal preparation", zap.Error(err))
+						logger.Warn("failed to create proposal preparation", zap.Error(err))
 						continue
 					}
 					atomic.AddInt32(&counter, 1)
@@ -107,9 +104,9 @@ func (rc *recipientController) listenToTicker(slots chan phase0.Slot) {
 			})
 		}
 		if err := g.Wait().ErrorOrNil(); err != nil {
-			rc.logger.Warn("failed to submit proposal preparation", zap.Error(err))
+			logger.Warn("failed to submit proposal preparation", zap.Error(err))
 		} else {
-			rc.logger.Debug("proposal preparation submitted", zap.Int32("count", atomic.LoadInt32(&counter)))
+			logger.Debug("proposal preparation submitted", zap.Int32("count", atomic.LoadInt32(&counter)))
 		}
 	}
 }

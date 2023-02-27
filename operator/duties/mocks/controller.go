@@ -9,6 +9,7 @@ import (
 
 	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockDutyExecutor is a mock of DutyExecutor interface.
@@ -35,17 +36,17 @@ func (m *MockDutyExecutor) EXPECT() *MockDutyExecutorMockRecorder {
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockDutyExecutor) ExecuteDuty(duty *types.Duty) error {
+func (m *MockDutyExecutor) ExecuteDuty(logger *zap.Logger, duty *types.Duty) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExecuteDuty", duty)
+	ret := m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ExecuteDuty indicates an expected call of ExecuteDuty.
-func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(duty interface{}) *gomock.Call {
+func (mr *MockDutyExecutorMockRecorder) ExecuteDuty(logger, duty interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), duty)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockDutyExecutor)(nil).ExecuteDuty), logger, duty)
 }
 
 // MockDutyController is a mock of DutyController interface.
@@ -72,13 +73,13 @@ func (m *MockDutyController) EXPECT() *MockDutyControllerMockRecorder {
 }
 
 // Start mocks base method.
-func (m *MockDutyController) Start() {
+func (m *MockDutyController) Start(logger *zap.Logger) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
+	m.ctrl.Call(m, "Start", logger)
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockDutyControllerMockRecorder) Start() *gomock.Call {
+func (mr *MockDutyControllerMockRecorder) Start(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockDutyController)(nil).Start))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockDutyController)(nil).Start), logger)
 }

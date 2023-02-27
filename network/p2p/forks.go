@@ -10,8 +10,8 @@ import (
 // OnFork handles a fork event, it will close the current p2p network
 // and recreate it with while preserving previous state (active validators)
 // NOTE: ths method MUST be called once per fork version, otherwise we are just restarting the network
-func (n *p2pNetwork) OnFork(forkVersion forksprotocol.ForkVersion) error {
-	logger := n.logger.With(zap.String("where", "OnFork"))
+func (n *p2pNetwork) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkVersion) error {
+	logger = logger.With(zap.String("where", "OnFork"))
 	logger.Info("forking network")
 	return errors.New(fmt.Sprintf("no handler for fork - %s", forkVersion.String()))
 }

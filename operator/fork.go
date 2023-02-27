@@ -14,12 +14,12 @@ func (n *operatorNode) getForkVersion(slot phase0.Slot) forksprotocol.ForkVersio
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed
-func (n *operatorNode) setFork(slot phase0.Slot) {
+func (n *operatorNode) setFork(logger *zap.Logger, slot phase0.Slot) {
 	currentVersion := n.getForkVersion(slot)
 	if currentVersion == n.forkVersion {
 		return
 	}
-	logger := n.logger.With(zap.String("previousFork", string(n.forkVersion)),
+	logger = logger.With(zap.String("previousFork", string(n.forkVersion)),
 		zap.String("currentFork", string(currentVersion)))
 	logger.Info("FORK")
 
@@ -30,7 +30,7 @@ func (n *operatorNode) setFork(slot phase0.Slot) {
 	if !ok {
 		logger.Panic("network instance is not a fork handler")
 	}
-	if err := netHandler.OnFork(currentVersion); err != nil {
+	if err := netHandler.OnFork(logger, currentVersion); err != nil {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 
@@ -39,7 +39,7 @@ func (n *operatorNode) setFork(slot phase0.Slot) {
 	if !ok {
 		logger.Panic("network instance is not a fork handler")
 	}
-	if err := vCtrlHandler.OnFork(currentVersion); err != nil {
+	if err := vCtrlHandler.OnFork(logger, currentVersion); err != nil {
 		logger.Panic("could not fork network", zap.Error(err))
 	}
 }

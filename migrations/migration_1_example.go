@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
@@ -12,7 +13,7 @@ import (
 // View/Update transactions usage
 var migrationExample2 = Migration{
 	Name: "migration_1_example",
-	Run: func(ctx context.Context, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
 			var (
 				testPrefix = []byte("test_prefix/")
