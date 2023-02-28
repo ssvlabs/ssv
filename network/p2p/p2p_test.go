@@ -154,12 +154,12 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 			sm := specqbft.SignedMessage{
 				Signature: []byte("xxx"),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
-				Message: &specqbft.Message{
+				Message: specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Height:     height,
 					Round:      round,
 					Identifier: mid[:],
-					Data:       []byte("dummy change round message"),
+					Root:       [32]byte{1, 2, 3},
 				},
 			}
 			data, err := sm.Encode()
@@ -260,12 +260,12 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	}
 	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
 	signedMsg := &specqbft.SignedMessage{
-		Message: &specqbft.Message{
+		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Round:      2,
 			Identifier: id[:],
 			Height:     specqbft.Height(height),
-			Data:       []byte("bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="),
+			Root:       [32]byte{0x1, 0x2, 0x3},
 		},
 		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN"),
 		Signers:   []spectypes.OperatorID{1, 3, 4},

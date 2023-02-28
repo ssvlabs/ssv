@@ -173,13 +173,14 @@ func (m mockConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
 	factory := ssvMessageFactory(m.Role)
 	return factory(
 		&qbft.SignedMessage{
-			Message: &qbft.Message{
+			Message: qbft.Message{
 				MsgType:    typ,
 				Height:     m.Height,
 				Round:      2,
 				Identifier: []byte{1, 2, 3, 4},
-				Data:       []byte{1, 2, 3, 4},
+				Root:       [32]byte{1, 2, 3},
 			},
+
 			Signature: []byte{1, 2, 3, 4},
 			Signers:   signers,
 		},

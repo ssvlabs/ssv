@@ -43,12 +43,12 @@ func TestCleanInstances(t *testing.T) {
 			DecidedMessage: &specqbft.SignedMessage{
 				Signature: []byte("sig"),
 				Signers:   []spectypes.OperatorID{1},
-				Message: &specqbft.Message{
+				Message: specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Height:     h,
 					Round:      1,
 					Identifier: id[:],
-					Data:       nil,
+					Root:       [32]byte{},
 				},
 			},
 		}

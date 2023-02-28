@@ -1,11 +1,12 @@
 package ekm
 
 import (
+	"testing"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
-	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -204,19 +205,16 @@ func TestSignRoot(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
-		commitData, err := (&specqbft.CommitData{Data: []byte("value1")}).Encode()
-		require.NoError(t, err)
-
-		msg := &specqbft.Message{
+		msg := specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(3),
 			Round:      specqbft.Round(2),
 			Identifier: []byte("identifier1"),
-			Data:       commitData,
+			Root:       [32]byte{1, 2, 3},
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
@@ -236,19 +234,16 @@ func TestSignRoot(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
-		commitData, err := (&specqbft.CommitData{Data: []byte("value2")}).Encode()
-		require.NoError(t, err)
-
-		msg := &specqbft.Message{
+		msg := specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(1),
 			Round:      specqbft.Round(3),
 			Identifier: []byte("identifier2"),
-			Data:       commitData,
+			Root:       [32]byte{4, 5, 6},
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
