@@ -2,7 +2,6 @@ package queue
 
 import (
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -110,7 +109,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 		isPostConsensusMessage = false
 	)
 	if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
-		isPostConsensusMessage = mm.Message.Type == ssv.PostConsensusPartialSig
+		isPostConsensusMessage = mm.Message.Type == spectypes.PostConsensusPartialSig
 		isPreConsensusMessage = !isPostConsensusMessage
 	}
 

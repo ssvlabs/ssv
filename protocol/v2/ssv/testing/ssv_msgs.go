@@ -169,9 +169,9 @@ var postConsensusAttestationMsg = func(
 		root = []byte{1, 2, 3, 4}
 	}
 
-	msgs := specssv.PartialSignatureMessages{
-		Type: specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+	msgs := spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed,
 				SigningRoot:      root,
@@ -219,9 +219,9 @@ var postConsensusBeaconBlockMsg = func(
 		root = []byte{1, 2, 3, 4}
 	}
 
-	msgs := specssv.PartialSignatureMessages{
-		Type: specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+	msgs := spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed.Signature[:],
 				SigningRoot:      root,
@@ -246,9 +246,9 @@ var PreConsensusFailedMsg = func(
 	d, _ := beacon.DomainData(testingutils.TestingDutyEpoch, spectypes.DomainRandao)
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(testingutils.TestingDutyEpoch), d, msgSigner.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
-	msg := specssv.PartialSignatureMessages{
+	msg := spectypes.PartialSignatureMessages{
 		Type: specssv.RandaoPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed[:],
 				SigningRoot:      root,
@@ -295,9 +295,9 @@ var PreConsensusRandaoDifferentSignerMsg = func(msgSigner, randaoSigner *bls.Sec
 	d, _ := beacon.DomainData(testingutils.TestingDutyEpoch, spectypes.DomainRandao)
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(testingutils.TestingDutyEpoch), d, randaoSigner.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
-	msg := specssv.PartialSignatureMessages{
+	msg := spectypes.PartialSignatureMessages{
 		Type: specssv.RandaoPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed[:],
 				SigningRoot:      root,
@@ -326,12 +326,12 @@ var randaoMsg = func(
 	d, _ := beacon.DomainData(epoch, spectypes.DomainRandao)
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(epoch), d, sk.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
-	msgs := specssv.PartialSignatureMessages{
+	msgs := spectypes.PartialSignatureMessages{
 		Type:     specssv.RandaoPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{},
+		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 	for i := 0; i < msgCnt; i++ {
-		msg := &specssv.PartialSignatureMessage{
+		msg := &spectypes.PartialSignatureMessage{
 			PartialSignature: signed[:],
 			SigningRoot:      root,
 			Signer:           id,
@@ -384,16 +384,16 @@ var selectionProofMsg = func(
 	d, _ := beacon.DomainData(1, spectypes.DomainSelectionProof)
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(slot), d, beaconsk.GetPublicKey().Serialize(), spectypes.DomainSelectionProof)
 
-	_msgs := make([]*specssv.PartialSignatureMessage, 0)
+	_msgs := make([]*spectypes.PartialSignatureMessage, 0)
 	for i := 0; i < msgCnt; i++ {
-		_msgs = append(_msgs, &specssv.PartialSignatureMessage{
+		_msgs = append(_msgs, &spectypes.PartialSignatureMessage{
 			PartialSignature: signed[:],
 			SigningRoot:      root,
 			Signer:           beaconid,
 		})
 	}
 
-	msgs := specssv.PartialSignatureMessages{
+	msgs := spectypes.PartialSignatureMessages{
 		Type:     specssv.SelectionProofPartialSig,
 		Messages: _msgs,
 	}
@@ -429,9 +429,9 @@ var postConsensusAggregatorMsg = func(
 		root = []byte{1, 2, 3, 4}
 	}
 
-	msgs := specssv.PartialSignatureMessages{
-		Type: specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+	msgs := spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed,
 				SigningRoot:      root,
@@ -471,9 +471,9 @@ var postConsensusSyncCommitteeMsg = func(
 		root = []byte{1, 2, 3, 4}
 	}
 
-	msgs := specssv.PartialSignatureMessages{
-		Type: specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{
+	msgs := spectypes.PartialSignatureMessages{
+		Type: spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed,
 				SigningRoot:      root,
@@ -524,7 +524,7 @@ var contributionProofMsg = func(
 	beacon := testingutils.NewTestingBeaconNode()
 	d, _ := beacon.DomainData(1, spectypes.DomainSyncCommitteeSelectionProof)
 
-	msgs := make([]*specssv.PartialSignatureMessage, 0)
+	msgs := make([]*spectypes.PartialSignatureMessage, 0)
 	for index := range testingutils.TestingContributionProofIndexes {
 		subnet, _ := beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		data := &altair.SyncAggregatorSelectionData{
@@ -532,7 +532,7 @@ var contributionProofMsg = func(
 			SubcommitteeIndex: subnet,
 		}
 		sig, root, _ := signer.SignBeaconObject(data, d, beaconsk.GetPublicKey().Serialize(), spectypes.DomainSyncCommitteeSelectionProof)
-		msg := &specssv.PartialSignatureMessage{
+		msg := &spectypes.PartialSignatureMessage{
 			PartialSignature: sig[:],
 			SigningRoot:      ensureRoot(root),
 			Signer:           beaconid,
@@ -550,7 +550,7 @@ var contributionProofMsg = func(
 		msgs[1] = m
 	}
 
-	msg := &specssv.PartialSignatureMessages{
+	msg := &spectypes.PartialSignatureMessages{
 		Type:     specssv.ContributionProofs,
 		Messages: msgs,
 	}
@@ -579,7 +579,7 @@ var postConsensusSyncCommitteeContributionMsg = func(
 	beacon := testingutils.NewTestingBeaconNode()
 	dContribAndProof, _ := beacon.DomainData(1, spectypes.DomainContributionAndProof)
 
-	msgs := make([]*specssv.PartialSignatureMessage, 0)
+	msgs := make([]*spectypes.PartialSignatureMessage, 0)
 	for index := range testingutils.TestingSyncCommitteeContributions {
 		// sign proof
 		subnet, _ := beacon.SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
@@ -608,7 +608,7 @@ var postConsensusSyncCommitteeContributionMsg = func(
 			root = []byte{1, 2, 3, 4}
 		}
 
-		msg := &specssv.PartialSignatureMessage{
+		msg := &spectypes.PartialSignatureMessage{
 			PartialSignature: signed,
 			SigningRoot:      root,
 			Signer:           id,
@@ -622,8 +622,8 @@ var postConsensusSyncCommitteeContributionMsg = func(
 		msgs = append(msgs, msg)
 	}
 
-	msg := &specssv.PartialSignatureMessages{
-		Type:     specssv.PostConsensusPartialSig,
+	msg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
 		Messages: msgs,
 	}
 

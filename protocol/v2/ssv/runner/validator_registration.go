@@ -98,9 +98,9 @@ func (r *ValidatorRegistrationRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
-	msgs := specssv.PartialSignatureMessages{
+	msgs := spectypes.PartialSignatureMessages{
 		Type:     specssv.ValidatorRegistrationPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	// sign msg

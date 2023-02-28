@@ -2,7 +2,6 @@ package runner
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -14,7 +13,7 @@ func (b *BaseRunner) signBeaconObject(
 	obj ssz.HashRoot,
 	slot phase0.Slot,
 	domainType phase0.DomainType,
-) (*specssv.PartialSignatureMessage, error) {
+) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
 	if err != nil {
@@ -26,14 +25,14 @@ func (b *BaseRunner) signBeaconObject(
 		return nil, errors.Wrap(err, "could not sign beacon object")
 	}
 
-	return &specssv.PartialSignatureMessage{
+	return &spectypes.PartialSignatureMessage{
 		PartialSignature: sig,
 		SigningRoot:      r,
 		Signer:           runner.GetBaseRunner().Share.OperatorID,
 	}, nil
 }
 
-func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *specssv.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
+func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (*spectypes.SignedPartialSignatureMessage, error) {
 	signature, err := runner.GetSigner().SignRoot(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
@@ -67,7 +66,7 @@ func (b *BaseRunner) validatePartialSigMsg(
 	return nil
 }
 
-func (b *BaseRunner) verifyBeaconPartialSignature(msg *specssv.PartialSignatureMessage) error {
+func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatureMessage) error {
 	signer := msg.Signer
 	signature := msg.PartialSignature
 	root := msg.SigningRoot

@@ -5,7 +5,6 @@ import (
 	"sort"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
@@ -108,7 +107,7 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.Sign
 		return err
 	}
 
-	sortedRoots := func(msgs specssv.PartialSignatureMessages) [][]byte {
+	sortedRoots := func(msgs spectypes.PartialSignatureMessages) [][]byte {
 		ret := make([][]byte, 0)
 		for _, msg := range msgs.Messages {
 			ret = append(ret, msg.SigningRoot)

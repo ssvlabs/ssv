@@ -11,7 +11,6 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
@@ -277,7 +276,7 @@ func (m messageSlice) dump(s *State) string {
 		case *spectypes.SignedPartialSignatureMessage:
 			// heightOrSlot = mm.Message.Messages[0].Slot
 			typ = mm.Message.Type
-			if typ == ssv.PostConsensusPartialSig {
+			if typ == spectypes.PostConsensusPartialSig {
 				kind = "post-consensus"
 			} else {
 				kind = "pre-consensus"
