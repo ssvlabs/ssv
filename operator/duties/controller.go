@@ -251,7 +251,7 @@ func (dc *dutyController) handleValidatorRegistration(slot phase0.Slot) {
 	// push if first time or every 10 epoch at first slot
 	epoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
 	firstSlot := dc.ethNetwork.GetEpochFirstSlot(epoch)
-	if dc.registered && slot != firstSlot && uint64(epoch)%validatorRegistrationEpochInterval != 0 {
+	if dc.registered && (slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0) {
 		return
 	}
 	dc.registered = true
