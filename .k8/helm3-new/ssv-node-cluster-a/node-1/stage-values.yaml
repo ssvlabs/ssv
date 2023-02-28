@@ -1,5 +1,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-domain: stage.ssv.network
-
+resources:
+  limits:
+    cpu: 2500m
+    mem: 3000Mi

@@ -5,7 +5,7 @@ replicaCount: 1
 
 namespace: ssv
 
-domain: stage.ssv.network
+
 
 image:
   repository: 121827225315.dkr.ecr.us-west-2.amazonaws.com/ssv-node
@@ -14,16 +14,7 @@ image:
   tag: latest
 
 resources:
-  limits_node_1:
-    cpu: 1500m
-    mem: 3000Mi
-  limits_node_2:
-    cpu: 1500m
-    mem: 3000Mi      
-  limits_node_3:
-    cpu: 1500m
-    mem: 3000Mi
-  limits_node_4:
+  limits:
     cpu: 1500m
     mem: 3000Mi
 
@@ -40,3 +31,6 @@ tolerations:
   - effect: NoSchedule
     key: kubernetes.io/role
     operator: Exists
+
+
+# helm upgrade --values cluseter_stage stage-values.yaml
