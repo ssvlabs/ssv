@@ -55,7 +55,6 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedSignedBlindedBe
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], pubkey)
-
 	signedReg := &api.VersionedSignedValidatorRegistration{
 		Version: spec.BuilderVersionV1,
 		V1: &eth2apiv1.SignedValidatorRegistration{

@@ -30,7 +30,7 @@ import (
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
-var validatorRegistrationEpochInterval = uint64(10)
+var validatorRegistrationEpochInterval = uint64(2)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -71,9 +71,6 @@ type dutyController struct {
 	syncCommitteeDutiesMap   *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
 	lastBlockEpoch           phase0.Epoch
 	currentDutyDependentRoot phase0.Root
-
-	// ValidatorRegistration
-	registered bool
 }
 
 var secPerSlot int64 = 12
@@ -251,10 +248,9 @@ func (dc *dutyController) handleValidatorRegistration(slot phase0.Slot) {
 	// push if first time or every 10 epoch at first slot
 	epoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
 	firstSlot := dc.ethNetwork.GetEpochFirstSlot(epoch)
-	if dc.registered && (slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0) {
+	if slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0 {
 		return
 	}
-	dc.registered = true
 	shares, err := dc.validatorController.GetAllValidatorShares() // TODO better to fetch only active validators
 	if err != nil {
 		dc.logger.Warn("failed to get all validators share", zap.Error(err))
