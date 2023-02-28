@@ -66,7 +66,7 @@ func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for sync committee role")
 }
 
@@ -116,7 +116,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")

@@ -64,7 +64,7 @@ func (r *AggregatorRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
@@ -155,7 +155,7 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 	return nil
 }
 
-func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -232,7 +232,7 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "could not sign PartialSignatureMessage for selection proof")
 	}
-	signedPartialMsg := &specssv.SignedPartialSignatureMessage{
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
 		Signer:    r.GetShare().OperatorID,

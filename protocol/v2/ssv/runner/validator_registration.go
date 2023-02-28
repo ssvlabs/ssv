@@ -51,7 +51,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, _, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing validator registration message")
@@ -70,7 +70,7 @@ func (r *ValidatorRegistrationRunner) ProcessConsensus(signedMsg *qbft.SignedMes
 	return errors.New("no consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no post consensus phase for validator registration")
 }
 
@@ -108,7 +108,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao msg")
 	}
-	signedPartialMsg := &specssv.SignedPartialSignatureMessage{
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
 		Signer:    r.GetShare().OperatorID,

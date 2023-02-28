@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
@@ -273,7 +274,7 @@ func (m messageSlice) dump(s *State) string {
 		}
 
 		switch mm := msg.Body.(type) {
-		case *ssv.SignedPartialSignatureMessage:
+		case *spectypes.SignedPartialSignatureMessage:
 			// heightOrSlot = mm.Message.Messages[0].Slot
 			typ = mm.Message.Type
 			if typ == ssv.PostConsensusPartialSig {
@@ -303,7 +304,7 @@ func (m messageSlice) dump(s *State) string {
 	return b.String()
 }
 
-func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *ssv.SignedPartialSignatureMessage) *types.SSVMessage {
+func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *spectypes.SignedPartialSignatureMessage) *types.SSVMessage {
 	switch role {
 	case types.BNRoleAttester:
 		return testingutils.SSVMsgAttester

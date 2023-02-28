@@ -68,7 +68,7 @@ func (r *AttesterRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *AttesterRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for attester role")
 }
 
@@ -118,7 +118,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	return nil
 }
 
-func (r *AttesterRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")

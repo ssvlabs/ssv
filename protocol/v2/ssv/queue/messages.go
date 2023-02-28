@@ -4,6 +4,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
@@ -28,7 +29,7 @@ func DecodeSSVMessage(m *types.SSVMessage) (*DecodedSSVMessage, error) {
 		}
 		body = sm
 	case types.SSVPartialSignatureMsgType:
-		sm := &ssv.SignedPartialSignatureMessage{}
+		sm := &spectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
 		}
@@ -108,7 +109,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
+	if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
 		isPostConsensusMessage = mm.Message.Type == ssv.PostConsensusPartialSig
 		isPreConsensusMessage = !isPostConsensusMessage
 	}

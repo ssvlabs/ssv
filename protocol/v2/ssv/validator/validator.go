@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"encoding/hex"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -110,7 +111,7 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 		}
 		return dutyRunner.ProcessConsensus(signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
+		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}

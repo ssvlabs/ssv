@@ -69,7 +69,7 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ProposerRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing randao message")
@@ -176,7 +176,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	return nil
 }
 
-func (r *ProposerRunner) ProcessPostConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -276,7 +276,7 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao msg")
 	}
-	signedPartialMsg := &specssv.SignedPartialSignatureMessage{
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
 		Signer:    r.GetShare().OperatorID,
