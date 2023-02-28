@@ -150,7 +150,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 	i := 0
 	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
-		logger := logger.With(zap.String("who", fmt.Sprintf("node-%d", i)))
+		logger := logger.Named(fmt.Sprintf("node-%d", i))
 		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))

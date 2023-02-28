@@ -395,7 +395,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 		}
 
 		// Start a committee validator.
-		v := c.validatorsMap.GetOrCreateValidator(logger.With(zap.String("who", "validatorsMap")), validatorShare)
+		v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), validatorShare)
 		isStarted, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator", zap.Error(err))
@@ -611,7 +611,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 }
 
 func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) {
-	v := c.validatorsMap.GetOrCreateValidator(logger.With(zap.String("who", "validatorsMap")), share)
+	v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
 	_, err := c.startValidator(logger, v)
 	if err != nil {
 		logger.Warn("could not start validator", zap.Error(err))

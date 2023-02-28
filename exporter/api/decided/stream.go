@@ -16,7 +16,7 @@ import (
 // NewStreamPublisher handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
 func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
-	logger = logger.With(zap.String("who", "NewDecidedHandler"))
+	logger = logger.Named("NewDecidedHandler")
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg *specqbft.SignedMessage) {
