@@ -65,7 +65,7 @@ func (s identityStore) SetupNetworkKey(logger *zap.Logger, skEncoded string) (*e
 		logger.Debug("using p2p network privateKey from storage")
 		return privateKey, nil
 	}
-	privateKey, err = utils.ECDSAPrivateKey(logger.With(zap.String("who", "p2p storage")), skEncoded)
+	privateKey, err = utils.ECDSAPrivateKey(logger.Named("p2p storage"), skEncoded)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to generate private key")
 	}

@@ -34,7 +34,7 @@ type localDiscovery struct {
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
-	logger = logger.With(zap.String("where", "mdns_discovery"))
+	logger = logger.Named("mdns_discovery")
 	logger.Debug("configuring mdns discovery")
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)

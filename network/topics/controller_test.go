@@ -234,7 +234,7 @@ func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork f
 	//
 	if msgValidator {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger.With(zap.String("who", "MsgValidator")),
+			return NewSSVMsgValidator(logger.Named("MsgValidator"),
 				fork, h.ID())
 		}
 	}
