@@ -155,7 +155,7 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -185,8 +185,13 @@ func (r *AggregatorRunner) ProcessPostConsensus(signedMsg *spectypes.SignedParti
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
+		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
+		if err != nil {
+			return errors.Wrap(err, "could not get aggregate and proof")
+		}
+
 		msg := &phase0.SignedAggregateAndProof{
-			Message:   r.GetState().DecidedValue.AggregateAndProof,
+			Message:   aggregateAndProof,
 			Signature: specSig,
 		}
 
@@ -214,7 +219,12 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AggregateAndProof}, spectypes.DomainAggregateAndProof, nil
+	aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get aggregate and proof")
+	}
+
+	return []ssz.HashRoot{aggregateAndProof}, spectypes.DomainAggregateAndProof, nil
 }
 
 // executeDuty steps:
@@ -232,9 +242,9 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
-	msgs := specssv.PartialSignatureMessages{
-		Type:     specssv.SelectionProofPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.SelectionProofPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	// sign msg
@@ -255,7 +265,7 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -303,11 +313,12 @@ func (r *AggregatorRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *AggregatorRunner) GetRoot() ([]byte, error) {
+// GetRoot returns the root used for signing and verification
+func (r *AggregatorRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }

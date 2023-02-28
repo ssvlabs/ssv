@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
+	bellatrix2 "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -92,23 +93,31 @@ func (r *ProposerRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartialS
 
 	duty := r.GetState().StartingDuty
 
-	input := &spectypes.ConsensusData{Duty: duty}
+	var ver spec.DataVersion
+	var obj ssz.Marshaler
 	if r.ProducesBlindedBlocks {
 		// get block data
-		blk, err := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
-
-		input.BlindedBlockData = blk
 	} else {
 		// get block data
-		blk, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
+	}
 
-		input.BlockData = blk
+	byts, err := obj.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal beacon block")
+	}
+
+	input := &spectypes.ConsensusData{
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: byts,
 	}
 
 	r.metrics.StartConsensus()
@@ -136,10 +145,14 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	// specific duty sig
 	var blkToSign ssz.HashRoot
 	if r.decidedBlindedBlock() {
-		blkToSign = decidedValue.BlindedBlockData
+		blkToSign, err = decidedValue.GetBellatrixBlindedBlockData()
 	} else {
-		blkToSign = decidedValue.BlockData
+		blkToSign, err = decidedValue.GetBellatrixBlockData()
 	}
+	if err != nil {
+		return errors.Wrap(err, "could not get block")
+	}
+
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
 		blkToSign,
@@ -149,9 +162,9 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &specssv.PartialSignatureMessages{
-		Type:     specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -166,7 +179,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -199,19 +212,28 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartial
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if r.decidedBlindedBlock() {
-			blk := &apiv1bellatrix.SignedBlindedBeaconBlock{
-				Message:   r.GetState().DecidedValue.BlindedBlockData,
+			data, err := r.GetState().DecidedValue.GetBellatrixBlindedBlockData()
+			if err != nil {
+				return errors.Wrap(err, "could not get blinded block")
+			}
+
+			blk := &bellatrix2.SignedBlindedBeaconBlock{
+				Message:   data,
 				Signature: specSig,
 			}
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(blk); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
-			blk := &bellatrix.SignedBeaconBlock{
-				Message:   r.GetState().DecidedValue.BlockData,
-				Signature: specSig,
+			data, err := r.GetState().DecidedValue.GetBellatrixBlockData()
+			if err != nil {
+				return errors.Wrap(err, "could not get block")
 			}
 
+			blk := &bellatrix.SignedBeaconBlock{
+				Message:   data,
+				Signature: specSig,
+			}
 			if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
 				r.metrics.RoleSubmissionFailed()
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
@@ -233,7 +255,8 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartial
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
-	return r.BaseRunner.State.DecidedValue.BlindedBlockData != nil
+	_, err := r.BaseRunner.State.DecidedValue.GetBellatrixBlindedBlockData()
+	return err == nil
 }
 
 func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
@@ -244,9 +267,18 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.decidedBlindedBlock() {
-		return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.BlindedBlockData}, spectypes.DomainProposer, nil
+		data, err := r.GetState().DecidedValue.GetBellatrixBlindedBlockData()
+		if err != nil {
+			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block")
+		}
+		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
-	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.BlockData}, spectypes.DomainProposer, nil
+
+	data, err := r.GetState().DecidedValue.GetBellatrixBlockData()
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block")
+	}
+	return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 }
 
 // executeDuty steps:
@@ -261,14 +293,13 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
-	msgs := specssv.PartialSignatureMessages{
-		Type:     specssv.RandaoPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.RandaoPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	// sign msg
@@ -289,7 +320,7 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -337,11 +368,11 @@ func (r *ProposerRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *ProposerRunner) GetRoot() ([]byte, error) {
+func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }

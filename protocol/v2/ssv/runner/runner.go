@@ -129,14 +129,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 		}
 	}
 
-	// get decided value
-	decidedData, err := decidedMsg.Message.GetCommitData()
-	if err != nil {
-		return false, nil, errors.Wrap(err, "failed to get decided data")
-	}
-
+	// decode consensus data
 	decidedValue = &spectypes.ConsensusData{}
-	if err := decidedValue.Decode(decidedData.Data); err != nil {
+	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
 
@@ -163,8 +158,8 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(runner Runner, signedMsg *sp
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 	container *specssv.PartialSigContainer,
-) (bool, [][]byte, error) {
-	roots := make([][]byte, 0)
+) (bool, [][32]byte, error) {
+	roots := make([][32]byte, 0)
 	anyQuorum := false
 	for _, msg := range signedMsg.Message.Messages {
 		prevQuorum := container.HasQuorum(msg.SigningRoot)
