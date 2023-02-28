@@ -24,7 +24,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-// DataVersionNil is just a placeholder for nil data version.
+// DataVersionNil is just a placeholder for a nil data version.
 // Don't check for it, check for errors or nil data instead.
 const DataVersionNil spec.DataVersion = math.MaxUint64
 

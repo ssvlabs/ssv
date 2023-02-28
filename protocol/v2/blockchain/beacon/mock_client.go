@@ -11,10 +11,12 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
+	spec "github.com/attestantio/go-eth2-client/spec"
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
 	bellatrix0 "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
+	ssz "github.com/ferranbt/fastssz"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -317,12 +319,13 @@ func (mr *MockBeaconMockRecorder) Events(ctx, topics, handler interface{}) *gomo
 }
 
 // GetAttestationData mocks base method.
-func (m *MockBeacon) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
+func (m *MockBeacon) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAttestationData", slot, committeeIndex)
-	ret0, _ := ret[0].(*phase0.AttestationData)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetAttestationData indicates an expected call of GetAttestationData.
@@ -332,12 +335,13 @@ func (mr *MockBeaconMockRecorder) GetAttestationData(slot, committeeIndex interf
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix0.BeaconBlock, error) {
+func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, committeeIndex, graffiti, randao)
-	ret0, _ := ret[0].(*bellatrix0.BeaconBlock)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetBeaconBlock indicates an expected call of GetBeaconBlock.
@@ -361,12 +365,13 @@ func (mr *MockBeaconMockRecorder) GetBeaconNetwork() *gomock.Call {
 }
 
 // GetBlindedBeaconBlock mocks base method.
-func (m *MockBeacon) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BlindedBeaconBlock, error) {
+func (m *MockBeacon) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBlindedBeaconBlock", slot, committeeIndex, graffiti, randao)
-	ret0, _ := ret[0].(*bellatrix.BlindedBeaconBlock)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetBlindedBeaconBlock indicates an expected call of GetBlindedBeaconBlock.
@@ -391,27 +396,29 @@ func (mr *MockBeaconMockRecorder) GetDuties(epoch, validatorIndices interface{})
 }
 
 // GetSyncCommitteeContribution mocks base method.
-func (m *MockBeacon) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint64) (*altair.SyncCommitteeContribution, error) {
+func (m *MockBeacon) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncCommitteeContribution", slot, subnetID)
-	ret0, _ := ret[0].(*altair.SyncCommitteeContribution)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetSyncCommitteeContribution", slot, selectionProofs, subnetIDs)
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetSyncCommitteeContribution indicates an expected call of GetSyncCommitteeContribution.
-func (mr *MockBeaconMockRecorder) GetSyncCommitteeContribution(slot, subnetID interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) GetSyncCommitteeContribution(slot, selectionProofs, subnetIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeContribution", reflect.TypeOf((*MockBeacon)(nil).GetSyncCommitteeContribution), slot, subnetID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncCommitteeContribution", reflect.TypeOf((*MockBeacon)(nil).GetSyncCommitteeContribution), slot, selectionProofs, subnetIDs)
 }
 
 // GetSyncMessageBlockRoot mocks base method.
-func (m *MockBeacon) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, error) {
+func (m *MockBeacon) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSyncMessageBlockRoot", slot)
 	ret0, _ := ret[0].(phase0.Root)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetSyncMessageBlockRoot indicates an expected call of GetSyncMessageBlockRoot.
@@ -451,12 +458,13 @@ func (mr *MockBeaconMockRecorder) IsSyncCommitteeAggregator(proof interface{}) *
 }
 
 // SubmitAggregateSelectionProof mocks base method.
-func (m *MockBeacon) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (*phase0.AggregateAndProof, error) {
+func (m *MockBeacon) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitAggregateSelectionProof", slot, committeeIndex, committeeLength, index, slotSig)
-	ret0, _ := ret[0].(*phase0.AggregateAndProof)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret0, _ := ret[0].(ssz.Marshaler)
+	ret1, _ := ret[1].(spec.DataVersion)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // SubmitAggregateSelectionProof indicates an expected call of SubmitAggregateSelectionProof.

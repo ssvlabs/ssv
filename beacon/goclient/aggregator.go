@@ -61,7 +61,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		AggregatorIndex: index,
 		Aggregate:       aggregateData,
 		SelectionProof:  selectionProof,
-	}, spec.DataVersionAltair, nil
+	}, spec.DataVersionPhase0, nil
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg
