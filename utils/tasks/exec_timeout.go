@@ -20,9 +20,7 @@ type funcResult struct {
 // ExecWithTimeout triggers some function in the given time frame, returns true if completed
 func ExecWithTimeout(ctx context.Context, fn Func, t time.Duration) (bool, interface{}, error) {
 	c := make(chan funcResult, 1)
-	logger := logex.GetLogger(zap.String("caller", "ExecWithTimeout"))
-	logger = logger.Named("stopper")
-	stopper := newStopper(logger)
+	stopper := newStopper(logex.GetLogger(zap.String("caller", "ExecWithTimeout")).Named("stopper"))
 
 	go func() {
 		defer func() {
