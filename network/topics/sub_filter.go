@@ -26,7 +26,7 @@ type subFilter struct {
 
 func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter {
 	return &subFilter{
-		logger:    logger.With(zap.String("who", "subFilter")),
+		logger:    logger.Named("subFilter"),
 		fork:      fork,
 		whitelist: newWhitelist(),
 		subsLimit: subsLimit,

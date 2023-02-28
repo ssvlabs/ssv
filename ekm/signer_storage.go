@@ -51,7 +51,7 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 	return &storage{
 		db:      db,
 		network: network,
-		logger:  logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
+		logger:  logger.Named(fmt.Sprintf("%sstorage", prefix)),
 		lock:    sync.RWMutex{},
 	}
 }
