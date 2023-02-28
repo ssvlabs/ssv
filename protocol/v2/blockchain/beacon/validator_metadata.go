@@ -65,8 +65,7 @@ type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
-	logger := logex.GetLogger()
-	logger = logger.Named("UpdateValidatorsMetadata")
+	logger := logex.GetLogger().Named("UpdateValidatorsMetadata")
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
