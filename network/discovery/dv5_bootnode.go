@@ -48,7 +48,7 @@ func (b *Bootnode) Close() error {
 }
 
 func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
-	privKey, err := utils.ECDSAPrivateKey(logger.With(zap.String("who", "bootnode")), opts.PrivateKey)
+	privKey, err := utils.ECDSAPrivateKey(logger.Named("bootnode"), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

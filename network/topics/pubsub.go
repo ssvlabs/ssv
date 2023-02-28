@@ -128,7 +128,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 	var topicScoreFactory func(string) *pubsub.TopicScoreParams
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
-		inspector := scoreInspector(logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
+		inspector := scoreInspector(logger.Named("scoreInspector"), cfg.ScoreIndex)
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
