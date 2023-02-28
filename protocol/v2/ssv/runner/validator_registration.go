@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"go.uber.org/zap"
@@ -56,7 +57,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
-	logger := logger.With(zap.String("role", spectypes.BNRoleValidatorRegistration.String()))
+	logger := logger.With(zap.String("role", spectypes.BNRoleValidatorRegistration.String()), zap.String("pk", hex.EncodeToString(r.BaseRunner.Share.ValidatorPubKey)))
 
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
