@@ -45,7 +45,6 @@ type NodeFilter func(*enode.Node) bool
 type DiscV5Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	logger *zap.Logger
 
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
@@ -66,7 +65,6 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 	dvs := DiscV5Service{
 		ctx:          ctx,
 		cancel:       cancel,
-		logger:       logger.Named("discv5"),
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
