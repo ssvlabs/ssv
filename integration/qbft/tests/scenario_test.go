@@ -122,7 +122,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		// collected already by the Go runtime. This causes the C code to receive a SIGSEGV (SIGnal SEGmentation Violation)
 		// which crashes the Go runtime in a way that is not recoverable. A long term fix would involve signaling
 		// when the validator ConsumeQueue() function has returned, as its processing is synchronous.
-		time.Sleep(time.Millisecond * 500)
+		time.Sleep(time.Millisecond * 1000)
 	})
 }
 
