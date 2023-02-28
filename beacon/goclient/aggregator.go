@@ -4,12 +4,14 @@ import (
 	"encoding/binary"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
-func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, validatorIndex phase0.ValidatorIndex, slotSig []byte) (*phase0.AggregateAndProof, error) {
+func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	// As specified in spec, an aggregator should wait until two thirds of the way through slot
 	// to broadcast the best aggregate to the global aggregate channel.
 	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
@@ -18,19 +20,19 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get aggregator status")
+		return nil, DataVersionNil, errors.Wrap(err, "could not get aggregator status")
 	}
 	if !isAggregator {
-		return nil, errors.New("validator is not an aggregator")
+		return nil, DataVersionNil, errors.New("validator is not an aggregator")
 	}
 
 	attDataReqStart := time.Now()
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
-		return nil, err
+		return nil, DataVersionNil, err
 	}
 	if data == nil {
-		return nil, errors.New("attestation data is nil")
+		return nil, DataVersionNil, errors.New("attestation data is nil")
 	}
 
 	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
@@ -38,16 +40,16 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// Get aggregate attestation data.
 	root, err := data.HashTreeRoot()
 	if err != nil {
-		return nil, errors.Wrap(err, "AttestationData.HashTreeRoot")
+		return nil, DataVersionNil, errors.Wrap(err, "AttestationData.HashTreeRoot")
 	}
 
 	aggDataReqStart := time.Now()
 	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get aggregate attestation")
+		return nil, DataVersionNil, errors.Wrap(err, "failed to get aggregate attestation")
 	}
 	if aggregateData == nil {
-		return nil, errors.New("aggregation data is nil")
+		return nil, DataVersionNil, errors.New("aggregation data is nil")
 	}
 
 	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
@@ -56,10 +58,10 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	copy(selectionProof[:], slotSig)
 
 	return &phase0.AggregateAndProof{
-		AggregatorIndex: validatorIndex,
+		AggregatorIndex: index,
 		Aggregate:       aggregateData,
 		SelectionProof:  selectionProof,
-	}, nil
+	}, spec.DataVersionAltair, nil
 }
 
 // SubmitSignedAggregateSelectionProof broadcasts a signed aggregator msg

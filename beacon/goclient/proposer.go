@@ -9,11 +9,12 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
-func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
+func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	// TODO need to support blinded?
 	// TODO what with fee recipient?
 	sig := phase0.BLSSignature{}
@@ -22,20 +23,20 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 	reqStart := time.Now()
 	beaconBlockRoot, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
 	if err != nil {
-		return nil, err
+		return nil, DataVersionNil, err
 	}
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 
 	switch beaconBlockRoot.Version {
 	case spec.DataVersionBellatrix:
-		return beaconBlockRoot.Bellatrix, nil
+		return beaconBlockRoot.Bellatrix, spec.DataVersionBellatrix, nil
 	default:
-		return nil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlockRoot.Version))
+		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlockRoot.Version))
 	}
 }
 
-func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*apiv1bellatrix.BlindedBeaconBlock, error) {
-	return nil, nil
+func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	return nil, DataVersionNil, nil
 }
 
 func (gc *goClient) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {

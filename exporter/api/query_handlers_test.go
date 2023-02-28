@@ -1,11 +1,11 @@
 package api
 
 import (
-	"fmt"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -103,19 +103,13 @@ func TestHandleDecidedQuery(t *testing.T) {
 	role := spectypes.BNRoleAttester
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
-		commitDataBytes, err := commitData.Encode()
-		if err != nil {
-			panic(err)
-		}
-
-		id := spectypes.NewMsgID(pk.Serialize(), role)
+		id := spectypes.NewMsgID(testingutils.TestingSSVDomainType, pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
 			Identifier: id[:],
-			Data:       commitDataBytes,
+			Root:       [32]byte{0x1, 0x2, 0x3},
 		}
 	})
 	require.NoError(t, err)

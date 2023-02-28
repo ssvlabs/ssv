@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"sync"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -21,6 +23,10 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
+
+// DataVersionNil is just a placeholder for nil data version.
+// Don't check for it, check for errors or nil data instead.
+const DataVersionNil spec.DataVersion = math.MaxUint64
 
 const (
 	healthCheckTimeout = 10 * time.Second
