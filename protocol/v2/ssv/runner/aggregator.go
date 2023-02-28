@@ -89,7 +89,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartia
 	r.metrics.PauseDutyFullFlow()
 
 	// get block data
-	res, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
@@ -97,9 +97,14 @@ func (r *AggregatorRunner) ProcessPreConsensus(signedMsg *spectypes.SignedPartia
 	r.metrics.ContinueDutyFullFlow()
 	r.metrics.StartConsensus()
 
+	byts, err := res.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal aggregate and proof")
+	}
 	input := &spectypes.ConsensusData{
-		Duty:              duty,
-		AggregateAndProof: res,
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: byts,
 	}
 
 	if err := r.BaseRunner.decide(r, input); err != nil {
@@ -123,14 +128,19 @@ func (r *AggregatorRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) e
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
+	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
+	if err != nil {
+		return errors.Wrap(err, "could not get aggregate and proof")
+	}
+
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
+	msg, err := r.BaseRunner.signBeaconObject(r, aggregateAndProof, decidedValue.Duty.Slot, spectypes.DomainAggregateAndProof)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &specssv.PartialSignatureMessages{
-		Type:     specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)

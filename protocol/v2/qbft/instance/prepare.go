@@ -6,7 +6,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
@@ -17,10 +16,7 @@ func (i *Instance) uponPrepare(
 	signedPrepare *specqbft.SignedMessage,
 	prepareMsgContainer,
 	commitMsgContainer *specqbft.MsgContainer) error {
-	acceptedProposalData, err := i.State.ProposalAcceptedForCurrentRound.Message.GetProposalData()
-	if err != nil {
-		return errors.Wrap(err, "could not get accepted proposal data")
-	}
+
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
@@ -28,6 +24,7 @@ func (i *Instance) uponPrepare(
 	if !addedMsg {
 		return nil // uponPrepare was already called
 	}
+
 	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
@@ -36,22 +33,15 @@ func (i *Instance) uponPrepare(
 		return nil // already moved to commit stage
 	}
 
-	proposedValue := acceptedProposalData.Data
+	proposedRoot := i.State.ProposalAcceptedForCurrentRound.Message.Root
 
-	i.State.LastPreparedValue = proposedValue
+	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.FullData
 	i.State.LastPreparedRound = i.State.Round
 
-	i.metrics.EndStagePrepare()
-
-	commitMsg, err := CreateCommit(i.State, i.config, proposedValue)
+	commitMsg, err := CreateCommit(i.State, i.config, proposedRoot)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
-
-	i.logger.Debug("got prepare quorum, broadcasting commit message",
-		zap.Uint64("round", uint64(i.State.Round)),
-		zap.Any("prepare-signers", signedPrepare.Signers),
-		zap.Any("commit-singers", commitMsg.Signers))
 
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
@@ -60,19 +50,31 @@ func (i *Instance) uponPrepare(
 	return nil
 }
 
-func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) []*specqbft.SignedMessage {
+func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.SignedMessage, error) {
 	if state.LastPreparedValue == nil {
-		return nil
+		return nil, nil
+	}
+
+	r, err := specqbft.HashDataRoot(state.LastPreparedValue)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not hash input data")
 	}
 
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
 	ret := make([]*specqbft.SignedMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndValue(config, msg, state.Height, state.LastPreparedRound, state.LastPreparedValue, state.Share.Committee); err == nil {
+		if err := validSignedPrepareForHeightRoundAndRoot(
+			config,
+			msg,
+			state.Height,
+			state.LastPreparedRound,
+			r,
+			state.Share.Committee,
+		); err == nil {
 			ret = append(ret, msg)
 		}
 	}
-	return ret
+	return ret, nil
 }
 
 // validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
@@ -100,12 +102,12 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndValue(
+func validSignedPrepareForHeightRoundAndRoot(
 	config qbft.IConfig,
 	signedPrepare *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
-	value []byte,
+	root [32]byte,
 	operators []*spectypes.Operator) error {
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
@@ -117,15 +119,11 @@ func validSignedPrepareForHeightRoundAndValue(
 		return errors.New("wrong msg round")
 	}
 
-	prepareData, err := signedPrepare.Message.GetPrepareData()
-	if err != nil {
-		return errors.Wrap(err, "could not get prepare data")
-	}
-	if err := prepareData.Validate(); err != nil {
+	if err := signedPrepare.Validate(); err != nil {
 		return errors.Wrap(err, "prepareData invalid")
 	}
 
-	if !bytes.Equal(prepareData.Data, value) {
+	if !bytes.Equal(signedPrepare.Message.Root[:], root[:]) {
 		return errors.New("proposed data mistmatch")
 	}
 
@@ -152,20 +150,14 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, value []byte) (*specqbft.SignedMessage, error) {
-	prepareData := &specqbft.PrepareData{
-		Data: value,
-	}
-	dataByts, err := prepareData.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed encoding prepare data")
-	}
+func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, root [32]byte) (*specqbft.SignedMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     state.Height,
 		Round:      newRound,
 		Identifier: state.ID,
-		Data:       dataByts,
+
+		Root: root,
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
@@ -175,7 +167,7 @@ func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
 		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
-		Message:   msg,
+		Message:   *msg,
 	}
 	return signedMsg, nil
 }
