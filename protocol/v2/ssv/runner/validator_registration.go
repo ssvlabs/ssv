@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"go.uber.org/zap"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -55,15 +56,20 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+	logger := logger.With(zap.String("role", spectypes.BNRoleValidatorRegistration.String()))
+
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
+	logger.Debug("NIV: got valid pre consensus", zap.Int64("signer", int64(signedMsg.Signer)))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
 	}
+
+	logger.Debug("NIV: pre consensus quorum")
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
