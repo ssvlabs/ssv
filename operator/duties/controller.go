@@ -30,7 +30,7 @@ import (
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
-var validatorRegistrationEpochInterval = uint64(10)
+var validatorRegistrationEpochInterval = uint64(4)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
