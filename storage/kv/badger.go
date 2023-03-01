@@ -61,7 +61,7 @@ func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 
 	_db := BadgerDb{
 		db:     db,
-		logger: logger.With(zap.String("who", "BadgerDb")),
+		logger: logger.Named("BadgerDb"),
 		ctx:    ctx,
 		cancel: cancel,
 	}
