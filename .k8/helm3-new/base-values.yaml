@@ -5,14 +5,6 @@ replicaCount: 1
 
 namespace: ssv
 
-
-
-image:
-  repository: 121827225315.dkr.ecr.us-west-2.amazonaws.com/ssv-node
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: latest
-
 resources:
   limits:
     cpu: 1500m
@@ -33,4 +25,22 @@ tolerations:
     operator: Exists
 
 
-# helm upgrade --values cluseter_stage stage-values.yaml
+envs:
+  SHARE_CONFIG: ./data/share.yaml
+  LOG_LEVEL: debug
+  DEBUG_SERVICES: ssv/*.
+  DISCOVERY_TYPE_KEY: discv5
+  NETWORK: prater
+  CONSENSUS_TYPE: validation
+  HOST_DNS: ""
+  HOST_ADDRESS: ""
+  LOGGER_LEVEL: debug
+  DB_PATH: ./data/db-v3
+  DB_REPORTING: false
+  ENABLE_PROFILE: true
+  DISCOVERY_TRACE: false
+  PUBSUB_TRACE: false
+  P2P_LOG: false
+  NETWORK_ID: shifu-v2-stage
+  GENESIS_EPOCH: 152834
+  CLEAN_REGISTRY_DATA: false

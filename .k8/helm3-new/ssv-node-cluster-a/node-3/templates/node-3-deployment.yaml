@@ -64,8 +64,6 @@ spec:
           name: port-15003
           hostPort: 15003
         env:
-        - name: SHARE_CONFIG
-          value: "./data/share.yaml"
         - name: CONFIG_PATH
           valueFrom:
             secretKeyRef:
@@ -93,6 +91,8 @@ spec:
               name: config-secrets
               key: abi_version
               optional: true
+        - name: SHARE_CONFIG
+          value: "./data/share.yaml"
         - name: LOG_LEVEL
           value: "debug"
         - name: DEBUG_SERVICES
@@ -107,30 +107,24 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
-        - name: TCP_PORT
-          value: "13003"
-        - name: UDP_PORT
-          value: "12003"
         - name: LOGGER_LEVEL
           value: "debug"
         - name: DB_PATH
           value: "./data/db-v3"
         - name: DB_REPORTING
           value: "false"
-        - name: METRICS_API_PORT
-          value: "15003"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
+        - name: P2P_LOG
+          value: "false"
         - name: NETWORK_ID
           value: "shifu-v2-stage"
         - name: GENESIS_EPOCH
           value: "152834"
-        - name: P2P_LOG
-          value: "false"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         volumeMounts:
