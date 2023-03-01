@@ -79,7 +79,7 @@ func CreateMultipleStoredInstances(
 				LastPreparedRound:    sm.Message.Round,
 				LastPreparedValue:    sm.Message.Data,
 				Decided:              true,
-				DecidedValue:         sm.Message.Data,
+				DecidedValue:         sm.FullData,
 				ProposeContainer:     specqbft.NewMsgContainer(),
 				PrepareContainer:     specqbft.NewMsgContainer(),
 				CommitContainer:      specqbft.NewMsgContainer(),

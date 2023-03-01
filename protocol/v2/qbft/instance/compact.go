@@ -45,7 +45,12 @@ func compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage, comp
 		if decidedMessage != nil {
 			signers = decidedMessage.Signers
 		} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
-			signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+			// TODO: this is a temporary solution, we shouldn't hash here probably.
+			root, err := specqbft.HashDataRoot(state.DecidedValue)
+			if err != nil {
+				panic(err)
+			}
+			signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndRoot(state.Round, root)
 		}
 		wholeCommitteeDecided = len(signers) == len(state.Share.Committee)
 	}

@@ -111,7 +111,7 @@ func testBroadcastedDecided(
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
-			if bytes.Equal(r1, r2) &&
+			if r1 == r2 &&
 				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signers, msg1.Signers) &&
 				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signature, msg1.Signature) {
 				require.False(t, found)
