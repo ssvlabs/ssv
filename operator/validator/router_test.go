@@ -3,19 +3,20 @@ package validator
 import (
 	"context"
 	"fmt"
+	"sync"
+	"testing"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
-	"sync"
-	"testing"
 )
 
 func TestRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 
 	router := newMessageRouter(genesis.New().MsgID())
 

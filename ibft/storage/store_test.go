@@ -7,7 +7,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -16,12 +15,8 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
-func init() {
-	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
-}
-
 func TestCleanInstances(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
@@ -116,7 +111,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveHighestInstance(instance))
@@ -154,7 +149,7 @@ func TestSaveAndFetchState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.GetLogger(), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveInstance(instance))

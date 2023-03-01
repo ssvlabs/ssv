@@ -2,9 +2,10 @@ package syncing_test
 
 import (
 	"context"
-	"go.uber.org/zap"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -35,6 +36,7 @@ func newMockMessageHandler() *mockMessageHandler {
 	return m
 }
 
+// TODO: this test is not stable
 func TestThrottle(t *testing.T) {
 	var calls int
 	handler := syncing.Throttle(func(msg spectypes.SSVMessage) {

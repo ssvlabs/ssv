@@ -469,7 +469,7 @@ func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
 func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		if err := beaconprotocol.UpdateValidatorsMetadata(pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
 			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
@@ -651,7 +651,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 			pks = append(pks, share.ValidatorPubKey)
 		}
 		logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beaconprotocol.UpdateValidatorsMetadataBatch(pks, c.metadataUpdateQueue, c,
+		beaconprotocol.UpdateValidatorsMetadataBatch(logger, pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }

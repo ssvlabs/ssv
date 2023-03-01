@@ -18,10 +18,6 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
-func init() {
-	logex.Build("test", zap.InfoLevel, nil)
-}
-
 func TestValidatorMetadata_Status(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
 		meta := &ValidatorMetadata{
@@ -65,7 +61,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	var updateCount uint64
 	pks := []string{
@@ -117,7 +113,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(logger, gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 
@@ -132,7 +128,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
 	}
-	err := UpdateValidatorsMetadata([][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
+	err := UpdateValidatorsMetadata(logger, [][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
 	require.Nil(t, err)
 	require.Equal(t, uint64(2), updateCount)
 

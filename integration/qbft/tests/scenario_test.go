@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"testing"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -21,10 +24,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
-	"time"
 )
 
 var (
@@ -53,18 +55,20 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		s.shared = GetSharedData(t)
 
+		logger := logex.TestLogger(t)
+
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
 			id := spectypes.OperatorID(id)
-			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
+			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), logger, s.shared.Nodes[id])
 
-			stores := newStores(s.shared.Logger)
-			s.shared.Nodes[id].RegisterHandlers(s.shared.Logger, protocolp2p.WithHandler(
+			stores := newStores(logger)
+			s.shared.Nodes[id].RegisterHandlers(logger, protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
-				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
+				handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
 			), protocolp2p.WithHandler(
 				protocolp2p.DecidedHistoryProtocol,
-				handlers.HistoryHandler(s.shared.Logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
+				handlers.HistoryHandler(logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
 			))
 		}
 

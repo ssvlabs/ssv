@@ -3,9 +3,11 @@ package syncing_test
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/logex"
 	"runtime"
 	"testing"
+
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -16,7 +18,7 @@ import (
 )
 
 func TestConcurrentSyncer(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -39,17 +41,17 @@ func TestConcurrentSyncer(t *testing.T) {
 	// Test SyncHighestDecided
 	id := spectypes.MessageID{}
 	handler := newMockMessageHandler()
-	syncer.EXPECT().SyncHighestDecided(logger, gomock.Any(), id, gomock.Any()).Return(nil)
+	syncer.EXPECT().SyncHighestDecided(gomock.Any(), gomock.Any(), id, gomock.Any()).Return(nil)
 	s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 	// Test SyncDecidedByRange
 	from := specqbft.Height(1)
 	to := specqbft.Height(10)
-	syncer.EXPECT().SyncDecidedByRange(logger, gomock.Any(), id, from, to, gomock.Any()).Return(nil)
+	syncer.EXPECT().SyncDecidedByRange(gomock.Any(), gomock.Any(), id, from, to, gomock.Any()).Return(nil)
 	s.SyncDecidedByRange(ctx, logger, id, from, to, handler.handler)
 
 	// Test error handling
-	syncer.EXPECT().SyncHighestDecided(logger, gomock.Any(), id, gomock.Any()).Return(fmt.Errorf("test error"))
+	syncer.EXPECT().SyncHighestDecided(gomock.Any(), gomock.Any(), id, gomock.Any()).Return(fmt.Errorf("test error"))
 	s.SyncHighestDecided(ctx, logger, id, handler.handler)
 
 	// Wait for the syncer to finish
@@ -68,7 +70,7 @@ func TestConcurrentSyncer(t *testing.T) {
 }
 
 func TestConcurrentSyncerMemoryUsage(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 
 	for i := 0; i < 4; i++ {
 		var before runtime.MemStats
@@ -112,7 +114,7 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 }
 
 func BenchmarkConcurrentSyncer(b *testing.B) {
-	logger := logex.GetLogger()
+	logger := logex.Build(b.Name(), zap.DebugLevel, nil)
 
 	for i := 0; i < b.N; i++ {
 		// Test setup

@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type MsgProcessingSpecTest struct {
@@ -34,7 +35,8 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	v := ssvtesting.BaseValidator(spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	logger := logex.TestLogger(t)
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
 

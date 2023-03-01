@@ -42,7 +42,7 @@ type PubsubMessageHandler func(string, *pubsub.Message) error
 // topicsCtrl implements Controller
 type topicsCtrl struct {
 	ctx    context.Context
-	logger *zap.Logger
+	logger *zap.Logger // struct logger to implement i.Closer
 	ps     *pubsub.PubSub
 	// scoreParamsFactory is a function that helps to set scoring params on topics
 	scoreParamsFactory  func(string) *pubsub.TopicScoreParams

@@ -31,7 +31,6 @@ const (
 // ClientOptions are the options for the client
 type ClientOptions struct {
 	Ctx                  context.Context
-	Logger               *zap.Logger
 	NodeAddr             string
 	RegistryContractAddr string
 	ContractABI          string

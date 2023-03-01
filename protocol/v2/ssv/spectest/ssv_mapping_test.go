@@ -17,7 +17,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -28,10 +28,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
-
-func init() {
-	logex.Build("ssv-mapping-test", zapcore.DebugLevel, nil)
-}
 
 func TestSSVMapping(t *testing.T) {
 	path, _ := os.Getwd()
@@ -233,7 +229,9 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
-	ret := baseRunnerForRole(base.BeaconRoleType, base, ks)
+	logger := logex.TestLogger(t)
+
+	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
 	// specific for blinded block
 	if blindedBlocks, ok := runnerMap["ProducesBlindedBlocks"]; ok {
@@ -253,7 +251,8 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 }
 
 func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	config := qbfttesting.TestingConfig(ks, spectypes.BNRoleAttester)
+	logger := logex.TestLogger(t)
+	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.Share,
@@ -298,34 +297,34 @@ func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.
 	return newInst
 }
 
-func baseRunnerForRole(role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
+func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
 	switch role {
 	case spectypes.BNRoleAttester:
-		ret := ssvtesting.AttesterRunner(ks)
+		ret := ssvtesting.AttesterRunner(logger, ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleAggregator:
-		ret := ssvtesting.AggregatorRunner(ks)
+		ret := ssvtesting.AggregatorRunner(logger, ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleProposer:
-		ret := ssvtesting.ProposerRunner(ks)
+		ret := ssvtesting.ProposerRunner(logger, ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommittee:
-		ret := ssvtesting.SyncCommitteeRunner(ks)
+		ret := ssvtesting.SyncCommitteeRunner(logger, ks)
 		ret.(*runner.SyncCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommitteeContribution:
-		ret := ssvtesting.SyncCommitteeContributionRunner(ks)
+		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleValidatorRegistration:
-		ret := ssvtesting.ValidatorRegistrationRunner(ks)
+		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
-		ret := ssvtesting.UnknownDutyTypeRunner(ks)
+		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	default:

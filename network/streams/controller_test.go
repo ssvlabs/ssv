@@ -3,14 +3,15 @@ package streams
 import (
 	"bytes"
 	"context"
+	"testing"
+	"time"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/utils/logex"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"testing"
-	"time"
 )
 
 func TestStreamCtrl(t *testing.T) {
@@ -18,8 +19,7 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	// logger := zaptest.NewLogger(t)
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 	ctrl0 := NewStreamController(context.Background(), hosts[0], genesis.New(), time.Second)
 	ctrl1 := NewStreamController(context.Background(), hosts[1], genesis.New(), time.Second)
 
