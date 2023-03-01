@@ -8,7 +8,7 @@ import (
 // for consensus to proceed.
 //
 // Compact always discards message from previous rounds.
-// Compact discards messages from below their current round, only if the state is decided.
+// Compact discards all non-commit messages, only if the given state is decided.
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
@@ -32,6 +32,7 @@ func compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage, comp
 	state.ProposeContainer = compactContainer(state.ProposeContainer, state.Round, state.Decided)
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
+	state.CommitContainer = compactContainer(state.CommitContainer, state.Round, false)
 
 	// TODO: disabled for now as we depend on the commit messages to check for
 	// whether we need to save an incoming decided message or not (see UponDecided).
