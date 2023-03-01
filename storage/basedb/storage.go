@@ -36,7 +36,7 @@ type IDb interface {
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error
 	Update(fn func(Txn) error) error
-	Close() error
+	Close(logger *zap.Logger) error
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

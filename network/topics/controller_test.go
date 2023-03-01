@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/logex"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/logex"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -25,7 +26,7 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	nPeers := 4
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
@@ -40,7 +41,7 @@ func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := genesis.New()
-	peers := newPeers(ctx, t, nPeers, false, true, f)
+	peers := newPeers(ctx, logger, t, nPeers, false, true, f)
 	baseTest(t, ctx, logger, peers, pks, f, 1, 2)
 }
 
@@ -180,10 +181,10 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, t, msgValidator, msgID, fork)
+		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, fork)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -202,15 +203,13 @@ func newPeers(ctx context.Context, t *testing.T, n int, msgValidator, msgID bool
 	return peers
 }
 
-func newPeer(ctx context.Context, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
-	ds, err := discovery.NewLocalDiscovery(ctx, zap.L(), h)
+	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
 	require.NoError(t, err)
 
 	var p *P
-	// logger := zaptest.NewLogger(t)
-	logger := zap.L()
 	var midHandler MsgIDHandler
 	if msgID {
 		midHandler = NewMsgIDHandler(ctx, fork, 2*time.Minute)

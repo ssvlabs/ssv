@@ -39,9 +39,8 @@ type DutyFetcher interface {
 }
 
 // newDutyFetcher creates a new instance
-func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
+func newDutyFetcher(beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
 	df := dutyFetcher{
-		logger:         logger.Named("operator/dutyFetcher"),
 		ethNetwork:     network,
 		beaconClient:   beaconClient,
 		indicesFetcher: indicesFetcher,
@@ -52,7 +51,7 @@ func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetch
 
 // dutyFetcher is internal implementation of DutyFetcher
 type dutyFetcher struct {
-	logger         *zap.Logger
+	logger         *zap.Logger // struct logger to implement eth2client.EventsProvider
 	ethNetwork     beacon.Network
 	beaconClient   beacon.Beacon
 	indicesFetcher validatorsIndicesFetcher

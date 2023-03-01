@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/utils/logex"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -37,7 +36,6 @@ func (v Version) String() string {
 
 // AbiParser serves as a parsing client for events from contract
 type AbiParser struct {
-	Logger  *zap.Logger
 	Version AbiVersion
 }
 
@@ -48,7 +46,7 @@ func NewParser(logger *zap.Logger, version Version) AbiParser {
 	case V2:
 		parserVersion = &abiparser.AbiV2{}
 	}
-	return AbiParser{Logger: logger, Version: parserVersion}
+	return AbiParser{Version: parserVersion}
 }
 
 // ParseOperatorRegistrationEvent parses an OperatorRegistrationEvent
@@ -92,7 +90,7 @@ type AbiVersion interface {
 }
 
 // LoadABI enables to load a custom abi json
-func LoadABI(abiFilePath string) error {
+func LoadABI(logger *zap.Logger, abiFilePath string) error {
 	jsonFile, err := os.Open(filepath.Clean(abiFilePath))
 	if err != nil {
 		return errors.Wrap(err, "failed to open abi")
@@ -103,12 +101,12 @@ func LoadABI(abiFilePath string) error {
 		return errors.Wrap(err, "failed to read abi")
 	}
 	if err := jsonFile.Close(); err != nil {
-		logex.GetLogger().Warn("failed to close abi json", zap.Error(err))
+		logger.Warn("failed to close abi json", zap.Error(err))
 	}
 	s := string(raw)
 
 	if err := jsonFile.Close(); err != nil {
-		logex.GetLogger().Warn("failed to close abi json", zap.Error(err))
+		logger.Warn("failed to close abi json", zap.Error(err))
 	}
 
 	// assert valid JSON

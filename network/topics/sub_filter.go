@@ -1,12 +1,13 @@
 package topics
 
 import (
+	"sync"
+
 	"github.com/bloxapp/ssv/network/forks"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
-	"sync"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
@@ -18,7 +19,6 @@ type SubFilter interface {
 }
 
 type subFilter struct {
-	logger    *zap.Logger
 	fork      forks.Fork
 	whitelist *dynamicWhitelist
 	subsLimit int
@@ -26,7 +26,6 @@ type subFilter struct {
 
 func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter {
 	return &subFilter{
-		logger:    logger.Named("subFilter"),
 		fork:      fork,
 		whitelist: newWhitelist(),
 		subsLimit: subsLimit,

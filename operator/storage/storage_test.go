@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/eth1"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -22,7 +20,7 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -30,7 +28,7 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 	db, err := ssvstorage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
-	defer db.Close()
+	defer db.Close(logger)
 
 	operatorStorage := storage{
 		db: db,
@@ -48,7 +46,6 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 }
 
 func TestSetupPrivateKey(t *testing.T) {
-	logger := logex.GetLogger()
 	tests := []struct {
 		name           string
 		existKey       string
@@ -115,9 +112,10 @@ func TestSetupPrivateKey(t *testing.T) {
 				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(logex.Build("test", zapcore.DebugLevel, nil), options)
+			logger := logex.TestLogger(t)
+			db, err := ssvstorage.GetStorageFactory(logger, options)
 			require.NoError(t, err)
-			defer db.Close()
+			defer db.Close(logger)
 
 			operatorStorage := storage{
 				db: db,
@@ -171,7 +169,7 @@ func TestSetupPrivateKey(t *testing.T) {
 }
 
 func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",

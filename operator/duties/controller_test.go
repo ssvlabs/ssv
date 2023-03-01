@@ -2,11 +2,13 @@ package duties
 
 import (
 	"context"
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/bloxapp/ssv/utils/logex"
 	"sync"
 	"testing"
 	"time"
+
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -19,14 +21,14 @@ import (
 )
 
 func TestDutyController_ListenToTicker(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	var wg sync.WaitGroup
 
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
 	mockExecutor := mocks.NewMockDutyExecutor(mockCtrl)
-	mockExecutor.EXPECT().ExecuteDuty(logger, gomock.Any()).DoAndReturn(func(duty *spectypes.Duty) error {
+	mockExecutor.EXPECT().ExecuteDuty(gomock.Any(), gomock.Any()).DoAndReturn(func(logger *zap.Logger, duty *spectypes.Duty) error {
 		require.NotNil(t, duty)
 		require.True(t, duty.Slot > 0)
 		wg.Done()
@@ -34,7 +36,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 	}).AnyTimes()
 
 	mockFetcher := mocks.NewMockDutyFetcher(mockCtrl)
-	mockFetcher.EXPECT().GetDuties(logger, gomock.Any()).DoAndReturn(func(slot phase0.Slot) ([]spectypes.Duty, error) {
+	mockFetcher.EXPECT().GetDuties(gomock.Any(), gomock.Any()).DoAndReturn(func(logger *zap.Logger, slot phase0.Slot) ([]spectypes.Duty, error) {
 		return []spectypes.Duty{{Slot: slot, PubKey: phase0.BLSPubKey{}}}, nil
 	}).AnyTimes()
 
@@ -67,7 +69,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 }
 
 func TestDutyController_ShouldExecute(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	ctrl := dutyController{ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 

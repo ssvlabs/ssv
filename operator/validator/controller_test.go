@@ -23,12 +23,8 @@ import (
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
-func init() {
-	logex.Build("test", zap.DebugLevel, nil)
-}
-
 func TestHandleNonCommitteeMessages(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
 	go ctr.handleRouterMessages(logger)
 
@@ -131,7 +127,7 @@ func TestGetIndices(t *testing.T) {
 		}),
 	}
 
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	ctr := setupController(logger, validators)
 	indices := ctr.GetValidatorsIndices(logger)
 	logger.Info("result", zap.Any("indices", indices))

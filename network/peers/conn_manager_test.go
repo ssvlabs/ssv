@@ -2,18 +2,19 @@ package peers
 
 import (
 	"context"
+	"math/rand"
+	"testing"
+
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/utils/logex"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"math/rand"
-	"testing"
 )
 
 func TestTagBestPeers(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 	connMgrMock := newConnMgr()
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)

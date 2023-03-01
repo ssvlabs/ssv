@@ -21,8 +21,7 @@ const (
 
 // BadgerDb struct
 type BadgerDb struct {
-	db     *badger.DB
-	logger *zap.Logger
+	db *badger.DB
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -61,7 +60,6 @@ func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 
 	_db := BadgerDb{
 		db:     db,
-		logger: logger.Named("BadgerDb"),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -75,7 +73,7 @@ func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 	// Start periodic garbage collection.
 	if options.GCInterval > 0 {
 		_db.wg.Add(1)
-		go _db.periodicallyCollectGarbage(options.GCInterval)
+		go _db.periodicallyCollectGarbage(logger, options.GCInterval)
 	}
 
 	return &_db, nil
@@ -230,7 +228,7 @@ func (b *BadgerDb) RemoveAllByCollection(prefix []byte) error {
 }
 
 // Close closes the database.
-func (b *BadgerDb) Close() error {
+func (b *BadgerDb) Close(logger *zap.Logger) error {
 	// Stop & wait for background goroutines.
 	b.cancel()
 	b.wg.Wait()
@@ -238,7 +236,7 @@ func (b *BadgerDb) Close() error {
 	// Close the database.
 	err := b.db.Close()
 	if err != nil {
-		b.logger.Fatal("failed to close db", zap.Error(err))
+		logger.Fatal("failed to close db", zap.Error(err))
 	}
 	return err
 }

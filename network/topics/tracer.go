@@ -2,11 +2,12 @@ package topics
 
 import (
 	"encoding/hex"
+	"sync/atomic"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
-	"sync/atomic"
 )
 
 // pubsub tracer states
@@ -18,7 +19,7 @@ const (
 // psTracer helps to trace pubsub events
 // it can run with logging in addition to reporting (on by default)
 type psTracer struct {
-	logger *zap.Logger
+	logger *zap.Logger // struct logger to implement pubsub.EventTracer
 	state  uint32
 }
 

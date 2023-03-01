@@ -43,7 +43,6 @@ type DutyController interface {
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-	Logger              *zap.Logger
 	Ctx                 context.Context
 	BeaconClient        beaconprotocol.Beacon
 	EthNetwork          beaconprotocol.Network
@@ -75,7 +74,7 @@ var secPerSlot int64 = 12
 
 // NewDutyController creates a new instance of DutyController
 func NewDutyController(opts *ControllerOptions) DutyController {
-	fetcher := newDutyFetcher(opts.Logger, opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
+	fetcher := newDutyFetcher(opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
 	dc := dutyController{
 		ctx:                 opts.Ctx,
 		ethNetwork:          opts.EthNetwork,

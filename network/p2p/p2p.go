@@ -52,7 +52,7 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	logger *zap.Logger
+	logger *zap.Logger // struct logger to log in io.Closer interface
 	fork   forks.Fork
 	cfg    *Config
 

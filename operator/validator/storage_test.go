@@ -7,12 +7,12 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -48,7 +48,7 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -56,7 +56,7 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 
 	db, err := storage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
-	defer db.Close()
+	defer db.Close(logger)
 
 	collection := NewCollection(CollectionOptions{
 		DB: db,

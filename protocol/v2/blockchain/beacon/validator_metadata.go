@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/queue"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
@@ -64,8 +63,8 @@ func (m *ValidatorMetadata) Slashed() bool {
 type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
-	logger := logex.GetLogger().Named("UpdateValidatorsMetadata")
+func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
+	logger = logger.Named("UpdateValidatorsMetadata")
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -125,7 +124,8 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 }
 
 // UpdateValidatorsMetadataBatch updates the given public keys in batches
-func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
+func UpdateValidatorsMetadataBatch(logger *zap.Logger,
+	pubKeys [][]byte,
 	queue queue.Queue,
 	collection ValidatorMetadataStorage,
 	bc Beacon,
@@ -133,7 +133,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	batchSize int) {
 	batch(pubKeys, queue, func(pks [][]byte) func() error {
 		return func() error {
-			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
+			return UpdateValidatorsMetadata(logger, pks, collection, bc, onUpdated)
 		}
 	}, batchSize)
 }

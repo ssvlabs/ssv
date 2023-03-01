@@ -14,7 +14,7 @@ import (
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 // TODO: add IP limiting
 type connGater struct {
-	logger *zap.Logger
+	logger *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	idx    peers.ConnectionIndex
 }
 

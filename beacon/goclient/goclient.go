@@ -95,7 +95,6 @@ type Client interface {
 // goClient implementing Beacon struct
 type goClient struct {
 	ctx            context.Context
-	logger         *zap.Logger
 	network        beaconprotocol.Network
 	client         Client
 	indicesMapLock sync.Mutex
@@ -125,7 +124,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
 		ctx:            opt.Context,
-		logger:         logger,
 		network:        network,
 		client:         httpClient.(*http.Service),
 		indicesMapLock: sync.Mutex{},

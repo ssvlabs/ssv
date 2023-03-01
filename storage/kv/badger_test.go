@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/logex"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/logex"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 func TestBadgerEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
@@ -87,7 +88,7 @@ func TestBadgerEndToEnd(t *testing.T) {
 }
 
 func TestBadgerDb_GetAll(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -96,7 +97,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 	t.Run("100_items", func(t *testing.T) {
 		db, err := New(logger, options)
 		require.NoError(t, err)
-		defer db.Close()
+		defer db.Close(logger)
 
 		getAllTest(t, 100, db)
 	})
@@ -104,7 +105,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 	t.Run("10K_items", func(t *testing.T) {
 		db, err := New(logger, options)
 		require.NoError(t, err)
-		defer db.Close()
+		defer db.Close(logger)
 
 		getAllTest(t, 10000, db)
 	})
@@ -112,21 +113,21 @@ func TestBadgerDb_GetAll(t *testing.T) {
 	t.Run("100K_items", func(t *testing.T) {
 		db, err := New(logger, options)
 		require.NoError(t, err)
-		defer db.Close()
+		defer db.Close(logger)
 
 		getAllTest(t, 100000, db)
 	})
 }
 
 func TestBadgerDb_GetMany(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
 	}
 	db, err := New(logger, options)
 	require.NoError(t, err)
-	defer db.Close()
+	defer db.Close(logger)
 
 	prefix := []byte("prefix")
 	var i uint64
@@ -146,14 +147,14 @@ func TestBadgerDb_GetMany(t *testing.T) {
 }
 
 func TestBadgerDb_SetMany(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
 	}
 	db, err := New(logger, options)
 	require.NoError(t, err)
-	defer db.Close()
+	defer db.Close(logger)
 
 	prefix := []byte("prefix")
 	var values [][]byte
@@ -180,7 +181,7 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func getAllTest(t *testing.T, n int, db basedb.IDb) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	// populating DB
 	prefix := []byte("test")
 	for i := 0; i < n; i++ {

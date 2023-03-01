@@ -5,8 +5,9 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
@@ -25,9 +26,6 @@ import (
 type HostProvider interface {
 	Host() host.Host
 }
-
-// LoggerFactory helps to inject loggers
-type LoggerFactory func(string) *zap.Logger
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {

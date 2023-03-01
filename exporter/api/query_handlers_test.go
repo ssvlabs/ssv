@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -22,7 +21,7 @@ import (
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -40,7 +39,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	tests := []struct {
 		expectedErr string
@@ -79,9 +78,9 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logex.Build("TestHandleDecidedQuery", zapcore.DebugLevel, nil)
+	logger := logex.TestLogger(t)
 
-	db, l, done := newDBAndLoggerForTest()
+	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
 	roles := []spectypes.BeaconRole{
@@ -187,8 +186,7 @@ func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *Ne
 	}
 }
 
-func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
-	logger := zap.L()
+func newDBAndLoggerForTest(logger *zap.Logger) (basedb.IDb, *zap.Logger, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -197,7 +195,7 @@ func newDBAndLoggerForTest() (basedb.IDb, *zap.Logger, func()) {
 		return nil, nil, func() {}
 	}
 	return db, logger, func() {
-		db.Close()
+		db.Close(logger)
 	}
 }
 

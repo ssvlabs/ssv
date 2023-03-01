@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"go.uber.org/zap"
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -17,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -28,19 +28,15 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
-func init() {
-	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
-}
-
 func TestSubmitProposal(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	operatorKey := "123456789"
 
 	db, collection := createStorage(t)
-	defer db.Close()
+	defer db.Close(logger)
 	network := beacon.NewNetwork(core.PraterNetwork, 0)
 	populateStorage(t, logger, collection, operatorKey)
 
@@ -106,7 +102,7 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",

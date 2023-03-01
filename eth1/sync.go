@@ -133,34 +133,33 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 // HandleEventResult handles the result of an event
 func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
 	var errs []error
-	var loggerWithData *zap.Logger
 	syncTitle := "history"
 	if ongoingSync {
 		syncTitle = "ongoing"
 	}
 
 	if err != nil || len(logFields) > 0 {
-		loggerWithData = logger.With(
+		logger = logger.With(
 			zap.String("event", event.Name),
 			zap.Uint64("block", event.Log.BlockNumber),
 			zap.String("txHash", event.Log.TxHash.Hex()),
 		)
 		if len(logFields) > 0 {
-			loggerWithData = loggerWithData.With(logFields...)
+			logger = logger.With(logFields...)
 		}
 	}
 	if err != nil {
-		loggerWithData = loggerWithData.With(zap.Error(err))
+		logger = logger.With(zap.Error(err))
 		var malformedEventErr *abiparser.MalformedEventError
 
 		if errors.As(err, &malformedEventErr) {
-			loggerWithData.Warn(fmt.Sprintf("could not handle %s sync event, the event is malformed", syncTitle))
+			logger.Warn(fmt.Sprintf("could not handle %s sync event, the event is malformed", syncTitle))
 		} else {
-			loggerWithData.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
+			logger.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
 			errs = append(errs, err)
 		}
-	} else if loggerWithData != nil {
-		loggerWithData.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
+	} else if logger != nil {
+		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
 	return errs

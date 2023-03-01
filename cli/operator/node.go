@@ -206,7 +206,7 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 		return nil, errors.Wrap(err, "failed to open db")
 	}
 	reopenDb := func() error {
-		if err := db.Close(); err != nil {
+		if err := db.Close(logger); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
 		db, err = storage.GetStorageFactory(logger, cfg.DBOptions)
@@ -310,7 +310,6 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorPubKey string, db b
 
 func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
-	cfg.ETH2Options.Logger = logger
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cl, err := goclient.New(logger, cfg.ETH2Options)
 	if err != nil {
@@ -322,7 +321,7 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	logger.Info("using registry contract address", zap.String("address", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
-		if err = eth1.LoadABI(cfg.ETH1Options.RegistryContractABI); err != nil {
+		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
 			logger.Fatal("failed to load ABI JSON", zap.Error(err))
 		}
 	}

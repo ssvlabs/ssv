@@ -43,7 +43,7 @@ type Storage interface {
 type storage struct {
 	db      basedb.IDb
 	network beacon.Network
-	logger  *zap.Logger
+	logger  *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock    sync.RWMutex
 }
 

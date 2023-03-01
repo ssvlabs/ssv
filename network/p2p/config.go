@@ -66,8 +66,6 @@ type Config struct {
 	UserAgent string
 	// ForkVersion to use
 	ForkVersion forksprotocol.ForkVersion
-	// Logger to used by network services
-	Logger *zap.Logger
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
 

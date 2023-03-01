@@ -2,13 +2,14 @@ package storage
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/utils/logex"
 	"strings"
 	"testing"
 
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -17,8 +18,8 @@ import (
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
-	logger := logex.GetLogger()
-	storage, done := newStorageForTest()
+	logger := logex.TestLogger(t)
+	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
 
@@ -121,8 +122,8 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	logger := logex.GetLogger()
-	storage, done := newStorageForTest()
+	logger := logex.TestLogger(t)
+	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
 
@@ -155,8 +156,7 @@ func TestStorage_ListOperators(t *testing.T) {
 	})
 }
 
-func newStorageForTest() (OperatorsCollection, func()) {
-	logger := zap.L()
+func newStorageForTest(logger *zap.Logger) (OperatorsCollection, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -166,6 +166,6 @@ func newStorageForTest() (OperatorsCollection, func()) {
 	}
 	s := NewOperatorsStorage(db, []byte("test"))
 	return s, func() {
-		db.Close()
+		db.Close(logger)
 	}
 }

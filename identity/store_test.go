@@ -6,8 +6,6 @@ import (
 
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/network/commons"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -15,17 +13,13 @@ import (
 	"github.com/bloxapp/ssv/utils/logex"
 )
 
-func init() {
-	logex.Build("test", zap.DebugLevel, nil)
-}
-
 var (
 	sk  = "ba03f90c6e2e6d67e4a4682621412ddbafeb6bffdc169df8f2bd31f193f001d4"
 	sk2 = "2340652c367bf8d17de1bc0454e6aa73e2eedd4a51686887d98d6b8813e5fb4a"
 )
 
 func TestSetupPrivateKey(t *testing.T) {
-	logger := logex.GetLogger()
+	logger := logex.TestLogger(t)
 
 	tests := []struct {
 		name      string
@@ -62,9 +56,9 @@ func TestSetupPrivateKey(t *testing.T) {
 				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(logex.Build("test", zapcore.DebugLevel, nil), options)
+			db, err := ssvstorage.GetStorageFactory(logex.TestLogger(t), options)
 			require.NoError(t, err)
-			defer db.Close()
+			defer db.Close(logger)
 
 			p2pStorage := identityStore{
 				db: db,
