@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 var (
@@ -18,8 +20,8 @@ var (
 
 // RecipientData the public data of a recipient
 type RecipientData struct {
-	Fee   common.Address `json:"feeRecipientAddress"`
-	Owner common.Address `json:"ownerAddress"`
+	FeeRecipient bellatrix.ExecutionAddress `json:"feeRecipientAddress"`
+	Owner        common.Address             `json:"ownerAddress"`
 }
 
 // RecipientsCollection is the interface for managing recipients data
@@ -83,7 +85,7 @@ func (s *recipientsStorage) SaveRecipientData(recipientData *RecipientData) (*Re
 		return nil, errors.Wrap(err, "could not get recipient data")
 	}
 	// same fee recipient
-	if found && r.Fee == recipientData.Fee {
+	if found && r.FeeRecipient == recipientData.FeeRecipient {
 		return nil, nil
 	}
 

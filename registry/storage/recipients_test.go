@@ -17,9 +17,9 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	defer done()
 
 	recipientData := RecipientData{
-		Fee:   common.BytesToAddress([]byte("0x2")),
 		Owner: common.BytesToAddress([]byte("0x1")),
 	}
+	copy(recipientData.FeeRecipient[:], "0x2")
 
 	t.Run("get non-existing recipient", func(t *testing.T) {
 		nonExistingRecipient, found, err := storage.GetRecipientData(recipientData.Owner)
@@ -35,22 +35,20 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, recipientData.Owner, recipientDataFromDB.Owner)
-		require.Equal(t, recipientData.Fee, recipientDataFromDB.Fee)
+		require.Equal(t, recipientData.FeeRecipient, recipientDataFromDB.FeeRecipient)
 		require.Equal(t, recipientData.Owner, rd.Owner)
-		require.Equal(t, recipientData.Fee, rd.Fee)
+		require.Equal(t, recipientData.FeeRecipient, rd.FeeRecipient)
 	})
 
 	t.Run("create existing recipient", func(t *testing.T) {
-		rd, err := storage.SaveRecipientData(&RecipientData{
-			Fee:   common.BytesToAddress([]byte("0x2")),
+		rdToSave := &RecipientData{
 			Owner: common.BytesToAddress([]byte("0x2")),
-		})
+		}
+		copy(rdToSave.FeeRecipient[:], "0x2")
+		rd, err := storage.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
-		rdDup, err := storage.SaveRecipientData(&RecipientData{
-			Fee:   common.BytesToAddress([]byte("0x2")),
-			Owner: common.BytesToAddress([]byte("0x2")),
-		})
+		rdDup, err := storage.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.Nil(t, rdDup)
 		rdFromDB, found, err := storage.GetRecipientData(rd.Owner)
@@ -60,30 +58,31 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 
 	t.Run("update existing recipient", func(t *testing.T) {
-		rd, err := storage.SaveRecipientData(&RecipientData{
-			Fee:   common.BytesToAddress([]byte("0x2")),
+		rdToSave := &RecipientData{
 			Owner: common.BytesToAddress([]byte("0x3")),
-		})
+		}
+		copy(rdToSave.FeeRecipient[:], "0x2")
+		rd, err := storage.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
-		rdNew, err := storage.SaveRecipientData(&RecipientData{
-			Fee:   common.BytesToAddress([]byte("0x3")),
-			Owner: common.BytesToAddress([]byte("0x3")),
-		})
+
+		copy(rdToSave.FeeRecipient[:], "0x3")
+		rdNew, err := storage.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rdNew)
 		rdFromDB, found, err := storage.GetRecipientData(rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, rdNew.Owner, rdFromDB.Owner)
-		require.Equal(t, rdNew.Fee, rdFromDB.Fee)
+		require.Equal(t, rdNew.FeeRecipient, rdFromDB.FeeRecipient)
 	})
 
 	t.Run("delete recipient", func(t *testing.T) {
-		rd, err := storage.SaveRecipientData(&RecipientData{
-			Fee:   common.BytesToAddress([]byte("0x2")),
+		rdToSave := &RecipientData{
 			Owner: common.BytesToAddress([]byte("0x4")),
-		})
+		}
+		copy(rdToSave.FeeRecipient[:], "0x2")
+		rd, err := storage.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 

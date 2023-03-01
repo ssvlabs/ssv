@@ -359,10 +359,11 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	event abiparser.FeeRecipientAddressUpdatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	r, err := c.recipientsCollection.SaveRecipientData(&registrystorage.RecipientData{
+	recipientData := &registrystorage.RecipientData{
 		Owner: event.Owner,
-		Fee:   event.RecipientAddress,
-	})
+	}
+	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
+	r, err := c.recipientsCollection.SaveRecipientData(recipientData)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not save recipient data")
 	}
@@ -370,7 +371,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	if ongoingSync && r != nil {
 		_ = c.validatorsMap.ForEach(func(v *validator.Validator) error {
 			if bytes.Equal(v.Share.OwnerAddress.Bytes(), r.Owner.Bytes()) {
-				v.Share.FeeRecipient = r.Fee
+				v.Share.FeeRecipient = r.FeeRecipient
 			}
 			return nil
 		})

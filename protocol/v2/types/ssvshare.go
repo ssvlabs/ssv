@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -70,11 +71,11 @@ func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.Rec
 	}
 	if !found {
 		// use owner address as a default for the fee recipient
-		s.FeeRecipient = s.OwnerAddress
+		copy(s.FeeRecipient[:], s.OwnerAddress.Bytes())
 		return nil
 	}
 
-	s.FeeRecipient = r.Fee
+	s.FeeRecipient = r.FeeRecipient
 	return nil
 }
 
@@ -123,5 +124,5 @@ type Metadata struct {
 	OwnerAddress   common.Address
 	Liquidated     bool
 	ClusterID      []byte
-	FeeRecipient   common.Address
+	FeeRecipient   bellatrix.ExecutionAddress
 }
