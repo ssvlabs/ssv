@@ -18,47 +18,47 @@ type eventData interface {
 }
 
 type operatorAddedEventYAML struct {
-	Id        uint64 `yaml:"Id"`
+	Id        uint64 `yaml:"ID"`
 	Owner     string `yaml:"Owner"`
 	PublicKey string `yaml:"PublicKey"`
 }
 
 type OperatorRemovedEventYAML struct {
-	Id uint64 `yaml:"Id"`
+	Id uint64 `yaml:"ID"`
 }
 
 type validatorAddedEventYAML struct {
 	PublicKey       string   `yaml:"PublicKey"`
-	OwnerAddress    string   `yaml:"OwnerAddress"`
+	OwnerAddress    string   `yaml:"Owner"`
 	OperatorIds     []uint64 `yaml:"OperatorIds"`
 	SharePublicKeys []string `yaml:"SharePublicKeys"`
 	EncryptedKeys   []string `yaml:"EncryptedKeys"`
 }
 
 type ValidatorRemovedEventYAML struct {
-	OwnerAddress string   `yaml:"OwnerAddress"`
+	OwnerAddress string   `yaml:"Owner"`
 	OperatorIds  []uint64 `yaml:"OperatorIds"`
 	PublicKey    string   `yaml:"PublicKey"`
 }
 
-type PodLiquidatedEventYAML struct {
-	OwnerAddress string   `yaml:"OwnerAddress"`
+type ClusterLiquidatedEventYAML struct {
+	OwnerAddress string   `yaml:"Owner"`
 	OperatorIds  []uint64 `yaml:"OperatorIds"`
 }
 
-type PodEnabledEventYAML struct {
-	OwnerAddress string   `yaml:"OwnerAddress"`
+type ClusterReactivatedEventYAML struct {
+	OwnerAddress string   `yaml:"Owner"`
 	OperatorIds  []uint64 `yaml:"OperatorIds"`
 }
 
-type FeeRecipientAddressAddedEventYAML struct {
-	OwnerAddress     string `yaml:"OwnerAddress"`
+type FeeRecipientAddressUpdatedEventYAML struct {
+	OwnerAddress     string `yaml:"Owner"`
 	RecipientAddress string `yaml:"RecipientAddress"`
 }
 
 func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorAddedEvent{
-		Id:        e.Id,
+		ID:        e.Id,
 		Owner:     common.HexToAddress(e.Owner),
 		PublicKey: []byte(e.PublicKey),
 	}, nil
@@ -66,7 +66,7 @@ func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
 
 func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorRemovedEvent{
-		Id: e.Id,
+		ID: e.Id,
 	}, nil
 }
 
@@ -85,7 +85,7 @@ func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 	}
 	return abiparser.ValidatorAddedEvent{
 		PublicKey:       pubKey,
-		OwnerAddress:    common.HexToAddress(e.OwnerAddress),
+		Owner:           common.HexToAddress(e.OwnerAddress),
 		OperatorIds:     e.OperatorIds,
 		SharePublicKeys: sharePubKeys,
 		EncryptedKeys:   encryptedKeys,
@@ -94,29 +94,29 @@ func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 
 func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.ValidatorRemovedEvent{
-		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-		OperatorIds:  e.OperatorIds,
-		PublicKey:    []byte(strings.TrimPrefix(e.PublicKey, "0x")),
+		Owner:       common.HexToAddress(e.OwnerAddress),
+		OperatorIds: e.OperatorIds,
+		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
 	}, nil
 }
 
-func (e *PodLiquidatedEventYAML) toEventData() (interface{}, error) {
-	return abiparser.PodLiquidatedEvent{
-		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-		OperatorIds:  e.OperatorIds,
+func (e *ClusterLiquidatedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.ClusterLiquidatedEvent{
+		Owner:       common.HexToAddress(e.OwnerAddress),
+		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
-func (e *PodEnabledEventYAML) toEventData() (interface{}, error) {
-	return abiparser.PodEnabledEvent{
-		OwnerAddress: common.HexToAddress(e.OwnerAddress),
-		OperatorIds:  e.OperatorIds,
+func (e *ClusterReactivatedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.ClusterReactivatedEvent{
+		Owner:       common.HexToAddress(e.OwnerAddress),
+		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
-func (e *FeeRecipientAddressAddedEventYAML) toEventData() (interface{}, error) {
-	return abiparser.FeeRecipientAddressAddedEvent{
-		OwnerAddress:     common.HexToAddress(e.OwnerAddress),
+func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error) {
+	return abiparser.FeeRecipientAddressUpdatedEvent{
+		Owner:            common.HexToAddress(e.OwnerAddress),
 		RecipientAddress: common.HexToAddress(e.RecipientAddress),
 	}, nil
 }
@@ -145,16 +145,16 @@ func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 		var v ValidatorRemovedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "PodLiquidated":
-		var v PodLiquidatedEventYAML
+	case "ClusterLiquidated":
+		var v ClusterLiquidatedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "PodEnabled":
-		var v PodEnabledEventYAML
+	case "ClusterReactivated":
+		var v ClusterReactivatedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
-	case "FeeRecipientAddressAdded":
-		var v FeeRecipientAddressAddedEventYAML
+	case "FeeRecipientAddressUpdated":
+		var v FeeRecipientAddressUpdatedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
 	default:

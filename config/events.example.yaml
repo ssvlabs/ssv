@@ -30,7 +30,7 @@
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
     SharePublicKeys:
-      - <share-public-key [hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
+      - <share-public-key [bls hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
       - <share-public-key>
       - <share-public-key>
       - <share-public-key>
@@ -59,7 +59,7 @@
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
     SharePublicKeys:
-      - <share-public-key [hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
+      - <share-public-key [bls hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
       - <share-public-key>
       - <share-public-key>
       - <share-public-key>
@@ -75,17 +75,17 @@
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
     PublicKey: <validator-public-key>
 - Log:
-  Name: PodLiquidated
+  Name: ClusterLiquidated
   Data:
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
 - Log:
-  Name: PodEnabled
+  Name: ClusterReactivated
   Data:
     OwnerAddress: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
 - Log:
-  Name: FeeRecipientAddressAdded
+  Name: FeeRecipientAddressUpdated
   Data:
     OwnerAddress: <owner-address>
     RecipientAddress: <recipient-address>

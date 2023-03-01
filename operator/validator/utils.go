@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -12,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -52,7 +52,7 @@ func ShareFromValidatorEvent(
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
-	validatorShare.OwnerAddress = validatorAddedEvent.OwnerAddress
+	validatorShare.OwnerAddress = validatorAddedEvent.Owner
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
@@ -75,14 +75,13 @@ func ShareFromValidatorEvent(
 			}
 
 			shareSecret = &bls.SecretKey{}
-			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, string(validatorAddedEvent.EncryptedKeys[i]))
+			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, validatorAddedEvent.EncryptedKeys[i])
 			if err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to decrypt share private key"),
 				}
 			}
-			decryptedSharePrivateKey = strings.Replace(decryptedSharePrivateKey, "0x", "", 1)
-			if err := shareSecret.SetHexString(decryptedSharePrivateKey); err != nil {
+			if err = shareSecret.SetLittleEndian(decryptedSharePrivateKey); err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to set decrypted share private key"),
 				}

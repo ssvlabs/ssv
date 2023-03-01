@@ -16,7 +16,7 @@ import (
 
 const (
 	// prod contract genesis
-	defaultSyncOffset string = "4e706f"
+	defaultSyncOffset string = "5140591"
 	// stage contract genesis -> 49e08f
 )
 
@@ -36,16 +36,16 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return HexStringToSyncOffset(defaultSyncOffset)
+	return StringToSyncOffset(defaultSyncOffset)
 }
 
-// HexStringToSyncOffset converts an hex string to SyncOffset
-func HexStringToSyncOffset(shex string) *SyncOffset {
-	if len(shex) == 0 {
+// StringToSyncOffset converts string to SyncOffset
+func StringToSyncOffset(syncOffset string) *SyncOffset {
+	if len(syncOffset) == 0 {
 		return nil
 	}
 	offset := new(SyncOffset)
-	offset.SetString(shex, 16)
+	offset.SetString(syncOffset, 10)
 	return offset
 }
 

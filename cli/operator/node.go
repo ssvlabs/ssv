@@ -150,7 +150,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("failed to load local events", zap.Error(err))
 			}
 		} else {
-			if err := operatorNode.StartEth1(logger, eth1.HexStringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+			if err := operatorNode.StartEth1(logger, eth1.StringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
 				logger.Fatal("failed to start eth1", zap.Error(err))
 			}
 		}

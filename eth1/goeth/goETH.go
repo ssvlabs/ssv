@@ -384,22 +384,22 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.PodLiquidated:
-		parsed, err := abiParser.ParsePodLiquidatedEvent(vLog, contractAbi)
+	case abiparser.ClusterLiquidated:
+		parsed, err := abiParser.ParseClusterLiquidatedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.PodEnabled:
-		parsed, err := abiParser.ParsePodEnabledEvent(vLog, contractAbi)
+	case abiparser.ClusterReactivated:
+		parsed, err := abiParser.ParseClusterReactivatedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
-	case abiparser.FeeRecipientAddressAdded:
-		parsed, err := abiParser.ParseFeeRecipientAddressAddedEvent(vLog, contractAbi)
+	case abiparser.FeeRecipientAddressUpdated:
+		parsed, err := abiParser.ParseFeeRecipientAddressUpdatedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err

@@ -78,24 +78,24 @@ func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.Rec
 	return nil
 }
 
-// SetPodID set the given share object with computed pod ID
-func (s *SSVShare) SetPodID() error {
+// SetClusterID set the given share object with computed cluster ID
+func (s *SSVShare) SetClusterID() error {
 	oids := make([]uint64, 0)
 	for _, o := range s.Committee {
 		oids = append(oids, uint64(o.OperatorID))
 	}
 
-	hash, err := ComputePodIDHash(s.OwnerAddress.Bytes(), oids)
+	hash, err := ComputeClusterIDHash(s.OwnerAddress.Bytes(), oids)
 	if err != nil {
-		return errors.New("could not compute share pod id")
+		return errors.New("could not compute share cluster id")
 	}
 
-	s.PodID = hash
+	s.ClusterID = hash
 	return nil
 }
 
-// ComputePodIDHash will compute pod ID hash with given owner address and operator ids
-func ComputePodIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
+// ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
+func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
 	// Create a new hash
 	hash := sha256.New()
 
@@ -122,6 +122,6 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
-	PodID          []byte
+	ClusterID      []byte
 	FeeRecipient   common.Address
 }

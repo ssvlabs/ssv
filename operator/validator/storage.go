@@ -157,10 +157,10 @@ func ByOperatorIDAndNotLiquidated(operatorID spectypes.OperatorID) func(share *t
 	}
 }
 
-// ByPodID filters by pod id.
-func ByPodID(podID []byte) func(share *types.SSVShare) bool {
+// ByClusterID filters by cluster id.
+func ByClusterID(podID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return bytes.Equal(share.PodID, podID)
+		return bytes.Equal(share.ClusterID, podID)
 	}
 }
 

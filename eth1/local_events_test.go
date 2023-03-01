@@ -1,10 +1,12 @@
 package eth1
 
 import (
-	"github.com/bloxapp/ssv/eth1/abiparser"
+	"testing"
+
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-	"testing"
+
+	"github.com/bloxapp/ssv/eth1/abiparser"
 )
 
 func TestLocalEventsUnmarshalYAML(t *testing.T) {
@@ -24,7 +26,7 @@ func TestLocalEventsUnmarshalYAML(t *testing.T) {
 - Log:
   Name: UnknownEvent
   Data:
-    Id: 1
+    ID: 1
 `)
 		var parsedData []*Event
 		err := yaml.Unmarshal(input, &parsedData)
@@ -51,7 +53,7 @@ func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
 - Log:
   Name: OperatorAdded
   Data:
-    Id: 1
+    ID: 1
     Owner: 0x97a6C1f3aaB5427B901fb135ED492749191C0f1F
     PublicKey: LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K
 `)
@@ -63,17 +65,17 @@ func TestUnmarshalYAMLOperatorAddedEvent(t *testing.T) {
 		require.NotNil(t, parsedData[0].Data)
 		eventData, ok := parsedData[0].Data.(abiparser.OperatorAddedEvent)
 		require.True(t, ok)
-		require.Equal(t, uint64(1), eventData.Id)
+		require.Equal(t, uint64(1), eventData.ID)
 		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.Owner.String())
 		require.Equal(t, []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"), eventData.PublicKey)
 	})
 
-	t.Run("Fail to unmarshal OperatorAdded event with non number operator Id", func(t *testing.T) {
+	t.Run("Fail to unmarshal OperatorAdded event with non number operator ID", func(t *testing.T) {
 		input := []byte(`
 - Log:
   Name: OperatorAdded
   Data:
-    Id: id
+    ID: id
 `)
 		var parsedData []*Event
 		err := yaml.Unmarshal(input, &parsedData)
@@ -89,7 +91,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
   Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
-    OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
+    Owner: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: [1, 2, 3, 4]
     SharePublicKeys:
       - 0x8f6c6caf14da98dc5b45482613d709be3620c5094ddc6958002263058cc2fe4bdb7d9801d205d0eca13601b2c5491854
@@ -112,7 +114,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
   Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
-    OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
+    Owner: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: [one, two, three, four]
 `)
 		var parsedData []*Event
@@ -127,7 +129,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
   Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
-    OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
+    Owner: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: 1, 2, 3, 4
 `)
 		var parsedData []*Event
@@ -142,7 +144,7 @@ func TestUnmarshalYAMLValidatorAddedEvent(t *testing.T) {
   Name: ValidatorAdded
   Data:
     PublicKey: 0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f
-    OwnerAddress: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
+    Owner: 0xcEEfd323DD28a8d9514EDDfeC45a6c81800A7D49
     OperatorIds: [1, 2, 3, 4]
     SharePublicKeys:
       - sss

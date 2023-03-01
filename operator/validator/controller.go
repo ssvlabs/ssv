@@ -95,6 +95,7 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error)
+	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
@@ -243,6 +244,10 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 
 func (c *controller) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
 	return c.collection.GetAllValidatorShares(logger)
+}
+
+func (c *controller) GetOperatorData() *registrystorage.OperatorData {
+	return c.operatorData
 }
 
 func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
@@ -562,8 +567,8 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
 		// TODO(oleg): should we care about non-committee podIds?
-		if err = share.SetPodID(); err != nil {
-			return nil, errors.Wrap(err, "could not set share pod id")
+		if err = share.SetClusterID(); err != nil {
+			return nil, errors.Wrap(err, "could not set share cluster id")
 		}
 
 		// get metadata
