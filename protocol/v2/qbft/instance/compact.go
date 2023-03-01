@@ -33,8 +33,8 @@ func compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage, comp
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
-	// TODO: disabled for now as we depend on the commit message to check for
-	// whether we need to save an incoming decided message or not.
+	// TODO: disabled for now as we depend on the commit messages to check for
+	// whether we need to save an incoming decided message or not (see UponDecided).
 	//
 	// // Only discard commit messages if the whole committee has signed,
 	// // otherwise just trim down to the current round and future rounds.
