@@ -139,11 +139,6 @@ func (v2 *AbiV2) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (v2 *AbiV2) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
 	var event ValidatorAddedEvent
-	fmt.Println("log.Data", hex.EncodeToString(log.Data))
-	fmt.Println("log.Data", log.Address.String())
-	fmt.Println("log.Data", log.Topics[0].String())
-	fmt.Println("log.Data", log.Topics[1].String())
-	fmt.Println("log.Data", log.TxHash.String())
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorAdded, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{
