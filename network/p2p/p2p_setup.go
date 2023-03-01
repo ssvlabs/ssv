@@ -260,7 +260,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := logger.With(zap.String("who", "MsgValidator"))
+			logger := logger.Named("MsgValidator")
 			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
 		},
 		MsgHandler: n.handlePubsubMessages(logger),
