@@ -2,6 +2,8 @@ package discovery
 
 import (
 	"context"
+
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils"
 	"go.uber.org/zap"
 )
@@ -31,13 +33,13 @@ func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions
 		return nil, err
 	}
 	np := disc.(NodeProvider)
-	enr := np.Self().Node().String()
-	logger.Info("bootnode is ready", zap.String("ENR", enr))
+	enr := np.Self().Node()
+	logger.Info("bootnode is ready", logging.Enr(enr))
 	return &Bootnode{
 		ctx:    ctx,
 		cancel: cancel,
 		disc:   disc,
-		ENR:    enr,
+		ENR:    enr.String(),
 	}, nil
 }
 

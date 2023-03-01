@@ -10,7 +10,6 @@ require (
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v3 v3.2103.4
-	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.10.23
 	github.com/ferranbt/fastssz v0.1.2
 	github.com/golang/mock v1.6.0
@@ -59,6 +58,7 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
+	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect

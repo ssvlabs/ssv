@@ -206,6 +206,10 @@ func Count(val int) zap.Field {
 	return zap.Int(FieldCount, val)
 }
 
+func ErrorStrs(val []string) zap.Field {
+	return zap.Any(FieldErrors, val)
+}
+
 func Errors(val []error) zap.Field {
 	return zap.Any(FieldErrors, val)
 }
