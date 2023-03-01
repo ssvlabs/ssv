@@ -5,27 +5,10 @@ replicaCount: 1
 
 namespace: ssv
 
-domain: stage.ssv.network
-
-image:
-  repository: 121827225315.dkr.ecr.us-west-2.amazonaws.com/ssv-node
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: latest
-
 resources:
-  limits_node_1:
-    cpu: 1500m
-    mem: 3000Mi
-  limits_node_2:
-    cpu: 1500m
-    mem: 3000Mi      
-  limits_node_3:
-    cpu: 1500m
-    mem: 3000Mi
-  limits_node_4:
-    cpu: 1500m
-    mem: 3000Mi
+  limits:
+    cpu: 2000m
+    mem: 2048Mi
 
 affinity:
   nodeAffinity:

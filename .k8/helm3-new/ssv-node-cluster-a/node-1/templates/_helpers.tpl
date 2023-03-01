@@ -1,7 +1,7 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "ssv-node-cluster-a-1.name" -}}
+{{- define "node-1.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
@@ -10,7 +10,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "ssv-node-cluster-a-1.fullname" -}}
+{{- define "node-1.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +26,16 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "ssv-node-cluster-a-1.chart" -}}
+{{- define "node-1.chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "ssv-node-cluster-a-1.labels" -}}
-helm.sh/chart: {{ include "ssv-node-cluster-a-1.chart" . }}
-{{ include "ssv-node-cluster-a-1.selectorLabels" . }}
+{{- define "node-1.labels" -}}
+helm.sh/chart: {{ include "node-1.chart" . }}
+{{ include "node-1.selectorLabels" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +45,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "ssv-node-cluster-a-1.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "ssv-node-cluster-a-1.name" . }}
+{{- define "node-1.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "node-1.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "ssv-node-cluster-a-1.serviceAccountName" -}}
+{{- define "node-1.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "ssv-node-cluster-a-1.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "node-1.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

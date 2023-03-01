@@ -2,10 +2,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-node-cluster-a-4-svc
+  name: node-4-svc
   namespace: {{ .Values.namespace }}
   labels:
-    app: ssv-node-cluster-a-4
+    app: node-4
 spec:
   type: ClusterIP
   ports:
@@ -22,14 +22,14 @@ spec:
       targetPort: 15004
       name: port-15004
   selector:
-    app: ssv-node-cluster-a-4
+    app: node-4
 ---
 apiVersion: apps/v1 
 kind: Deployment
 metadata:
   labels:
-    app: ssv-node-cluster-a-4
-  name: ssv-node-cluster-a-4
+    app: node-4
+  name: node-4
   namespace: {{ .Values.namespace }}
 spec:
   replicas: {{ .Values.replicaCount }}
@@ -37,20 +37,20 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-node-cluster-a-4
+      app: node-4
   template:
     metadata:
       labels:
-        app: ssv-node-cluster-a-4
+        app: node-4
     spec:
       containers:
-      - name: ssv-node-cluster-a-4
+      - name: node-4
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
         imagePullPolicy: {{ .Values.image.pullPolicy }}
         resources:
           limits:
-            cpu:  {{ .Values.resources.limits_node_4.cpu }}
-            memory: {{ .Values.resources.limits_node_4.mem }}            
+            cpu:  {{ .Values.resources.limits.cpu }}
+            memory: {{ .Values.resources.limits.mem }}            
         command: ["make", "start-node"]
         ports:
         - containerPort: 12004
