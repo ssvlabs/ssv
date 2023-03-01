@@ -127,6 +127,7 @@ var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValue
 		return runner.NewValidatorRegistrationRunner(
 			spectypes.PraterNetwork,
 			share,
+			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,

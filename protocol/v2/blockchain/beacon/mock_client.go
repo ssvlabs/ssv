@@ -9,10 +9,10 @@ import (
 	reflect "reflect"
 
 	client "github.com/attestantio/go-eth2-client"
+	api "github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
-	bellatrix0 "github.com/attestantio/go-eth2-client/spec/bellatrix"
+	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
@@ -198,7 +198,7 @@ func (m *Mockproposer) EXPECT() *MockproposerMockRecorder {
 }
 
 // SubmitProposalPreparation mocks base method.
-func (m *Mockproposer) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix0.ExecutionAddress) error {
+func (m *Mockproposer) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitProposalPreparation", feeRecipients)
 	ret0, _ := ret[0].(error)
@@ -332,10 +332,10 @@ func (mr *MockBeaconMockRecorder) GetAttestationData(slot, committeeIndex interf
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix0.BeaconBlock, error) {
+func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BeaconBlock, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, committeeIndex, graffiti, randao)
-	ret0, _ := ret[0].(*bellatrix0.BeaconBlock)
+	ret0, _ := ret[0].(*bellatrix.BeaconBlock)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -361,18 +361,18 @@ func (mr *MockBeaconMockRecorder) GetBeaconNetwork() *gomock.Call {
 }
 
 // GetBlindedBeaconBlock mocks base method.
-func (m *MockBeacon) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (*bellatrix.BlindedBeaconBlock, error) {
+func (m *MockBeacon) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (*api.VersionedBlindedBeaconBlock, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBlindedBeaconBlock", slot, committeeIndex, graffiti, randao)
-	ret0, _ := ret[0].(*bellatrix.BlindedBeaconBlock)
+	ret := m.ctrl.Call(m, "GetBlindedBeaconBlock", slot, graffiti, randao)
+	ret0, _ := ret[0].(*api.VersionedBlindedBeaconBlock)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetBlindedBeaconBlock indicates an expected call of GetBlindedBeaconBlock.
-func (mr *MockBeaconMockRecorder) GetBlindedBeaconBlock(slot, committeeIndex, graffiti, randao interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) GetBlindedBeaconBlock(slot, graffiti, randao interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlindedBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBlindedBeaconBlock), slot, committeeIndex, graffiti, randao)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlindedBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBlindedBeaconBlock), slot, graffiti, randao)
 }
 
 // GetDuties mocks base method.
@@ -480,7 +480,7 @@ func (mr *MockBeaconMockRecorder) SubmitAttestation(attestation interface{}) *go
 }
 
 // SubmitBeaconBlock mocks base method.
-func (m *MockBeacon) SubmitBeaconBlock(block *bellatrix0.SignedBeaconBlock) error {
+func (m *MockBeacon) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBeaconBlock", block)
 	ret0, _ := ret[0].(error)
@@ -494,7 +494,7 @@ func (mr *MockBeaconMockRecorder) SubmitBeaconBlock(block interface{}) *gomock.C
 }
 
 // SubmitBlindedBeaconBlock mocks base method.
-func (m *MockBeacon) SubmitBlindedBeaconBlock(block *bellatrix.SignedBlindedBeaconBlock) error {
+func (m *MockBeacon) SubmitBlindedBeaconBlock(block *api.VersionedSignedBlindedBeaconBlock) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", block)
 	ret0, _ := ret[0].(error)
@@ -508,7 +508,7 @@ func (mr *MockBeaconMockRecorder) SubmitBlindedBeaconBlock(block interface{}) *g
 }
 
 // SubmitProposalPreparation mocks base method.
-func (m *MockBeacon) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix0.ExecutionAddress) error {
+func (m *MockBeacon) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitProposalPreparation", feeRecipients)
 	ret0, _ := ret[0].(error)
@@ -575,6 +575,20 @@ func (m *MockBeacon) SubmitSyncMessage(msg *altair.SyncCommitteeMessage) error {
 func (mr *MockBeaconMockRecorder) SubmitSyncMessage(msg interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncMessage", reflect.TypeOf((*MockBeacon)(nil).SubmitSyncMessage), msg)
+}
+
+// SubmitValidatorRegistration mocks base method.
+func (m *MockBeacon) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitValidatorRegistration", pubkey, feeRecipient, sig)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitValidatorRegistration indicates an expected call of SubmitValidatorRegistration.
+func (mr *MockBeaconMockRecorder) SubmitValidatorRegistration(pubkey, feeRecipient, sig interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeacon)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
 }
 
 // SubscribeToCommitteeSubnet mocks base method.
