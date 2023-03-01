@@ -202,7 +202,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", logging.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), logging.EnrLocalNode(localNode), zap.String("OperatorID", opts.OperatorID))
+		zap.Int("UdpPort", opts.Port), logging.EnrLocalNode(localNode), logging.OperatorIDStr(opts.OperatorID))
 
 	return nil
 }
@@ -331,7 +331,7 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", logging.EnrLocalNode(localNode), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
+	logger.Debug("node record is ready", logging.EnrLocalNode(localNode), logging.OperatorIDStr(opts.OperatorID), logging.Subnets(opts.Subnets))
 
 	return localNode, nil
 }

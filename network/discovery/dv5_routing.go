@@ -2,12 +2,12 @@ package discovery
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"time"
 )
 
 // implementing discovery.Discovery
@@ -25,7 +25,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	}
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", zap.String("ns", ns))
+		logger.Debug("not a subnet", logging.Topic(ns))
 		return opts.Ttl, nil
 	}
 
@@ -42,7 +42,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 	logger := logging.FromContext(ctx).Named("discv5")
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", zap.String("ns", ns))
+		logger.Debug("not a subnet", logging.Topic(ns))
 		return nil, nil
 	}
 	cn := make(chan peer.AddrInfo, 32)

@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -196,7 +197,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 			select {
 			case discoveredPeers <- e.AddrInfo:
 			default:
-				logger.Warn("connector queue is full, skipping new peer", zap.String("peerID", e.AddrInfo.ID.String()))
+				logger.Warn("connector queue is full, skipping new peer", logging.PeerID(e.AddrInfo.ID))
 			}
 		})
 	}, 3)

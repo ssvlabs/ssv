@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/logex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -246,7 +247,7 @@ type dummyRouter struct {
 func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	logger.Debug("got message",
-		zap.String("identifier", message.GetID().String()),
+		logging.Identifier(message.GetID()),
 		zap.Uint64("count", c))
 }
 

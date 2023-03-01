@@ -24,26 +24,38 @@ import (
 const (
 	FieldAddress             = "address"
 	FieldBindIP              = "bindIP"
+	FieldBlock               = "block"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
+	FieldCid                 = "cid"
+	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
 	FieldEnr                 = "enr"
+	FieldErrors              = "errors"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
+	FieldHeight              = "height"
 	FieldIdentifier          = "identifier"
 	FieldIndexCacheMetrics   = "indexCacheMetrics"
 	FieldMessageID           = "messageID"
+	FieldName                = "name"
+	FieldOperatorId          = "operatorID"
 	FieldPeerID              = "peerID"
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
-	FieldSyncResults         = "syncResults"
+	FieldRole                = "role"
+	FieldRound               = "round"
 	FieldStartTimeUnixMilli  = "startTimeUnixMilli"
+	FieldStartTimeUnixNano   = "startTimeUnixNano"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
+	FieldSyncResults         = "syncResults"
 	FieldTargetNodeEnr       = "targetNodeEnr"
+	FieldTopic               = "topic"
 	FieldTxHash              = "txHash"
 	FieldUpdatedEnrLocalNode = "updated_enr"
 	FieldValidator           = "validator"
+	FiledEvent               = "event"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -158,10 +170,46 @@ func OperatorID(operatorId spectypes.OperatorID) zap.Field {
 	return zap.Uint64("operator-id", uint64(operatorId))
 }
 
+func OperatorIDStr(operatorId string) zap.Field { //todo cleanup it
+	return zap.String(FieldOperatorId, operatorId)
+}
+
 func Height(height specqbft.Height) zap.Field {
 	return zap.Uint64("height", uint64(height))
 }
 
 func Round(round specqbft.Round) zap.Field {
-	return zap.Uint64("round", uint64(round))
+	return zap.Stringer(FieldRound, uint64Stringer{uint64(round)})
+}
+
+func Role(val spectypes.BeaconRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
+
+func EventName(val string) zap.Field {
+	return zap.String(FiledEvent, val)
+}
+
+func BlockNumber(val uint64) zap.Field {
+	return zap.Stringer(FieldBlock, uint64Stringer{val})
+}
+
+func Name(val string) zap.Field {
+	return zap.String(FieldName, val)
+}
+
+func Cid(val string) zap.Field {
+	return zap.String(FieldCid, val)
+}
+
+func Count(val int) zap.Field {
+	return zap.Int(FieldCount, val)
+}
+
+func Errors(val []error) zap.Field {
+	return zap.Any(FieldErrors, val)
+}
+
+func Topic(val string) zap.Field {
+	return zap.String(FieldTopic, val)
 }
