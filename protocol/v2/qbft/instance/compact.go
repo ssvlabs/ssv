@@ -2,15 +2,13 @@ package instance
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Compact trims the given qbft.State down to the minimum required
 // for consensus to proceed.
 //
 // Compact always discards message from previous rounds.
-// Compact discards non-commit messages from below their current round, only if the state is decided.
-// Compact discards commit messages from below the current round, only if the whole committee has signed.
+// Compact discards messages from below their current round, only if the state is decided.
 //
 // This helps reduce the state's memory footprint.
 func Compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage) {
@@ -35,21 +33,24 @@ func compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage, comp
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
 
-	// Only discard commit messages if the whole committee has signed,
-	// otherwise just trim down to the current round and future rounds.
-	var wholeCommitteeDecided bool
-	if state.Share == nil {
-		// Share may be missing in tests.
-	} else {
-		var signers []spectypes.OperatorID
-		if decidedMessage != nil {
-			signers = decidedMessage.Signers
-		} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
-			signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
-		}
-		wholeCommitteeDecided = len(signers) == len(state.Share.Committee)
-	}
-	state.CommitContainer = compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
+	// TODO: disabled for now as we depend on the commit message to check for
+	// whether we need to save an incoming decided message or not.
+	//
+	// // Only discard commit messages if the whole committee has signed,
+	// // otherwise just trim down to the current round and future rounds.
+	// var wholeCommitteeDecided bool
+	// if state.Share == nil {
+	// 	// Share may be missing in tests.
+	// } else {
+	// 	var signers []spectypes.OperatorID
+	// 	if decidedMessage != nil {
+	// 		signers = decidedMessage.Signers
+	// 	} else if state.Decided && len(state.CommitContainer.Msgs) >= len(state.Share.Committee) {
+	// 		signers, _ = state.CommitContainer.LongestUniqueSignersForRoundAndValue(state.Round, state.DecidedValue)
+	// 	}
+	// 	wholeCommitteeDecided = len(signers) == len(state.Share.Committee)
+	// }
+	// state.CommitContainer = compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
 type compactContainerFunc func(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer
