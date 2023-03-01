@@ -7,6 +7,7 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var AttesterRunner = func(keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -53,7 +54,7 @@ var UnknownDutyTypeRunner = func(keySet *spectestingutils.TestKeySet) runner.Run
 
 var baseRunner = func(role spectypes.BeaconRole, valCheck specqbft.ProposedValueCheckF, keySet *spectestingutils.TestKeySet) runner.Runner {
 	share := spectestingutils.TestingShare(keySet)
-	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], role)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), spectestingutils.TestingValidatorPubKey[:], role)
 	net := spectestingutils.NewTestingNetwork()
 	km := spectestingutils.NewTestingKeyManager()
 

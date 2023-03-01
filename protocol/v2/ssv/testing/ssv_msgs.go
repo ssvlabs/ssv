@@ -8,32 +8,33 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
 var AttesterMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	return ret[:]
 }()
 
 var ProposerMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleProposer)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleProposer)
 	return ret[:]
 }()
 var AggregatorMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAggregator)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAggregator)
 	return ret[:]
 }()
 var SyncCommitteeMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommittee)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommittee)
 	return ret[:]
 }()
 var SyncCommitteeContributionMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution)
 	return ret[:]
 }()
 var ValidatorRegistrationMsgID = func() []byte {
-	ret := spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration)
+	ret := spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration)
 	return ret[:]
 }()
 
@@ -90,31 +91,31 @@ var TestConsensusWrongDutyPKData = &spectypes.ConsensusData{
 var TestConsensusWrongDutyPKDataByts, _ = TestConsensusWrongDutyPKData.Encode()
 
 var SSVMsgAttester = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester))
 }
 
 var SSVMsgWrongID = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingWrongValidatorPubKey[:], spectypes.BNRoleAttester))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingWrongValidatorPubKey[:], spectypes.BNRoleAttester))
 }
 
 var SSVMsgProposer = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleProposer))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleProposer))
 }
 
 var SSVMsgAggregator = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAggregator))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAggregator))
 }
 
 var SSVMsgSyncCommittee = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommittee))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommittee))
 }
 
 var SSVMsgSyncCommitteeContribution = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution))
 }
 
 var SSVMsgValidatorRegistration = func(qbftMsg *specqbft.SignedMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration))
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(types.GetDefaultDomain(), testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration))
 }
 
 var ssvMsg = func(qbftMsg *specqbft.SignedMessage, postMsg *spectypes.SignedPartialSignatureMessage, msgID spectypes.MessageID) *spectypes.SSVMessage {

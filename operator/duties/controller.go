@@ -181,7 +181,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
+		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), pubKey.Serialize(), duty.Type),
 		Data:    data,
 	}, nil
 }

@@ -3,12 +3,14 @@ package validator
 import (
 	"context"
 	"fmt"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"sync"
 	"testing"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestRouter(t *testing.T) {
@@ -37,7 +39,7 @@ func TestRouter(t *testing.T) {
 	for i := 0; i < expectedCount; i++ {
 		msg := spectypes.SSVMessage{
 			MsgType: spectypes.MsgType(i % 3),
-			MsgID:   spectypes.NewMsgID([]byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
+			MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), []byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
 			Data:    []byte(fmt.Sprintf("data-%d", i)),
 		}
 		router.Route(msg)

@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -103,7 +104,7 @@ func dummySSVConsensusMsg(pkHex string, height int) (*spectypes.SSVMessage, erro
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
@@ -19,7 +20,7 @@ import (
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := qbfttesting.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := qbfttesting.NewTestingQBFTController(
 		identifier[:],

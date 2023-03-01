@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
@@ -99,7 +100,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(duty *spectypes.Duty) error {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
 	msgs := spectypes.PartialSignatureMessages{
-		Type:     specssv.ValidatorRegistrationPartialSig,
+		Type:     spectypes.ValidatorRegistrationPartialSig,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -121,7 +122,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -183,11 +184,11 @@ func (r *ValidatorRegistrationRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *ValidatorRegistrationRunner) GetRoot() ([]byte, error) {
+func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }

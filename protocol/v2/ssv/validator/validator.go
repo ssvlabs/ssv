@@ -67,7 +67,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
-		msgID := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, role).String()
+		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
 
 		v.Queues[role] = queueContainer{
 			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),

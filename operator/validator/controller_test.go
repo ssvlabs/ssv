@@ -41,7 +41,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(2)
 
-	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 
 	ctr.messageRouter.Route(spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,

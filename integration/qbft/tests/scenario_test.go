@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"testing"
+	"time"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -23,8 +26,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
-	"time"
 )
 
 var (
@@ -86,7 +87,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {

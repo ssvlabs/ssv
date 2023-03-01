@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -201,7 +202,7 @@ func (c *controller) handleValidatorRemovalEvent(
 	//}
 
 	// remove decided messages
-	messageID := spectypes.NewMsgID(share.ValidatorPubKey, spectypes.BNRoleAttester)
+	messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, spectypes.BNRoleAttester)
 	store := c.ibftStorageMap.Get(messageID.GetRoleType())
 	if store != nil {
 		if err := store.CleanAllInstances(messageID[:]); err != nil { // TODO need to delete for multi duty as well

@@ -446,7 +446,7 @@ func (c *controller) setupNonCommitteeValidators() {
 			if err != nil {
 				c.logger.Error("failed to subscribe to network", zap.Error(err))
 			}
-			messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
+			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
 			err = c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				c.logger.Error("failed to sync highest decided", zap.Error(err))
@@ -694,7 +694,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, role)
+		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl

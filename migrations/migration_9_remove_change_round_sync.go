@@ -6,6 +6,7 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -20,7 +21,7 @@ var migrationRemoveChangeRoundSync = Migration{
 
 		for _, share := range shares {
 			role := spectypes.BNRoleAttester
-			messageID := spectypes.NewMsgID(share.ValidatorPubKey, role)
+			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
 			if err := cleanLastChangeRound(opt.Db, []byte(role.String()), messageID[:]); err != nil {
 				return err
 			}

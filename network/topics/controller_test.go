@@ -12,6 +12,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -264,7 +265,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

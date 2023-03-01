@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 const (
@@ -52,7 +53,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	msgID := spectypes.NewMsgID(pkRaw, beaconRole)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
 	instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)

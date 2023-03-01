@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -13,7 +14,7 @@ import (
 )
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
-	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := qbfttesting.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := qbfttesting.NewTestingQBFTController(
 		identifier[:],

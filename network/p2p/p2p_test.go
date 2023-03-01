@@ -20,6 +20,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -118,7 +119,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -258,7 +259,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	signedMsg := &specqbft.SignedMessage{
 		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
