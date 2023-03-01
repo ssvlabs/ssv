@@ -135,6 +135,7 @@ var compactTests = []struct {
 			},
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
+			CommitContainer:      mockContainer(2, 3, 4),
 			RoundChangeContainer: mockContainer(),
 		},
 	},
