@@ -1,16 +1,3 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-domain: ssv.network
-
-image:
-  repository: 764289642555.dkr.ecr.us-west-2.amazonaws.com/ssv-node
-  pullPolicy: IfNotPresent
-  # Overrides the image tag whose default is the chart appVersion.
-  tag: latest
-
-resources:
-  limits:
-    cpu: 1500m
-    mem: 3000Mi
-
