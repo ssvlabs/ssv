@@ -26,7 +26,7 @@ const (
 	FieldBindIP              = "bindIP"
 	FieldBlock               = "block"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
-	FieldCid                 = "cid"
+	FieldConnectionID        = "connectionID"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
@@ -94,7 +94,7 @@ func Validator(val []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, hexStringer{val})
 }
 
-func Address(val url.URL) zapcore.Field {
+func AddressURL(val url.URL) zapcore.Field {
 	return zap.Stringer(FieldAddress, &val)
 }
 
@@ -198,8 +198,8 @@ func Name(val string) zap.Field {
 	return zap.String(FieldName, val)
 }
 
-func Cid(val string) zap.Field {
-	return zap.String(FieldCid, val)
+func ConnectionID(val string) zap.Field {
+	return zap.String(FieldConnectionID, val)
 }
 
 func Count(val int) zap.Field {

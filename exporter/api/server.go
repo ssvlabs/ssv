@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/quic-go/quic-go/logging"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -109,7 +110,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 		return
 	}
 	cid := ConnectionID(conn)
-	logger = logger.With(zap.String("cid", cid))
+	logger = logger.With(logging.ConnectionID(cid))
 	logger.Debug("handles query requests")
 
 	for {
@@ -145,8 +146,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 // handleStream registers the connection for broadcasting of stream messages
 func (ws *wsServer) handleStream(logger *zap.Logger, wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
-	logger = logger.
-		With(zap.String("cid", cid))
+	logger = logger.With(logging.ConnectionID(cid))
 	defer logger.Debug("stream handler done")
 
 	ctx, cancel := context.WithCancel(ws.ctx)
