@@ -8,8 +8,6 @@ on:
     branches:
       - "**"
 
-  workflow_dispatch:
-
 jobs:
   test:
     runs-on: ubuntu-latest
