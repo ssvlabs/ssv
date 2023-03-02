@@ -42,15 +42,21 @@ func NewProposerRunner(
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
-
 	return &ProposerRunner{
-		BaseRunner: NewBaseRunner(logger, spectypes.BNRoleProposer, beaconNetwork, share, qbftController),
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		logger:     logger.With(zap.String("who", "ProposerRunner")),
-		metrics:    metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
+		BaseRunner: &BaseRunner{
+			BeaconRoleType: spectypes.BNRoleProposer,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
+			QBFTController: qbftController,
+			logger:         logger.With(zap.String("who", "BaseRunner")),
+		},
+
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		logger:   logger.With(zap.String("who", "ProposerRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
 	}
 }
 

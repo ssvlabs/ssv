@@ -30,10 +30,15 @@ func NewValidatorRegistrationRunner(
 	signer spectypes.KeyManager,
 ) Runner {
 	return &ValidatorRegistrationRunner{
-		BaseRunner: NewBaseRunner(logger, spectypes.BNRoleValidatorRegistration, beaconNetwork, share, nil),
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
+		BaseRunner: &BaseRunner{
+			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
+		},
+
+		beacon:  beacon,
+		network: network,
+		signer:  signer,
 	}
 }
 

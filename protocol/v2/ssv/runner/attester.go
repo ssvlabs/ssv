@@ -41,11 +41,18 @@ func NewAttesterRunnner(
 ) Runner {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &AttesterRunner{
-		BaseRunner: NewBaseRunner(logger, spectypes.BNRoleAttester, beaconNetwork, share, qbftController),
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
+		BaseRunner: &BaseRunner{
+			BeaconRoleType: spectypes.BNRoleAttester,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
+			QBFTController: qbftController,
+			logger:         logger.With(zap.String("who", "BaseRunner")),
+		},
+
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
 
 		logger:  logger.With(zap.String("who", "AttesterRunner")),
 		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),

@@ -40,13 +40,20 @@ func NewSyncCommitteeRunner(
 ) Runner {
 	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &SyncCommitteeRunner{
-		BaseRunner: NewBaseRunner(logger, spectypes.BNRoleSyncCommittee, beaconNetwork, share, qbftController),
-		beacon:     beacon,
-		network:    network,
-		signer:     signer,
-		valCheck:   valCheck,
-		logger:     logger.With(zap.String("who", "SyncCommitteeRunner")),
-		metrics:    metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
+		BaseRunner: &BaseRunner{
+			BeaconRoleType: spectypes.BNRoleSyncCommittee,
+			BeaconNetwork:  beaconNetwork,
+			Share:          share,
+			QBFTController: qbftController,
+			logger:         logger.With(zap.String("who", "BaseRunner")),
+		},
+
+		beacon:   beacon,
+		network:  network,
+		signer:   signer,
+		valCheck: valCheck,
+		logger:   logger.With(zap.String("who", "SyncCommitteeRunner")),
+		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
 	}
 }
 
