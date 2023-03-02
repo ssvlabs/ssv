@@ -72,13 +72,18 @@ func NewBaseRunner(logger *zap.Logger) *BaseRunner {
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
-	b.mtx.Lock() // writes to b.State
-	defer b.mtx.Unlock()
-
 	if err := b.canStartNewDuty(); err != nil {
 		return err
 	}
-	b.State = NewRunnerState(b.Share.Quorum, duty)
+
+	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
+	// b.State but currently this does not happen
+	func() {
+		b.mtx.Lock() // writes to b.State
+		defer b.mtx.Unlock()
+		b.State = NewRunnerState(b.Share.Quorum, duty)
+	}()
+
 	return runner.executeDuty(duty)
 }
 
