@@ -73,8 +73,8 @@ type dutyController struct {
 var secPerSlot int64 = 12
 
 // NewDutyController creates a new instance of DutyController
-func NewDutyController(opts *ControllerOptions) DutyController {
-	fetcher := newDutyFetcher(opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
+func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyController {
+	fetcher := newDutyFetcher(logger, opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
 	dc := dutyController{
 		ctx:                 opts.Ctx,
 		ethNetwork:          opts.EthNetwork,

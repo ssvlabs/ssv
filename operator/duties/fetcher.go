@@ -39,8 +39,9 @@ type DutyFetcher interface {
 }
 
 // newDutyFetcher creates a new instance
-func newDutyFetcher(beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
+func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
 	df := dutyFetcher{
+		logger:         logger,
 		ethNetwork:     network,
 		beaconClient:   beaconClient,
 		indicesFetcher: indicesFetcher,

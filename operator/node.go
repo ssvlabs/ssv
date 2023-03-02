@@ -101,7 +101,7 @@ func New(logger *zap.Logger, opts Options) Node {
 		eth1Client:     opts.Eth1Client,
 		storage:        storage.NewNodeStorage(opts.DB),
 		qbftStorage:    storageMap,
-		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
+		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
 			Ctx:                 opts.Context,
 			BeaconClient:        opts.Beacon,
 			EthNetwork:          opts.ETHNetwork,
