@@ -5,30 +5,27 @@
 
 # SSV - Development Guide
 
-- [SSV - Development Guide](#ssv---development-guide)
-  - [Usage](#usage)
-    - [Common Commands](#common-commands)
-      - [Build](#build)
-      - [Test](#test)
-      - [Lint](#lint)
-      - [Specify Version](#specify-version)
-      - [Splitting a Validator Key](#splitting-a-validator-key)
-      - [Generating an Operator Key](#generating-an-operator-key)
-    - [Config Files](#config-files)
-      - [Node Config](#node-config)
-  - [Running a Local Network of Operators](#running-a-local-network-of-operators)
-    - [Install](#install)
-      - [Prerequisites](#prerequisites)
-      - [Clone Repository](#clone-repository)
-      - [Build Binary](#build-binary)
-    - [Configuration](#configuration)
-      - [Use script:](#use-script)
-      - [Use manual steps:](#use-manual-steps)
-    - [Run](#run)
-      - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
-      - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
-      - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
-  - [Coding Standards](#coding-standards)
+* [Usage](#usage)
+  + [Common Commands](#common-commands)
+    - [Build](#build)
+    - [Test](#test)
+    - [Lint](#lint)
+    - [Specify Version](#specify-version)
+    - [Splitting a Validator Key](#splitting-a-validator-key)
+    - [Generating an Operator Key](#generating-an-operator-key)
+  + [Config Files](#config-files)
+    - [Node Config](#node-config)
+* [Running a Local Network of Operators](#running-a-local-network-of-operators)
+  + [Install](#install)
+    - [Prerequisites](#prerequisites)
+    - [Clone Repository](#clone-repository)
+    - [Build Binary](#build-binary)
+  + [Configuration](#configuration)
+  + [Run](#run)
+    - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
+    - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
+    - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
+* [Coding Standards](#coding-standards)
 
 ## Usage
 
@@ -93,7 +90,7 @@ This section details the steps to run a local network of operator nodes.
 
 In order to run a local environment, install the following:
 * git
-* go (1.20)
+* go (1.19)
 * docker
 * make
 * yq
