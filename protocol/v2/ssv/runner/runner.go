@@ -51,7 +51,7 @@ type Runner interface {
 }
 
 type BaseRunner struct {
-	mtx            *sync.RWMutex
+	mtx            sync.RWMutex
 	State          *State
 	Share          *spectypes.Share
 	QBFTController *controller.Controller
@@ -63,14 +63,10 @@ type BaseRunner struct {
 	TimeoutF TimeoutF `json:"-"`
 }
 
-func NewBaseRunner(logger *zap.Logger, beaconRoleType spectypes.BeaconRole, beaconNetwork spectypes.BeaconNetwork, share *spectypes.Share, qbftController *controller.Controller) *BaseRunner {
+// NewBaseRunner exists to to provide a logger to the private logger struct field. If the logger is nil the code will panic
+func NewBaseRunner(logger *zap.Logger) *BaseRunner {
 	return &BaseRunner{
-		mtx:            &sync.RWMutex{},
-		logger:         logger.With(zap.String("who", "BaseRunner")),
-		BeaconRoleType: beaconRoleType,
-		BeaconNetwork:  beaconNetwork,
-		Share:          share,
-		QBFTController: qbftController,
+		logger: logger.With(zap.String("who", "BaseRunner")),
 	}
 }
 
