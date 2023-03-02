@@ -40,7 +40,7 @@ func (gc *goClient) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorI
 	}
 	wg.Wait()
 
-	logger.Debug("fetched duties", zap.Int("count", len(duties)), logging.DurationMilliS(start))
+	logger.Debug("fetched duties", zap.Int("count", len(duties)), logging.DurationMilli(start))
 
 	return duties, nil
 }
