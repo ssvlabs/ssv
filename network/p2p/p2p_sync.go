@@ -5,13 +5,14 @@ import (
 	"encoding/hex"
 	"math/rand"
 
+	"github.com/multiformats/go-multistream"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -105,7 +106,7 @@ func (n *p2pNetwork) GetHistory(mid spectypes.MessageID, from, to specqbft.Heigh
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(protocolID))
+		random, err := n.getSubsetOfPeers(mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
@@ -256,7 +257,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 		logger := logger.With(zap.String("peer", pid.String()))
 		raw, err := n.streamCtrl.Request(pid, protocol, encoded)
 		if err != nil {
-			if errors.Is(err, multistream.ErrNotSupported[libp2p_protocol.ID]{}) {
+			if err != multistream.ErrNotSupported {
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue
@@ -280,7 +281,7 @@ func (n *p2pNetwork) makeSyncRequest(peers []peer.ID, mid spectypes.MessageID, p
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols
-func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...libp2p_protocol.ID) func(peer.ID) bool {
+func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...string) func(peer.ID) bool {
 	return func(id peer.ID) bool {
 		supported, err := n.host.Network().Peerstore().SupportsProtocols(id, protocols...)
 		if err != nil {
