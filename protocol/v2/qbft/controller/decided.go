@@ -32,7 +32,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+		i := instance.NewInstance(logger, c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = data.Data

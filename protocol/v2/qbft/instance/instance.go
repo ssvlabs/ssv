@@ -4,17 +4,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	ipfslog "github.com/ipfs/go-log"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
@@ -27,9 +23,11 @@ type Instance struct {
 	StartValue  []byte
 
 	metrics *metrics
+	logger  *zap.Logger
 }
 
 func NewInstance(
+	logger *zap.Logger,
 	config qbft.IConfig,
 	share *spectypes.Share,
 	identifier []byte,
@@ -51,11 +49,14 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(msgId),
+		logger:      logger.Named("qbftInstance"),
 	}
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(value []byte, height specqbft.Height) {
+	logger := i.logger.Named("Start")
+
 	i.startOnce.Do(func() {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
@@ -64,7 +65,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		logger.Debug("starting QBFT instance")
+		i.logger.Debug("starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
@@ -109,18 +110,18 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(i.logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
+			return i.uponPrepare(i.logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(i.logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(i.logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}

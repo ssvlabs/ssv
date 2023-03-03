@@ -7,12 +7,15 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) error {
+	logger = logger.Named("ValidatorStart")
+
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		n, ok := v.Network.(p2p.Subscriber)
 		if !ok {
@@ -25,7 +28,7 @@ func (v *Validator) Start(logger *zap.Logger) error {
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
-			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
+			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(logger, identifier[:]); err != nil {
 				logger.Warn("failed to load highest instance",
 					zap.String("identifier", identifier.String()),
 					zap.Error(err))

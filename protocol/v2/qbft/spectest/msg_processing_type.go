@@ -6,16 +6,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/utils/logex"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -25,6 +25,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logex.TestLogger(t)
 	pre := instance.NewInstance(
+		logger,
 		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,

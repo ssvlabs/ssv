@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -26,7 +27,8 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 }
 
 func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
-	err := test.Runner.StartNewDuty(test.Duty)
+	logger := logex.TestLogger(t)
+	err := test.Runner.StartNewDuty(logger, test.Duty)
 	if len(test.ExpectedError) > 0 {
 		require.EqualError(t, err, test.ExpectedError)
 	} else {

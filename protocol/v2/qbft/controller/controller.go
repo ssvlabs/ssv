@@ -12,10 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	ipfslog "github.com/ipfs/go-log"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/controller").Desugar()
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
@@ -56,7 +53,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(value []byte) error {
+func (c *Controller) StartNewInstance(logger *zap.Logger, value []byte) error {
 	if err := c.canStartInstanceForValue(value); err != nil {
 		return errors.Wrap(err, "can't start new QBFT instance")
 	}
@@ -66,14 +63,14 @@ func (c *Controller) StartNewInstance(value []byte) error {
 		c.bumpHeight()
 	}
 
-	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, c.Height)
+	newInstance := c.addAndStoreNewInstance(logger)
+	newInstance.Start(value, c.Height)
 
 	return nil
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -161,7 +158,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(logger, c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -176,8 +173,8 @@ func (c *Controller) GetIdentifier() []byte {
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
-func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+func (c *Controller) addAndStoreNewInstance(logger *zap.Logger) *instance.Instance {
+	i := instance.NewInstance(logger, c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

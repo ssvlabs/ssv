@@ -1,21 +1,16 @@
 package runner
 
 import (
-	logging "github.com/ipfs/go-log"
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
-
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
-
-var logger = logging.Logger("ssv/protocol/ssv/runner").Desugar()
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
@@ -31,13 +26,13 @@ type Runner interface {
 	Getters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
-	StartNewDuty(duty *spectypes.Duty) error
+	StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
-	ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error
+	ProcessPreConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
-	ProcessConsensus(msg *specqbft.SignedMessage) error
+	ProcessConsensus(logger *zap.Logger, msg *specqbft.SignedMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
@@ -45,7 +40,7 @@ type Runner interface {
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
-	executeDuty(duty *spectypes.Duty) error
+	executeDuty(logger *zap.Logger, duty *spectypes.Duty) error
 }
 
 type BaseRunner struct {
@@ -64,12 +59,12 @@ func NewBaseRunner() *BaseRunner {
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
-func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error {
+func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
 	if err := b.canStartNewDuty(); err != nil {
 		return err
 	}
 	b.State = NewRunnerState(b.Share.Quorum, duty)
-	return runner.executeDuty(duty)
+	return runner.executeDuty(logger, duty)
 }
 
 // canStartNewDuty is a base func that all runner implementation can call to decide if a new duty can start
@@ -92,13 +87,13 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
-	decidedMsg, err := b.QBFTController.ProcessMsg(msg)
+	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
 	if err != nil {
 		return false, nil, err
@@ -201,7 +196,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.S
 	return true, nil
 }
 
-func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error {
+func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.ConsensusData) error {
 	byts, err := input.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode ConsensusData")
@@ -211,7 +206,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 		return errors.Wrap(err, "input data invalid")
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger, byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
 	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)
@@ -221,7 +216,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
-	b.registerTimeoutHandler(newInstance, runner.GetBaseRunner().QBFTController.Height)
+	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }

@@ -6,17 +6,17 @@ import (
 	"reflect"
 	"testing"
 
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/utils/logex"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
-	"github.com/stretchr/testify/require"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -32,7 +32,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 	var lastErr error
 	for _, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, contr, config, identifier, runData); err != nil {
+		if err := runInstanceWithData(t, logger, contr, config, identifier, runData); err != nil {
 			lastErr = err
 		}
 	}
@@ -59,6 +59,7 @@ func testTimer(
 
 func testProcessMsg(
 	t *testing.T,
+	logger *zap.Logger,
 	contr *controller.Controller,
 	config *qbft.Config,
 	runData *spectests.RunInstanceData,
@@ -66,7 +67,7 @@ func testProcessMsg(
 	decidedCnt := 0
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(msg)
+		decided, err := contr.ProcessMsg(logger, msg)
 		if err != nil {
 			lastErr = err
 		}
@@ -124,8 +125,8 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbft.Config, identifier spectypes.MessageID, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(runData.InputValue)
+func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Controller, config *qbft.Config, identifier spectypes.MessageID, runData *spectests.RunInstanceData) error {
+	err := contr.StartNewInstance(logger, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
@@ -133,7 +134,7 @@ func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbf
 
 	testTimer(t, config, runData)
 
-	if err := testProcessMsg(t, contr, config, runData); err != nil {
+	if err := testProcessMsg(t, logger, contr, config, runData); err != nil {
 		lastErr = err
 	}
 
