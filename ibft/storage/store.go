@@ -61,7 +61,7 @@ func (i *ibftStorage) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkV
 	i.forkLock.Lock()
 	defer i.forkLock.Unlock()
 
-	logger = logger.Named("OnFork")
+	logger = logger.Named(logging.OnFork)
 	logger.Info("forking ibft storage")
 	i.fork = forksfactory.NewFork(forkVersion)
 	return nil

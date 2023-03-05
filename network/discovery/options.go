@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"crypto/ecdsa"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -94,7 +95,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 	if logger != nil {
 		logger.Info("discovery trace is active")
 		newLogger := log.New()
-		newLogger.SetHandler(&dv5Logger{logger.Named("dv5Logger")})
+		newLogger.SetHandler(&dv5Logger{logger.Named(logging.DiscoveryLogger)})
 		dv5Cfg.Log = newLogger
 	}
 

@@ -17,7 +17,7 @@ type NonCommitteeValidator struct {
 }
 
 func NewNonCommitteeValidator(identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
-	logger := logger.Named("NonCommitteeValidator").With(zap.String("identifier", identifier.String()))
+	logger := logger.With(zap.String("identifier", identifier.String()))
 
 	// currently, only need domain & storage
 	config := &qbft.Config{

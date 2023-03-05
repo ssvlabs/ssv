@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"github.com/bloxapp/ssv/logging"
 	"math/rand"
 	"net"
 	"strings"
@@ -48,6 +49,8 @@ const (
 
 // Setup is used to setup the network
 func (n *p2pNetwork) Setup(logger *zap.Logger) error {
+	logger = logger.Named(logging.P2PNetworkComponent)
+
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
@@ -260,8 +263,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := logger.Named("MsgValidator")
-			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
+			return topics.NewSSVMsgValidator(n.fork)
 		},
 		MsgHandler: n.handlePubsubMessages(logger),
 		ScoreIndex: n.idx,

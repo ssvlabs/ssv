@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -11,7 +12,7 @@ import (
 // and recreate it with while preserving previous state (active validators)
 // NOTE: ths method MUST be called once per fork version, otherwise we are just restarting the network
 func (n *p2pNetwork) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkVersion) error {
-	logger = logger.Named("OnFork")
+	logger = logger.Named(logging.OnFork)
 	logger.Info("forking network")
 	return errors.New(fmt.Sprintf("no handler for fork - %s", forkVersion.String()))
 }
