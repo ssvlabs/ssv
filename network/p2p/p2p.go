@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"bytes"
 	"context"
+	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -129,6 +130,8 @@ func (n *p2pNetwork) Close() error {
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.P2PNetworkComponent)
+
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil

@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -145,6 +146,8 @@ func (n *operatorNode) init(opts Options) error {
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start(logger *zap.Logger) error {
+	logger.Named(logging.OperatorComponent)
+
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
@@ -182,6 +185,7 @@ func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
 
 // StartEth1 starts the eth1 events sync and streaming
 func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset) error {
+	logger = logger.Named(logging.Eth1Component)
 	logger.Info("starting operator node syncing with eth1")
 
 	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
