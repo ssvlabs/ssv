@@ -23,20 +23,6 @@ var (
 	defaultMigrations = Migrations{
 		migrationExample1,
 		migrationExample2,
-		migrationCleanAllRegistryData,
-		migrationCleanOperatorNodeRegistryData,
-		migrationCleanExporterRegistryData,
-		migrationCleanValidatorRegistryData,
-		migrationCleanSyncOffset,
-		migrationCleanOperatorRemovalCorruptions,
-		migrationCleanShares,
-		migrationRemoveChangeRoundSync,
-		migrationAddGraffiti,
-		migrationCleanRegistryData,
-		migrationCleanRegistryDataIncludingSignerStorage,
-		migrationCleanRegistryDataShifuV2,
-		migrationCompactInstances,
-		migrationForceFullGC,
 	}
 )
 
@@ -65,20 +51,24 @@ type Options struct {
 	Network beacon.Network
 }
 
+// nolint
 func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
 	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(logger), o.signerStorage(logger)}
 }
 
+// nolint
 func (o Options) validatorStorage() validatorstorage.ICollection {
 	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
 		DB: o.Db,
 	})
 }
 
+// nolint
 func (o Options) nodeStorage(logger *zap.Logger) operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db)
 }
 
+// nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
 	return ekm.NewSignerStorage(o.Db, o.Network, logger)
 }
