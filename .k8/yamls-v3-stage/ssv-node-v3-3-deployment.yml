@@ -132,6 +132,8 @@ spec:
           value: "15303"
         - name: ENABLE_PROFILE
           value: "true"
+        - name: LOG_FORMAT
+          value: json
         - name: NETWORK_ID
           value: "shifu-v2-stage"
         - name: GENESIS_EPOCH
