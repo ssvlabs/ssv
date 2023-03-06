@@ -243,7 +243,7 @@ func (b *BadgerDb) Close(logger *zap.Logger) error {
 
 // report the db size and metrics
 func (b *BadgerDb) report(logger *zap.Logger) func() {
-	logger = logger.Named("BadgerDBReporting")
+	logger = logger.Named(logging.BadgerDBReporting)
 	return func() {
 		lsm, vlog := b.db.Size()
 		blockCache := b.db.BlockCacheMetrics()

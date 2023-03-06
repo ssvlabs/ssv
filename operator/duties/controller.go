@@ -91,6 +91,7 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 
 // Start listens to slot ticker and dispatches duties execution
 func (dc *dutyController) Start(logger *zap.Logger) {
+	logger = logger.Named(logging.DutyController)
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices(logger)
 	logger.Debug("warming up indices", zap.Int("count", len(indices)))
