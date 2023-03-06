@@ -3,6 +3,7 @@ package topics
 import (
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
@@ -36,7 +37,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			//		Value: peerScores.IPColocationFactor,
 			//	},
 			//}
-			logger.Debug("peer scores", zap.String("peer", pid.String()),
+			logger.Debug("peer scores", logging.PeerID(pid),
 				zap.Any("peerScores", peerScores))
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 			// err := scoreIdx.Score(pid, scores...)
@@ -51,14 +52,14 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 }
 
 // topicScoreParams factory for creating scoring params for topics
-func topicScoreParams(cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
+func topicScoreParams(logger *zap.Logger, cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
-			cfg.Logger.Debug("could not read stats: active validators")
+			logger.Debug("could not read stats: active validators")
 			return nil
 		}
-		logger := cfg.Logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
+		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
 		opts := params.NewSubnetTopicOpts(int(totalValidators), f.Subnets())

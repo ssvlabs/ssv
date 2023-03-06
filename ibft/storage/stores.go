@@ -7,14 +7,13 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"go.uber.org/zap"
 )
 
-func NewStoresFromRoles(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) *QBFTStores {
+func NewStoresFromRoles(db basedb.IDb, roles ...spectypes.BeaconRole) *QBFTStores {
 	stores := NewStores()
 
 	for _, role := range roles {
-		stores.Add(role, New(db, logger, role.String(), forksprotocol.GenesisForkVersion))
+		stores.Add(role, New(db, role.String(), forksprotocol.GenesisForkVersion))
 	}
 
 	return stores

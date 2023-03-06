@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/utils/logex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
@@ -22,8 +23,9 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
+	logger := logex.TestLogger(t)
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
+		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,

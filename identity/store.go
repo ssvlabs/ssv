@@ -25,19 +25,18 @@ var (
 // TODO: add operator key
 type Store interface {
 	GetNetworkKey() (*ecdsa.PrivateKey, bool, error)
-	SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error)
+	SetupNetworkKey(logger *zap.Logger, skEncoded string) (*ecdsa.PrivateKey, error)
 	// GetOperatorKey() (*rsa.PrivateKey, bool, error)
 	// SetupOperatorkKey(skEncoded string) (*rsa.PrivateKey, error)
 }
 
 type identityStore struct {
-	db     basedb.IDb
-	logger *zap.Logger
+	db basedb.IDb
 }
 
 // NewIdentityStore creates a new identity store
-func NewIdentityStore(db basedb.IDb, logger *zap.Logger) Store {
-	es := identityStore{db, logger}
+func NewIdentityStore(db basedb.IDb) Store {
+	es := identityStore{db}
 	return &es
 }
 
@@ -57,16 +56,16 @@ func (s identityStore) GetNetworkKey() (*ecdsa.PrivateKey, bool, error) {
 	return pk, found, nil
 }
 
-func (s identityStore) SetupNetworkKey(skEncoded string) (*ecdsa.PrivateKey, error) {
+func (s identityStore) SetupNetworkKey(logger *zap.Logger, skEncoded string) (*ecdsa.PrivateKey, error) {
 	privateKey, found, err := s.GetNetworkKey()
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to get privateKey")
 	}
 	if skEncoded == "" && found && privateKey != nil {
-		s.logger.Debug("using p2p network privateKey from storage")
+		logger.Debug("using p2p network privateKey from storage")
 		return privateKey, nil
 	}
-	privateKey, err = utils.ECDSAPrivateKey(s.logger.With(zap.String("who", "p2p storage")), skEncoded)
+	privateKey, err = utils.ECDSAPrivateKey(logger.Named("p2p storage"), skEncoded)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to generate private key")
 	}

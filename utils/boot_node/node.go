@@ -24,7 +24,6 @@ import (
 
 // Options contains options to create the node
 type Options struct {
-	Logger     *zap.Logger
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
 	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
@@ -33,12 +32,11 @@ type Options struct {
 // Node represents the behavior of boot node
 type Node interface {
 	// Start starts the SSV node
-	Start(ctx context.Context) error
+	Start(ctx context.Context, logger *zap.Logger) error
 }
 
 // bootNode implements Node interface
 type bootNode struct {
-	logger      *zap.Logger
 	privateKey  string
 	discv5port  int
 	forkVersion []byte
@@ -49,7 +47,6 @@ type bootNode struct {
 // New is the constructor of ssvNode
 func New(opts Options) Node {
 	return &bootNode{
-		logger:      opts.Logger,
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
@@ -60,31 +57,32 @@ func New(opts Options) Node {
 
 type handler struct {
 	listener *discover.UDPv5
-	logger   *zap.Logger
 }
 
-func (h *handler) httpHandler(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	write := func(w io.Writer, b []byte) {
-		if _, err := w.Write(b); err != nil {
-			h.logger.Error("Failed to write to http response", zap.Error(err))
+func (h *handler) httpHandler(logger *zap.Logger) func(w http.ResponseWriter, _ *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		write := func(w io.Writer, b []byte) {
+			if _, err := w.Write(b); err != nil {
+				logger.Error("Failed to write to http response", zap.Error(err))
+			}
 		}
-	}
-	allNodes := h.listener.AllNodes()
-	write(w, []byte("Nodes stored in the table:\n"))
-	for i, n := range allNodes {
-		write(w, []byte(fmt.Sprintf("Node %d\n", i)))
-		write(w, []byte(n.String()+"\n"))
-		write(w, []byte("Node ID: "+n.ID().String()+"\n"))
-		write(w, []byte("IP: "+n.IP().String()+"\n"))
-		write(w, []byte(fmt.Sprintf("UDP Port: %d", n.UDP())+"\n"))
-		write(w, []byte(fmt.Sprintf("TCP Port: %d", n.TCP())+"\n\n"))
+		allNodes := h.listener.AllNodes()
+		write(w, []byte("Nodes stored in the table:\n"))
+		for i, n := range allNodes {
+			write(w, []byte(fmt.Sprintf("Node %d\n", i)))
+			write(w, []byte(n.String()+"\n"))
+			write(w, []byte("Node ID: "+n.ID().String()+"\n"))
+			write(w, []byte("IP: "+n.IP().String()+"\n"))
+			write(w, []byte(fmt.Sprintf("UDP Port: %d", n.UDP())+"\n"))
+			write(w, []byte(fmt.Sprintf("TCP Port: %d", n.TCP())+"\n\n"))
+		}
 	}
 }
 
 // Start implements Node interface
-func (n *bootNode) Start(ctx context.Context) error {
-	privKey, err := utils.ECDSAPrivateKey(n.logger.With(zap.String("who", "p2pNetworkPrivateKey")), n.privateKey)
+func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
+	privKey, err := utils.ECDSAPrivateKey(logger.Named("p2pNetworkPrivateKey"), n.privateKey)
 	if err != nil {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
@@ -95,18 +93,17 @@ func (n *bootNode) Start(ctx context.Context) error {
 	// ipAddr = "127.0.0.1"
 	log.Print("TEST Ip addr----", ipAddr)
 	if err != nil {
-		n.logger.Fatal("Failed to get ExternalIP", zap.Error(err))
+		logger.Fatal("Failed to get ExternalIP", zap.Error(err))
 	}
-	listener := n.createListener(ipAddr, n.discv5port, cfg)
+	listener := n.createListener(logger, ipAddr, n.discv5port, cfg)
 	node := listener.Self()
-	n.logger.Info("Running bootnode", zap.String("node", node.String()))
+	logger.Info("Running bootnode", zap.String("node", node.String()))
 
 	handler := &handler{
 		listener: listener,
-		logger:   n.logger,
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/p2p", handler.httpHandler)
+	mux.HandleFunc("/p2p", handler.httpHandler(logger))
 
 	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 	// nolint: gosec
@@ -117,10 +114,10 @@ func (n *bootNode) Start(ctx context.Context) error {
 	return nil
 }
 
-func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) *discover.UDPv5 {
+func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, cfg discover.Config) *discover.UDPv5 {
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
-		n.logger.Fatal("IPV4 address not provided", zap.String("ipAddr", ipAddr))
+		logger.Fatal("IPV4 address not provided", zap.String("ipAddr", ipAddr))
 	}
 	var bindIP net.IP
 	var networkVersion string
@@ -132,7 +129,7 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 		bindIP = net.IPv4zero
 		networkVersion = "udp4"
 	default:
-		n.logger.Fatal("Valid ip address not provided", zap.String("ipAddr", ipAddr))
+		logger.Fatal("Valid ip address not provided", zap.String("ipAddr", ipAddr))
 	}
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,
@@ -142,7 +139,7 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 	if err != nil {
 		log.Fatal(err)
 	}
-	localNode, err := n.createLocalNode(cfg.PrivateKey, ip, port)
+	localNode, err := n.createLocalNode(logger, cfg.PrivateKey, ip, port)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -154,7 +151,7 @@ func (n *bootNode) createListener(ipAddr string, port int, cfg discover.Config) 
 	return network
 }
 
-func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, port int) (*enode.LocalNode, error) {
+func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port int) (*enode.LocalNode, error) {
 	db, err := enode.OpenDB("")
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not open node's peer database")
@@ -162,9 +159,9 @@ func (n *bootNode) createLocalNode(privKey *ecdsa.PrivateKey, ipAddr net.IP, por
 	external := net.ParseIP(n.externalIP)
 	if n.externalIP == "" {
 		external = ipAddr
-		n.logger.Info("Running with IP", zap.String("ip", ipAddr.String()))
+		logger.Info("Running with IP", zap.String("ip", ipAddr.String()))
 	} else {
-		n.logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
+		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
 	fVersion := n.network.ForkVersion()

@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"testing"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
@@ -12,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 const (
@@ -23,8 +24,7 @@ const (
 var sharedData *SharedData
 
 type SharedData struct {
-	Logger *zap.Logger
-	Nodes  map[spectypes.OperatorID]network.P2PNetwork
+	Nodes map[spectypes.OperatorID]network.P2PNetwork
 }
 
 func GetSharedData(t *testing.T) SharedData { //singleton B-)
@@ -55,8 +55,7 @@ func TestMain(m *testing.M) {
 	}
 
 	sharedData = &SharedData{
-		Logger: logger,
-		Nodes:  nodes,
+		Nodes: nodes,
 	}
 
 	m.Run()

@@ -1,6 +1,7 @@
 package network
 
 import (
+	"go.uber.org/zap"
 	"io"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -11,7 +12,7 @@ import (
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(message spectypes.SSVMessage)
+	Route(logger *zap.Logger, message spectypes.SSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter
@@ -26,11 +27,11 @@ type P2PNetwork interface {
 	protocolp2p.Network
 	MessageRouting
 	// Setup initialize the network layer and starts the libp2p host
-	Setup() error
+	Setup(logger *zap.Logger) error
 	// Start starts the network
-	Start() error
+	Start(logger *zap.Logger) error
 	// UpdateSubnets will update the registered subnets according to active validators
-	UpdateSubnets()
+	UpdateSubnets(logger *zap.Logger)
 }
 
 // GetValidatorStats returns stats of validators, including the following:

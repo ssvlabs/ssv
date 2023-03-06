@@ -40,7 +40,6 @@ var (
 
 // PububConfig is the needed config to instantiate pubsub
 type PububConfig struct {
-	Logger      *zap.Logger
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
@@ -80,9 +79,6 @@ func (cfg *PububConfig) init() error {
 	if cfg.Host == nil {
 		return errors.New("bad args: missing host")
 	}
-	if cfg.Logger == nil {
-		return errors.New("bad args: missing logger")
-	}
 	if cfg.OutboundQueueSize == 0 {
 		cfg.OutboundQueueSize = outboundQueueSize
 	}
@@ -106,12 +102,12 @@ func (cfg *PububConfig) initScoring() {
 }
 
 // NewPubsub creates a new pubsub router and the necessary components
-func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.PubSub, Controller, error) {
+func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork forks.Fork) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
 
-	sf := newSubFilter(cfg.Logger, fork, subscriptionRequestLimit)
+	sf := newSubFilter(logger, fork, subscriptionRequestLimit)
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
@@ -120,7 +116,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
-		//	cfg.Logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
+		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
 		// }),
 	}
@@ -132,7 +128,7 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 	var topicScoreFactory func(string) *pubsub.TopicScoreParams
 	if cfg.ScoreIndex != nil {
 		cfg.initScoring()
-		inspector := scoreInspector(cfg.Logger.With(zap.String("who", "scoreInspector")), cfg.ScoreIndex)
+		inspector := scoreInspector(logger.Named("scoreInspector"), cfg.ScoreIndex)
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
@@ -146,25 +142,25 @@ func NewPubsub(ctx context.Context, cfg *PububConfig, fork forks.Fork) (*pubsub.
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(cfg, fork)
+		topicScoreFactory = topicScoreParams(logger, cfg, fork)
 	}
 
 	if cfg.MsgIDHandler != nil {
-		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID()))
+		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID(logger)))
 	}
 
 	if len(cfg.StaticPeers) > 0 {
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))
 	}
 
-	psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(cfg.Logger, cfg.TraceLog)))
+	psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger, cfg.TraceLog)))
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, cfg.Logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

@@ -2,11 +2,14 @@ package protocolp2p
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 )
@@ -20,7 +23,7 @@ var (
 type Subscriber interface {
 	p2p.Subscriber
 	// Unsubscribe unsubscribes from the validator subnet
-	Unsubscribe(pk spectypes.ValidatorPK) error
+	Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error
 	// Peers returns the peers that are connected to the given validator
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 }
@@ -56,6 +59,33 @@ type SyncResult struct {
 }
 
 type SyncResults []SyncResult
+
+// String method was created for logging purposes
+func (s SyncResults) String() string {
+	var v []string
+	for _, m := range s {
+		var sm *specqbft.SignedMessage
+		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
+			sm = &specqbft.SignedMessage{}
+			if err := sm.Decode(m.Msg.Data); err != nil {
+				v = append(v, fmt.Sprintf("(%v)", err))
+				continue
+			}
+			v = append(
+				v,
+				fmt.Sprintf(
+					"(type=%d height=%d round=%d)",
+					m.Msg.MsgType,
+					sm.Message.Height,
+					sm.Message.Round,
+				),
+			)
+		}
+		v = append(v, fmt.Sprintf("(type=%d)", m.Msg.MsgType))
+	}
+
+	return strings.Join(v, ", ")
+}
 
 func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
 	for _, res := range results {
@@ -107,14 +137,14 @@ type Syncer interface {
 	specqbft.Syncer
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
 	// it accepts a list of targets for the request.
-	GetHistory(mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
+	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
 
 	// RegisterHandlers registers handler for the given protocol
-	RegisterHandlers(handlers ...*SyncHandler)
+	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)
 
 	// LastDecided fetches last decided from a random set of peers
 	// TODO: replace with specqbft.SyncHighestDecided
-	LastDecided(mid spectypes.MessageID) ([]SyncResult, error)
+	LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]SyncResult, error)
 }
 
 // MsgValidationResult helps other components to report message validation with a generic results scheme
@@ -136,7 +166,7 @@ const (
 // ValidationReporting is the interface for reporting on message validation results
 type ValidationReporting interface {
 	// ReportValidation reports the result for the given message
-	ReportValidation(message *spectypes.SSVMessage, res MsgValidationResult)
+	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res MsgValidationResult)
 }
 
 // Network holds the networking layer used to complement the underlying protocols

@@ -11,7 +11,7 @@ import (
 
 // Broadcaster is an interface broadcasting stream message across all available connections
 type Broadcaster interface {
-	FromFeed(feed *event.Feed) error
+	FromFeed(logger *zap.Logger, feed *event.Feed) error
 	Broadcast(msg Message) error
 	Register(conn broadcasted) bool
 	Deregister(conn broadcasted) bool
@@ -23,36 +23,34 @@ type broadcasted interface {
 }
 
 type broadcaster struct {
-	logger      *zap.Logger
 	mut         sync.Mutex
 	connections map[string]broadcasted
 }
 
-func newBroadcaster(logger *zap.Logger) Broadcaster {
+func newBroadcaster() Broadcaster {
 	return &broadcaster{
-		logger:      logger.With(zap.String("component", "exporter/api/broadcaster")),
 		mut:         sync.Mutex{},
 		connections: map[string]broadcasted{},
 	}
 }
 
 // FromFeed subscribes to the given feed and broadcasts incoming messages
-func (b *broadcaster) FromFeed(msgFeed *event.Feed) error {
+func (b *broadcaster) FromFeed(logger *zap.Logger, msgFeed *event.Feed) error {
 	cn := make(chan Message, 512)
 	sub := msgFeed.Subscribe(cn)
 	defer sub.Unsubscribe()
-	defer b.logger.Debug("done reading from feed")
+	defer logger.Debug("done reading from feed")
 
 	for {
 		select {
 		case msg := <-cn:
 			go func(msg Message) {
 				if err := b.Broadcast(msg); err != nil {
-					b.logger.Error("could not broadcast message", zap.Error(err))
+					logger.Error("could not broadcast message", zap.Error(err))
 				}
 			}(msg)
 		case err := <-sub.Err():
-			b.logger.Warn("could not read messages from msgFeed", zap.Error(err))
+			logger.Warn("could not read messages from msgFeed", zap.Error(err))
 			return err
 		}
 	}

@@ -2,13 +2,14 @@ package bootnode
 
 import (
 	"fmt"
+	"log"
+
 	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-	"log"
 )
 
 type config struct {
@@ -30,16 +31,15 @@ var StartBootNodeCmd = &cobra.Command{
 		}
 
 		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
-		Logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{Format: cfg.GlobalConfig.LogFormat})
+		logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{Format: cfg.GlobalConfig.LogFormat})
 
 		if err != nil {
-			Logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
+			logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
 		}
 
-		cfg.Options.Logger = Logger
 		bootNode := bootnode.New(cfg.Options)
-		if err := bootNode.Start(cmd.Context()); err != nil {
-			Logger.Fatal("failed to start boot node", zap.Error(err))
+		if err := bootNode.Start(cmd.Context(), logger); err != nil {
+			logger.Fatal("failed to start boot node", zap.Error(err))
 		}
 	},
 }

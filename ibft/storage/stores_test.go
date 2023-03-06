@@ -7,17 +7,12 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 )
-
-func init() {
-	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
-}
 
 func TestQBFTStores(t *testing.T) {
 	qbftMap := NewStores()
 
-	store, err := newTestIbftStorage(logex.GetLogger(), "", forksprotocol.GenesisForkVersion)
+	store, err := newTestIbftStorage(logex.TestLogger(t), "", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 	qbftMap.Add(types.BNRoleAttester, store)
 	qbftMap.Add(types.BNRoleProposer, store)

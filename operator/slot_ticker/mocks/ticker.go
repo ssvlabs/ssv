@@ -10,6 +10,7 @@ import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
+	zap "go.uber.org/zap"
 )
 
 // MockTicker is a mock of Ticker interface.
@@ -36,15 +37,15 @@ func (m *MockTicker) EXPECT() *MockTickerMockRecorder {
 }
 
 // Start mocks base method.
-func (m *MockTicker) Start() {
+func (m *MockTicker) Start(logger *zap.Logger) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
+	m.ctrl.Call(m, "Start", logger)
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockTickerMockRecorder) Start() *gomock.Call {
+func (mr *MockTickerMockRecorder) Start(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockTicker)(nil).Start))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockTicker)(nil).Start), logger)
 }
 
 // Subscribe mocks base method.

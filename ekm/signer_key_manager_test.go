@@ -1,11 +1,11 @@
 package ekm
 
 import (
+	"testing"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/prysmaticlabs/go-bitfield"
-	"go.uber.org/zap"
-	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -13,7 +13,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -31,10 +30,12 @@ const (
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	db, err := getBaseStorage()
+	logger := logex.TestLogger(t)
+
+	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(db, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), zap.L())
+	km, err := NewETHKeyManagerSigner(db, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), logger)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -194,7 +195,6 @@ func TestSlashing(t *testing.T) {
 }
 
 func TestSignRoot(t *testing.T) {
-	logex.Build("", zapcore.DebugLevel, &logex.EncodingConfig{})
 
 	require.NoError(t, bls.Init(bls.BLS12_381))
 

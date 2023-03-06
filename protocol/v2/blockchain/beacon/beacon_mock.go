@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"go.uber.org/zap"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -109,7 +110,7 @@ func (b beaconMock) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 	return phase0.Domain{}, nil
 }
 
-func (b beaconMock) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
+func (b beaconMock) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
 	//TODO implement me
 	panic("implement me")
 }

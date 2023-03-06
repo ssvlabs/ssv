@@ -3,12 +3,14 @@ package topics
 import (
 	"bytes"
 	"context"
+	"sync"
+	"time"
+
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/forks"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
-	"sync"
-	"time"
 )
 
 const (
@@ -36,7 +38,7 @@ type MsgPeersResolver interface {
 // this uses to identify msg senders after validation
 type MsgIDHandler interface {
 	MsgPeersResolver
-	MsgID() func(pmsg *ps_pb.Message) string
+	MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message) string
 
 	Start()
 	GC()
@@ -51,7 +53,6 @@ type msgIDEntry struct {
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
 	ctx    context.Context
-	logger *zap.Logger
 	fork   forks.Fork
 	added  chan addedEvent
 	ids    map[string]*msgIDEntry
@@ -60,10 +61,9 @@ type msgIDHandler struct {
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, logger *zap.Logger, fork forks.Fork, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, fork forks.Fork, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
 		ctx:    ctx,
-		logger: logger,
 		fork:   fork,
 		added:  make(chan addedEvent, msgIDHandlerBufferSize),
 		ids:    make(map[string]*msgIDEntry),
@@ -92,12 +92,12 @@ func (handler *msgIDHandler) Start() {
 }
 
 // MsgID returns the msg_id function that calculates msg_id based on it's content.
-func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
+func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message) string {
 	return func(pmsg *ps_pb.Message) string {
 		if pmsg == nil {
 			return MsgIDEmptyMessage
 		}
-		//logger := handler.logger.With()
+		//logger := logger.With()
 		if len(pmsg.GetData()) == 0 {
 			return MsgIDEmptyMessage
 		}
@@ -107,9 +107,9 @@ func (handler *msgIDHandler) MsgID() func(pmsg *ps_pb.Message) string {
 		}
 		mid := handler.fork.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
-			handler.logger.Debug("could not create msg_id",
+			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
-				zap.String("from", pid.String()))
+				logging.PeerID(pid))
 			return MsgIDError
 		}
 		handler.Add(mid, pid)

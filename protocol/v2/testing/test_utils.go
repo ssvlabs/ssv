@@ -149,11 +149,10 @@ func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.Secret
 }
 
 // NewInMemDb returns basedb.IDb with in-memory type
-func NewInMemDb() basedb.IDb {
-	db, _ := kv.New(basedb.Options{
-		Type:   "badger-memory",
-		Path:   "",
-		Logger: zap.L(),
+func NewInMemDb(logger *zap.Logger) basedb.IDb {
+	db, _ := kv.New(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	return db
 }

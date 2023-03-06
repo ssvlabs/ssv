@@ -43,7 +43,7 @@ type Storage interface {
 type storage struct {
 	db      basedb.IDb
 	network beacon.Network
-	logger  *zap.Logger
+	logger  *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock    sync.RWMutex
 }
 
@@ -51,7 +51,7 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 	return &storage{
 		db:      db,
 		network: network,
-		logger:  logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
+		logger:  logger.Named(fmt.Sprintf("%sstorage", prefix)),
 		lock:    sync.RWMutex{},
 	}
 }
@@ -120,7 +120,7 @@ func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 
 	ret := make([]core.ValidatorAccount, 0)
 
-	err := s.db.GetAll(s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
+	err := s.db.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		acc, err := s.decodeAccount(obj.Value)
 		if err != nil {
 			return errors.Wrap(err, "failed to list accounts")

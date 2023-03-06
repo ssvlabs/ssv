@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func (v *Validator) handleEventMessage(msg *queue.DecodedSSVMessage, dutyRunner runner.Runner) error {
+func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage, dutyRunner runner.Runner) error {
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
 		return errors.New("could not decode event message")
@@ -18,13 +18,13 @@ func (v *Validator) handleEventMessage(msg *queue.DecodedSSVMessage, dutyRunner 
 	case types.Timeout:
 		err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(*eventMsg)
 		if err != nil {
-			v.logger.Warn("on timeout failed", zap.Error(err)) // need to return error instead?
+			logger.Warn("on timeout failed", zap.Error(err)) // need to return error instead?
 		}
 		return nil
 	case types.ExecuteDuty:
-		err := v.OnExecuteDuty(*eventMsg)
+		err := v.OnExecuteDuty(logger, *eventMsg)
 		if err != nil {
-			v.logger.Warn("failed to execute duty", zap.Error(err)) // need to return error instead?
+			logger.Warn("failed to execute duty", zap.Error(err)) // need to return error instead?
 		}
 		return nil
 	default:
