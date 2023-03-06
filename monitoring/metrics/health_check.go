@@ -1,8 +1,10 @@
 package metrics
 
 import (
-	"go.uber.org/zap"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
+	"go.uber.org/zap"
 )
 
 // HealthCheckAgent represent an health-check agent
@@ -36,7 +38,7 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 		if len(errs) == 0 {
 			break
 		}
-		logger.Warn(name+" is not healthy, trying again in 1sec", zap.Any("errors", errs))
+		logger.Warn(name+" is not healthy, trying again in 1sec", logging.ErrorStrs(errs))
 		time.Sleep(1 * time.Second)
 	}
 	logger.Debug(name + " is healthy")

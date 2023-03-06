@@ -55,8 +55,7 @@ var unknown = "unknown"
 func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
-		logger.Debug("connected peers status",
-			zap.Int("count", len(pids)))
+		logger.Debug("connected peers status", logging.Count(len(pids)))
 		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
@@ -74,8 +73,7 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
 		nTopics := len(topics)
-		logger.Debug("connected topics",
-			zap.Int("count", nTopics))
+		logger.Debug("connected topics", logging.Count(nTopics))
 		for _, name := range topics {
 			n.reportTopicPeers(logger, name)
 		}
@@ -85,11 +83,10 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
-		logger.Warn("could not get topic peers", zap.String("topic", name), zap.Error(err))
+		logger.Warn("could not get topic peers", logging.Topic(name), zap.Error(err))
 		return
 	}
-	logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
-		zap.Any("peers", peers))
+	logger.Debug("topic peers status", logging.Topic(name), logging.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
