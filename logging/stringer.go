@@ -28,3 +28,11 @@ type uint64Stringer struct {
 func (h uint64Stringer) String() string {
 	return strconv.FormatUint(h.val, 10)
 }
+
+type funcStringer struct {
+	fn func() string
+}
+
+func (s funcStringer) String() string {
+	return s.fn()
+}
