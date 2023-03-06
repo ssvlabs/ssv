@@ -62,9 +62,9 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 				zap.Any("signers", msg.Signers),
 			)
 			if err = c.SaveInstance(inst, msg); err != nil {
-				logger.Debug("failed to save instance", zap.Error(err))
+				logger.Debug("❗failed to save instance", zap.Error(err))
 			} else {
-				logger.Debug("saved instance upon decided", zap.Error(err))
+				logger.Debug("💾 saved instance upon decided", zap.Error(err))
 			}
 		}
 	}

@@ -21,7 +21,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
-			logger.Debug("failed to decode message data", zap.Error(err))
+			logger.Debug("❌ failed to decode message data", zap.Error(err))
 			reporting.ReportValidation(logger, msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
 		} else if sm.Protocol != message.LastDecidedType {
@@ -36,7 +36,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 			}
 			instance, err := store.GetHighestInstance(msgID[:])
 			if err != nil {
-				logger.Debug("failed to get highest instance", zap.Error(err))
+				logger.Debug("❗ failed to get highest instance", zap.Error(err))
 			} else if instance != nil {
 				sm.UpdateResults(err, instance.DecidedMessage)
 			}

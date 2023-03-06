@@ -49,7 +49,7 @@ func (i *Instance) uponPrepare(
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
-	logger.Debug("got prepare quorum, broadcasting commit message",
+	logger.Debug("📢 got prepare quorum, broadcasting commit message",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		zap.Any("commit-singers", commitMsg.Signers))

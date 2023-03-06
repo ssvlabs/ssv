@@ -186,7 +186,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successful submitted aggregate")
+		logger.Debug("✅ successful submitted aggregate")
 	}
 	r.GetState().Finished = true
 
