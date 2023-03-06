@@ -85,7 +85,7 @@ func (b *BaseRunner) canStartNewDuty() error {
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
 	if err := b.ValidatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
@@ -145,7 +145,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
 	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
@@ -207,6 +207,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 
 	if err := runner.GetValCheckF()(byts); err != nil {
 		return errors.Wrap(err, "input data invalid")
+
 	}
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {

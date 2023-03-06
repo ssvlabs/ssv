@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -167,7 +168,7 @@ var postConsensusAttestationMsg = func(
 	}
 
 	if wrongRoot {
-		root = []byte{1, 2, 3, 4}
+		root = [32]byte{1, 2, 3, 4}
 	}
 
 	msgs := spectypes.PartialSignatureMessages{
@@ -217,7 +218,7 @@ var postConsensusBeaconBlockMsg = func(
 	}
 
 	if wrongRoot {
-		root = []byte{1, 2, 3, 4}
+		root = [32]byte{1, 2, 3, 4}
 	}
 
 	msgs := spectypes.PartialSignatureMessages{
@@ -248,7 +249,7 @@ var PreConsensusFailedMsg = func(
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(testingutils.TestingDutyEpoch), d, msgSigner.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
 	msg := spectypes.PartialSignatureMessages{
-		Type: specssv.RandaoPartialSig,
+		Type: spectypes.RandaoPartialSig,
 		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed[:],
@@ -297,7 +298,7 @@ var PreConsensusRandaoDifferentSignerMsg = func(msgSigner, randaoSigner *bls.Sec
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(testingutils.TestingDutyEpoch), d, randaoSigner.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
 	msg := spectypes.PartialSignatureMessages{
-		Type: specssv.RandaoPartialSig,
+		Type: spectypes.RandaoPartialSig,
 		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed[:],
@@ -328,7 +329,7 @@ var randaoMsg = func(
 	signed, root, _ := signer.SignBeaconObject(spectypes.SSZUint64(epoch), d, sk.GetPublicKey().Serialize(), spectypes.DomainRandao)
 
 	msgs := spectypes.PartialSignatureMessages{
-		Type:     specssv.RandaoPartialSig,
+		Type:     spectypes.RandaoPartialSig,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 	for i := 0; i < msgCnt; i++ {
@@ -338,7 +339,7 @@ var randaoMsg = func(
 			Signer:           id,
 		}
 		if wrongRoot {
-			msg.SigningRoot = make([]byte, 32)
+			msg.SigningRoot = [32]byte{}
 		}
 		msgs.Messages = append(msgs.Messages, msg)
 	}
@@ -427,7 +428,7 @@ var postConsensusAggregatorMsg = func(
 	}
 
 	if wrongRoot {
-		root = []byte{1, 2, 3, 4}
+		root = [32]byte{1, 2, 3, 4}
 	}
 
 	msgs := spectypes.PartialSignatureMessages{
@@ -469,7 +470,7 @@ var postConsensusSyncCommitteeMsg = func(
 	}
 
 	if wrongRoot {
-		root = []byte{1, 2, 3, 4}
+		root = [32]byte{1, 2, 3, 4}
 	}
 
 	msgs := spectypes.PartialSignatureMessages{
@@ -535,7 +536,7 @@ var contributionProofMsg = func(
 		sig, root, _ := signer.SignBeaconObject(data, d, beaconsk.GetPublicKey().Serialize(), spectypes.DomainSyncCommitteeSelectionProof)
 		msg := &spectypes.PartialSignatureMessage{
 			PartialSignature: sig[:],
-			SigningRoot:      ensureRoot(root),
+			SigningRoot:      root,
 			Signer:           beaconid,
 		}
 
@@ -552,7 +553,7 @@ var contributionProofMsg = func(
 	}
 
 	msg := &spectypes.PartialSignatureMessages{
-		Type:     specssv.ContributionProofs,
+		Type:     spectypes.ContributionProofs,
 		Messages: msgs,
 	}
 
@@ -595,18 +596,31 @@ var postConsensusSyncCommitteeContributionMsg = func(
 		copy(blsProofSig[:], proofSig)
 
 		// get contribution
-		contribution, _ := beacon.GetSyncCommitteeContribution(testingutils.TestingDutySlot, subnet)
+		contributionsMarshaler, dataVersion, err := beacon.GetSyncCommitteeContribution(testingutils.TestingDutySlot, []phase0.BLSSignature{blsProofSig}, []uint64{})
+		if err != nil {
+			panic(err)
+		}
+		if dataVersion != spec.DataVersionAltair {
+			panic("wrong data version")
+		}
+		contributions, ok := contributionsMarshaler.(*spectypes.Contributions)
+		if !ok || contributions == nil {
+			panic("bad contributions returned")
+		}
+		if len(*contributions) != 1 {
+			panic("wrong number of contributions")
+		}
 
 		// sign contrib and proof
 		contribAndProof := &altair.ContributionAndProof{
 			AggregatorIndex: validatorIndex,
-			Contribution:    contribution,
+			Contribution:    &(*contributions)[0].Contribution,
 			SelectionProof:  blsProofSig,
 		}
 		signed, root, _ := signer.SignBeaconObject(contribAndProof, dContribAndProof, sk.GetPublicKey().Serialize(), spectypes.DomainSyncCommitteeSelectionProof)
 
 		if wrongRoot {
-			root = []byte{1, 2, 3, 4}
+			root = [32]byte{1, 2, 3, 4}
 		}
 
 		msg := &spectypes.PartialSignatureMessage{
@@ -634,17 +648,4 @@ var postConsensusSyncCommitteeContributionMsg = func(
 		Signature: sig,
 		Signer:    id,
 	}
-}
-
-// ensureRoot ensures that SigningRoot will have sufficient allocated memory
-// otherwise we get panic from bls:
-// github.com/herumi/bls-eth-go-binary/bls.(*Sign).VerifyByte:738
-func ensureRoot(root []byte) []byte {
-	n := len(root)
-	if n == 0 {
-		n = 1
-	}
-	tmp := make([]byte, n)
-	copy(tmp, root)
-	return tmp
 }

@@ -55,7 +55,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *spectypes.SSVMessage) {
 			logger.Debug("failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
-		if signedMsg == nil || signedMsg.Message == nil {
+		if signedMsg == nil {
 			logger.Debug("got empty message")
 			return
 		}

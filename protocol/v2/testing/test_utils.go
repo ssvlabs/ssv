@@ -77,7 +77,7 @@ func CreateMultipleStoredInstances(
 				Round:                sm.Message.Round,
 				Height:               sm.Message.Height,
 				LastPreparedRound:    sm.Message.Round,
-				LastPreparedValue:    sm.Message.Data,
+				LastPreparedValue:    sm.FullData,
 				Decided:              true,
 				DecidedValue:         sm.FullData,
 				ProposeContainer:     specqbft.NewMsgContainer(),
@@ -120,7 +120,7 @@ func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectyp
 	}
 
 	return &specqbft.SignedMessage{
-		Message:   msg,
+		Message:   *msg,
 		Signature: agg.Serialize(),
 		Signers:   operators,
 	}, nil

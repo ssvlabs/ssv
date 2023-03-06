@@ -1,7 +1,7 @@
 package runner
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -11,8 +11,8 @@ import (
 func (b *BaseRunner) signBeaconObject(
 	runner Runner,
 	obj ssz.HashRoot,
-	slot phase0.Slot,
-	domainType phase0.DomainType,
+	slot spec.Slot,
+	domainType spec.DomainType,
 ) (*spectypes.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
@@ -45,12 +45,16 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialS
 	}, nil
 }
 
-func (b *BaseRunner) validatePartialSigMsg(
+func (b *BaseRunner) validatePartialSigMsgForSlot(
 	signedMsg *spectypes.SignedPartialSignatureMessage,
-	slot phase0.Slot,
+	slot spec.Slot,
 ) error {
 	if err := signedMsg.Validate(); err != nil {
 		return errors.Wrap(err, "SignedPartialSignatureMessage invalid")
+	}
+
+	if signedMsg.Message.Slot != slot {
+		return errors.New("invalid partial sig slot")
 	}
 
 	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
@@ -83,7 +87,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 			}
 
 			// verify
-			if !sig.VerifyByte(pk, root) {
+			if !sig.VerifyByte(pk, root[:]) {
 				return errors.New("wrong signature")
 			}
 			return nil

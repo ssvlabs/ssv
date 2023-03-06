@@ -242,12 +242,16 @@ func (dc *dutyController) handleSlot(slot phase0.Slot) {
 	// execute sync committee duties
 	if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
 		toSpecDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
+			indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
+			for i, index := range duty.ValidatorSyncCommitteeIndices {
+				indices[i] = uint64(index)
+			}
 			return &spectypes.Duty{
 				Type:                          role,
 				PubKey:                        duty.PubKey,
 				Slot:                          slot, // in order for the duty ctrl to execute
 				ValidatorIndex:                duty.ValidatorIndex,
-				ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+				ValidatorSyncCommitteeIndices: indices,
 			}
 		}
 		syncCommitteeDuties.Range(func(index phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty) bool {

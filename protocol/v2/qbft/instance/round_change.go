@@ -310,7 +310,7 @@ func minRound(roundChangeMsgs []*specqbft.SignedMessage) specqbft.Round {
 	return ret
 }
 
-func getRoundChangeData(state *specqbft.State, config qbft.IConfig, instanceStartValue []byte) (specqbft.Round, [32]byte, []byte, []*SignedMessage, error) {
+func getRoundChangeData(state *specqbft.State, config qbft.IConfig, instanceStartValue []byte) (specqbft.Round, [32]byte, []byte, []*specqbft.SignedMessage, error) {
 	if state.LastPreparedRound != specqbft.NoRound && state.LastPreparedValue != nil {
 		justifications, err := getRoundChangeJustification(state, config, state.PrepareContainer)
 		if err != nil {
