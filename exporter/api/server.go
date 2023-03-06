@@ -7,9 +7,9 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
-	"github.com/quic-go/quic-go/logging"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 

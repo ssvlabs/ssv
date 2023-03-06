@@ -21,7 +21,7 @@ type Bootnode struct {
 	cancel context.CancelFunc
 	disc   Service
 
-	ENR string
+	ENR string // Ethereum Node Records https://eips.ethereum.org/EIPS/eip-778
 }
 
 // NewBootnode creates a new bootnode
@@ -33,13 +33,13 @@ func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions
 		return nil, err
 	}
 	np := disc.(NodeProvider)
-	enr := np.Self().Node()
-	logger.Info("bootnode is ready", logging.Enr(enr))
+	enr := np.Self().Node().String()
+	logger.Info("bootnode is ready", logging.ENRStr(enr))
 	return &Bootnode{
 		ctx:    ctx,
 		cancel: cancel,
 		disc:   disc,
-		ENR:    enr.String(),
+		ENR:    enr,
 	}, nil
 }
 

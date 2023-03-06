@@ -30,7 +30,7 @@ const (
 	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
-	FieldEnr                 = "enr"
+	FieldENR                 = "ENR"
 	FieldErrors              = "errors"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
@@ -50,10 +50,10 @@ const (
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
 	FieldSyncResults         = "syncResults"
-	FieldTargetNodeEnr       = "targetNodeEnr"
+	FieldTargetNodeENR       = "targetNodeENR"
 	FieldTopic               = "topic"
 	FieldTxHash              = "txHash"
-	FieldUpdatedEnrLocalNode = "updated_enr"
+	FieldUpdatedENRLocalNode = "updatedENR"
 	FieldValidator           = "validator"
 	FiledEvent               = "event"
 )
@@ -98,20 +98,24 @@ func AddressURL(val url.URL) zapcore.Field {
 	return zap.Stringer(FieldAddress, &val)
 }
 
-func Enr(val *enode.Node) zapcore.Field {
-	return zap.Stringer(FieldEnr, val)
+func ENR(val *enode.Node) zapcore.Field {
+	return zap.Stringer(FieldENR, val)
 }
 
-func TargetNodeEnr(val *enode.Node) zapcore.Field {
-	return zap.Stringer(FieldTargetNodeEnr, val)
+func ENRStr(val string) zapcore.Field {
+	return zap.String(FieldENR, val)
 }
 
-func EnrLocalNode(val *enode.LocalNode) zapcore.Field {
-	return zap.Stringer(FieldEnr, val.Node())
+func TargetNodeENR(val *enode.Node) zapcore.Field {
+	return zap.Stringer(FieldTargetNodeENR, val)
 }
 
-func UpdatedEnrLocalNode(val *enode.LocalNode) zapcore.Field {
-	return zap.Stringer(FieldUpdatedEnrLocalNode, val.Node())
+func ENRLocalNode(val *enode.LocalNode) zapcore.Field {
+	return zap.Stringer(FieldENR, val.Node())
+}
+
+func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
+	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
 }
 
 func Subnets(val records.Subnets) zapcore.Field {
@@ -136,14 +140,6 @@ func DurationMilli(val time.Time) zapcore.Field {
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, uint64Stringer{uint64(network.EstimatedCurrentSlot())})
-}
-
-type funcStringer struct {
-	fn func() string
-}
-
-func (s funcStringer) String() string {
-	return s.fn()
 }
 
 func StartTimeUnixMilli(network beacon.Network, slot spec.Slot) zapcore.Field {
