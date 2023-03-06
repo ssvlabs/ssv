@@ -2,15 +2,13 @@ package api
 
 import (
 	"context"
-	"net/http"
-	"time"
-
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"net/http"
+	"time"
 )
 
 const (
@@ -57,6 +55,8 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 
 // Start starts the websocket server and the broadcaster
 func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
+	logger = logger.Named(logging.NameWsServer)
+
 	ws.RegisterHandler(logger, "/query", ws.handleQuery)
 	ws.RegisterHandler(logger, "/stream", ws.handleStream)
 
