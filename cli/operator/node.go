@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
 	"log"
 	"net/http"
 	"time"
@@ -11,7 +12,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
-	logging "github.com/ipfs/go-log"
+	golog "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -197,25 +198,25 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 	}
 	if len(cfg.DebugServices) > 0 {
-		if err := logging.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String()); err != nil {
+		if err := golog.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String()); err != nil {
 			return nil, err
 		}
 	}
 
 	if v := cfg.GlobalConfig.LogLevels.Debug; len(v) > 0 {
-		if err := logging.SetLogLevelRegex(v, "debug"); err != nil {
+		if err := golog.SetLogLevelRegex(v, "debug"); err != nil {
 			return nil, err
 		}
 	}
 
 	if v := cfg.GlobalConfig.LogLevels.Info; len(v) > 0 {
-		if err := logging.SetLogLevelRegex(v, "info"); err != nil {
+		if err := golog.SetLogLevelRegex(v, "info"); err != nil {
 			return nil, err
 		}
 	}
 
 	if v := cfg.GlobalConfig.LogLevels.Warn; len(v) > 0 {
-		if err := logging.SetLogLevelRegex(v, "warn"); err != nil {
+		if err := golog.SetLogLevelRegex(v, "warn"); err != nil {
 			return nil, err
 		}
 	}
@@ -364,6 +365,7 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
+	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
