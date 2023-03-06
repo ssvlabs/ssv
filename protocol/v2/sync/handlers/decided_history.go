@@ -16,7 +16,6 @@ import (
 // HistoryHandler handler for decided history protocol
 // TODO: add msg validation and report scores
 func HistoryHandler(logger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting, maxBatchSize int) protocolp2p.RequestHandler {
-	logger = logger.Named("HistoryHandler")
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 		logger := logger.With(zap.String("msg_id", fmt.Sprintf("%x", msg.MsgID)))
 		sm := &message.SyncMessage{}
