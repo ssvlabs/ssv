@@ -73,12 +73,11 @@ func (b *BaseRunner) baseStartNewDuty(runner Runner, duty *spectypes.Duty) error
 	}
 
 	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently this does not happen
-	func() {
-		b.mtx.Lock() // writes to b.State
-		defer b.mtx.Unlock()
-		b.State = NewRunnerState(b.Share.Quorum, duty)
-	}()
+	// b.State but currently does not write to it
+	state := NewRunnerState(b.Share.Quorum, duty)
+	b.mtx.Lock() // writes to b.State
+	b.State = state
+	b.mtx.Unlock()
 
 	return runner.executeDuty(duty)
 }
