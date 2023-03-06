@@ -83,7 +83,7 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named(logging.P2PNetworkComponent)
+	logger = logger.Named(logging.NameP2PNetwork)
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
@@ -130,7 +130,7 @@ func (n *p2pNetwork) Close() error {
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
-	logger = logger.Named(logging.P2PNetworkComponent)
+	logger = logger.Named(logging.NameP2PNetwork)
 
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
@@ -215,7 +215,7 @@ func (n *p2pNetwork) isReady() bool {
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
-	logger = logger.Named(logging.P2PNetworkComponent)
+	logger = logger.Named(logging.NameP2PNetwork)
 
 	visited := make(map[int]bool)
 	n.activeValidatorsLock.Lock()
@@ -253,7 +253,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
 
-	err := n.disc.RegisterSubnets(logger.Named(logging.DiscoveryServiceComponent), subnetsToAdd...)
+	err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
 	if err != nil {
 		logger.Warn("could not register subnets", zap.Error(err))
 		return

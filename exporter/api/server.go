@@ -55,7 +55,7 @@ func (ws *wsServer) UseQueryHandler(handler QueryMessageHandler) {
 
 // Start starts the websocket server and the broadcaster
 func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
-	logger = logger.Named(logging.WsServerComponent)
+	logger = logger.Named(logging.NameWsServer)
 
 	ws.RegisterHandler(logger, "/query", ws.handleQuery)
 	ws.RegisterHandler(logger, "/stream", ws.handleStream)

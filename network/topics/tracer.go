@@ -30,7 +30,7 @@ func newTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
 	if withLogging {
 		state = psTraceStateWithLogging
 	}
-	return &psTracer{logger: logger.Named(logging.PubsubTrace), state: state}
+	return &psTracer{logger: logger.Named(logging.NamePubsubTrace), state: state}
 }
 
 // Trace handles events, implementation of pubsub.EventTracer

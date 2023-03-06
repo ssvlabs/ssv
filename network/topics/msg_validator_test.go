@@ -18,9 +18,7 @@ import (
 
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
-	//logger := logex.TestLogger(t)
 	f := genesis.ForkGenesis{}
-	//self := peer.ID("16Uiu2HAmNNPRh9pV2MXASMB7oAGCqdmFrYyp5tzutFiF2LN1xFCE")
 	mv := NewSSVMsgValidator(&f)
 	require.NotNil(t, mv)
 

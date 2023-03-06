@@ -146,7 +146,7 @@ func (n *operatorNode) init(opts Options) error {
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start(logger *zap.Logger) error {
-	logger.Named(logging.OperatorComponent)
+	logger.Named(logging.NameOperator)
 
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 

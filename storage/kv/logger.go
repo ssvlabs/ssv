@@ -15,7 +15,7 @@ type badgerLogger struct {
 
 // newLogger creates a new instance of logger
 func newLogger(l *zap.Logger) badger.Logger {
-	return &badgerLogger{l.Named(logging.BadgerDBLog)}
+	return &badgerLogger{l.Named(logging.NameBadgerDBLog)}
 }
 
 // Errorf implements badger.Logger
