@@ -15,7 +15,7 @@ import (
 // Advertise advertises a service
 // implementation of discovery.Advertiser
 func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...discovery.Option) (time.Duration, error) {
-	logger := logging.FromContext(ctx).Named(logging.DiscoveryService)
+	logger := logging.FromContext(ctx).Named(logging.DiscoveryServiceComponent)
 	opts := discovery.Options{}
 	if err := opts.Apply(opt...); err != nil {
 		return 0, errors.Wrap(err, "could not apply options")
@@ -39,7 +39,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 // FindPeers discovers peers providing a service
 // implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
-	logger := logging.FromContext(ctx).Named(logging.DiscoveryService)
+	logger := logging.FromContext(ctx).Named(logging.DiscoveryServiceComponent)
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
 		logger.Debug("not a subnet", zap.String("ns", ns))

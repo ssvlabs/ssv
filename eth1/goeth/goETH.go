@@ -84,6 +84,7 @@ func (ec *eth1Client) EventsFeed() *event.Feed {
 
 // Start streams events from the contract
 func (ec *eth1Client) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.EthClientComponent)
 	err := ec.streamSmartContractEvents(logger)
 	if err != nil {
 		logger.Error("Failed to init operator contract address subject", zap.Error(err))

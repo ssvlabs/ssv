@@ -13,7 +13,7 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) error {
-	logger.Named(logging.ValidatorName)
+	logger.Named(logging.ValidatorComponent)
 
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		n, ok := v.Network.(p2p.Subscriber)

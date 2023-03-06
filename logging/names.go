@@ -1,23 +1,22 @@
 package logging
 
 const (
-	MetricsHandler      = "MetricsHandler"
-	Eth1                = "Eth1"
-	WsServer            = "WsServer"
-	P2PNetwork          = "P2PNetwork"
-	Operator            = "Operator"
-	ValidatorName       = "Validator"
-	ControllerComponent = "Controller"
-	DutyController      = "DutyController"
-	DiscoveryService    = "DiscoveryService"
-	BootNode            = "BootNode"
+	BootNodeComponent         = "BootNode"
+	ControllerComponent       = "Controller"
+	DiscoveryServiceComponent = "DiscoveryService"
+	DutyControllerComponent   = "DutyController"
+	EthClientComponent        = "EthClient"
+	MetricsHandlerComponent   = "MetricsHandler"
+	OperatorComponent         = "Operator"
+	P2PNetworkComponent       = "P2PNetwork"
+	ValidatorComponent        = "Validator"
+	WsServerComponent         = "WsServer"
 
-	//logger names who was added before refactoring
+	BadgerDBLog       = "BadgerDBLog"
+	BadgerDBReporting = "BadgerDBReporting"
+	DiscoveryLogger   = "DiscoveryLogger"
 	OnFork            = "OnFork"
 	P2PStorage        = "P2PStorage"
-	DiscoveryLogger   = "DiscoveryLogger"
-	ScoreInspector    = "ScoreInspector"
 	PubsubTrace       = "PubsubTrace"
-	BadgerDBReporting = "BadgerDBReporting"
-	BadgerDBLog       = "BadgerDBLog"
+	ScoreInspector    = "ScoreInspector"
 )

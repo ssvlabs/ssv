@@ -102,7 +102,7 @@ func (dvs *DiscV5Service) Self() *enode.LocalNode {
 
 // UpdateForkVersion updates the fork version used to filter nodes, and also the entry in ENR
 func (dvs *DiscV5Service) UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error {
-	logger = logger.Named(logging.DiscoveryService)
+	logger = logger.Named(logging.DiscoveryServiceComponent)
 
 	if dvs.forkv == forkv {
 		return nil
@@ -273,7 +273,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
 func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
-	logger = logger.Named(logging.DiscoveryService)
+	logger = logger.Named(logging.DiscoveryServiceComponent)
 
 	if len(subnets) == 0 {
 		return nil
