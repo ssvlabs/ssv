@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"crypto/ecdsa"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
@@ -65,7 +66,7 @@ func (s identityStore) SetupNetworkKey(logger *zap.Logger, skEncoded string) (*e
 		logger.Debug("using p2p network privateKey from storage")
 		return privateKey, nil
 	}
-	privateKey, err = utils.ECDSAPrivateKey(logger.Named("p2p storage"), skEncoded)
+	privateKey, err = utils.ECDSAPrivateKey(logger.Named(logging.NameP2PStorage), skEncoded)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to generate private key")
 	}

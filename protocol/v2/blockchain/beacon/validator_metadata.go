@@ -64,8 +64,6 @@ type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
-	logger = logger.Named("UpdateValidatorsMetadata")
-
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")

@@ -56,7 +56,6 @@ type Worker struct {
 // NewWorker return new Worker
 func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
-	logger = logger.Named("messageWorker")
 
 	w := &Worker{
 		ctx:           ctx,
