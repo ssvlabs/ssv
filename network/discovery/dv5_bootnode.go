@@ -8,7 +8,6 @@ import (
 
 // BootnodeOptions contains options to create the node
 type BootnodeOptions struct {
-	Logger     *zap.Logger
 	PrivateKey string `yaml:"PrivateKey" env:"BOOTNODE_NETWORK_KEY" env-description:"Bootnode private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOTNODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
 	Port       int    `yaml:"Port" env:"BOOTNODE_PORT" env-description:"Override boot node's port' "`
@@ -24,16 +23,16 @@ type Bootnode struct {
 }
 
 // NewBootnode creates a new bootnode
-func NewBootnode(pctx context.Context, opts *BootnodeOptions) (*Bootnode, error) {
+func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
-	disc, err := createBootnodeDiscovery(ctx, opts)
+	disc, err := createBootnodeDiscovery(ctx, logger, opts)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	np := disc.(NodeProvider)
 	enr := np.Self().Node().String()
-	opts.Logger.Info("bootnode is ready", zap.String("ENR", enr))
+	logger.Info("bootnode is ready", zap.String("ENR", enr))
 	return &Bootnode{
 		ctx:    ctx,
 		cancel: cancel,
@@ -48,13 +47,12 @@ func (b *Bootnode) Close() error {
 	return nil
 }
 
-func createBootnodeDiscovery(ctx context.Context, opts *BootnodeOptions) (Service, error) {
-	privKey, err := utils.ECDSAPrivateKey(opts.Logger.With(zap.String("who", "bootnode")), opts.PrivateKey)
+func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
+	privKey, err := utils.ECDSAPrivateKey(logger.Named("bootnode"), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 	discOpts := &Options{
-		Logger: opts.Logger,
 		DiscV5Opts: &DiscV5Options{
 			IP:         opts.ExternalIP,
 			BindIP:     "", // net.IPv4zero.String()
@@ -62,8 +60,7 @@ func createBootnodeDiscovery(ctx context.Context, opts *BootnodeOptions) (Servic
 			TCPPort:    5000,
 			NetworkKey: privKey,
 			Bootnodes:  []string{},
-			Logger:     opts.Logger,
 		},
 	}
-	return newDiscV5Service(ctx, discOpts)
+	return newDiscV5Service(ctx, logger, discOpts)
 }

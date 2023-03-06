@@ -21,7 +21,7 @@ import (
 // Handler handles incoming metrics requests
 type Handler interface {
 	// Start starts an http server, listening to /metrics requests
-	Start(mux *http.ServeMux, addr string) error
+	Start(logger *zap.Logger, mux *http.ServeMux, addr string) error
 }
 
 type nodeStatus int32
@@ -43,17 +43,15 @@ func init() {
 
 type metricsHandler struct {
 	ctx           context.Context
-	logger        *zap.Logger
 	db            basedb.IDb
 	enableProf    bool
 	healthChecker HealthCheckAgent
 }
 
 // NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, db basedb.IDb, enableProf bool, healthChecker HealthCheckAgent) Handler {
 	mh := metricsHandler{
 		ctx:           ctx,
-		logger:        logger.With(zap.String("component", "metrics/handler")),
 		db:            db,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
@@ -61,8 +59,8 @@ func NewMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, e
 	return &mh
 }
 
-func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
-	mh.logger.Info("setup metrics collection", zap.String("addr", addr),
+func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr string) error {
+	logger.Info("setup metrics collection", zap.String("addr", addr),
 		zap.Bool("enableProf", mh.enableProf))
 
 	if mh.enableProf {
@@ -90,7 +88,7 @@ func (mh *metricsHandler) Start(mux *http.ServeMux, addr string) error {
 		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 		// nolint: gosec
 		if err := http.ListenAndServe(addr, mux); err != nil {
-			mh.logger.Error("failed to start metrics http end-point", zap.Error(err))
+			logger.Error("failed to start metrics http end-point", zap.Error(err))
 		}
 	}()
 

@@ -10,9 +10,6 @@ import (
 	"github.com/bloxapp/ssv/cli/operator"
 )
 
-// Logger is the default logger
-var Logger *zap.Logger
-
 // RootCmd represents the root command of SSV CLI
 var RootCmd = &cobra.Command{
 	Use:   "ssvnode",

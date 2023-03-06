@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"testing"
 	"time"
 
 	"go.uber.org/zap"
@@ -11,12 +12,6 @@ import (
 )
 
 var once sync.Once
-var logger *zap.Logger
-
-// GetLogger returns an instance with some context, expressed as fields
-func GetLogger(fields ...zap.Field) *zap.Logger {
-	return logger.With(fields...)
-}
 
 // EncodingConfig represents the needed encoding configuration for logger
 type EncodingConfig struct {
@@ -49,6 +44,10 @@ func defaultEncodingConfig(ec *EncodingConfig) *EncodingConfig {
 	return ec
 }
 
+func TestLogger(t *testing.T) *zap.Logger {
+	return Build(t.Name(), zap.DebugLevel, nil)
+}
+
 // Build builds the default zap logger, and sets the global zap logger to the configured logger instance.
 func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger {
 	ec = defaultEncodingConfig(ec)
@@ -70,12 +69,14 @@ func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger 
 		},
 	}
 
+	logger, err := cfg.Build()
+	if err != nil {
+		log.Fatalf("err making logger: %+v", err)
+	}
+
+	// HACK: callers of Build don't know if it has been called/they don't know if Build will set the zap global logger
+	// which means Build has indeterminate behavior
 	once.Do(func() {
-		var err error
-		logger, err = cfg.Build()
-		if err != nil {
-			log.Fatalf("err making logger: %+v", err)
-		}
 		zap.ReplaceGlobals(logger)
 	})
 

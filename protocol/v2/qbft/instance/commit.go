@@ -14,7 +14,7 @@ import (
 
 // UponCommit returns true if a quorum of commit messages was received.
 // Assumes commit message is valid!
-func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *specqbft.SignedMessage, error) {
+func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedMessage, commitMsgContainer *specqbft.MsgContainer) (bool, []byte, *specqbft.SignedMessage, error) {
 	addMsg, err := commitMsgContainer.AddFirstMsgForSignerAndRound(signedCommit)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not add commit msg to container")
@@ -38,7 +38,7 @@ func (i *Instance) UponCommit(signedCommit *specqbft.SignedMessage, commitMsgCon
 			return false, nil, nil, errors.Wrap(err, "could not aggregate commit msgs")
 		}
 
-		i.logger.Debug("got commit quorum",
+		logger.Debug("got commit quorum",
 			zap.Uint64("round", uint64(i.State.Round)),
 			zap.Any("commit-signers", signedCommit.Signers),
 			zap.Any("agg-signers", agg.Signers))

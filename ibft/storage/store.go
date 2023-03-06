@@ -2,7 +2,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"encoding/hex"
 	"log"
 	"sync"
 
@@ -14,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
+	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -43,27 +43,25 @@ func init() {
 type ibftStorage struct {
 	prefix   []byte
 	db       basedb.IDb
-	logger   *zap.Logger
 	fork     forks.Fork
 	forkLock *sync.RWMutex
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+func New(db basedb.IDb, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	return &ibftStorage{
 		prefix:   []byte(prefix),
 		db:       db,
-		logger:   logger,
 		fork:     forksfactory.NewFork(forkVersion),
 		forkLock: &sync.RWMutex{},
 	}
 }
 
-func (i *ibftStorage) OnFork(forkVersion forksprotocol.ForkVersion) error {
+func (i *ibftStorage) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkVersion) error {
 	i.forkLock.Lock()
 	defer i.forkLock.Unlock()
 
-	logger := i.logger.With(zap.String("where", "OnFork"))
+	logger = logger.Named("OnFork")
 	logger.Info("forking ibft storage")
 	i.fork = forksfactory.NewFork(forkVersion)
 	return nil
@@ -165,7 +163,7 @@ func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Heigh
 }
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
-func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
+func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error {
 	i.forkLock.RLock()
 	defer i.forkLock.RUnlock()
 
@@ -176,8 +174,9 @@ func (i *ibftStorage) CleanAllInstances(msgID []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-	i.logger.Debug("removed decided", zap.Int("count", n),
-		zap.String("identifier", hex.EncodeToString(msgID)))
+
+	logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
+
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")
 	}

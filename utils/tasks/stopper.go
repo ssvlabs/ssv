@@ -1,7 +1,6 @@
 package tasks
 
 import (
-	"go.uber.org/zap"
 	"sync"
 )
 
@@ -13,15 +12,13 @@ type Stopper interface {
 }
 
 type stopper struct {
-	logger  *zap.Logger
 	stopped bool
 	mut     sync.Mutex
 }
 
-func newStopper(logger *zap.Logger) *stopper {
+func newStopper() *stopper {
 	s := stopper{
-		logger: logger,
-		mut:    sync.Mutex{},
+		mut: sync.Mutex{},
 	}
 	return &s
 }

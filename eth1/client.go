@@ -1,6 +1,7 @@
 package eth1
 
 import (
+	"go.uber.org/zap"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -30,6 +31,6 @@ type SyncEndedEvent struct {
 // Client represents the required interface for eth1 client
 type Client interface {
 	EventsFeed() *event.Feed
-	Start() error
-	Sync(fromBlock *big.Int) error
+	Start(logger *zap.Logger) error
+	Sync(logger *zap.Logger, fromBlock *big.Int) error
 }

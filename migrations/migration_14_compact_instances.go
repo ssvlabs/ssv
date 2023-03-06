@@ -2,11 +2,13 @@ package migrations
 
 import (
 	"context"
+
+	"go.uber.org/zap"
 )
 
 var migrationCompactInstances = Migration{
 	Name: "migration_14_compact_instances",
-	Run: func(ctx context.Context, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		// Migration is disabled for now.
 		return nil
 

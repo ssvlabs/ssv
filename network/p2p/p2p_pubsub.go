@@ -3,13 +3,13 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -56,7 +56,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", zap.String("pk", hex.EncodeToString(vpk)), zap.Error(err))
+			n.logger.Debug("could not broadcast msg", logging.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
@@ -72,7 +72,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.setValidatorStateSubscribing(pkHex) {
 		return nil
 	}
-	err := n.subscribe(pk)
+	err := n.subscribe(n.logger, pk)
 	if err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -91,7 +91,7 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 	}
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Unsubscribe(topic, false); err != nil {
+		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
 		}
 	}
@@ -100,10 +100,10 @@ func (n *p2pNetwork) Unsubscribe(pk spectypes.ValidatorPK) error {
 }
 
 // subscribe to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	topics := n.fork.ValidatorTopicID(pk)
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Subscribe(topic); err != nil {
+		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
 			return err
 		}
@@ -165,37 +165,39 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) error {
-	if n.msgRouter == nil {
-		n.logger.Debug("msg router is not configured")
-		return nil
-	}
-	if msg == nil {
-		return nil
-	}
-
-	var ssvMsg *spectypes.SSVMessage
-	if msg.ValidatorData != nil {
-		m, ok := msg.ValidatorData.(spectypes.SSVMessage)
-		if ok {
-			ssvMsg = &m
+func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string, msg *pubsub.Message) error {
+	return func(topic string, msg *pubsub.Message) error {
+		if n.msgRouter == nil {
+			logger.Debug("msg router is not configured")
+			return nil
 		}
+		if msg == nil {
+			return nil
+		}
+
+		var ssvMsg *spectypes.SSVMessage
+		if msg.ValidatorData != nil {
+			m, ok := msg.ValidatorData.(spectypes.SSVMessage)
+			if ok {
+				ssvMsg = &m
+			}
+		}
+		if ssvMsg == nil {
+			return errors.New("message was not decoded")
+		}
+
+		p2pID := ssvMsg.GetID().String()
+
+		// logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
+		// logger.Debug("incoming pubsub message",
+		// 	zap.String("p2p_id", p2pID),
+		// 	zap.String("topic", topic),
+		// 	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+
+		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
+		n.msgRouter.Route(logger, *ssvMsg)
+		return nil
 	}
-	if ssvMsg == nil {
-		return errors.New("message was not decoded")
-	}
-
-	p2pID := ssvMsg.GetID().String()
-
-	// logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
-	// logger.Debug("incoming pubsub message",
-	// 	zap.String("p2p_id", p2pID),
-	// 	zap.String("topic", topic),
-	// 	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
-
-	metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
-	n.msgRouter.Route(*ssvMsg)
-	return nil
 }
 
 // // withIncomingMsgFields adds fields to the given logger
@@ -222,16 +224,16 @@ func (n *p2pNetwork) handlePubsubMessages(topic string, msg *pubsub.Message) err
 // }
 
 // subscribeToSubnets subscribes to all the node's subnets
-func (n *p2pNetwork) subscribeToSubnets() error {
+func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	if len(n.subnets) == 0 {
 		return nil
 	}
-	n.logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
+	logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
 	for i, val := range n.subnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)
-			if err := n.topicsCtrl.Subscribe(subnet); err != nil {
-				n.logger.Warn("could not subscribe to subnet",
+			if err := n.topicsCtrl.Subscribe(logger, subnet); err != nil {
+				logger.Warn("could not subscribe to subnet",
 					zap.String("subnet", subnet), zap.Error(err))
 				// TODO: handle error
 			}

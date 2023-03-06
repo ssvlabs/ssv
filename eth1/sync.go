@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -76,7 +77,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 		}
 	}()
 	syncOffset = determineSyncOffset(logger, storage, syncOffset)
-	if err := client.Sync(syncOffset); err != nil {
+	if err := client.Sync(logger, syncOffset); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	// waiting for eth1 sync to finish
@@ -117,52 +118,48 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 		logger.Warn("failed to get sync offset", zap.Error(err))
 	}
 	if found && syncOffsetFromStorage != nil {
-		logger.Debug("using last sync offset",
-			zap.Uint64("syncOffset", syncOffsetFromStorage.Uint64()))
+		logger.Debug("using last sync offset", logging.SyncOffset(syncOffsetFromStorage))
 		return syncOffsetFromStorage
 	}
 	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
-		logger.Debug("using provided sync offset",
-			zap.Uint64("syncOffset", syncOffset.Uint64()))
+		logger.Debug("using provided sync offset", logging.SyncOffset(syncOffset))
 		return syncOffset
 	}
 	syncOffset = DefaultSyncOffset()
-	logger.Debug("using default sync offset",
-		zap.Uint64("syncOffset", syncOffset.Uint64()))
+	logger.Debug("using default sync offset", logging.SyncOffset(syncOffset))
 	return syncOffset
 }
 
 // HandleEventResult handles the result of an event
 func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
 	var errs []error
-	var loggerWithData *zap.Logger
 	syncTitle := "history"
 	if ongoingSync {
 		syncTitle = "ongoing"
 	}
 
 	if err != nil || len(logFields) > 0 {
-		loggerWithData = logger.With(
+		logger = logger.With(
 			zap.String("event", event.Name),
 			zap.Uint64("block", event.Log.BlockNumber),
 			zap.String("txHash", event.Log.TxHash.Hex()),
 		)
 		if len(logFields) > 0 {
-			loggerWithData = loggerWithData.With(logFields...)
+			logger = logger.With(logFields...)
 		}
 	}
 	if err != nil {
-		loggerWithData = loggerWithData.With(zap.Error(err))
+		logger = logger.With(zap.Error(err))
 		var malformedEventErr *abiparser.MalformedEventError
 
 		if errors.As(err, &malformedEventErr) {
-			loggerWithData.Warn(fmt.Sprintf("could not handle %s sync event, the event is malformed", syncTitle))
+			logger.Warn(fmt.Sprintf("could not handle %s sync event, the event is malformed", syncTitle))
 		} else {
-			loggerWithData.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
+			logger.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
 			errs = append(errs, err)
 		}
-	} else if loggerWithData != nil {
-		loggerWithData.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
+	} else if logger != nil {
+		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
 	return errs

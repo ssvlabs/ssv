@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"net"
 	"time"
 )
@@ -20,7 +21,7 @@ type NetworkMessage struct {
 }
 
 // QueryMessageHandler handles the given message
-type QueryMessageHandler func(nm *NetworkMessage)
+type QueryMessageHandler func(logger *zap.Logger, nm *NetworkMessage)
 
 // ConnectionID calculates the id of the given Connection
 func ConnectionID(conn Connection) string {

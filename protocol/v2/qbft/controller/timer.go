@@ -21,5 +21,5 @@ func (c *Controller) OnTimeout(msg types.EventMsg) error {
 	if decided {
 		return nil
 	}
-	return instance.UponRoundTimeout()
+	return instance.UponRoundTimeout(logger)
 }

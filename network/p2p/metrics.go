@@ -9,6 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -51,42 +52,48 @@ func init() {
 
 var unknown = "unknown"
 
-func (n *p2pNetwork) reportAllPeers() {
-	pids := n.host.Network().Peers()
-	n.logger.Debug("connected peers status",
-		zap.Int("count", len(pids)))
-	MetricsAllConnectedPeers.Set(float64(len(pids)))
-}
-
-func (n *p2pNetwork) reportPeerIdentities() {
-	pids := n.host.Network().Peers()
-	for _, pid := range pids {
-		n.reportPeerIdentity(pid)
+func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
+	return func() {
+		pids := n.host.Network().Peers()
+		logger.Debug("connected peers status",
+			zap.Int("count", len(pids)))
+		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
 
-func (n *p2pNetwork) reportTopics() {
-	topics := n.topicsCtrl.Topics()
-	nTopics := len(topics)
-	n.logger.Debug("connected topics",
-		zap.Int("count", nTopics))
-	for _, name := range topics {
-		n.reportTopicPeers(name)
+func (n *p2pNetwork) reportPeerIdentities(logger *zap.Logger) func() {
+	return func() {
+		pids := n.host.Network().Peers()
+		for _, pid := range pids {
+			n.reportPeerIdentity(logger, pid)
+		}
 	}
 }
 
-func (n *p2pNetwork) reportTopicPeers(name string) {
+func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
+	return func() {
+		topics := n.topicsCtrl.Topics()
+		nTopics := len(topics)
+		logger.Debug("connected topics",
+			zap.Int("count", nTopics))
+		for _, name := range topics {
+			n.reportTopicPeers(logger, name)
+		}
+	}
+}
+
+func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
-		n.logger.Warn("could not get topic peers", zap.String("topic", name), zap.Error(err))
+		logger.Warn("could not get topic peers", zap.String("topic", name), zap.Error(err))
 		return
 	}
-	n.logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
+	logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
 		zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
-func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
+func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	opPKHash, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
@@ -104,15 +111,15 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(pubKey.(string))
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.(string))
 		if opDataErr == nil && found {
 			opIndex = strconv.FormatUint(operatorData.Index, 10)
 			opName = operatorData.Name
 		}
 	} else {
-		operators, err := n.nodeStorage.ListOperators(0, 0)
+		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
 		if err != nil {
-			n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+			logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}
 
 		for _, operator := range operators {
@@ -126,8 +133,8 @@ func (n *p2pNetwork) reportPeerIdentity(pid peer.ID) {
 	}
 
 	nodeState := n.idx.State(pid)
-	n.logger.Info("peer identity",
-		zap.String("peer", pid.String()),
+	logger.Debug("peer identity",
+		logging.PeerID(pid),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
 		zap.String("opPKHash", opPKHash),

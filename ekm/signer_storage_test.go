@@ -19,6 +19,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -27,22 +28,22 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage() (basedb.IDb, error) {
-	return ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: zap.L(),
-		Path:   "",
+func getBaseStorage(logger *zap.Logger) (basedb.IDb, error) {
+	return ssvstorage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 }
 
-func newStorageForTest() (Storage, func()) {
-	db, err := getBaseStorage()
+func newStorageForTest(t *testing.T) (Storage, func()) {
+	logger := logex.TestLogger(t)
+	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), zap.L())
+	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), logger)
 	return s, func() {
-		db.Close()
+		db.Close(logex.TestLogger(t))
 	}
 }
 
@@ -53,7 +54,7 @@ func testWallet(t *testing.T) (core.Wallet, Storage, func()) {
 	index := 1
 
 	//signerStorage := getWalletStorage(t)
-	signerStorage, done := newStorageForTest()
+	signerStorage, done := newStorageForTest(t)
 
 	wallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(wallet))
@@ -109,7 +110,7 @@ func TestDeleteAccount(t *testing.T) {
 }
 
 func TestNonExistingWallet(t *testing.T) {
-	signerStorage, done := newStorageForTest()
+	signerStorage, done := newStorageForTest(t)
 	defer done()
 
 	w, err := signerStorage.OpenWallet()
