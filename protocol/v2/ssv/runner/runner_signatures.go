@@ -6,6 +6,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (b *BaseRunner) signBeaconObject(
@@ -54,6 +55,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	}
 
 	if signedMsg.Message.Slot != slot {
+		b.logger.Error("invalid partial sig slot", zap.Uint64("expected", uint64(slot)), zap.Uint64("actual", uint64(signedMsg.Message.Slot)), zap.Any("signedMsg", signedMsg))
 		return errors.New("invalid partial sig slot")
 	}
 

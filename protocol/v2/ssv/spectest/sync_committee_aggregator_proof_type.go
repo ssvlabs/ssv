@@ -2,9 +2,10 @@ package spectest
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
@@ -20,7 +21,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()
 
-	lastErr := v.StartDuty(testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(&testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {

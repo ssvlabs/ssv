@@ -98,6 +98,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     decidedValue.Duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 

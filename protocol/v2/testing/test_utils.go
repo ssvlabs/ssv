@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
@@ -156,13 +155,6 @@ func NewInMemDb() basedb.IDb {
 		Logger: zap.L(),
 	})
 	return db
-}
-
-// CommitDataToBytes encode commit data and handle error if exist
-func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
-	ret, err := json.Marshal(input)
-	require.NoError(t, err)
-	return ret
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {

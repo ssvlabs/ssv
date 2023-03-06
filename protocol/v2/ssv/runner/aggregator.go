@@ -244,6 +244,7 @@ func (r *AggregatorRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.SelectionProofPartialSig,
+		Slot:     duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 

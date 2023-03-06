@@ -184,6 +184,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(signedMsg *specqbft.Sig
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     decidedValue.Duty.Slot,
 		Messages: msgs,
 	}
 

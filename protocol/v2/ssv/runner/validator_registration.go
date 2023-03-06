@@ -101,6 +101,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.ValidatorRegistrationPartialSig,
+		Slot:     duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
