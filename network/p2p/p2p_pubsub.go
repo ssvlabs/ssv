@@ -228,7 +228,7 @@ func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	if len(n.subnets) == 0 {
 		return nil
 	}
-	logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
+	logger.Debug("subscribing to subnets", logging.Subnets(n.subnets))
 	for i, val := range n.subnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)

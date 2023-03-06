@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/logging"
 	"math/rand"
 
 	"github.com/multiformats/go-multistream"
@@ -250,11 +251,11 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 	if err != nil {
 		return nil, err
 	}
-	logger = logger.With(zap.String("protocol", string(protocol)), zap.String("identifier", mid.String()))
+	logger = logger.With(zap.String("protocol", string(protocol)), logging.Identifier(mid))
 	msgID := n.fork.MsgID()
 	distinct := make(map[string]struct{})
 	for _, pid := range peers {
-		logger := logger.With(zap.String("peer", pid.String()))
+		logger := logger.With(logging.PeerID(pid))
 		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
 			if err != multistream.ErrNotSupported {
