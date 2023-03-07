@@ -99,7 +99,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	}
 	listener := n.createListener(logger, ipAddr, n.discv5port, cfg)
 	node := listener.Self()
-	logger.Info("Running bootnode", zap.String("node", node.String()))
+	logger.Info("Running", zap.String("node", node.String()))
 
 	handler := &handler{
 		listener: listener,

@@ -75,7 +75,10 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := setupGlobal(cmd)
+		logger, err := setupGlobal(cmd)
+		if err != nil {
+			logger.Fatal("could not create logger", zap.Error(err))
+		}
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
@@ -174,7 +177,7 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal(cmd *cobra.Command) *zap.Logger {
+func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
 	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
@@ -194,10 +197,30 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 	}
 	if len(cfg.DebugServices) > 0 {
-		_ = golog.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String())
+		if err := golog.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String()); err != nil {
+			return nil, err
+		}
 	}
 
-	return logger
+	if v := cfg.GlobalConfig.LogLevels.Debug; len(v) > 0 {
+		if err := golog.SetLogLevelRegex(v, "debug"); err != nil {
+			return nil, err
+		}
+	}
+
+	if v := cfg.GlobalConfig.LogLevels.Info; len(v) > 0 {
+		if err := golog.SetLogLevelRegex(v, "info"); err != nil {
+			return nil, err
+		}
+	}
+
+	if v := cfg.GlobalConfig.LogLevels.Warn; len(v) > 0 {
+		if err := golog.SetLogLevelRegex(v, "warn"); err != nil {
+			return nil, err
+		}
+	}
+
+	return logger, nil
 }
 
 func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
@@ -347,7 +370,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start metrics handler", zap.Error(err))
+		logger.Error("failed to start", zap.Error(err))
 	}
 }
 

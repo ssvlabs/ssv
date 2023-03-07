@@ -138,7 +138,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 		return nil
 	}
 
-	logger.Info("starting p2p network service")
+	logger.Info("starting")
 
 	go n.startDiscovery(logger)
 

@@ -150,7 +150,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
+		logger.Debug("✅ successfully submitted sync committee!", zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height))
 	}
 	r.GetState().Finished = true

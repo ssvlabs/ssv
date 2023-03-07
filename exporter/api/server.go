@@ -66,7 +66,7 @@ func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 			logger.Debug("failed to pull messages from feed")
 		}
 	}()
-	logger.Info("starting websocket server",
+	logger.Info("starting",
 		zap.String("addr", addr),
 		zap.Strings("endPoints", []string{"/query", "/stream"}))
 
@@ -74,7 +74,7 @@ func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 	// nolint: gosec
 	err := http.ListenAndServe(addr, ws.router)
 	if err != nil {
-		logger.Warn("could not start http server", zap.Error(err))
+		logger.Warn("could not start", zap.Error(err))
 	}
 	return err
 }
@@ -123,7 +123,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 		err := conn.ReadJSON(&incoming)
 		if err != nil {
 			if isCloseError(err) {
-				logger.Debug("failed to read message as the connection was closed", zap.Error(err))
+				logger.Debug("failed to read message; connection was closed", zap.Error(err))
 				return
 			}
 			logger.Warn("could not read incoming message", zap.Error(err))
