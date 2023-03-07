@@ -5,11 +5,12 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) func() {
@@ -30,17 +31,17 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 
 		msg, err := v.createTimerMessage(identifier, height)
 		if err != nil {
-			logger.Debug("failed to create timer msg", zap.Error(err))
+			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
 		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			logger.Debug("failed to decode timer msg", zap.Error(err))
+			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
 		}
 
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping timeout message because the queue is full",
+			logger.Warn("❗️ dropping timeout message because the queue is full",
 				zap.String("role", identifier.GetRoleType().String()))
 		}
 	}
