@@ -14,6 +14,14 @@ import (
 
 func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) func() {
 	return func() {
+		v.mtx.RLock() // read-lock for v.Queues, v.state
+		defer v.mtx.RUnlock()
+
+		// only run if the validator is started
+		if v.state != uint32(Started) {
+			return
+		}
+
 		dr := v.DutyRunners[identifier.GetRoleType()]
 		hasDuty := dr.HasRunningDuty()
 		if !hasDuty {
@@ -30,6 +38,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Debug("failed to decode timer msg", zap.Error(err))
 			return
 		}
+
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping timeout message because the queue is full",
 				zap.String("role", identifier.GetRoleType().String()))

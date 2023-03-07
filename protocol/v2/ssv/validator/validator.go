@@ -2,6 +2,8 @@ package validator
 
 import (
 	"context"
+	"sync"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -22,6 +24,7 @@ var logger = ipsflog.Logger("ssv/protocol/ssv/validator").Desugar() // TODO REVI
 // Every validator has a validatorID which is validator's public key.
 // Each validator has multiple DutyRunners, for each duty type.
 type Validator struct {
+	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -42,6 +45,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	options.defaults()
 
 	v := &Validator{
+		mtx:         &sync.RWMutex{},
 		ctx:         pctx,
 		cancel:      cancel,
 		DutyRunners: options.DutyRunners,

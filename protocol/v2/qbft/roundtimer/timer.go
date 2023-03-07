@@ -2,6 +2,7 @@ package roundtimer
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,6 +29,7 @@ func RoundTimeout(r specqbft.Round) time.Duration {
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
+	mtx *sync.RWMutex
 	ctx context.Context
 	// cancelCtx cancels the current context, will be called from Kill()
 	cancelCtx context.CancelFunc
@@ -45,6 +47,7 @@ type RoundTimer struct {
 func New(pctx context.Context, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
+		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
 		cancelCtx:    cancelCtx,
 		timer:        nil,
@@ -55,6 +58,9 @@ func New(pctx context.Context, done func()) *RoundTimer {
 
 // OnTimeout sets a function called on timeout.
 func (t *RoundTimer) OnTimeout(done func()) {
+	t.mtx.Lock() // write to t.done
+	defer t.mtx.Unlock()
+
 	t.done = done
 }
 
@@ -91,9 +97,13 @@ func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time
 	case <-ctx.Done():
 	case <-timeout:
 		if t.Round() == round {
-			if done := t.done; done != nil {
-				done()
-			}
+			func() {
+				t.mtx.RLock() // read t.done
+				defer t.mtx.RUnlock()
+				if done := t.done; done != nil {
+					done()
+				}
+			}()
 		}
 	}
 }

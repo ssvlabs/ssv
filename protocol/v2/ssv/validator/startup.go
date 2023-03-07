@@ -41,12 +41,16 @@ func (v *Validator) Start(logger *zap.Logger) error {
 }
 
 // Stop stops a Validator.
-func (v *Validator) Stop() error {
-	v.cancel()
-	// clear the msg q
-	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+func (v *Validator) Stop() {
+	if atomic.CompareAndSwapUint32(&v.state, uint32(Started), uint32(NotStarted)) {
+		v.cancel()
 
-	return nil
+		v.mtx.Lock() // write-lock for v.Queues
+		defer v.mtx.Unlock()
+
+		// clear the msg q
+		v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+	}
 }
 
 // sync performs highest decided sync
