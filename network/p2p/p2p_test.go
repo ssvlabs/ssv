@@ -133,8 +133,9 @@ func TestP2pNetwork_Stream(t *testing.T) {
 		1, 1, 1,
 	}
 	msgCounter := int64(0)
+	errors := make(chan error, len(ln.Nodes))
 	for i, node := range ln.Nodes {
-		registerHandler(node, mid, heights[i], rounds[i], &msgCounter)
+		registerHandler(node, mid, heights[i], rounds[i], &msgCounter, errors)
 	}
 
 	<-time.After(time.Second)
@@ -142,18 +143,23 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	node := ln.Nodes[0]
 	res, err := node.LastDecided(mid)
 	require.NoError(t, err)
+	select {
+	case err := <-errors:
+		require.NoError(t, err)
+	default:
+	}
 	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
 	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
 	require.GreaterOrEqual(t, msgCounter, int64(2))
 }
 
-func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
+func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
 	node.RegisterHandlers(&protcolp2p.SyncHandler{
 		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
-				Signature: []byte("xxx"),
+				Signature: make([]byte, 96),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
 				Message: specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
@@ -165,6 +171,7 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 			}
 			data, err := sm.Encode()
 			if err != nil {
+				errors <- err
 				return nil, err
 			}
 			return &spectypes.SSVMessage{
@@ -268,7 +275,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 			Height:     specqbft.Height(height),
 			Root:       [32]byte{0x1, 0x2, 0x3},
 		},
-		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN"),
+		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
 		Signers:   []spectypes.OperatorID{1, 3, 4},
 	}
 	data, err := signedMsg.Encode()

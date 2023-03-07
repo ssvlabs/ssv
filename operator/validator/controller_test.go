@@ -176,7 +176,7 @@ func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
 	sm := specqbft.SignedMessage{
-		Signature: []byte("sig"),
+		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
 		Signers:   []spectypes.OperatorID{1},
 		Message: specqbft.Message{
 			MsgType:    specqbft.RoundChangeMsgType,
@@ -193,7 +193,7 @@ func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte
 
 func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
 	sm := specqbft.SignedMessage{
-		Signature: []byte("sig"),
+		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
 		Signers:   []spectypes.OperatorID{1, 2, 3},
 		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
