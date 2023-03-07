@@ -6,7 +6,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -17,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
@@ -104,7 +104,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	role := spectypes.BNRoleAttester
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		id := spectypes.NewMsgID(testingutils.TestingSSVDomainType, pk.Serialize(), role)
+		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -125,7 +125,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
-		require.True(t, ok)
+		require.True(t, ok, "expected []*specqbft.SignedMessage, got %+v", nm.Msg.Data)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})
 
@@ -135,7 +135,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
-		require.Equal(t, 0, len(data))
+		require.Equal(t, []string{"no messages"}, data)
 	})
 
 	t.Run("non-existing validator", func(t *testing.T) {

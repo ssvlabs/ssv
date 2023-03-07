@@ -67,7 +67,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		}
 		data, err := DecidedAPIData(msgs...)
 		if err != nil {
-			res.Data = []string{}
+			res.Data = []string{err.Error()}
 		} else {
 			res.Data = data
 		}
