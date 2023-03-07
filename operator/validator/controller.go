@@ -107,8 +107,8 @@ type controller struct {
 	recipientsCollection registrystorage.RecipientsCollection
 	ibftStorageMap       *storage.QBFTStores
 
-	beacon               beaconprotocol.Beacon
-	keyManager           spectypes.KeyManager
+	beacon     beaconprotocol.Beacon
+	keyManager spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorData               *registrystorage.OperatorData
@@ -612,7 +612,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(logger *zap.logger, share *types.SSVShare) (bool, error) {
+func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		logger.Warn("could not start validator as metadata not found", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 		return false, nil

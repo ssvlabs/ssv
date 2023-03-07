@@ -9,10 +9,12 @@ import (
 
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
-	storage, done := newRecipientStorageForTest()
+	logger := logex.TestLogger(t)
+	storage, done := newRecipientStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
 
@@ -95,18 +97,16 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 }
 
-func newRecipientStorageForTest() (RecipientsCollection, func()) {
-	logger := zap.L()
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: logger,
-		Path:   "",
+func newRecipientStorageForTest(logger *zap.Logger) (RecipientsCollection, func()) {
+	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewRecipientsStorage(db, logger, []byte("test"))
+	s := NewRecipientsStorage(db, []byte("test"))
 	return s, func() {
-		db.Close()
+		db.Close(logger)
 	}
 }

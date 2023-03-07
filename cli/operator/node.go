@@ -253,11 +253,11 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 	return db, nil
 }
 
-func setupOperatorStorage(db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage := operatorstorage.NewNodeStorage(db)
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
-		cfg.DBOptions.Logger.Fatal("could not setup operator private key", zap.Error(err))
+		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 
 	_, found, err := nodeStorage.GetPrivateKey()
@@ -265,7 +265,7 @@ func setupOperatorStorage(db basedb.IDb) (operatorstorage.Storage, *registrystor
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(logger, operatorPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}

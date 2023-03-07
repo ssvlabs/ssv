@@ -3,13 +3,11 @@ package storage
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -34,16 +32,14 @@ type RecipientsCollection interface {
 
 type recipientsStorage struct {
 	db     basedb.IDb
-	logger *zap.Logger
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewRecipientsStorage creates a new instance of Storage
-func NewRecipientsStorage(db basedb.IDb, logger *zap.Logger, prefix []byte) RecipientsCollection {
+func NewRecipientsStorage(db basedb.IDb, prefix []byte) RecipientsCollection {
 	return &recipientsStorage{
 		db:     db,
-		logger: logger.With(zap.String("component", fmt.Sprintf("%sstorage", prefix))),
 		prefix: prefix,
 	}
 }

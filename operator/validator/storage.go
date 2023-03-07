@@ -21,7 +21,7 @@ type ICollection interface {
 	eth1.RegistryStore
 
 	SaveValidatorShare(logger *zap.Logger, share *types.SSVShare) error
-	SaveValidatorShares(shares []*types.SSVShare) error
+	SaveValidatorShares(logger *zap.Logger, shares []*types.SSVShare) error
 	GetValidatorShare(key []byte) (*types.SSVShare, bool, error)
 	GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
 	GetFilteredValidatorShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error)

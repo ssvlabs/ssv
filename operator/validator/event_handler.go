@@ -38,7 +38,7 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterReactivated:
 			ev := e.Data.(abiparser.ClusterReactivatedEvent)
-			return c.handleClusterReactivatedEvent(ev, ongoingSync)
+			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
 		case abiparser.FeeRecipientAddressUpdated:
 			ev := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
 			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
@@ -145,10 +145,10 @@ func (c *controller) handleOperatorRemovedEvent(
 // handleValidatorAddedEvent handles registry contract event for validator added
 func (c *controller) handleValidatorAddedEvent(
 	logger *zap.Logger,
-	validatorAddedEvent abiparser.ValidatorAddedEvent,
+	event abiparser.ValidatorAddedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	pubKey := hex.EncodeToString(validatorAddedEvent.PublicKey)
+	pubKey := hex.EncodeToString(event.PublicKey)
 	// TODO: check if need
 	if ongoingSync {
 		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
@@ -157,12 +157,12 @@ func (c *controller) handleValidatorAddedEvent(
 		}
 	}
 
-	validatorShare, found, err := c.collection.GetValidatorShare(validatorAddedEvent.PublicKey)
+	validatorShare, found, err := c.collection.GetValidatorShare(event.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
 	if !found {
-		validatorShare, err = c.onShareCreate(logger, validatorAddedEvent)
+		validatorShare, err = c.onShareCreate(logger, event)
 		if err != nil {
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
@@ -183,7 +183,7 @@ func (c *controller) handleValidatorAddedEvent(
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
 			zap.String("ownerAddress", validatorShare.OwnerAddress.String()),
-			zap.Uint64s("operatorIds", validatorAddedEvent.OperatorIds),
+			zap.Uint64s("operatorIds", event.OperatorIds),
 		)
 	}
 
@@ -193,11 +193,11 @@ func (c *controller) handleValidatorAddedEvent(
 // handleValidatorRemovedEvent handles registry contract event for validator removed
 func (c *controller) handleValidatorRemovedEvent(
 	logger *zap.Logger,
-	validatorRemovedEvent abiparser.ValidatorRemovedEvent,
+	event abiparser.ValidatorRemovedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	// TODO: handle metrics
-	share, found, err := c.collection.GetValidatorShare(validatorRemovedEvent.PublicKey)
+	share, found, err := c.collection.GetValidatorShare(event.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
 	}
@@ -223,7 +223,7 @@ func (c *controller) handleValidatorRemovedEvent(
 
 	isOperatorShare := share.BelongsToOperator(c.operatorData.ID)
 	if isOperatorShare {
-		pubKey := hex.EncodeToString(validatorRemovedEvent.PublicKey)
+		pubKey := hex.EncodeToString(event.PublicKey)
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
 		if ongoingSync {
 			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
@@ -233,12 +233,12 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 
 	// remove recipient if there are no more validators under the removed validator owner address
-	shares, err := c.collection.GetFilteredValidatorShares(ByOwnerAddress(share.OwnerAddress))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(share.OwnerAddress))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get validator shares by owner address")
 	}
 	if len(shares) == 0 {
-		if err := c.recipientsCollection.DeleteRecipientData(validatorRemovedEvent.Owner); err != nil {
+		if err := c.recipientsCollection.DeleteRecipientData(event.Owner); err != nil {
 			return nil, errors.Wrap(err, "could not delete recipient")
 		}
 	}
@@ -260,7 +260,7 @@ func (c *controller) handleClusterLiquidatedEvent(
 	event abiparser.ClusterLiquidatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	toLiquidate, liquidatedPubKeys, err := c.processClusterEvent(event.Owner, event.OperatorIds, true)
+	toLiquidate, liquidatedPubKeys, err := c.processClusterEvent(logger, event.Owner, event.OperatorIds, true)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not process cluster event")
 	}
@@ -293,7 +293,7 @@ func (c *controller) handleClusterReactivatedEvent(
 	event abiparser.ClusterReactivatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	toEnable, enabledPubKeys, err := c.processClusterEvent(event.Owner, event.OperatorIds, false)
+	toEnable, enabledPubKeys, err := c.processClusterEvent(logger, event.Owner, event.OperatorIds, false)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not process cluster event")
 	}
@@ -319,6 +319,7 @@ func (c *controller) handleClusterReactivatedEvent(
 
 // processClusterEvent handles registry contract event for cluster
 func (c *controller) processClusterEvent(
+	logger *zap.Logger,
 	owner common.Address,
 	operatorIds []uint64,
 	toLiquidate bool,
@@ -328,7 +329,7 @@ func (c *controller) processClusterEvent(
 		return nil, nil, errors.Wrapf(err, "could not compute share cluster id")
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(ByClusterID(podID))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByClusterID(podID))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get validator shares by cluster id")
 	}
@@ -347,7 +348,7 @@ func (c *controller) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = c.collection.SaveValidatorShares(toUpdate); err != nil {
+		if err = c.collection.SaveValidatorShares(logger, toUpdate); err != nil {
 			return nil, nil, errors.Wrapf(err, "could not save validator shares")
 		}
 	}
@@ -356,6 +357,7 @@ func (c *controller) processClusterEvent(
 }
 
 func (c *controller) handleFeeRecipientAddressUpdatedEvent(
+	logger *zap.Logger,
 	event abiparser.FeeRecipientAddressUpdatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {

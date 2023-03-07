@@ -20,7 +20,6 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/herumi/bls-eth-go-binary v1.28.1
-	github.com/holiman/uint256 v1.2.0
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/ipfs/go-log v1.0.5
 	github.com/libp2p/go-libp2p v0.24.2
