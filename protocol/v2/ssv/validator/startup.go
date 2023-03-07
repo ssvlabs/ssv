@@ -5,6 +5,7 @@ import (
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"go.uber.org/zap"
 	"sync/atomic"
 	"time"

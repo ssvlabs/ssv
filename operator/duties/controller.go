@@ -95,7 +95,7 @@ func (dc *dutyController) Start(logger *zap.Logger) {
 	logger = logger.Named(logging.NameDutyController)
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices(logger)
-	logger.Debug("warming up indices", logging.Count(len(indices)))
+	logger.Debug("warming up indices", fields.Count(len(indices)))
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.

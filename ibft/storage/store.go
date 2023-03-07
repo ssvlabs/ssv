@@ -14,7 +14,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
