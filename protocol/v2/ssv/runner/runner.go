@@ -129,9 +129,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 				zap.Any("signers", msg.Signers),
 			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				logger.Debug("failed to save instance", zap.Error(err))
+				logger.Debug("❗ failed to save instance", zap.Error(err))
 			} else {
-				logger.Debug("saved instance")
+				logger.Debug("💾 saved instance")
 			}
 		}
 	}
