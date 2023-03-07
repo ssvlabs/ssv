@@ -3,13 +3,13 @@ package syncing
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/logging/fields"
 	"sync/atomic"
 	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
@@ -208,9 +208,9 @@ func (s *syncer) getDecidedByRange(
 			})
 			logger.Debug("received and processed history batch",
 				zap.Int64("tail", int64(tail)),
-				logging.DurationMilli(start),
+				fields.DurationMilli(start),
 				zap.Int("results_count", len(msgs)),
-				logging.SyncResults(msgs),
+				fields.SyncResults(msgs),
 				zap.Int("handled", handled))
 			return nil
 		}, maxRetries)

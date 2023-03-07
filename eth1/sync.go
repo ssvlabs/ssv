@@ -2,12 +2,11 @@ package eth1
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"math/big"
 	"sync"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -118,15 +117,15 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 		logger.Warn("failed to get sync offset", zap.Error(err))
 	}
 	if found && syncOffsetFromStorage != nil {
-		logger.Debug("using last sync offset", logging.SyncOffset(syncOffsetFromStorage))
+		logger.Debug("using last sync offset", fields.SyncOffset(syncOffsetFromStorage))
 		return syncOffsetFromStorage
 	}
 	if syncOffset != nil { // if provided sync offset is nil - use default sync offset
-		logger.Debug("using provided sync offset", logging.SyncOffset(syncOffset))
+		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
 	syncOffset = DefaultSyncOffset()
-	logger.Debug("using default sync offset", logging.SyncOffset(syncOffset))
+	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }
 

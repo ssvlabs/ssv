@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/logging/fields"
 	"sync/atomic"
 	"time"
 
@@ -64,7 +65,7 @@ func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
 		err := v.Network.SyncHighestDecided(mid)
 		if err != nil {
 			logger.Debug("failed to sync highest decided",
-				logging.MessageID(mid),
+				fields.MessageID(mid),
 				zap.Error(err))
 			retries--
 			if retries > 0 {

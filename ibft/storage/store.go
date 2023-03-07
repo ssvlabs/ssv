@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"sync"
 
@@ -175,7 +176,7 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 		return errors.Wrap(err, "failed to remove decided")
 	}
 
-	logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
+	logger.Debug("removed decided", zap.Int("count", n), fields.IdentifierBytes(msgID))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

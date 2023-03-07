@@ -3,10 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/bloxapp/ssv/logging/fields"
 	"net/url"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -35,7 +35,7 @@ func NewWSClient(ctx context.Context) *WSClient {
 func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
 
-	logger.Debug("connecting to server", logging.AddressURL(u))
+	logger.Debug("connecting to server", fields.AddressURL(u))
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
@@ -68,7 +68,7 @@ func (client *WSClient) StartStream(logger *zap.Logger, addr, path string) error
 func (client *WSClient) StartQuery(logger *zap.Logger, addr, path string) error {
 	u := url.URL{Scheme: "ws", Host: addr, Path: path}
 
-	logger.Debug("connecting to server", logging.AddressURL(u))
+	logger.Debug("connecting to server", fields.AddressURL(u))
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {

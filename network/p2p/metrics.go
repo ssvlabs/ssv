@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"strconv"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -55,7 +55,7 @@ var unknown = "unknown"
 func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
-		logger.Debug("connected peers status", logging.Count(len(pids)))
+		logger.Debug("connected peers status", fields.Count(len(pids)))
 		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
@@ -73,7 +73,7 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
 		nTopics := len(topics)
-		logger.Debug("connected topics", logging.Count(nTopics))
+		logger.Debug("connected topics", fields.Count(nTopics))
 		for _, name := range topics {
 			n.reportTopicPeers(logger, name)
 		}
@@ -83,10 +83,10 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
-		logger.Warn("could not get topic peers", logging.Topic(name), zap.Error(err))
+		logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
 		return
 	}
-	logger.Debug("topic peers status", logging.Topic(name), logging.Count(len(peers)), zap.Any("peers", peers))
+	logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
@@ -131,7 +131,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 
 	nodeState := n.idx.State(pid)
 	logger.Debug("peer identity",
-		logging.PeerID(pid),
+		fields.PeerID(pid),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
 		zap.String("opPKHash", opPKHash),

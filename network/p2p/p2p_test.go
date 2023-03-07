@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -245,7 +246,7 @@ type dummyRouter struct {
 func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
 	logger.Debug("got message",
-		logging.Identifier(message.GetID()),
+		fields.Identifier(message.GetID()),
 		zap.Uint64("count", c))
 }
 

@@ -3,6 +3,7 @@ package goeth
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"math/big"
 	"strings"
 	"time"
@@ -237,7 +238,7 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *big.Int) error {
-	logger.Debug("syncing smart contract events", logging.FromBlock(fromBlock))
+	logger.Debug("syncing smart contract events", fields.FromBlock(fromBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
@@ -345,10 +346,10 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	ev, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
-			logging.EventID(vLog.Topics[0]),
+			fields.EventID(vLog.Topics[0]),
 
 			zap.Uint64("block", vLog.BlockNumber),
-			logging.TxHash(vLog.TxHash),
+			fields.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
 		return "", nil

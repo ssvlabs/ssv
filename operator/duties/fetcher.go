@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -14,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -89,7 +89,7 @@ func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]specty
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			logging.DurationMilli(start))
+			fields.DurationMilli(start))
 	}
 
 	return duties, nil
