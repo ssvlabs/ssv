@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/bloxapp/ssv/logging"
+
 	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -30,8 +31,8 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		loggerLevel, err := logex.GetLoggerLevelValue(cfg.LogLevel)
-		logger := logex.Build(cmd.Parent().Short, loggerLevel, &logex.EncodingConfig{Format: cfg.GlobalConfig.LogFormat})
+		loggerLevel, err := logging.GetLoggerLevelValue(cfg.LogLevel)
+		logger := zap.L()
 
 		if err != nil {
 			logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))

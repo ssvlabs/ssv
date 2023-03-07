@@ -2,10 +2,11 @@ package records
 
 import (
 	"crypto/ecdsa"
+	"net"
+
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
-	"net"
 )
 
 // CreateLocalNode create a new enode.LocalNode instance

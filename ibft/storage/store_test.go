@@ -12,11 +12,10 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestCleanInstances(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
@@ -111,7 +110,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(zap.L(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveHighestInstance(instance))
@@ -149,7 +148,7 @@ func TestSaveAndFetchState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(zap.L(), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveInstance(instance))

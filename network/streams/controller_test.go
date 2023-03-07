@@ -6,9 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/utils/logex"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestStreamCtrl(t *testing.T) {
 
 	prot := protocol.ID("/test/protocol")
 
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	ctrl0 := NewStreamController(context.Background(), hosts[0], genesis.New(), time.Second)
 	ctrl1 := NewStreamController(context.Background(), hosts[1], genesis.New(), time.Second)
 

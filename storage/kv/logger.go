@@ -2,6 +2,7 @@ package kv
 
 import (
 	"fmt"
+
 	"github.com/bloxapp/ssv/logging"
 
 	"github.com/dgraph-io/badger/v3"

@@ -26,7 +26,6 @@ import (
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -46,7 +45,6 @@ func TestSSVMapping(t *testing.T) {
 	}()
 
 	for name, test := range untypedTests {
-		logex.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]
@@ -229,7 +227,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
@@ -251,7 +249,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 }
 
 func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,

@@ -4,13 +4,14 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"go.uber.org/zap"
+
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/network/commons"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 )
 
 func TestSetupPrivateKey(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	tests := []struct {
 		name      string
@@ -56,7 +57,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(logex.TestLogger(t), options)
+			db, err := ssvstorage.GetStorageFactory(zap.L(), options)
 			require.NoError(t, err)
 			defer db.Close(logger)
 

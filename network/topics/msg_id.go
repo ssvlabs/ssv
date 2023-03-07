@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/network/forks"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -109,7 +110,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
-				logging.PeerID(pid))
+				fields.PeerID(pid))
 			return MsgIDError
 		}
 		handler.Add(mid, pid)

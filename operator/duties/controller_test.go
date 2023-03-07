@@ -7,7 +7,6 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/bloxapp/ssv/utils/logex"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -21,7 +20,7 @@ import (
 )
 
 func TestDutyController_ListenToTicker(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	var wg sync.WaitGroup
 
 	mockCtrl := gomock.NewController(t)
@@ -69,7 +68,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 }
 
 func TestDutyController_ShouldExecute(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	ctrl := dutyController{ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 

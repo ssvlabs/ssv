@@ -17,11 +17,10 @@ import (
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -39,7 +38,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	tests := []struct {
 		expectedErr string
@@ -78,7 +77,7 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()

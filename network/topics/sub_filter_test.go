@@ -3,15 +3,16 @@ package topics
 import (
 	"testing"
 
+	"go.uber.org/zap"
+
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSubFilter(t *testing.T) {
 	f := forksfactory.NewFork(forksprotocol.GenesisForkVersion)
-	l := logex.TestLogger(t)
+	l := zap.L()
 	sf := newSubFilter(l, f, 2)
 
 	require.False(t, sf.CanSubscribe("xxx"))

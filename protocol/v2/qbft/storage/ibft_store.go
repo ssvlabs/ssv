@@ -2,6 +2,7 @@ package qbftstorage
 
 import (
 	"encoding/json"
+
 	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

@@ -25,11 +25,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -102,7 +101,7 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",

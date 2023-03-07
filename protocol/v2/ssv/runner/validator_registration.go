@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"go.uber.org/zap"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"

@@ -6,9 +6,10 @@ import (
 	"sync"
 	"testing"
 
+	"go.uber.org/zap"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 )
 
@@ -16,7 +17,7 @@ func TestRouter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 
 	router := newMessageRouter(genesis.New().MsgID())
 

@@ -2,11 +2,12 @@ package async
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestInterval(t *testing.T) {

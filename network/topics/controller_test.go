@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
@@ -26,7 +24,7 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	nPeers := 4
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",

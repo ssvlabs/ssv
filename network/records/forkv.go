@@ -1,11 +1,12 @@
 package records
 
 import (
+	"io"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
-	"io"
 )
 
 // ForkVersionEntry holds the fork version of the node

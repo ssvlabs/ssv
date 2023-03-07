@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -117,7 +118,7 @@ func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
 	}
 	logger.Debug(msg,
-		logging.PubKey(s.ValidatorPubKey),
+		fields.PubKey(s.ValidatorPubKey),
 		zap.Uint64("node_id", uint64(s.OperatorID)),
 		zap.Strings("committee", committee))
 }

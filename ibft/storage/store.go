@@ -5,6 +5,8 @@ import (
 	"log"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -13,7 +15,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -174,7 +175,7 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 		return errors.Wrap(err, "failed to remove decided")
 	}
 
-	logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
+	logger.Debug("removed decided", zap.Int("count", n), fields.IdentifierBytes(msgID))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

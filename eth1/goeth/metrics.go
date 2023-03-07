@@ -1,9 +1,10 @@
 package goeth
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"log"
 )
 
 type eth1NodeStatus int32

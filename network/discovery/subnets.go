@@ -1,8 +1,9 @@
 package discovery
 
 import (
-	"github.com/bloxapp/ssv/utils/format"
 	"strconv"
+
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 var regPool = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")

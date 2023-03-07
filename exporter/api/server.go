@@ -2,13 +2,15 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"time"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-	"net/http"
-	"time"
 )
 
 const (
@@ -110,7 +112,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 		return
 	}
 	cid := ConnectionID(conn)
-	logger = logger.With(logging.ConnectionID(cid))
+	logger = logger.With(fields.ConnectionID(cid))
 	logger.Debug("handles query requests")
 
 	for {
@@ -146,7 +148,7 @@ func (ws *wsServer) handleQuery(logger *zap.Logger, conn *websocket.Conn) {
 // handleStream registers the connection for broadcasting of stream messages
 func (ws *wsServer) handleStream(logger *zap.Logger, wsc *websocket.Conn) {
 	cid := ConnectionID(wsc)
-	logger = logger.With(logging.ConnectionID(cid))
+	logger = logger.With(fields.ConnectionID(cid))
 	defer logger.Debug("stream handler done")
 
 	ctx, cancel := context.WithCancel(ws.ctx)

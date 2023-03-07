@@ -4,17 +4,17 @@ import (
 	"encoding/hex"
 	"testing"
 
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
 )
 
 func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
-	logger := logex.TestLogger(t)
+	logger := zap.L()
 	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
 	contr := qbfttesting.NewTestingQBFTController(
