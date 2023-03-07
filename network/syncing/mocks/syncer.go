@@ -11,7 +11,7 @@ import (
 	qbft "github.com/bloxapp/ssv-spec/qbft"
 	types "github.com/bloxapp/ssv-spec/types"
 	syncing "github.com/bloxapp/ssv/network/syncing"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/bloxapp/ssv/protocol/p2p"
 	gomock "github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
 )

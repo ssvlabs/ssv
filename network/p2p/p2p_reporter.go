@@ -8,7 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	ssvpeers "github.com/bloxapp/ssv/network/peers"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/bloxapp/ssv/protocol/p2p"
 )
 
 // ReportValidation reports the result for the given message

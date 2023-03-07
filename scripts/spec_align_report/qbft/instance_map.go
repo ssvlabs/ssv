@@ -12,7 +12,7 @@ func InstanceSet() []utils.KeyValue {
 	instanceMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"\n", "")
 	instanceMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
 	instanceMap.Set("logging \"github.com/ipfs/go-log\"\n", "")
-	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	instanceMap.Set("\"github.com/bloxapp/ssv/protocol/qbft\"\n", "")
 	instanceMap.Set("\"go.uber.org/zap\"\n\n", "")
 	instanceMap.Set("specqbft.", "")
 	instanceMap.Set("spectypes.", "types.")
@@ -50,7 +50,7 @@ func ProposalSet() []utils.KeyValue {
 	proposalMap.Set("package instance", "package qbft")
 	proposalMap.Set("spectypes \"github.com/bloxapp/ssv-spec/types\"", "\"github.com/bloxapp/ssv-spec/types\"")
 	proposalMap.Set("\"go.uber.org/zap\"\n", "")
-	proposalMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	proposalMap.Set("\"github.com/bloxapp/ssv/protocol/qbft\"\n", "")
 
 	proposalMap.Set("qbft.IConfig", "IConfig")
 	proposalMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
@@ -77,7 +77,7 @@ func PrepareSet() []utils.KeyValue {
 	prepareMap.Set("qbft.IConfig", "IConfig")
 	prepareMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
 	prepareMap.Set("\"go.uber.org/zap\"\n", "")
-	prepareMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	prepareMap.Set("\"github.com/bloxapp/ssv/protocol/qbft\"\n", "")
 
 	prepareMap.Set("specqbft.", "")
 	prepareMap.Set("spectypes.", "types.")
@@ -98,7 +98,7 @@ func CommitSet() []utils.KeyValue {
 	commitMap.Set("qbft.IConfig", "IConfig")
 	commitMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
 	commitMap.Set("\"go.uber.org/zap\"\n", "")
-	commitMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	commitMap.Set("\"github.com/bloxapp/ssv/protocol/qbft\"\n", "")
 
 	commitMap.Set("specqbft.", "")
 	commitMap.Set("spectypes.", "types.")
@@ -120,7 +120,7 @@ func RoundChangeSet() []utils.KeyValue {
 	roundChangeMap.Set("qbft.IConfig", "IConfig")
 	roundChangeMap.Set("specqbft \"github.com/bloxapp/ssv-spec/qbft\"\n", "")
 	roundChangeMap.Set("\"go.uber.org/zap\"\n", "")
-	roundChangeMap.Set("\"github.com/bloxapp/ssv/protocol/v2/qbft\"\n", "")
+	roundChangeMap.Set("\"github.com/bloxapp/ssv/protocol/qbft\"\n", "")
 
 	roundChangeMap.Set("specqbft.", "")
 	roundChangeMap.Set("spectypes.", "types.")

@@ -10,8 +10,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 

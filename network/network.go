@@ -1,12 +1,12 @@
 package network
 
 import (
-	"go.uber.org/zap"
 	"io"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/bloxapp/ssv/protocol/p2p"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components

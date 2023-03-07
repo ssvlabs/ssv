@@ -5,15 +5,16 @@
 package mocks
 
 import (
-	reflect "reflect"
+	"reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	eth1 "github.com/bloxapp/ssv/eth1"
-	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	types "github.com/bloxapp/ssv/protocol/v2/types"
-	gomock "github.com/golang/mock/gomock"
-	event "github.com/prysmaticlabs/prysm/async/event"
-	zap "go.uber.org/zap"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/golang/mock/gomock"
+	"github.com/prysmaticlabs/prysm/async/event"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/protocol/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/types"
 )
 
 // MockController is a mock of Controller interface.

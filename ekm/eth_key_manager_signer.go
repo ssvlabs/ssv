@@ -22,7 +22,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 

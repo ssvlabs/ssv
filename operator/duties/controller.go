@@ -18,11 +18,11 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/message"
+	"github.com/bloxapp/ssv/protocol/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -44,8 +44,8 @@ type DutyController interface {
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
 	Ctx                 context.Context
-	BeaconClient        beaconprotocol.Beacon
-	EthNetwork          beaconprotocol.Network
+	BeaconClient        beacon.Beacon
+	EthNetwork          beacon.Network
 	ValidatorController validator.Controller
 	Executor            DutyExecutor
 	DutyLimit           uint64
@@ -56,7 +56,7 @@ type ControllerOptions struct {
 // dutyController internal implementation of DutyController
 type dutyController struct {
 	ctx        context.Context
-	ethNetwork beaconprotocol.Network
+	ethNetwork beacon.Network
 	// executor enables to work with a custom execution
 	executor            DutyExecutor
 	fetcher             DutyFetcher

@@ -36,7 +36,7 @@ func initControllerCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/controller/controller.go",
 		SpecPath:    utils.DataPath + "/controller/controller_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/controller/controller.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/controller/controller.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/controller.go", c.SpecPath); err != nil {
@@ -52,7 +52,7 @@ func initDecidedCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/controller/decided.go",
 		SpecPath:    utils.DataPath + "/controller/decided_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/controller/decided.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/controller/decided.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/decided.go", c.SpecPath); err != nil {
@@ -68,7 +68,7 @@ func initFutureMsgCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/controller/future_msg.go",
 		SpecPath:    utils.DataPath + "/controller/future_msg_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/controller/future_msg.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/controller/future_msg.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/future_msg.go", c.SpecPath); err != nil {

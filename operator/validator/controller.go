@@ -20,19 +20,19 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/p2p"
+	"github.com/bloxapp/ssv/protocol/qbft"
+	qbftcontroller "github.com/bloxapp/ssv/protocol/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/qbft/roundtimer"
+	utilsprotocol "github.com/bloxapp/ssv/protocol/queue"
+	"github.com/bloxapp/ssv/protocol/queue/worker"
+	"github.com/bloxapp/ssv/protocol/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/sync/handlers"
+	"github.com/bloxapp/ssv/protocol/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -59,9 +59,9 @@ type ControllerOptions struct {
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
-	ETHNetwork                 beaconprotocol.Network
+	ETHNetwork                 beacon.Network
 	Network                    network.P2PNetwork
-	Beacon                     beaconprotocol.Beacon
+	Beacon                     beacon.Beacon
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
@@ -103,7 +103,7 @@ type controller struct {
 	collection     ICollection
 	storage        registrystorage.OperatorsCollection
 	ibftStorageMap *storage.QBFTStores
-	beacon         beaconprotocol.Beacon
+	beacon         beacon.Beacon
 	keyManager     spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
@@ -414,7 +414,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
 // to start consensus flow which would save the highest decided instance
-// and sync any gaps (in protocol/v2/qbft/controller/decided.go).
+// and sync any gaps (in protocol/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 	nonCommitteeShares, err := c.collection.GetFilteredValidatorShares(logger, NotLiquidated())
 	if err != nil {
@@ -469,20 +469,20 @@ func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
 func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte) {
 	if len(pubKeys) > 0 {
 		logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+		if err := beacon.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
 			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beacon.ValidatorMetadata) error {
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
+		if err := c.collection.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
 			return err
 		}
 		_, err := c.startValidator(logger, v)
@@ -522,7 +522,7 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beaconprotocol.ValidatorMetadata) {
+func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beacon.ValidatorMetadata) {
 	if meta == nil {
 		return
 	}
@@ -651,7 +651,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 			pks = append(pks, share.ValidatorPubKey)
 		}
 		logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beaconprotocol.UpdateValidatorsMetadataBatch(logger, pks, c.metadataUpdateQueue, c,
+		beacon.UpdateValidatorsMetadataBatch(logger, pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }

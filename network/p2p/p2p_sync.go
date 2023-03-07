@@ -16,8 +16,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/p2p"
 )
 
 // extremeLowPeerCount is the maximum number of peers considered as too low

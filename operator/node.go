@@ -20,8 +20,8 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -33,8 +33,8 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          beaconprotocol.Network
-	Beacon              beaconprotocol.Beacon
+	ETHNetwork          beacon.Network
+	Beacon              beacon.Beacon
 	Network             network.P2PNetwork
 	Context             context.Context
 	Eth1Client          eth1.Client
@@ -55,11 +55,11 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork       beaconprotocol.Network
+	ethNetwork       beacon.Network
 	context          context.Context
 	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
-	beacon           beaconprotocol.Beacon
+	beacon           beacon.Beacon
 	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores

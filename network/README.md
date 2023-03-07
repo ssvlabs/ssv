@@ -38,7 +38,7 @@ such as subscribing to topics or reading, syncing and broadcasting messages.
 ### Interfaces
 
 Network interface is composed of several dedicated interfaces.
-It is mostly based on `protcolp2p.Network` which is located in `./protocol/v2/p2p/network.go`:
+It is mostly based on `protocolp2p.Network` which is located in `./protocol/p2p/network.go`:
 
 ```go 
 package protocolp2p

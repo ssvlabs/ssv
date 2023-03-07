@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
 )
 
 const (
@@ -95,7 +95,7 @@ type Client interface {
 // goClient implementing Beacon struct
 type goClient struct {
 	ctx            context.Context
-	network        beaconprotocol.Network
+	network        beacon.Network
 	client         Client
 	indicesMapLock sync.Mutex
 	graffiti       []byte
@@ -105,7 +105,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
+func New(logger *zap.Logger, opt beacon.Options) (beacon.Beacon, error) {
 	logger.Info("connecting to consensus client...", zap.String("address", opt.BeaconNodeAddr), zap.String("network", opt.Network))
 
 	httpClient, err := http.New(opt.Context,
@@ -121,7 +121,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 
 	logger.Info("successfully connected to consensus client", zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
 
-	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
+	network := beacon.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
 		ctx:            opt.Context,
 		network:        network,

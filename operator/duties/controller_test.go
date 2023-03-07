@@ -7,17 +7,17 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/bloxapp/ssv/utils/logex"
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/operator/duties/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/duties/mocks"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestDutyController_ListenToTicker(t *testing.T) {

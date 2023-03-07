@@ -1,12 +1,14 @@
 package tests
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	"github.com/bloxapp/ssv/protocol/qbft/roundtimer"
+	protocolstorage "github.com/bloxapp/ssv/protocol/qbft/storage"
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {

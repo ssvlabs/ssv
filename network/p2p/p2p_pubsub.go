@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -11,8 +12,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/message"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/p2p"
 )
 
 const (

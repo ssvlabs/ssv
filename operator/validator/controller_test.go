@@ -12,11 +12,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/message"
+	"github.com/bloxapp/ssv/protocol/queue/worker"
+	"github.com/bloxapp/ssv/protocol/ssv/validator"
+	"github.com/bloxapp/ssv/protocol/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
 

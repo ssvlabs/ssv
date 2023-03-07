@@ -71,7 +71,7 @@ func initRunnerCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/runner.go",
 		SpecPath:    utils.DataPath + "/runner/runner_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/runner.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/runner.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner.go", c.SpecPath); err != nil {
@@ -88,7 +88,7 @@ func initRunnerStateCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/runner_state.go",
 		SpecPath:    utils.DataPath + "/runner/runner_state_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/runner_state.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/runner_state.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_state.go", c.SpecPath); err != nil {
@@ -105,7 +105,7 @@ func initAggregatorCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/aggregator.go",
 		SpecPath:    utils.DataPath + "/runner/aggregator_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/aggregator.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/aggregator.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/aggregator.go", c.SpecPath); err != nil {
@@ -122,7 +122,7 @@ func initAttesterCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/attester.go",
 		SpecPath:    utils.DataPath + "/runner/attester_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/attester.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/attester.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/attester.go", c.SpecPath); err != nil {
@@ -139,7 +139,7 @@ func initProposerCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/proposer.go",
 		SpecPath:    utils.DataPath + "/runner/proposer_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/proposer.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/proposer.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/proposer.go", c.SpecPath); err != nil {
@@ -156,7 +156,7 @@ func initSyncCommitteeCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/sync_committee.go",
 		SpecPath:    utils.DataPath + "/runner/sync_committee_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/sync_committee.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/sync_committee.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/sync_committee.go", c.SpecPath); err != nil {
@@ -173,7 +173,7 @@ func initSyncCommitteeAggregatorCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/sync_committee_aggregator.go",
 		SpecPath:    utils.DataPath + "/runner/sync_committee_aggregator_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/sync_committee_aggregator.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/sync_committee_aggregator.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/sync_committee_aggregator.go", c.SpecPath); err != nil {
@@ -190,7 +190,7 @@ func initRunnerValidationsCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/runner_validations.go",
 		SpecPath:    utils.DataPath + "/runner/runner_validations_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/runner_validations.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/runner_validations.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_validations.go", c.SpecPath); err != nil {
@@ -207,7 +207,7 @@ func initRunnerSignaturesCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/runner/runner_signatures.go",
 		SpecPath:    utils.DataPath + "/runner/runner_signatures_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/runner/runner_signatures.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/runner/runner_signatures.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/runner_signatures.go", c.SpecPath); err != nil {

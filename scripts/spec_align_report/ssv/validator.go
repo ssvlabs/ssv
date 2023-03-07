@@ -23,7 +23,7 @@ func initValidatorCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/validator/validator.go",
 		SpecPath:    utils.DataPath + "/validator/validator_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/ssv/validator/validator.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/ssv/validator/validator.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/ssv/validator.go", c.SpecPath); err != nil {

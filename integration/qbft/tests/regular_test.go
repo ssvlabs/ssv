@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/stretchr/testify/require"
-	"testing"
+
+	protocolstorage "github.com/bloxapp/ssv/protocol/qbft/storage"
 )
 
 func TestRegular4CommitteeScenario(t *testing.T) {

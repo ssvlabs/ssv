@@ -33,9 +33,9 @@ import (
 	"github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -46,11 +46,11 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options         `yaml:"db"`
-	SSVOptions                 operator.Options       `yaml:"ssv"`
-	ETH1Options                eth1.Options           `yaml:"eth1"`
-	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
-	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
+	DBOptions                  basedb.Options   `yaml:"db"`
+	SSVOptions                 operator.Options `yaml:"ssv"`
+	ETH1Options                eth1.Options     `yaml:"eth1"`
+	ETH2Options                beacon.Options   `yaml:"eth2"`
+	P2pNetworkConfig           p2pv1.Config     `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
@@ -200,7 +200,7 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 	return logger
 }
 
-func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
+func setupDb(logger *zap.Logger, eth2Network beacon.Network) (basedb.IDb, error) {
 	db, err := storage.GetStorageFactory(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -269,14 +269,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorPubKey
 }
 
-func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion) {
+func setupSSVNetwork(logger *zap.Logger) (beacon.Network, forksprotocol.ForkVersion) {
 	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
 		cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
 	} else {
 		// we have some custom network id, overriding default domain
 		types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
 	}
-	eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
+	eth2Network := beacon.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
@@ -308,7 +308,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorPubKey string, db b
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger) (beacon.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cl, err := goclient.New(logger, cfg.ETH2Options)

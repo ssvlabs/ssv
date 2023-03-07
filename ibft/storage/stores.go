@@ -4,8 +4,9 @@ import (
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	qbftstorage "github.com/bloxapp/ssv/protocol/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 

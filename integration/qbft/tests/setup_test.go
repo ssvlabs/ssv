@@ -5,15 +5,16 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	protocolforks "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 	logging "github.com/ipfs/go-log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/bloxapp/ssv/network"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
+	protocolforks "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/bloxapp/ssv/protocol/types"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 const (

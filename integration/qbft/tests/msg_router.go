@@ -2,8 +2,9 @@ package tests
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"go.uber.org/zap"
+
+	protocolvalidator "github.com/bloxapp/ssv/protocol/ssv/validator"
 )
 
 type msgRouter struct {

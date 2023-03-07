@@ -14,8 +14,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
-	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/types"
 	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -35,7 +35,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(db, beacon2.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), logger)
+	km, err := NewETHKeyManagerSigner(db, beacon.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), logger)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

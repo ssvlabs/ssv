@@ -9,14 +9,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
-	"github.com/bloxapp/ssv/operator/validator"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"go.uber.org/zap"
-
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -29,8 +29,8 @@ type RecipientController interface {
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
 	Ctx               context.Context
-	BeaconClient      beaconprotocol.Beacon
-	EthNetwork        beaconprotocol.Network
+	BeaconClient      beacon.Beacon
+	EthNetwork        beacon.Network
 	ShareStorage      validator.ICollection
 	Ticker            slot_ticker.Ticker
 	OperatorPublicKey string
@@ -39,8 +39,8 @@ type ControllerOptions struct {
 // recipientController implementation of RecipientController
 type recipientController struct {
 	ctx               context.Context
-	beaconClient      beaconprotocol.Beacon
-	ethNetwork        beaconprotocol.Network
+	beaconClient      beacon.Beacon
+	ethNetwork        beacon.Network
 	shareStorage      validator.ICollection
 	ticker            slot_ticker.Ticker
 	operatorPublicKey string

@@ -1,9 +1,10 @@
 package tasks
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/queue"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/protocol/queue"
 )
 
 // Fn represents a function to execute

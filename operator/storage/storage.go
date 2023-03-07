@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	registry "github.com/bloxapp/ssv/protocol/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"

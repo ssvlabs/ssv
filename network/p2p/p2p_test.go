@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -20,7 +18,8 @@ import (
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protcolp2p "github.com/bloxapp/ssv/protocol/p2p"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestGetMaxPeers(t *testing.T) {

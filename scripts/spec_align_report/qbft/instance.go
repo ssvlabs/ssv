@@ -48,7 +48,7 @@ func initInstanceCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/instance/instance.go",
 		SpecPath:    utils.DataPath + "/instance/instance_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/instance/instance.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/instance/instance.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/instance.go", c.SpecPath); err != nil {
@@ -64,7 +64,7 @@ func initProposalCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/instance/proposal.go",
 		SpecPath:    utils.DataPath + "/instance/proposal_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/instance/proposal.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/instance/proposal.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/proposal.go", c.SpecPath); err != nil {
@@ -80,7 +80,7 @@ func initPrepareCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/instance/prepare.go",
 		SpecPath:    utils.DataPath + "/instance/prepare_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/instance/prepare.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/instance/prepare.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/prepare.go", c.SpecPath); err != nil {
@@ -96,7 +96,7 @@ func initCommitCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/instance/commit.go",
 		SpecPath:    utils.DataPath + "/instance/commit_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/instance/commit.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/instance/commit.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/commit.go", c.SpecPath); err != nil {
@@ -112,7 +112,7 @@ func initRoundChangeCompareStruct() *utils.Compare {
 		SSVPath:     utils.DataPath + "/instance/round_change.go",
 		SpecPath:    utils.DataPath + "/instance/round_change_spec.go",
 	}
-	if err := utils.Copy("./protocol/v2/qbft/instance/round_change.go", c.SSVPath); err != nil {
+	if err := utils.Copy("./protocol/qbft/instance/round_change.go", c.SSVPath); err != nil {
 		panic(err)
 	}
 	if err := utils.Copy("./scripts/spec_align_report/ssv-spec/qbft/round_change.go", c.SpecPath); err != nil {
