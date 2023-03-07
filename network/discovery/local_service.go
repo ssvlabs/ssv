@@ -36,7 +36,7 @@ type localDiscovery struct {
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
 	logger = logger.Named(logging.NameDiscoveryService)
-	logger.Debug("configuring mdns discovery")
+	logger.Debug("configuring mdns")
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {
