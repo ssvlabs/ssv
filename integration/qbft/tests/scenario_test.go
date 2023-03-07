@@ -9,6 +9,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
@@ -136,7 +137,7 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 		OperatorID:      id,
 		ValidatorPubKey: keySet.ValidatorPK.Serialize(),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keySet.Threshold,
 		PartialQuorum:   keySet.PartialThreshold,
 		Committee:       keySet.Committee(),

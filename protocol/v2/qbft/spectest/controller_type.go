@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
@@ -16,13 +15,12 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
 	"github.com/stretchr/testify/require"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := qbfttesting.TestingConfig(spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
+	identifier := []byte{1, 2, 3, 4}
+	config := qbfttesting.TestingConfig(spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
 	contr := qbfttesting.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
@@ -91,16 +89,21 @@ func testProcessMsg(
 func testBroadcastedDecided(
 	t *testing.T,
 	config *qbft.Config,
-	identifier spectypes.MessageID,
+	identifier []byte,
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {
-			if !bytes.Equal(identifier[:], msg.MsgID[:]) {
+
+			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
+			msgID := spectypes.MessageID{}
+			copy(msgID[:], identifier)
+
+			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
 				continue
 			}
 
@@ -123,7 +126,7 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbft.Config, identifier spectypes.MessageID, runData *spectests.RunInstanceData) error {
+func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
 	err := contr.StartNewInstance(runData.InputValue)
 	var lastErr error
 	if err != nil {

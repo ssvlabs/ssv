@@ -44,7 +44,7 @@ func TestSSVMapping(t *testing.T) {
 	}
 
 	origDomain := types.GetDefaultDomain()
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 	defer func() {
 		types.SetDefaultDomain(origDomain)
 	}()

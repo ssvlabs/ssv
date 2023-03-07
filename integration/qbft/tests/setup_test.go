@@ -2,7 +2,10 @@ package tests
 
 import (
 	"context"
+	"testing"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
@@ -12,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"testing"
 )
 
 const (
@@ -41,7 +43,7 @@ func TestMain(m *testing.M) {
 	ctx := context.Background()
 	logger := logex.Build("integration-tests", zapcore.DebugLevel, nil)
 
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, maxSupportedCommittee, maxSupportedQuorum, false)
 	if err != nil {
