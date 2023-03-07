@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -147,7 +148,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing role", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), -1, 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
