@@ -252,7 +252,7 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	//m.lock.Lock()
 	//defer m.lock.Unlock()
 
-	m.logger.Debug("CALL SYNC")
+	m.logger.Debug("🔀 CALL SYNC")
 	m.calledDecidedSyncCnt++
 
 	spk := hex.EncodeToString(mid.GetPubKey())

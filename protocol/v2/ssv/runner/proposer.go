@@ -218,7 +218,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		logger.Info("successfully proposed block!")
+		logger.Info("✅ successfully proposed block!")
 	}
 
 	r.GetState().Finished = true

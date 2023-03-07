@@ -240,7 +240,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			r.metrics.EndDutyFullFlow()
 			r.metrics.RoleSubmitted()
 
-			logger.Debug("submitted successfully sync committee aggregator!")
+			logger.Debug("✅ submitted successfully sync committee aggregator!")
 			break
 		}
 	}
