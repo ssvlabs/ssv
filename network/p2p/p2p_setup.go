@@ -57,7 +57,7 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	// set a seed for rand values
 	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 
-	logger.Info("configuring p2p network service")
+	logger.Info("configuring")
 
 	n.initCfg()
 
@@ -66,13 +66,13 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 		return err
 	}
 	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
-	logger.Debug("p2p host was configured")
+	logger.Debug("host configured")
 
 	err = n.SetupServices(logger)
 	if err != nil {
 		return err
 	}
-	logger.Info("p2p services were configured")
+	logger.Info("services configured")
 
 	return nil
 }
