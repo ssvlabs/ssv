@@ -22,12 +22,12 @@ func (v *Validator) Start(logger *zap.Logger) error {
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
-				logger.Warn("⚠️ share is missing", zap.String("role", role.String()))
+				logger.Warn("❗ share is missing", zap.String("role", role.String()))
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
 			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
-				logger.Warn("⚠️ failed to load highest instance",
+				logger.Warn("❗ failed to load highest instance",
 					zap.String("identifier", identifier.String()),
 					zap.Error(err))
 			}

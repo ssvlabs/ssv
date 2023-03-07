@@ -64,19 +64,19 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		logger.Debug("▶️ starting QBFT instance")
+		logger.Debug("ℹ️ starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("⚠️ failed to create proposal", zap.Error(err))
+				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					logger.Warn("⚠️ failed to broadcast proposal", zap.Error(err))
+					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}

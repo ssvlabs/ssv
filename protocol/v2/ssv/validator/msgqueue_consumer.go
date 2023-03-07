@@ -30,7 +30,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			logger.Warn("⚠️ failed to decode message",
+			logger.Warn("❗ failed to decode message",
 				zap.Error(err),
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()),
@@ -39,7 +39,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 		}
 		if pushed := q.Q.TryPush(decodedMsg); !pushed {
 			msgID := msg.MsgID.String()
-			logger.Warn("⚠️ dropping message because the queue is full",
+			logger.Warn("❗ dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}

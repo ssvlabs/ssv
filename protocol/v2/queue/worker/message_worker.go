@@ -129,7 +129,7 @@ func (w *Worker) Size() int {
 // process the msg's from queue
 func (w *Worker) process(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	if w.handler == nil {
-		logger.Warn("⚠️ no handler for worker")
+		logger.Warn("❗ no handler for worker")
 		return
 	}
 	if err := w.handler(logger, msg); err != nil {

@@ -20,13 +20,13 @@ func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 	case types.Timeout:
 		err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(*eventMsg)
 		if err != nil {
-			logger.Warn("⚠️ on timeout failed", zap.Error(err)) // need to return error instead?
+			logger.Warn("❗ on timeout failed", zap.Error(err)) // need to return error instead?
 		}
 		return nil
 	case types.ExecuteDuty:
 		err := v.OnExecuteDuty(logger, *eventMsg)
 		if err != nil {
-			logger.Warn("⚠️ failed to execute duty", zap.Error(err)) // need to return error instead?
+			logger.Warn("❗ failed to execute duty", zap.Error(err)) // need to return error instead?
 		}
 		return nil
 	default:
