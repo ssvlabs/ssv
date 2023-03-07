@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/logging"
 	"testing"
 
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
@@ -10,7 +11,6 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 var (
@@ -19,7 +19,7 @@ var (
 )
 
 func TestSetupPrivateKey(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		name      string
@@ -56,7 +56,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				Path: "",
 			}
 
-			db, err := ssvstorage.GetStorageFactory(logex.TestLogger(t), options)
+			db, err := ssvstorage.GetStorageFactory(logging.TestLogger(t), options)
 			require.NoError(t, err)
 			defer db.Close(logger)
 

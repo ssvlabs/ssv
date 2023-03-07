@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"encoding/hex"
+	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,7 +15,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
@@ -61,7 +61,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	var updateCount uint64
 	pks := []string{

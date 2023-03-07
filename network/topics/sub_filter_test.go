@@ -1,17 +1,17 @@
 package topics
 
 import (
+	"github.com/bloxapp/ssv/logging"
 	"testing"
 
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSubFilter(t *testing.T) {
 	f := forksfactory.NewFork(forksprotocol.GenesisForkVersion)
-	l := logex.TestLogger(t)
+	l := logging.TestLogger(t)
 	sf := newSubFilter(l, f, 2)
 
 	require.False(t, sf.CanSubscribe("xxx"))

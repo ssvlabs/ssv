@@ -3,6 +3,7 @@ package goeth
 import (
 	"context"
 	"encoding/json"
+	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"sync"
 	"testing"
@@ -15,11 +16,10 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		name                  string

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -15,7 +14,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := logex.Build(RootCmd.Short, zapcore.DebugLevel, nil)
+		logger := logging.Build(RootCmd.Short, zapcore.DebugLevel, nil)
 
 		pk, sk, err := rsaencryption.GenerateKeys()
 		if err != nil {

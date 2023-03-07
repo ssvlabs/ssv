@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/logging"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -9,8 +10,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
-	logging "github.com/ipfs/go-log"
+	golog "github.com/ipfs/go-log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -34,12 +34,12 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 }
 
 func TestMain(m *testing.M) {
-	if err := logging.SetLogLevelRegex("ssv/.*", "debug"); err != nil {
+	if err := golog.SetLogLevelRegex("ssv/.*", "debug"); err != nil {
 		panic(err)
 	}
 
 	ctx := context.Background()
-	logger := logex.Build("integration-tests", zapcore.DebugLevel, nil)
+	logger := logging.Build("integration-tests", zapcore.DebugLevel, nil)
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
 

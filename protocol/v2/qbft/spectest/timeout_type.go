@@ -3,12 +3,12 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +22,7 @@ type SpecTest struct {
 }
 
 func RunTimeout(t *testing.T, test *SpecTest) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	err := test.Pre.UponRoundTimeout(logger)
 
 	if len(test.ExpectedError) != 0 {

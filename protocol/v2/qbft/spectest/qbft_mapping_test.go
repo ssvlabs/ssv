@@ -2,6 +2,7 @@ package qbft
 
 import (
 	"encoding/json"
+	"github.com/bloxapp/ssv/logging"
 	"os"
 	"reflect"
 	"strings"
@@ -18,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -38,7 +38,7 @@ func TestQBFTMapping(t *testing.T) {
 	}()
 
 	for name, test := range untypedTests {
-		logex.Reset()
+		logging.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]
@@ -113,7 +113,7 @@ func TestQBFTMapping(t *testing.T) {
 
 			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
-			logger := logex.TestLogger(t)
+			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
 				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,

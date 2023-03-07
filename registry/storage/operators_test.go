@@ -2,10 +2,10 @@ package storage
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/logex"
 	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -18,7 +18,7 @@ import (
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
@@ -122,7 +122,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()

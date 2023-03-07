@@ -2,12 +2,12 @@ package tasks
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +51,7 @@ func TestExecWithTimeout(t *testing.T) {
 					time.Sleep(2 * time.Millisecond)
 				}
 			}
-			completed, _, err := ExecWithTimeout(test.ctx, logex.TestLogger(t), fn, test.t)
+			completed, _, err := ExecWithTimeout(test.ctx, logging.TestLogger(t), fn, test.t)
 			stopped.Wait()
 			require.False(t, completed)
 			require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestExecWithTimeout_ShortFunc(t *testing.T) {
 		time.Sleep(2 * time.Millisecond)
 		return true, nil
 	}
-	completed, res, err := ExecWithTimeout(context.TODO(), logex.TestLogger(t), longExec, 10*time.Millisecond)
+	completed, res, err := ExecWithTimeout(context.TODO(), logging.TestLogger(t), longExec, 10*time.Millisecond)
 	require.True(t, completed)
 	require.True(t, res.(bool))
 	require.NoError(t, err)
