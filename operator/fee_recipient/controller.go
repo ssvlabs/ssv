@@ -28,7 +28,6 @@ type RecipientController interface {
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-
 	Ctx          context.Context
 	BeaconClient beaconprotocol.Beacon
 	EthNetwork   beaconprotocol.Network
@@ -39,7 +38,6 @@ type ControllerOptions struct {
 
 // recipientController implementation of RecipientController
 type recipientController struct {
-
 	ctx          context.Context
 	beaconClient beaconprotocol.Beacon
 	ethNetwork   beaconprotocol.Network
