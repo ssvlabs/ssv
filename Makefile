@@ -159,4 +159,3 @@ format:
 	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 1 sh -c 'gopls -v format -w $0'
 # the argument to gopls imports must be a single file so this entire command takes a few mintues to run
 	find . -name "*.go" ! -path '*mock*' ! -name 'enr_fork_id_encoding.go' -type f -print0 | xargs -0 -P 10 -I{} sh -c 'gopls -v imports -w "{}"'
-
