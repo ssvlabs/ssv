@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -30,7 +29,7 @@ import (
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -103,7 +102,7 @@ func TestSubmitProposal(t *testing.T) {
 }
 
 func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",

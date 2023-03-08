@@ -5,8 +5,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"go.uber.org/zap"
-
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -15,7 +14,7 @@ import (
 )
 
 func TestTagBestPeers(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	connMgrMock := newConnMgr()
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)

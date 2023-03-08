@@ -7,6 +7,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
@@ -22,7 +23,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 		Reporting: true,
 		Ctx:       ctx,
 	}
-	db, err := kv.New(zap.L(), options)
+	db, err := kv.New(logging.TestLogger(t).Named(logging.NameMigrations), options)
 	if err != nil {
 		return Options{}, err
 	}
@@ -34,7 +35,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 
 func Test_RunNotMigratingTwice(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.L()
+	logger := logging.TestLogger(t).Named(logging.NameMigrations)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -62,7 +63,7 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 
 func Test_Rollback(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.L()
+	logger := logging.TestLogger(t).Named(logging.NameMigrations)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -89,7 +90,7 @@ func Test_Rollback(t *testing.T) {
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.L()
+	logger := logging.TestLogger(t).Named(logging.NameMigrations)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -112,7 +113,7 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 
 func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 	ctx := context.Background()
-	logger := zap.L()
+	logger := logging.TestLogger(t).Named(logging.NameMigrations)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 

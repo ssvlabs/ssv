@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
-	logger := zap.L()
+	logger := zap.L().Named("integration-tests")
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
 

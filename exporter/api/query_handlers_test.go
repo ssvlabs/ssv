@@ -22,7 +22,7 @@ import (
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -40,7 +40,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		expectedErr string
@@ -79,7 +79,7 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()

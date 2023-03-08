@@ -4,9 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"go.uber.org/zap"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
@@ -49,7 +48,7 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",

@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -54,7 +55,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		s.shared = GetSharedData(t)
 
-		logger := zap.L()
+		logger := logging.TestLogger(t)
 
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {

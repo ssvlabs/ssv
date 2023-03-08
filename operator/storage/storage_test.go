@@ -4,8 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"go.uber.org/zap"
-
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -21,7 +20,7 @@ var (
 )
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -113,7 +112,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				Path: "",
 			}
 
-			logger := zap.L()
+			logger := logging.TestLogger(t)
 			db, err := ssvstorage.GetStorageFactory(logger, options)
 			require.NoError(t, err)
 			defer db.Close(logger)
@@ -170,7 +169,7 @@ func TestSetupPrivateKey(t *testing.T) {
 }
 
 func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",

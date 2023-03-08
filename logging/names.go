@@ -19,4 +19,7 @@ const (
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
+	NameExportKeys        = "ExportKeys"
+	NameCreateThreshold   = "CreateThreshold"
+	NameMigrations        = "Migrations"
 )

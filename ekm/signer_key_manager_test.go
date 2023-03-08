@@ -3,10 +3,9 @@ package ekm
 import (
 	"testing"
 
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/prysmaticlabs/go-bitfield"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -31,7 +30,7 @@ const (
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)

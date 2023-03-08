@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -227,7 +228,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
@@ -249,7 +250,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 }
 
 func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,

@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
+	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -20,7 +19,7 @@ import (
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		name                  string

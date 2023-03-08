@@ -191,7 +191,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	}
 	loggerLevel, errLogLevel := logging.GetLoggerLevelValue(cfg.LogLevel)
 	logging.SetGlobalLogger(loggerLevel)
-	logger := zap.L()
+	logger := zap.L().Named(commons.GetBuildData())
 	if errLogLevel != nil {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 	}

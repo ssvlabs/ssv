@@ -7,13 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"go.uber.org/zap"
-
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
 
@@ -113,7 +112,7 @@ func TestQBFTMapping(t *testing.T) {
 
 			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
-			logger := zap.L()
+			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
 				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,

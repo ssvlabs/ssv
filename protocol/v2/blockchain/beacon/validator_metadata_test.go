@@ -10,6 +10,7 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -60,7 +61,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 
 	var updateCount uint64
 	pks := []string{

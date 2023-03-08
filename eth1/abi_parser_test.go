@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
@@ -30,7 +29,7 @@ func TestParseOperatorRegistrationEvent(t *testing.T) {
 
 	t.Run("v2 operator added", func(t *testing.T) {
 		LogOperatorRegistration, contractAbi := unmarshalLog(t, rawOperatorRegistration, V2)
-		abiParser := NewParser(zap.L(), V2)
+		abiParser := NewParser(logging.TestLogger(t), V2)
 		parsed, err := abiParser.ParseOperatorRegistrationEvent(*LogOperatorRegistration, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
@@ -59,7 +58,7 @@ func TestParseValidatorRegistrationEvent(t *testing.T) {
 
 	t.Run("v2 validator added", func(t *testing.T) {
 		vLogValidatorRegistration, contractAbi := unmarshalLog(t, rawValidatorRegistration, V2)
-		abiParser := NewParser(zap.L(), V2)
+		abiParser := NewParser(logging.TestLogger(t), V2)
 		parsed, err := abiParser.ParseValidatorRegistrationEvent(*vLogValidatorRegistration, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
