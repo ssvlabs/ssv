@@ -7,14 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"

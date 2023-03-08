@@ -7,13 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
 
@@ -39,7 +38,6 @@ func TestQBFTMapping(t *testing.T) {
 	}()
 
 	for name, test := range untypedTests {
-		logging.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]

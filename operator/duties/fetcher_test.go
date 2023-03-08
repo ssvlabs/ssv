@@ -4,10 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
