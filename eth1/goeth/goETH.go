@@ -348,7 +348,6 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
 			fields.EventID(vLog.Topics[0]),
-
 			zap.Uint64("block", vLog.BlockNumber),
 			fields.TxHash(vLog.TxHash),
 			zap.Error(err),

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"

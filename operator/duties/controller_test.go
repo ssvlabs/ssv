@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"go.uber.org/zap"
 

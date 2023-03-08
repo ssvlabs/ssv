@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/bloxapp/ssv/logging"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"

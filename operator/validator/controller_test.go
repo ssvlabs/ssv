@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
