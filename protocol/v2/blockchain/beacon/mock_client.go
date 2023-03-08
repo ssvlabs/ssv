@@ -18,6 +18,7 @@ import (
 	types "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockbeaconDuties is a mock of beaconDuties interface.
@@ -58,18 +59,18 @@ func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler interface{})
 }
 
 // GetDuties mocks base method.
-func (m *MockbeaconDuties) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+func (m *MockbeaconDuties) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDuties", epoch, validatorIndices)
+	ret := m.ctrl.Call(m, "GetDuties", logger, epoch, validatorIndices)
 	ret0, _ := ret[0].([]*types.Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDuties indicates an expected call of GetDuties.
-func (mr *MockbeaconDutiesMockRecorder) GetDuties(epoch, validatorIndices interface{}) *gomock.Call {
+func (mr *MockbeaconDutiesMockRecorder) GetDuties(logger, epoch, validatorIndices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockbeaconDuties)(nil).GetDuties), epoch, validatorIndices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockbeaconDuties)(nil).GetDuties), logger, epoch, validatorIndices)
 }
 
 // SyncCommitteeDuties mocks base method.
@@ -381,18 +382,18 @@ func (mr *MockBeaconMockRecorder) GetBlindedBeaconBlock(slot, committeeIndex, gr
 }
 
 // GetDuties mocks base method.
-func (m *MockBeacon) GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+func (m *MockBeacon) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDuties", epoch, validatorIndices)
+	ret := m.ctrl.Call(m, "GetDuties", logger, epoch, validatorIndices)
 	ret0, _ := ret[0].([]*types.Duty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDuties indicates an expected call of GetDuties.
-func (mr *MockBeaconMockRecorder) GetDuties(epoch, validatorIndices interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) GetDuties(logger, epoch, validatorIndices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockBeacon)(nil).GetDuties), epoch, validatorIndices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockBeacon)(nil).GetDuties), logger, epoch, validatorIndices)
 }
 
 // GetSyncCommitteeContribution mocks base method.

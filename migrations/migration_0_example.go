@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -9,9 +10,9 @@ import (
 // This migration is an Example migration
 var migrationExample1 = Migration{
 	Name: "migration_0_example",
-	Run: func(ctx context.Context, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		// Example to clean registry data for specific storage
-		if err := opt.nodeStorage().CleanRegistryData(); err != nil {
+		if err := opt.nodeStorage(logger).CleanRegistryData(); err != nil {
 			return err
 		}
 

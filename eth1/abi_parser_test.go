@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestParseOperatorRegistrationEvent(t *testing.T) {
@@ -29,10 +28,9 @@ func TestParseOperatorRegistrationEvent(t *testing.T) {
   "transactionHash": "0x79478d46847aca9aa93f351c4b9c2126739a746b916da6445c0e64ab227fd016"
 }`
 
-	logger := logex.Build("test", zap.DebugLevel, nil)
 	t.Run("v2 operator added", func(t *testing.T) {
 		LogOperatorRegistration, contractAbi := unmarshalLog(t, rawOperatorRegistration, V2)
-		abiParser := NewParser(logger, V2)
+		abiParser := NewParser(logex.TestLogger(t), V2)
 		parsed, err := abiParser.ParseOperatorRegistrationEvent(*LogOperatorRegistration, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
@@ -61,7 +59,7 @@ func TestParseValidatorRegistrationEvent(t *testing.T) {
 
 	t.Run("v2 validator added", func(t *testing.T) {
 		vLogValidatorRegistration, contractAbi := unmarshalLog(t, rawValidatorRegistration, V2)
-		abiParser := NewParser(logex.Build("test", zap.InfoLevel, nil), V2)
+		abiParser := NewParser(logex.TestLogger(t), V2)
 		parsed, err := abiParser.ParseValidatorRegistrationEvent(*vLogValidatorRegistration, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)

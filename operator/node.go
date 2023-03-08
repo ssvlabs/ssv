@@ -27,8 +27,8 @@ import (
 
 // Node represents the behavior of SSV node
 type Node interface {
-	Start() error
-	StartEth1(syncOffset *eth1.SyncOffset) error
+	Start(logger *zap.Logger) error
+	StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset) error
 }
 
 // Options contains options to create the node
@@ -37,7 +37,6 @@ type Options struct {
 	Beacon              beaconprotocol.Beacon
 	Network             network.P2PNetwork
 	Context             context.Context
-	Logger              *zap.Logger
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
@@ -60,7 +59,6 @@ type operatorNode struct {
 	context          context.Context
 	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
-	logger           *zap.Logger
 	beacon           beaconprotocol.Beacon
 	net              network.P2PNetwork
 	storage          storage.Storage
@@ -77,7 +75,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(opts Options) Node {
+func New(logger *zap.Logger, opts Options) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
@@ -88,25 +86,22 @@ func New(opts Options) Node {
 		spectypes.BNRoleSyncCommitteeContribution,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, opts.Logger, role.String(), opts.ForkVersion))
+		storageMap.Add(role, qbftstorage.New(opts.DB, role.String(), opts.ForkVersion))
 	}
 
-	ticker := slot_ticker.NewTicker(opts.Context, opts.Logger, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
+	ticker := slot_ticker.NewTicker(opts.Context, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
 
 	node := &operatorNode{
 		context:        opts.Context,
-		logger:         opts.Logger.With(zap.String("component", "operatorNode")),
 		ticker:         ticker,
 		validatorsCtrl: opts.ValidatorController,
 		ethNetwork:     opts.ETHNetwork,
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
-		storage:        storage.NewNodeStorage(opts.DB, opts.Logger),
+		storage:        storage.NewNodeStorage(opts.DB),
 		qbftStorage:    storageMap,
-
-		dutyCtrl: duties.NewDutyController(&duties.ControllerOptions{
-			Logger:              opts.Logger,
+		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
 			Ctx:                 opts.Context,
 			BeaconClient:        opts.Beacon,
 			EthNetwork:          opts.ETHNetwork,
@@ -117,13 +112,11 @@ func New(opts Options) Node {
 			Ticker:              ticker,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
-			Logger:       opts.Logger,
 			Ctx:          opts.Context,
 			BeaconClient: opts.Beacon,
 			EthNetwork:   opts.ETHNetwork,
 			ShareStorage: validator.NewCollection(validator.CollectionOptions{
-				DB:     opts.DB,
-				Logger: opts.Logger,
+				DB: opts.DB,
 			}),
 			Ticker:            ticker,
 			OperatorPublicKey: opts.ValidatorOptions.OperatorPubKey,
@@ -135,7 +128,7 @@ func New(opts Options) Node {
 	}
 
 	if err := node.init(opts); err != nil {
-		node.logger.Panic("failed to init", zap.Error(err))
+		logger.Panic("failed to init", zap.Error(err))
 	}
 
 	return node
@@ -151,11 +144,11 @@ func (n *operatorNode) init(opts Options) error {
 }
 
 // Start starts to stream duties and run IBFT instances
-func (n *operatorNode) Start() error {
-	n.logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
+func (n *operatorNode) Start(logger *zap.Logger) error {
+	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {
-		err := n.startWSServer()
+		err := n.startWSServer(logger)
 		if err != nil {
 			// TODO: think if we need to panic
 			return
@@ -163,58 +156,58 @@ func (n *operatorNode) Start() error {
 	}()
 
 	// slot ticker init
-	go n.ticker.Start()
+	go n.ticker.Start(logger)
 
-	n.validatorsCtrl.StartNetworkHandlers()
-	n.validatorsCtrl.StartValidators()
-	go n.net.UpdateSubnets()
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-	go n.listenForCurrentSlot()
-	go n.reportOperators()
+	n.validatorsCtrl.StartNetworkHandlers(logger)
+	n.validatorsCtrl.StartValidators(logger)
+	go n.net.UpdateSubnets(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop(logger)
+	go n.listenForCurrentSlot(logger)
+	go n.reportOperators(logger)
 
-	go n.feeRecipientCtrl.Start()
-	n.dutyCtrl.Start()
+	go n.feeRecipientCtrl.Start(logger)
+	n.dutyCtrl.Start(logger)
 
 	return nil
 }
 
 // listenForCurrentSlot listens to current slot and trigger relevant components if needed
-func (n *operatorNode) listenForCurrentSlot() {
+func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
 	tickerChan := make(chan phase0.Slot, 32)
 	n.ticker.Subscribe(tickerChan)
 	for slot := range tickerChan {
-		n.setFork(slot)
+		n.setFork(logger, slot)
 	}
 }
 
 // StartEth1 starts the eth1 events sync and streaming
-func (n *operatorNode) StartEth1(syncOffset *eth1.SyncOffset) error {
-	n.logger.Info("starting operator node syncing with eth1")
+func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset) error {
+	logger.Info("starting operator node syncing with eth1")
 
-	handler := n.validatorsCtrl.Eth1EventHandler(false)
+	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
 	// sync past events
-	if err := eth1.SyncEth1Events(n.logger, n.eth1Client, n.storage, syncOffset, handler); err != nil {
+	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
-	n.logger.Info("manage to sync contract events")
-	shares, err := n.validatorsCtrl.GetAllValidatorShares()
+	logger.Info("manage to sync contract events")
+	shares, err := n.validatorsCtrl.GetAllValidatorShares(logger)
 	if err != nil {
-		n.logger.Error("failed to get validator shares", zap.Error(err))
+		logger.Error("failed to get validator shares", zap.Error(err))
 	}
-	operators, err := n.storage.ListOperators(0, 0)
+	operators, err := n.storage.ListOperators(logger, 0, 0)
 	if err != nil {
-		n.logger.Error("failed to get operators", zap.Error(err))
+		logger.Error("failed to get operators", zap.Error(err))
 	}
-	n.logger.Info("ETH1 sync history stats",
+	logger.Info("ETH1 sync history stats",
 		zap.Int("validators count", len(shares)),
 		zap.Int("operators count", len(operators)),
 	)
 
 	// setup validator controller to listen to new events
-	go n.validatorsCtrl.ListenToEth1Events(n.eth1Client.EventsFeed())
+	go n.validatorsCtrl.ListenToEth1Events(logger, n.eth1Client.EventsFeed())
 
 	// starts the eth1 events subscription
-	if err := n.eth1Client.Start(); err != nil {
+	if err := n.eth1Client.Start(logger); err != nil {
 		return errors.Wrap(err, "failed to start eth1 client")
 	}
 
@@ -240,29 +233,29 @@ func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
 }
 
 // handleQueryRequests waits for incoming messages and
-func (n *operatorNode) handleQueryRequests(nm *api.NetworkMessage) {
+func (n *operatorNode) handleQueryRequests(logger *zap.Logger, nm *api.NetworkMessage) {
 	if nm.Err != nil {
 		nm.Msg = api.Message{Type: api.TypeError, Data: []string{"could not parse network message"}}
 	}
-	n.logger.Debug("got incoming export request",
+	logger.Debug("got incoming export request",
 		zap.String("type", string(nm.Msg.Type)))
 	switch nm.Msg.Type {
 	case api.TypeDecided:
-		api.HandleDecidedQuery(n.logger, n.qbftStorage, nm)
+		api.HandleDecidedQuery(logger, n.qbftStorage, nm)
 	case api.TypeError:
-		api.HandleErrorQuery(n.logger, nm)
+		api.HandleErrorQuery(logger, nm)
 	default:
-		api.HandleUnknownQuery(n.logger, nm)
+		api.HandleUnknownQuery(logger, nm)
 	}
 }
 
-func (n *operatorNode) startWSServer() error {
+func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 	if n.ws != nil {
-		n.logger.Info("starting WS server")
+		logger.Info("starting WS server")
 
 		n.ws.UseQueryHandler(n.handleQueryRequests)
 
-		if err := n.ws.Start(fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
+		if err := n.ws.Start(logger, fmt.Sprintf(":%d", n.wsAPIPort)); err != nil {
 			return err
 		}
 	}
@@ -270,14 +263,14 @@ func (n *operatorNode) startWSServer() error {
 	return nil
 }
 
-func (n *operatorNode) reportOperators() {
-	operators, err := n.storage.ListOperators(0, 1000) // TODO more than 1000?
+func (n *operatorNode) reportOperators(logger *zap.Logger) {
+	operators, err := n.storage.ListOperators(logger, 0, 1000) // TODO more than 1000?
 	if err != nil {
-		n.logger.Warn("failed to get all operators for reporting", zap.Error(err))
+		logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		return
 	}
-	n.logger.Debug("reporting operators", zap.Int("count", len(operators)))
+	logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for i := range operators {
-		exporter.ReportOperatorIndex(n.logger, &operators[i])
+		exporter.ReportOperatorIndex(logger, &operators[i])
 	}
 }

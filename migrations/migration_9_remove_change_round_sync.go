@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -12,9 +13,9 @@ import (
 
 var migrationRemoveChangeRoundSync = Migration{
 	Name: "migration_9_remove_change_round_sync",
-	Run: func(ctx context.Context, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		validatorStorage := opt.validatorStorage()
-		shares, err := validatorStorage.GetAllValidatorShares()
+		shares, err := validatorStorage.GetAllValidatorShares(logger)
 		if err != nil {
 			return err
 		}

@@ -3,7 +3,6 @@ package duties
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -16,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -33,17 +33,16 @@ var syncCommitteePreparationEpochs = uint64(2)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
-	ExecuteDuty(duty *spectypes.Duty) error
+	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error
 }
 
 // DutyController interface for dispatching duties execution according to slot ticker
 type DutyController interface {
-	Start()
+	Start(logger *zap.Logger)
 }
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-	Logger              *zap.Logger
 	Ctx                 context.Context
 	BeaconClient        beaconprotocol.Beacon
 	EthNetwork          beaconprotocol.Network
@@ -56,7 +55,6 @@ type ControllerOptions struct {
 
 // dutyController internal implementation of DutyController
 type dutyController struct {
-	logger     *zap.Logger
 	ctx        context.Context
 	ethNetwork beaconprotocol.Network
 	// executor enables to work with a custom execution
@@ -75,10 +73,9 @@ type dutyController struct {
 var secPerSlot int64 = 12
 
 // NewDutyController creates a new instance of DutyController
-func NewDutyController(opts *ControllerOptions) DutyController {
-	fetcher := newDutyFetcher(opts.Logger, opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
+func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyController {
+	fetcher := newDutyFetcher(logger, opts.BeaconClient, opts.ValidatorController, opts.EthNetwork)
 	dc := dutyController{
-		logger:              opts.Logger,
 		ctx:                 opts.Ctx,
 		ethNetwork:          opts.EthNetwork,
 		fetcher:             fetcher,
@@ -93,48 +90,48 @@ func NewDutyController(opts *ControllerOptions) DutyController {
 }
 
 // Start listens to slot ticker and dispatches duties execution
-func (dc *dutyController) Start() {
+func (dc *dutyController) Start(logger *zap.Logger) {
 	// warmup
-	indices := dc.validatorController.GetValidatorsIndices()
-	dc.logger.Debug("warming up indices", zap.Int("count", len(indices)))
+	indices := dc.validatorController.GetValidatorsIndices(logger)
+	logger.Debug("warming up indices", zap.Int("count", len(indices)))
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
 	// This also allows us to re-request duties if the dependent roots change.
-	if err := dc.fetcher.Events(dc.ctx, []string{"head"}, dc.HandleHeadEvent); err != nil {
-		dc.logger.Error("failed to subscribe to head events", zap.Error(err))
+	if err := dc.fetcher.Events(dc.ctx, []string{"head"}, dc.HandleHeadEvent(logger)); err != nil {
+		logger.Error("failed to subscribe to head events", zap.Error(err))
 	}
-	dc.warmUpDuties()
+	dc.warmUpDuties(logger)
 	tickerChan := make(chan phase0.Slot, 32)
 	dc.ticker.Subscribe(tickerChan)
-	dc.listenToTicker(tickerChan)
+	dc.listenToTicker(logger, tickerChan)
 }
 
 // warmUpDuties preparing duties for all validators when the node starts
 // this is done to avoid missing duties for the current epoch when the node starts
 // for now we are fetching duties in this way for sync committees only
-func (dc *dutyController) warmUpDuties() {
-	indices := dc.validatorController.GetValidatorsIndices()
+func (dc *dutyController) warmUpDuties(logger *zap.Logger) {
+	indices := dc.validatorController.GetValidatorsIndices(logger)
 	currentEpoch := dc.ethNetwork.EstimatedCurrentEpoch()
 
 	thisSyncCommitteePeriodStartEpoch := dc.ethNetwork.FirstEpochOfSyncPeriod(uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod)
-	go dc.scheduleSyncCommitteeMessages(thisSyncCommitteePeriodStartEpoch, indices)
+	go dc.scheduleSyncCommitteeMessages(logger, thisSyncCommitteePeriodStartEpoch, indices)
 
 	// next sync committee period.
 	// TODO: we should fetch duties for validator indices that became active (active_ongoing) in the next sync committee period as well
 	nextSyncCommitteePeriodStartEpoch := dc.ethNetwork.FirstEpochOfSyncPeriod(uint64(currentEpoch)/goclient.EpochsPerSyncCommitteePeriod + 1)
 	if uint64(nextSyncCommitteePeriodStartEpoch-currentEpoch) <= syncCommitteePreparationEpochs {
-		go dc.scheduleSyncCommitteeMessages(nextSyncCommitteePeriodStartEpoch, indices)
+		go dc.scheduleSyncCommitteeMessages(logger, nextSyncCommitteePeriodStartEpoch, indices)
 	}
 }
 
 // ExecuteDuty tries to execute the given duty
-func (dc *dutyController) ExecuteDuty(duty *spectypes.Duty) error {
+func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if dc.executor != nil {
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
-		return dc.executor.ExecuteDuty(duty)
+		return dc.executor.ExecuteDuty(logger, duty)
 	}
-	logger := dc.loggerWithDutyContext(dc.logger, duty)
+	logger = dc.loggerWithDutyContext(logger, duty)
 
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
@@ -187,42 +184,44 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 }
 
 // HandleHeadEvent handles the "head" events from the beacon node.
-func (dc *dutyController) HandleHeadEvent(event *eth2apiv1.Event) {
-	if event.Data == nil {
-		return
-	}
-
-	var zeroRoot phase0.Root
-
-	data := event.Data.(*eth2apiv1.HeadEvent)
-	if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
-		return
-	}
-
-	// check for reorg
-	epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
-	if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
-		if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
-			!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
-			dc.logger.Debug("Current duty dependent root has changed",
-				zap.String("old_dependent_root", fmt.Sprintf("%#x", dc.currentDutyDependentRoot[:])),
-				zap.String("new_dependent_root", fmt.Sprintf("%#x", data.CurrentDutyDependentRoot[:])))
-			dc.handleCurrentDependentRootChanged()
+func (dc *dutyController) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Event) {
+	return func(event *eth2apiv1.Event) {
+		if event.Data == nil {
+			return
 		}
-	}
 
-	dc.lastBlockEpoch = epoch
-	dc.currentDutyDependentRoot = data.CurrentDutyDependentRoot
+		var zeroRoot phase0.Root
+
+		data := event.Data.(*eth2apiv1.HeadEvent)
+		if data.Slot != dc.ethNetwork.EstimatedCurrentSlot() {
+			return
+		}
+
+		// check for reorg
+		epoch := dc.ethNetwork.EstimatedEpochAtSlot(data.Slot)
+		if dc.lastBlockEpoch != 0 && epoch <= dc.lastBlockEpoch {
+			if !bytes.Equal(dc.currentDutyDependentRoot[:], zeroRoot[:]) &&
+				!bytes.Equal(dc.currentDutyDependentRoot[:], data.CurrentDutyDependentRoot[:]) {
+				logger.Debug("Current duty dependent root has changed",
+					zap.String("old_dependent_root", fmt.Sprintf("%#x", dc.currentDutyDependentRoot[:])),
+					zap.String("new_dependent_root", fmt.Sprintf("%#x", data.CurrentDutyDependentRoot[:])))
+				dc.handleCurrentDependentRootChanged(logger)
+			}
+		}
+
+		dc.lastBlockEpoch = epoch
+		dc.currentDutyDependentRoot = data.CurrentDutyDependentRoot
+	}
 }
 
 // listenToTicker loop over the given slot channel
-func (dc *dutyController) listenToTicker(slots <-chan phase0.Slot) {
+func (dc *dutyController) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		dc.handleSlot(currentSlot)
+		dc.handleSlot(logger, currentSlot)
 	}
 }
 
-func (dc *dutyController) handleSlot(slot phase0.Slot) {
+func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 	syncPeriod := uint64(dc.ethNetwork.EstimatedEpochAtSlot(slot)) / goclient.EpochsPerSyncCommitteePeriod
 	defer func() {
 		if slot == dc.ethNetwork.LastSlotOfSyncPeriod(syncPeriod) {
@@ -231,12 +230,12 @@ func (dc *dutyController) handleSlot(slot phase0.Slot) {
 		}
 	}()
 	// execute duties (attester, proposal)
-	duties, err := dc.fetcher.GetDuties(slot)
+	duties, err := dc.fetcher.GetDuties(logger, slot)
 	if err != nil {
-		dc.logger.Warn("failed to get duties", zap.Error(err))
+		logger.Warn("failed to get duties", zap.Error(err))
 	}
 	for i := range duties {
-		go dc.onDuty(&duties[i])
+		go dc.onDuty(logger, &duties[i])
 	}
 
 	// execute sync committee duties
@@ -255,8 +254,8 @@ func (dc *dutyController) handleSlot(slot phase0.Slot) {
 			}
 		}
 		syncCommitteeDuties.Range(func(index phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty) bool {
-			go dc.onDuty(toSpecDuty(duty, slot, spectypes.BNRoleSyncCommittee))
-			go dc.onDuty(toSpecDuty(duty, slot, spectypes.BNRoleSyncCommitteeContribution))
+			go dc.onDuty(logger, toSpecDuty(duty, slot, spectypes.BNRoleSyncCommittee))
+			go dc.onDuty(logger, toSpecDuty(duty, slot, spectypes.BNRoleSyncCommitteeContribution))
 			return true
 		})
 	}
@@ -268,33 +267,33 @@ func (dc *dutyController) handleSlot(slot phase0.Slot) {
 
 		// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
 		if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
-			indices := dc.validatorController.GetValidatorsIndices()
-			go dc.scheduleSyncCommitteeMessages(currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
+			indices := dc.validatorController.GetValidatorsIndices(logger)
+			go dc.scheduleSyncCommitteeMessages(logger, currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
 		}
 	}
 }
 
-func (dc *dutyController) handleCurrentDependentRootChanged() {
+func (dc *dutyController) handleCurrentDependentRootChanged(logger *zap.Logger) {
 	// We need to refresh the sync committee duties for the next period if we are
 	// at the appropriate boundary.
 	currentEpoch := dc.ethNetwork.EstimatedCurrentEpoch()
 	if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == 0 {
-		indices := dc.validatorController.GetValidatorsIndices()
+		indices := dc.validatorController.GetValidatorsIndices(logger)
 		syncPeriod := dc.ethNetwork.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
 		dc.syncCommitteeDutiesMap.Del(syncPeriod)
-		go dc.scheduleSyncCommitteeMessages(dc.ethNetwork.EstimatedCurrentEpoch()+phase0.Epoch(syncCommitteePreparationEpochs), indices)
+		go dc.scheduleSyncCommitteeMessages(logger, dc.ethNetwork.EstimatedCurrentEpoch()+phase0.Epoch(syncCommitteePreparationEpochs), indices)
 	}
 }
 
 // scheduleSyncCommitteeMessages schedules sync committee messages for the given period and validator indices.
-func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
+func (dc *dutyController) scheduleSyncCommitteeMessages(logger *zap.Logger, epoch phase0.Epoch, indices []phase0.ValidatorIndex) {
 	if len(indices) == 0 {
 		return
 	}
 
-	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(epoch, indices)
+	syncCommitteeDuties, err := dc.fetcher.SyncCommitteeDuties(logger, epoch, indices)
 	if err != nil {
-		dc.logger.Warn("failed to get sync committee duties", zap.Error(err))
+		logger.Warn("failed to get sync committee duties", zap.Error(err))
 		return
 	}
 
@@ -307,11 +306,11 @@ func (dc *dutyController) scheduleSyncCommitteeMessages(epoch phase0.Epoch, indi
 }
 
 // onDuty handles next duty
-func (dc *dutyController) onDuty(duty *spectypes.Duty) {
-	logger := dc.loggerWithDutyContext(dc.logger, duty)
-	if dc.shouldExecute(duty) {
+func (dc *dutyController) onDuty(logger *zap.Logger, duty *spectypes.Duty) {
+	logger = dc.loggerWithDutyContext(logger, duty)
+	if dc.shouldExecute(logger, duty) {
 		logger.Debug("duty was sent to execution")
-		if err := dc.ExecuteDuty(duty); err != nil {
+		if err := dc.ExecuteDuty(logger, duty); err != nil {
 			logger.Warn("could not dispatch duty", zap.Error(err))
 			return
 		}
@@ -320,13 +319,13 @@ func (dc *dutyController) onDuty(duty *spectypes.Duty) {
 	logger.Warn("slot is irrelevant, ignoring duty")
 }
 
-func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
+func (dc *dutyController) shouldExecute(logger *zap.Logger, duty *spectypes.Duty) bool {
 	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot >= uint64(duty.Slot) && currentSlot-uint64(duty.Slot) <= dc.dutyLimit {
 		return true
 	} else if currentSlot+1 == uint64(duty.Slot) {
-		dc.loggerWithDutyContext(dc.logger, duty).Debug("current slot and duty slot are not aligned, "+
+		dc.loggerWithDutyContext(logger, duty).Debug("current slot and duty slot are not aligned, "+
 			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.Type.String()))
 		return true
 	}
@@ -335,30 +334,27 @@ func (dc *dutyController) shouldExecute(duty *spectypes.Duty) bool {
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
-	currentSlot := uint64(dc.ethNetwork.EstimatedCurrentSlot())
 	return logger.
 		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(zap.Uint64("current slot", currentSlot)).
+		With(logging.CurrentSlot(dc.ethNetwork)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
-		With(zap.String("pubKey", hex.EncodeToString(duty.PubKey[:]))).
-		With(zap.Time("start_time", dc.ethNetwork.GetSlotStartTime(duty.Slot)))
+		With(logging.PubKey(duty.PubKey[:])).
+		With(logging.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
-func NewReadOnlyExecutor(logger *zap.Logger) DutyExecutor {
-	return &readOnlyDutyExec{logger: logger}
+func NewReadOnlyExecutor() DutyExecutor {
+	return &readOnlyDutyExec{}
 }
 
-type readOnlyDutyExec struct {
-	logger *zap.Logger
-}
+type readOnlyDutyExec struct{}
 
-func (e *readOnlyDutyExec) ExecuteDuty(duty *spectypes.Duty) error {
-	e.logger.Debug("skipping duty execution",
+func (e *readOnlyDutyExec) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
 		zap.Uint64("slot", uint64(duty.Slot)),
-		zap.String("pubKey", hex.EncodeToString(duty.PubKey[:])))
+		logging.PubKey(duty.PubKey[:]))
 	return nil
 }

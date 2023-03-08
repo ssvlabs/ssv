@@ -25,8 +25,7 @@ const (
 var sharedData *SharedData
 
 type SharedData struct {
-	Logger *zap.Logger
-	Nodes  map[spectypes.OperatorID]network.P2PNetwork
+	Nodes map[spectypes.OperatorID]network.P2PNetwork
 }
 
 func GetSharedData(t *testing.T) SharedData { //singleton B-)
@@ -57,8 +56,7 @@ func TestMain(m *testing.M) {
 	}
 
 	sharedData = &SharedData{
-		Logger: logger,
-		Nodes:  nodes,
+		Nodes: nodes,
 	}
 
 	m.Run()

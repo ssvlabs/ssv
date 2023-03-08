@@ -14,6 +14,7 @@ import (
 // uponRoundChange process round change messages.
 // Assumes round change message is valid!
 func (i *Instance) uponRoundChange(
+	logger *zap.Logger,
 	instanceStartValue []byte,
 	signedRoundChange *specqbft.SignedMessage,
 	roundChangeMsgContainer *specqbft.MsgContainer,
@@ -27,7 +28,7 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
-	i.logger.Debug("got change round",
+	logger.Debug("got change round",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Uint64("height", uint64(i.State.Height)),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
@@ -56,7 +57,7 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		i.logger.Debug("got justified change round, broadcasting proposal message",
+		logger.Debug("got justified change round, broadcasting proposal message",
 			zap.Uint64("round", uint64(i.State.Round)))
 
 		if err := i.Broadcast(proposal); err != nil {

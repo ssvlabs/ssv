@@ -5,9 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bloxapp/ssv/utils/logex"
+	"go.uber.org/zap"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -16,7 +18,8 @@ import (
 )
 
 func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
-	storage, done := newStorageForTest()
+	logger := logex.TestLogger(t)
+	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
 
@@ -37,14 +40,14 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 	})
 
 	t.Run("get non-existing operator by public key", func(t *testing.T) {
-		nonExistingOperator, found, err := storage.GetOperatorDataByPubKey("dummyPK")
+		nonExistingOperator, found, err := storage.GetOperatorDataByPubKey(logger, "dummyPK")
 		require.NoError(t, err)
 		require.Nil(t, nonExistingOperator)
 		require.False(t, found)
 	})
 
 	t.Run("create and get operator", func(t *testing.T) {
-		err := storage.SaveOperatorData(&operatorData)
+		err := storage.SaveOperatorData(logger, &operatorData)
 		require.NoError(t, err)
 		operatorDataFromDB, found, err := storage.GetOperatorData(operatorData.Index)
 		require.NoError(t, err)
@@ -52,7 +55,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		require.Equal(t, "my_operator", operatorDataFromDB.Name)
 		require.Equal(t, operatorData.Index, operatorDataFromDB.Index)
 		require.True(t, strings.EqualFold(operatorData.PublicKey, operatorDataFromDB.PublicKey))
-		operatorDataFromDBCmp, found, err := storage.GetOperatorDataByPubKey(operatorData.PublicKey)
+		operatorDataFromDBCmp, found, err := storage.GetOperatorDataByPubKey(logger, operatorData.PublicKey)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, operatorDataFromDB.Name, operatorDataFromDBCmp.Name)
@@ -67,7 +70,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 			OwnerAddress: common.Address{},
 			Index:        1,
 		}
-		err := storage.SaveOperatorData(&od)
+		err := storage.SaveOperatorData(logger, &od)
 		require.NoError(t, err)
 		odDup := OperatorData{
 			PublicKey:    "010101010101",
@@ -75,7 +78,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 			OwnerAddress: common.Address{},
 			Index:        1,
 		}
-		err = storage.SaveOperatorData(&odDup)
+		err = storage.SaveOperatorData(logger, &odDup)
 		require.NoError(t, err)
 		odFromDb, found, err := storage.GetOperatorData(od.Index)
 		require.NoError(t, err)
@@ -104,7 +107,7 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 		}
 		for _, od := range ods {
 			odCopy := od
-			require.NoError(t, storage.SaveOperatorData(&odCopy))
+			require.NoError(t, storage.SaveOperatorData(logger, &odCopy))
 		}
 
 		for _, od := range ods {
@@ -119,7 +122,8 @@ func TestStorage_SaveAndGetOperatorInformation(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	storage, done := newStorageForTest()
+	logger := logex.TestLogger(t)
+	storage, done := newStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
 
@@ -132,12 +136,12 @@ func TestStorage_ListOperators(t *testing.T) {
 			Name:      fmt.Sprintf("operator-%d", i+1),
 			Index:     uint64(i),
 		}
-		err = storage.SaveOperatorData(&operator)
+		err = storage.SaveOperatorData(logger, &operator)
 		require.NoError(t, err)
 	}
 
 	t.Run("successfully list operators", func(t *testing.T) {
-		operators, err := storage.ListOperators(0, 0)
+		operators, err := storage.ListOperators(logger, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, n, len(operators))
 		for _, operator := range operators {
@@ -146,24 +150,22 @@ func TestStorage_ListOperators(t *testing.T) {
 	})
 
 	t.Run("successfully list operators in range", func(t *testing.T) {
-		operators, err := storage.ListOperators(1, 2)
+		operators, err := storage.ListOperators(logger, 1, 2)
 		require.NoError(t, err)
 		require.Equal(t, 2, len(operators))
 	})
 }
 
-func newStorageForTest() (OperatorsCollection, func()) {
-	logger := zap.L()
-	db, err := ssvstorage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Logger: logger,
-		Path:   "",
+func newStorageForTest(logger *zap.Logger) (OperatorsCollection, func()) {
+	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewOperatorsStorage(db, logger, []byte("test"))
+	s := NewOperatorsStorage(db, []byte("test"))
 	return s, func() {
-		db.Close()
+		db.Close(logger)
 	}
 }

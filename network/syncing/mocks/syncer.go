@@ -13,6 +13,7 @@ import (
 	syncing "github.com/bloxapp/ssv/network/syncing"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockSyncer is a mock of Syncer interface.
@@ -39,31 +40,31 @@ func (m *MockSyncer) EXPECT() *MockSyncerMockRecorder {
 }
 
 // SyncDecidedByRange mocks base method.
-func (m *MockSyncer) SyncDecidedByRange(ctx context.Context, id types.MessageID, from, to qbft.Height, handler syncing.MessageHandler) error {
+func (m *MockSyncer) SyncDecidedByRange(ctx context.Context, logger *zap.Logger, id types.MessageID, from, to qbft.Height, handler syncing.MessageHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncDecidedByRange", ctx, id, from, to, handler)
+	ret := m.ctrl.Call(m, "SyncDecidedByRange", ctx, logger, id, from, to, handler)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SyncDecidedByRange indicates an expected call of SyncDecidedByRange.
-func (mr *MockSyncerMockRecorder) SyncDecidedByRange(ctx, id, from, to, handler interface{}) *gomock.Call {
+func (mr *MockSyncerMockRecorder) SyncDecidedByRange(ctx, logger, id, from, to, handler interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDecidedByRange", reflect.TypeOf((*MockSyncer)(nil).SyncDecidedByRange), ctx, id, from, to, handler)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDecidedByRange", reflect.TypeOf((*MockSyncer)(nil).SyncDecidedByRange), ctx, logger, id, from, to, handler)
 }
 
 // SyncHighestDecided mocks base method.
-func (m *MockSyncer) SyncHighestDecided(ctx context.Context, id types.MessageID, handler syncing.MessageHandler) error {
+func (m *MockSyncer) SyncHighestDecided(ctx context.Context, logger *zap.Logger, id types.MessageID, handler syncing.MessageHandler) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncHighestDecided", ctx, id, handler)
+	ret := m.ctrl.Call(m, "SyncHighestDecided", ctx, logger, id, handler)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SyncHighestDecided indicates an expected call of SyncHighestDecided.
-func (mr *MockSyncerMockRecorder) SyncHighestDecided(ctx, id, handler interface{}) *gomock.Call {
+func (mr *MockSyncerMockRecorder) SyncHighestDecided(ctx, logger, id, handler interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncHighestDecided", reflect.TypeOf((*MockSyncer)(nil).SyncHighestDecided), ctx, id, handler)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncHighestDecided", reflect.TypeOf((*MockSyncer)(nil).SyncHighestDecided), ctx, logger, id, handler)
 }
 
 // MockNetwork is a mock of Network interface.
@@ -90,9 +91,9 @@ func (m *MockNetwork) EXPECT() *MockNetworkMockRecorder {
 }
 
 // GetHistory mocks base method.
-func (m *MockNetwork) GetHistory(id types.MessageID, from, to qbft.Height, targets ...string) ([]protocolp2p.SyncResult, qbft.Height, error) {
+func (m *MockNetwork) GetHistory(logger *zap.Logger, id types.MessageID, from, to qbft.Height, targets ...string) ([]protocolp2p.SyncResult, qbft.Height, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{id, from, to}
+	varargs := []interface{}{logger, id, from, to}
 	for _, a := range targets {
 		varargs = append(varargs, a)
 	}
@@ -104,23 +105,23 @@ func (m *MockNetwork) GetHistory(id types.MessageID, from, to qbft.Height, targe
 }
 
 // GetHistory indicates an expected call of GetHistory.
-func (mr *MockNetworkMockRecorder) GetHistory(id, from, to interface{}, targets ...interface{}) *gomock.Call {
+func (mr *MockNetworkMockRecorder) GetHistory(logger, id, from, to interface{}, targets ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{id, from, to}, targets...)
+	varargs := append([]interface{}{logger, id, from, to}, targets...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistory", reflect.TypeOf((*MockNetwork)(nil).GetHistory), varargs...)
 }
 
 // LastDecided mocks base method.
-func (m *MockNetwork) LastDecided(id types.MessageID) ([]protocolp2p.SyncResult, error) {
+func (m *MockNetwork) LastDecided(logger *zap.Logger, id types.MessageID) ([]protocolp2p.SyncResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "LastDecided", id)
+	ret := m.ctrl.Call(m, "LastDecided", logger, id)
 	ret0, _ := ret[0].([]protocolp2p.SyncResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // LastDecided indicates an expected call of LastDecided.
-func (mr *MockNetworkMockRecorder) LastDecided(id interface{}) *gomock.Call {
+func (mr *MockNetworkMockRecorder) LastDecided(logger, id interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastDecided", reflect.TypeOf((*MockNetwork)(nil).LastDecided), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LastDecided", reflect.TypeOf((*MockNetwork)(nil).LastDecided), logger, id)
 }

@@ -6,7 +6,7 @@ package discovery
 //	defer cancel()
 //	n := 4
 //	//logger := zaptest.NewLogger(t)
-//	logger := zap.L()
+//	logger := logex.Build("migratons", zap.DebugLevel, nil)
 //	udpRand := make(v1_testing.UDPPortsRandomizer)
 //	bn, err := createTestBootnode(ctx, logger, udpRand.Next(13001, 13999))
 //	require.NoError(t, err)
@@ -45,7 +45,7 @@ package discovery
 //				TCPPort:     tcpPort,
 //				NetworkKey:  k.NetKey,
 //				Bootnodes:   []string{bn.ENR},
-//				Logger:      logger.With(zap.Int("i", i), zap.String("who", "dv5")),
+//				Logger:      logger.Named("dv5").With(zap.Int("i", i)),
 //			},
 //		})
 //		require.NoError(t, err)
@@ -90,7 +90,7 @@ package discovery
 //		return nil, err
 //	}
 //	return NewBootnode(ctx, &BootnodeOptions{
-//		Logger:     logger.With(zap.String("component", "bootnode")),
+//		Logger:     logger.Named("bootnode"),
 //		PrivateKey: hex.EncodeToString(b),
 //		ExternalIP: "127.0.0.1",
 //		Port:       port,

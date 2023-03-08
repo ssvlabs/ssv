@@ -101,7 +101,6 @@ type Client interface {
 // goClient implementing Beacon struct
 type goClient struct {
 	ctx            context.Context
-	logger         *zap.Logger
 	network        beaconprotocol.Network
 	client         Client
 	indicesMapLock sync.Mutex
@@ -112,8 +111,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	logger := opt.Logger
+func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	logger.Info("connecting to consensus client...", zap.String("address", opt.BeaconNodeAddr), zap.String("network", opt.Network))
 
 	httpClient, err := http.New(opt.Context,
@@ -132,7 +130,6 @@ func New(opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
 		ctx:            opt.Context,
-		logger:         logger,
 		network:        network,
 		client:         httpClient.(*http.Service),
 		indicesMapLock: sync.Mutex{},

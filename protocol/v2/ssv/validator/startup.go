@@ -7,12 +7,13 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 )
 
 // Start starts a Validator.
-func (v *Validator) Start() error {
+func (v *Validator) Start(logger *zap.Logger) error {
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		n, ok := v.Network.(p2p.Subscriber)
 		if !ok {
@@ -21,36 +22,40 @@ func (v *Validator) Start() error {
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
-				v.logger.Warn("share is missing", zap.String("role", role.String()))
+				logger.Warn("share is missing", zap.String("role", role.String()))
 				continue
 			}
 			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), r.GetBaseRunner().Share.ValidatorPubKey, role)
 			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
-				v.logger.Warn("failed to load highest instance",
+				logger.Warn("failed to load highest instance",
 					zap.String("identifier", identifier.String()),
 					zap.Error(err))
 			}
 			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
 				return err
 			}
-			go v.StartQueueConsumer(identifier, v.ProcessMessage)
-			go v.sync(identifier)
+			go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
+			go v.sync(logger, identifier)
 		}
 	}
 	return nil
 }
 
 // Stop stops a Validator.
-func (v *Validator) Stop() error {
-	v.cancel()
-	// clear the msg q
-	v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+func (v *Validator) Stop() {
+	if atomic.CompareAndSwapUint32(&v.state, uint32(Started), uint32(NotStarted)) {
+		v.cancel()
 
-	return nil
+		v.mtx.Lock() // write-lock for v.Queues
+		defer v.mtx.Unlock()
+
+		// clear the msg q
+		v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+	}
 }
 
 // sync performs highest decided sync
-func (v *Validator) sync(mid spectypes.MessageID) {
+func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -61,8 +66,8 @@ func (v *Validator) sync(mid spectypes.MessageID) {
 	for ctx.Err() == nil {
 		err := v.Network.SyncHighestDecided(mid)
 		if err != nil {
-			v.logger.Debug("failed to sync highest decided",
-				zap.String("identifier", mid.String()),
+			logger.Debug("failed to sync highest decided",
+				logging.MessageID(mid),
 				zap.Error(err))
 			retries--
 			if retries > 0 {

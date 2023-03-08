@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
+	"github.com/bloxapp/ssv/utils/logex"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
@@ -16,7 +17,8 @@ import (
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks)
-	v := ssvtesting.BaseValidator(keySetForShare(share))
+	logger := logex.TestLogger(t)
+	v := ssvtesting.BaseValidator(logger, keySetForShare(share))
 	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()

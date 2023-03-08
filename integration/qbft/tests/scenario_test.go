@@ -25,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -55,18 +56,20 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		s.shared = GetSharedData(t)
 
+		logger := logex.TestLogger(t)
+
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
 			id := spectypes.OperatorID(id)
-			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), s.shared.Logger, s.shared.Nodes[id])
+			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), logger, s.shared.Nodes[id])
 
-			stores := newStores(s.shared.Logger)
-			s.shared.Nodes[id].RegisterHandlers(protocolp2p.WithHandler(
+			stores := newStores(logger)
+			s.shared.Nodes[id].RegisterHandlers(logger, protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
-				handlers.LastDecidedHandler(s.shared.Logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
+				handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
 			), protocolp2p.WithHandler(
 				protocolp2p.DecidedHistoryProtocol,
-				handlers.HistoryHandler(s.shared.Logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
+				handlers.HistoryHandler(logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
 			))
 		}
 
@@ -109,8 +112,21 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		// teardown
 		for _, val := range s.validators {
-			require.NoError(t, val.Stop())
+			val.Stop()
 		}
+
+		// HACK: sleep to wait for function calls to github.com/herumi/bls-eth-go-binary
+		// to return. When val.Stop() is called, the context.Context that controls the procedure to
+		// pop & process messages by the validator from its queue will stop running new iterations.
+		// But if a procedure to pop & process a message is in progress when val.Stop() is called, the
+		// popped message will still be processed. When a message is processed the github.com/herumi/bls-eth-go-binary
+		// library is used. When this test function returns, the validator and all of its resources are
+		// garbage collected by the Go runtime. Because the bls-eth-go-binary library is a cgo wrapper of a C/C++ library,
+		// the C/C++ runtime will continue to try to access the signature data of the message even though it has been garbage
+		// collected already by the Go runtime. This causes the C code to receive a SIGSEGV (SIGnal SEGmentation Violation)
+		// which crashes the Go runtime in a way that is not recoverable. A long term fix would involve signaling
+		// when the validator ConsumeQueue() function has returned, as its processing is synchronous.
+		time.Sleep(time.Millisecond * 1000)
 	})
 }
 
@@ -149,10 +165,9 @@ func quorum(committee int) int {
 }
 
 func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := storage.GetStorageFactory(basedb.Options{
-		Type:   "badger-memory",
-		Path:   "",
-		Logger: logger,
+	db, err := storage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
 	})
 	if err != nil {
 		panic(err)
@@ -168,7 +183,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleSyncCommitteeContribution,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, logger, role.String(), protocolforks.GenesisForkVersion))
+		storageMap.Add(role, qbftstorage.New(db, role.String(), protocolforks.GenesisForkVersion))
 	}
 
 	return storageMap
@@ -202,7 +217,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(val))
-	require.NoError(t, val.Start())
+	require.NoError(t, val.Start(logger))
 
 	return val
 }

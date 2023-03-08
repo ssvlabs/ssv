@@ -2,11 +2,11 @@ package roundtimer
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"go.uber.org/zap"
 )
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
@@ -29,8 +29,8 @@ func RoundTimeout(r specqbft.Round) time.Duration {
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
-	logger *zap.Logger
-	ctx    context.Context
+	mtx *sync.RWMutex
+	ctx context.Context
 	// cancelCtx cancels the current context, will be called from Kill()
 	cancelCtx context.CancelFunc
 	// timer is the underlying time.Timer
@@ -44,12 +44,12 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
+func New(pctx context.Context, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
+		mtx:          &sync.RWMutex{},
 		ctx:          ctx,
 		cancelCtx:    cancelCtx,
-		logger:       logger,
 		timer:        nil,
 		done:         done,
 		roundTimeout: RoundTimeout,
@@ -58,6 +58,9 @@ func New(pctx context.Context, logger *zap.Logger, done func()) *RoundTimer {
 
 // OnTimeout sets a function called on timeout.
 func (t *RoundTimer) OnTimeout(done func()) {
+	t.mtx.Lock() // write to t.done
+	defer t.mtx.Unlock()
+
 	t.done = done
 }
 
@@ -94,9 +97,13 @@ func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time
 	case <-ctx.Done():
 	case <-timeout:
 		if t.Round() == round {
-			if done := t.done; done != nil {
-				done()
-			}
+			func() {
+				t.mtx.RLock() // read t.done
+				defer t.mtx.RUnlock()
+				if done := t.done; done != nil {
+					done()
+				}
+			}()
 		}
 	}
 }

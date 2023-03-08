@@ -6,6 +6,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
@@ -13,6 +14,7 @@ import (
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
 func (i *Instance) uponPrepare(
+	logger *zap.Logger,
 	signedPrepare *specqbft.SignedMessage,
 	prepareMsgContainer,
 	commitMsgContainer *specqbft.MsgContainer) error {
@@ -44,6 +46,11 @@ func (i *Instance) uponPrepare(
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
+
+	logger.Debug("got prepare quorum, broadcasting commit message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("prepare-signers", signedPrepare.Signers),
+		zap.Any("commit-singers", commitMsg.Signers))
 
 	if err := i.Broadcast(commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")

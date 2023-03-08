@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/zap"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/syncing"
@@ -13,11 +15,11 @@ import (
 
 type mockSyncer struct{}
 
-func (m *mockSyncer) SyncHighestDecided(ctx context.Context, id spectypes.MessageID, handler syncing.MessageHandler) error {
+func (m *mockSyncer) SyncHighestDecided(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, handler syncing.MessageHandler) error {
 	return nil
 }
 
-func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
+func (m *mockSyncer) SyncDecidedByRange(ctx context.Context, logger *zap.Logger, id spectypes.MessageID, from specqbft.Height, to specqbft.Height, handler syncing.MessageHandler) error {
 	return nil
 }
 
@@ -34,6 +36,7 @@ func newMockMessageHandler() *mockMessageHandler {
 	return m
 }
 
+// TODO: this test is not stable
 func TestThrottle(t *testing.T) {
 	var calls int
 	handler := syncing.Throttle(func(msg spectypes.SSVMessage) {

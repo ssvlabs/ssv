@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -25,8 +24,8 @@ type SyncCommitteeRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
-	metrics  metrics.ConsensusMetrics
+
+	metrics metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeRunner(
@@ -38,21 +37,18 @@ func NewSyncCommitteeRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &SyncCommitteeRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleSyncCommittee,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "SyncCommitteeRunner")),
 		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
 	}
 }
@@ -121,7 +117,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -164,7 +160,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPa
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		r.logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
+		logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height))
 	}
 	r.GetState().Finished = true

@@ -3,7 +3,6 @@ package runner
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -26,8 +25,8 @@ type SyncCommitteeAggregatorRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
-	metrics  metrics.ConsensusMetrics
+
+	metrics metrics.ConsensusMetrics
 }
 
 func NewSyncCommitteeAggregatorRunner(
@@ -39,21 +38,18 @@ func NewSyncCommitteeAggregatorRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleSyncCommitteeContribution,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "SyncCommitteeAggregatorRunner")),
 		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution),
 	}
 }
@@ -210,7 +206,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(signedMsg *specqbft.Sig
 	return nil
 }
 
-func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -268,7 +264,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(signedMsg *spectype
 			r.metrics.EndDutyFullFlow()
 			r.metrics.RoleSubmitted()
 
-			r.logger.Debug("submitted successfully sync committee aggregator!")
+			logger.Debug("submitted successfully sync committee aggregator!")
 			break
 		}
 	}

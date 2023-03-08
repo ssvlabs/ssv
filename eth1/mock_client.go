@@ -10,6 +10,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
+	zap "go.uber.org/zap"
 )
 
 // MockClient is a mock of Client interface.
@@ -50,29 +51,29 @@ func (mr *MockClientMockRecorder) EventsFeed() *gomock.Call {
 }
 
 // Start mocks base method.
-func (m *MockClient) Start() error {
+func (m *MockClient) Start(logger *zap.Logger) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Start")
+	ret := m.ctrl.Call(m, "Start", logger)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockClientMockRecorder) Start() *gomock.Call {
+func (mr *MockClientMockRecorder) Start(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockClient)(nil).Start))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockClient)(nil).Start), logger)
 }
 
 // Sync mocks base method.
-func (m *MockClient) Sync(fromBlock *big.Int) error {
+func (m *MockClient) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Sync", fromBlock)
+	ret := m.ctrl.Call(m, "Sync", logger, fromBlock)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Sync indicates an expected call of Sync.
-func (mr *MockClientMockRecorder) Sync(fromBlock interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) Sync(logger, fromBlock interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockClient)(nil).Sync), fromBlock)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Sync", reflect.TypeOf((*MockClient)(nil).Sync), logger, fromBlock)
 }

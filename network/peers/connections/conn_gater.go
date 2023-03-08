@@ -14,7 +14,7 @@ import (
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 // TODO: add IP limiting
 type connGater struct {
-	logger *zap.Logger
+	logger *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	idx    peers.ConnectionIndex
 }
 
@@ -51,7 +51,7 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return n.idx.IsBad(id)
+	return n.idx.IsBad(n.logger, id)
 }
 
 // InterceptUpgraded is called for inbound and outbound connections, after

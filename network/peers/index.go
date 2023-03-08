@@ -5,6 +5,7 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"io"
 )
 
@@ -38,7 +39,7 @@ type ConnectionIndex interface {
 	// Limit checks if the node has reached peers limit
 	Limit(dir libp2pnetwork.Direction) bool
 	// IsBad returns whether the given peer is bad
-	IsBad(id peer.ID) bool
+	IsBad(logger *zap.Logger, id peer.ID) bool
 }
 
 // ScoreIndex is an interface for managing peers scores
@@ -58,7 +59,7 @@ type NodeInfoIndex interface {
 	// UpdateSelfRecord updating current self with new one
 	UpdateSelfRecord(newInfo *records.NodeInfo)
 	// AddNodeInfo indexes the given peer info
-	AddNodeInfo(id peer.ID, node *records.NodeInfo) (bool, error)
+	AddNodeInfo(logger *zap.Logger, id peer.ID, node *records.NodeInfo) (bool, error)
 	// GetNodeInfo returns the info of the given node
 	GetNodeInfo(id peer.ID) (*records.NodeInfo, error)
 }

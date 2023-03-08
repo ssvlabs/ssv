@@ -9,6 +9,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -19,9 +20,8 @@ type validatorIterator func(validator *validator.Validator) error
 
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
-	logger *zap.Logger
-	ctx    context.Context
-	db     basedb.IDb
+	ctx context.Context
+	db  basedb.IDb
 
 	optsTemplate *validator.Options
 
@@ -29,9 +29,8 @@ type validatorsMap struct {
 	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context, logger *zap.Logger, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
+func newValidatorsMap(ctx context.Context, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
-		logger:        logger.With(zap.String("who", "validatorsMap")),
 		ctx:           ctx,
 		db:            db,
 		lock:          sync.RWMutex{},
@@ -67,7 +66,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(share *types.SSVShare) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -80,13 +79,13 @@ func (vm *validatorsMap) GetOrCreateValidator(share *types.SSVShare) *validator.
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(vm.ctx)
-		opts.DutyRunners = SetupRunners(ctx, vm.logger, opts)
+		opts.DutyRunners = SetupRunners(ctx, logger, opts)
 		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
 
-		printShare(share, vm.logger, "setup validator done")
+		printShare(share, logger, "setup validator done")
 		opts.SSVShare = nil
 	} else {
-		printShare(v.Share, vm.logger, "get validator")
+		printShare(v.Share, logger, "get validator")
 	}
 
 	return vm.validatorsMap[pubKey]
@@ -118,7 +117,7 @@ func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
 	}
 	logger.Debug(msg,
-		zap.String("pub_key", hex.EncodeToString(s.ValidatorPubKey)),
+		logging.PubKey(s.ValidatorPubKey),
 		zap.Uint64("node_id", uint64(s.OperatorID)),
 		zap.Strings("committee", committee))
 }

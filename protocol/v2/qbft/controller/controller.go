@@ -3,7 +3,6 @@ package controller
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -13,10 +12,10 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	logging "github.com/ipfs/go-log"
+	ipfslog "github.com/ipfs/go-log"
 )
 
-var logger = logging.Logger("ssv/protocol/qbft/controller").Desugar()
+var logger = ipfslog.Logger("ssv/protocol/qbft/controller").Desugar()
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
@@ -35,7 +34,6 @@ type Controller struct {
 	NewDecidedHandler   NewDecidedHandler `json:"-"`
 	config              qbft.IConfig
 	fullNode            bool
-	logger              *zap.Logger
 }
 
 func NewController(
@@ -45,7 +43,6 @@ func NewController(
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
-	msgId := spectypes.MessageIDFromBytes(identifier)
 	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
@@ -55,8 +52,6 @@ func NewController(
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 		fullNode:            fullNode,
-		logger: logger.With(zap.String("publicKey", hex.EncodeToString(msgId.GetPubKey())),
-			zap.String("role", msgId.GetRoleType().String())),
 	}
 }
 
@@ -72,7 +67,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 	}
 
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(value, c.Height)
+	newInstance.Start(logger, value, c.Height)
 
 	return nil
 }
@@ -91,16 +86,16 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
 	if IsDecidedMsg(c.Share, msg) {
-		return c.UponDecided(msg)
+		return c.UponDecided(logger, msg)
 	} else if msg.Message.Height > c.Height {
-		return c.UponFutureMsg(msg)
+		return c.UponFutureMsg(logger, msg)
 	} else {
-		return c.UponExistingInstanceMsg(msg)
+		return c.UponExistingInstanceMsg(logger, msg)
 	}
 }
 
-func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	inst := c.InstanceForHeight(msg.Message.Height)
+func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	inst := c.InstanceForHeight(logger, msg.Message.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
 	}
@@ -125,7 +120,7 @@ func (c *Controller) UponExistingInstanceMsg(msg *specqbft.SignedMessage) (*spec
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		c.logger.Debug("failed to broadcast decided message", zap.Error(err))
+		logger.Debug("failed to broadcast decided message", zap.Error(err))
 	}
 
 	if prevDecided {
@@ -145,7 +140,7 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	return nil
 }
 
-func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instance {
+func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Height) *instance.Instance {
 	// Search in memory.
 	if inst := c.StoredInstances.FindInstance(height); inst != nil {
 		return inst
@@ -157,7 +152,7 @@ func (c *Controller) InstanceForHeight(height specqbft.Height) *instance.Instanc
 	}
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
-		c.logger.Debug("could not load instance from storage",
+		logger.Debug("could not load instance from storage",
 			zap.Uint64("height", uint64(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))

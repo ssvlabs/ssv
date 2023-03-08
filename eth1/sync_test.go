@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -14,12 +15,12 @@ import (
 )
 
 func TestSyncEth1(t *testing.T) {
+	logger := logex.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	eth1Client, eventsFeed := eth1ClientMock(ctrl, nil)
+	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
-	logger := zap.L()
 
 	rawOffset := DefaultSyncOffset().Uint64()
 	rawOffset += 10
@@ -40,12 +41,12 @@ func TestSyncEth1(t *testing.T) {
 }
 
 func TestSyncEth1Error(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	eth1Client, eventsFeed := eth1ClientMock(ctrl, errors.New("eth1-sync-test"))
+	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, errors.New("eth1-sync-test"))
 	storage := syncStorageMock(ctrl)
 
 	go func() {
@@ -63,12 +64,12 @@ func TestSyncEth1Error(t *testing.T) {
 }
 
 func TestSyncEth1HandlerError(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	eth1Client, eventsFeed := eth1ClientMock(ctrl, nil)
+	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
 	go func() {
@@ -85,7 +86,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 }
 
 func TestDetermineSyncOffset(t *testing.T) {
-	logger := zap.L()
+	logger := logex.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -119,12 +120,12 @@ func TestDetermineSyncOffset(t *testing.T) {
 	})
 }
 
-func eth1ClientMock(ctrl *gomock.Controller, err error) (*MockClient, *event.Feed) {
+func eth1ClientMock(logger *zap.Logger, ctrl *gomock.Controller, err error) (*MockClient, *event.Feed) {
 	eventsFeed := new(event.Feed)
 
 	eth1Client := NewMockClient(ctrl)
 	eth1Client.EXPECT().EventsFeed().Return(eventsFeed)
-	eth1Client.EXPECT().Sync(gomock.Any()).DoAndReturn(func(*big.Int) error {
+	eth1Client.EXPECT().Sync(logger, gomock.Any()).DoAndReturn(func(*zap.Logger, *big.Int) error {
 		<-time.After(50 * time.Millisecond)
 		return err
 	})

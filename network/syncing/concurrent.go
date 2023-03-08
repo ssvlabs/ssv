@@ -3,6 +3,7 @@ package syncing
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"sync"
 	"time"
 
@@ -38,7 +39,7 @@ var DefaultTimeouts = Timeouts{
 
 // Operation is a syncing operation that has been queued for execution.
 type Operation interface {
-	run(context.Context, Syncer) error
+	run(context.Context, *zap.Logger, Syncer) error
 	timeout(Timeouts) time.Duration
 }
 
@@ -47,8 +48,8 @@ type OperationSyncHighestDecided struct {
 	Handler MessageHandler
 }
 
-func (o OperationSyncHighestDecided) run(ctx context.Context, s Syncer) error {
-	return s.SyncHighestDecided(ctx, o.ID, o.Handler)
+func (o OperationSyncHighestDecided) run(ctx context.Context, logger *zap.Logger, s Syncer) error {
+	return s.SyncHighestDecided(ctx, logger, o.ID, o.Handler)
 }
 
 func (o OperationSyncHighestDecided) timeout(t Timeouts) time.Duration {
@@ -66,8 +67,8 @@ type OperationSyncDecidedByRange struct {
 	Handler MessageHandler
 }
 
-func (o OperationSyncDecidedByRange) run(ctx context.Context, s Syncer) error {
-	return s.SyncDecidedByRange(ctx, o.ID, o.From, o.To, o.Handler)
+func (o OperationSyncDecidedByRange) run(ctx context.Context, logger *zap.Logger, s Syncer) error {
+	return s.SyncDecidedByRange(ctx, logger, o.ID, o.From, o.To, o.Handler)
 }
 
 func (o OperationSyncDecidedByRange) timeout(t Timeouts) time.Duration {
@@ -112,7 +113,7 @@ func NewConcurrent(
 
 // Run starts the worker goroutines and blocks until the context is done
 // and any remaining jobs are finished.
-func (s *ConcurrentSyncer) Run() {
+func (s *ConcurrentSyncer) Run(logger *zap.Logger) {
 	// Spawn worker goroutines.
 	var wg sync.WaitGroup
 	for i := 0; i < s.concurrency; i++ {
@@ -120,7 +121,7 @@ func (s *ConcurrentSyncer) Run() {
 		go func() {
 			defer wg.Done()
 			for job := range s.jobs {
-				s.do(job)
+				s.do(logger, job)
 			}
 		}()
 	}
@@ -133,10 +134,10 @@ func (s *ConcurrentSyncer) Run() {
 	wg.Wait()
 }
 
-func (s *ConcurrentSyncer) do(job Operation) {
+func (s *ConcurrentSyncer) do(logger *zap.Logger, job Operation) {
 	ctx, cancel := context.WithTimeout(s.ctx, job.timeout(s.timeouts))
 	defer cancel()
-	err := job.run(ctx, s.syncer)
+	err := job.run(ctx, logger, s.syncer)
 	if err != nil && s.errors != nil {
 		s.errors <- Error{
 			Operation: job,
@@ -159,6 +160,7 @@ func (s *ConcurrentSyncer) Capacity() int {
 
 func (s *ConcurrentSyncer) SyncHighestDecided(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	handler MessageHandler,
 ) error {
@@ -171,6 +173,7 @@ func (s *ConcurrentSyncer) SyncHighestDecided(
 
 func (s *ConcurrentSyncer) SyncDecidedByRange(
 	ctx context.Context,
+	logger *zap.Logger,
 	id spectypes.MessageID,
 	from, to specqbft.Height,
 	handler MessageHandler,

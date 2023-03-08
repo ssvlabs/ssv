@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
+	"go.uber.org/zap"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -71,7 +73,7 @@ func (r *ValidatorRegistrationRunner) ProcessConsensus(signedMsg *qbft.SignedMes
 	return errors.New("no consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no post consensus phase for validator registration")
 }
 

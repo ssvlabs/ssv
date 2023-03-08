@@ -8,25 +8,23 @@ import (
 
 const bufSize = 1024
 
-func newMessageRouter(logger *zap.Logger, msgID forks.MsgIDFunc) *messageRouter {
+func newMessageRouter(msgID forks.MsgIDFunc) *messageRouter {
 	return &messageRouter{
-		logger: logger,
-		ch:     make(chan spectypes.SSVMessage, bufSize),
-		msgID:  msgID,
+		ch:    make(chan spectypes.SSVMessage, bufSize),
+		msgID: msgID,
 	}
 }
 
 type messageRouter struct {
-	logger *zap.Logger
-	ch     chan spectypes.SSVMessage
-	msgID  forks.MsgIDFunc
+	ch    chan spectypes.SSVMessage
+	msgID forks.MsgIDFunc
 }
 
-func (r *messageRouter) Route(message spectypes.SSVMessage) {
+func (r *messageRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	select {
 	case r.ch <- message:
 	default:
-		r.logger.Warn("message router buffer is full. dropping message")
+		logger.Warn("message router buffer is full. dropping message")
 	}
 }
 

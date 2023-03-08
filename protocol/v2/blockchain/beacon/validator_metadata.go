@@ -10,14 +10,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/queue"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
 
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
-	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
+	UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error
 }
 
 // ValidatorMetadata represents validator metdata from beacon
@@ -61,11 +60,11 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(pk string, meta *ValidatorMetadata)
+type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
-	logger := logex.GetLogger(zap.String("who", "UpdateValidatorsMetadata"))
+func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
+	logger = logger.Named("UpdateValidatorsMetadata")
 
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
@@ -76,13 +75,13 @@ func UpdateValidatorsMetadata(pubKeys [][]byte, collection ValidatorMetadataStor
 
 	var errs []error
 	for pk, meta := range results {
-		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
+		if err := collection.UpdateValidatorMetadata(logger, pk, meta); err != nil {
 			logger.Error("failed to update validator metadata",
 				zap.String("validator", pk), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if onUpdated != nil {
-			onUpdated(pk, meta)
+			onUpdated(logger, pk, meta)
 		}
 		logger.Debug("successfully updated validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", meta))
@@ -125,7 +124,8 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 }
 
 // UpdateValidatorsMetadataBatch updates the given public keys in batches
-func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
+func UpdateValidatorsMetadataBatch(logger *zap.Logger,
+	pubKeys [][]byte,
 	queue queue.Queue,
 	collection ValidatorMetadataStorage,
 	bc Beacon,
@@ -133,7 +133,7 @@ func UpdateValidatorsMetadataBatch(pubKeys [][]byte,
 	batchSize int) {
 	batch(pubKeys, queue, func(pks [][]byte) func() error {
 		return func() error {
-			return UpdateValidatorsMetadata(pks, collection, bc, onUpdated)
+			return UpdateValidatorsMetadata(logger, pks, collection, bc, onUpdated)
 		}
 	}, batchSize)
 }

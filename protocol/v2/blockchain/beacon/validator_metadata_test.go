@@ -18,10 +18,6 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
-func init() {
-	logex.Build("test", zap.InfoLevel, nil)
-}
-
 func TestValidatorMetadata_Status(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
 		meta := &ValidatorMetadata{
@@ -65,6 +61,8 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
+	logger := logex.TestLogger(t)
+
 	var updateCount uint64
 	pks := []string{
 		"a17bb48a3f8f558e29d08ede97d6b7b73823d8dc2e0530fe8b747c93d7d6c2755957b7ffb94a7cec830456fd5492ba19",
@@ -115,7 +113,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 
@@ -124,13 +122,13 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(pk string, meta *ValidatorMetadata) {
+	onUpdated := func(logger *zap.Logger, pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
 		require.True(t, strings.Contains(joined, pk))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
 	}
-	err := UpdateValidatorsMetadata([][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
+	err := UpdateValidatorsMetadata(logger, [][]byte{blsPubKeys[0][:], blsPubKeys[1][:], blsPubKeys[2][:]}, storage, bc, onUpdated)
 	require.Nil(t, err)
 	require.Equal(t, uint64(2), updateCount)
 

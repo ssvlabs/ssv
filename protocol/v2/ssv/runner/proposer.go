@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	bellatrix2 "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
@@ -29,8 +28,8 @@ type ProposerRunner struct {
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
-	logger   *zap.Logger
-	metrics  metrics.ConsensusMetrics
+
+	metrics metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(
@@ -42,21 +41,18 @@ func NewProposerRunner(
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
-	logger := logger.With(zap.String("validator", hex.EncodeToString(share.ValidatorPubKey)))
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleProposer,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
-			logger:         logger.With(zap.String("who", "BaseRunner")),
 		},
 
 		beacon:   beacon,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		logger:   logger.With(zap.String("who", "ProposerRunner")),
 		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
 	}
 }
@@ -190,7 +186,7 @@ func (r *ProposerRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	return nil
 }
 
-func (r *ProposerRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -245,7 +241,7 @@ func (r *ProposerRunner) ProcessPostConsensus(signedMsg *spectypes.SignedPartial
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		r.logger.Info("successfully proposed block!")
+		logger.Info("successfully proposed block!")
 	}
 
 	r.GetState().Finished = true

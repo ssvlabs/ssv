@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockRecipientController is a mock of RecipientController interface.
@@ -34,13 +35,13 @@ func (m *MockRecipientController) EXPECT() *MockRecipientControllerMockRecorder 
 }
 
 // Start mocks base method.
-func (m *MockRecipientController) Start() {
+func (m *MockRecipientController) Start(logger *zap.Logger) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Start")
+	m.ctrl.Call(m, "Start", logger)
 }
 
 // Start indicates an expected call of Start.
-func (mr *MockRecipientControllerMockRecorder) Start() *gomock.Call {
+func (mr *MockRecipientControllerMockRecorder) Start(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockRecipientController)(nil).Start), logger)
 }

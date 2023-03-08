@@ -25,7 +25,7 @@ func init() {
 }
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(msg *spectypes.SSVMessage) error
+type MsgHandler func(logger *zap.Logger, msg *spectypes.SSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
 type ErrorHandler func(msg *spectypes.SSVMessage, err error) error
@@ -37,7 +37,6 @@ func defaultErrHandler(msg *spectypes.SSVMessage, err error) error {
 // Config holds all necessary config for worker
 type Config struct {
 	Ctx          context.Context
-	Logger       *zap.Logger
 	WorkersCount int
 	Buffer       int
 	MetrixPrefix string
@@ -47,7 +46,6 @@ type Config struct {
 type Worker struct {
 	ctx           context.Context
 	cancel        context.CancelFunc
-	logger        *zap.Logger
 	workersCount  int
 	queue         chan *spectypes.SSVMessage
 	handler       MsgHandler
@@ -56,34 +54,33 @@ type Worker struct {
 }
 
 // NewWorker return new Worker
-func NewWorker(cfg *Config) *Worker {
+func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
-	logger := cfg.Logger.With(zap.String("who", "messageWorker"))
+	logger = logger.Named("messageWorker")
 
 	w := &Worker{
 		ctx:           ctx,
 		cancel:        cancel,
-		logger:        logger,
 		workersCount:  cfg.WorkersCount,
 		queue:         make(chan *spectypes.SSVMessage, cfg.Buffer),
 		errHandler:    defaultErrHandler,
 		metricsPrefix: cfg.MetrixPrefix,
 	}
 
-	w.init()
+	w.init(logger)
 
 	return w
 }
 
 // init the worker listening process
-func (w *Worker) init() {
+func (w *Worker) init(logger *zap.Logger) {
 	for i := 1; i <= w.workersCount; i++ {
-		go w.startWorker(w.queue)
+		go w.startWorker(logger, w.queue)
 	}
 }
 
 // startWorker process functionality
-func (w *Worker) startWorker(ch <-chan *spectypes.SSVMessage) {
+func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *spectypes.SSVMessage) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer cancel()
 	for {
@@ -91,7 +88,7 @@ func (w *Worker) startWorker(ch <-chan *spectypes.SSVMessage) {
 		case <-ctx.Done():
 			return
 		case msg := <-ch:
-			w.process(msg)
+			w.process(logger, msg)
 		}
 	}
 }
@@ -130,14 +127,14 @@ func (w *Worker) Size() int {
 }
 
 // process the msg's from queue
-func (w *Worker) process(msg *spectypes.SSVMessage) {
+func (w *Worker) process(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	if w.handler == nil {
-		w.logger.Warn("no handler for worker")
+		logger.Warn("no handler for worker")
 		return
 	}
-	if err := w.handler(msg); err != nil {
+	if err := w.handler(logger, msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			w.logger.Debug("failed to handle message", zap.Error(handlerErr))
+			logger.Debug("failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}

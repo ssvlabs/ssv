@@ -19,7 +19,7 @@ import (
 // beaconDuties interface serves all duty related calls
 type beaconDuties interface {
 	// GetDuties returns duties (attester, proposer) for the passed validators indices
-	GetDuties(epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
+	GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error)
 	SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
 	eth2client.EventsProvider
 }
@@ -60,7 +60,6 @@ type Beacon interface {
 // Options for controller struct creation
 type Options struct {
 	Context        context.Context
-	Logger         *zap.Logger
 	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 	MinGenesisTime uint64 `yaml:"MinGenesisTime" env:"MinGenesisTime"`
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`

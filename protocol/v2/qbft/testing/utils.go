@@ -9,9 +9,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
 	return &qbft.Config{
 		Signer:    testingutils.NewTestingKeyManager(),
 		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
@@ -30,7 +31,7 @@ var TestingConfig = func(keySet *testingutils.TestKeySet, role types.BeaconRole)
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage: TestingStores().Get(role),
+		Storage: TestingStores(logger).Get(role),
 		Network: testingutils.NewTestingNetwork(),
 		Timer:   testingutils.NewTestingTimer(),
 	}

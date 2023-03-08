@@ -3,11 +3,12 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/logex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -41,7 +42,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
-	ln, routers, err := createNetworkAndSubscribe(ctx, t, n, forksprotocol.GenesisForkVersion, pks...)
+	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, forksprotocol.GenesisForkVersion, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -109,11 +110,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 func TestP2pNetwork_Stream(t *testing.T) {
 	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
+	logger := logex.TestLogger(t)
 	defer cancel()
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
 
-	ln, _, err := createNetworkAndSubscribe(ctx, t, n, forksprotocol.GenesisForkVersion, pkHex)
+	ln, _, err := createNetworkAndSubscribe(t, ctx, n, forksprotocol.GenesisForkVersion, pkHex)
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
@@ -135,13 +137,13 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	msgCounter := int64(0)
 	errors := make(chan error, len(ln.Nodes))
 	for i, node := range ln.Nodes {
-		registerHandler(node, mid, heights[i], rounds[i], &msgCounter, errors)
+		registerHandler(logger, node, mid, heights[i], rounds[i], &msgCounter, errors)
 	}
 
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastDecided(mid)
+	res, err := node.LastDecided(logger, mid)
 	require.NoError(t, err)
 	select {
 	case err := <-errors:
@@ -153,8 +155,8 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	require.GreaterOrEqual(t, msgCounter, int64(2))
 }
 
-func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
-	node.RegisterHandlers(&protcolp2p.SyncHandler{
+func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
+	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
 		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
@@ -183,13 +185,9 @@ func registerHandler(node network.P2PNetwork, mid spectypes.MessageID, height sp
 	})
 }
 
-func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	//logger := zaptest.NewLogger(t, zaptest.Level(zapcore.DebugLevel))
-	logger := zap.L()
-	loggerFactory := func(who string) *zap.Logger {
-		return logger.With(zap.String("who", who))
-	}
-	ln, err := CreateAndStartLocalNet(ctx, logger.With(zap.String("who", "createNetworkAndSubscribe")), forkVersion, n, n/2-1, false)
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
+	logger := logex.TestLogger(t)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), forkVersion, n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -203,7 +201,7 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 	// for now, skip routers for v0
 	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{i: i, logger: loggerFactory(fmt.Sprintf("msgRouter-%d", i))}
+		routers[i] = &dummyRouter{i: i}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -249,14 +247,13 @@ func createNetworkAndSubscribe(ctx context.Context, t *testing.T, n int, forkVer
 }
 
 type dummyRouter struct {
-	logger *zap.Logger
-	count  uint64
-	i      int
+	count uint64
+	i     int
 }
 
-func (r *dummyRouter) Route(message spectypes.SSVMessage) {
+func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	r.logger.Debug("got message",
+	logger.Debug("got message",
 		zap.String("identifier", message.GetID().String()),
 		zap.Uint64("count", c))
 }

@@ -14,17 +14,12 @@ import (
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/logex"
 )
-
-func init() {
-	logex.Build("qbft-mapping-test", zapcore.DebugLevel, nil)
-}
 
 func TestQBFTMapping(t *testing.T) {
 	path, _ := os.Getwd()
@@ -118,8 +113,9 @@ func TestQBFTMapping(t *testing.T) {
 
 			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
+			logger := logex.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const (
@@ -19,8 +21,7 @@ const (
 
 // BadgerDb struct
 type BadgerDb struct {
-	db     *badger.DB
-	logger *zap.Logger
+	db *badger.DB
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -31,7 +32,7 @@ type BadgerDb struct {
 }
 
 // New create new instance of Badger db
-func New(options basedb.Options) (basedb.IDb, error) {
+func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
@@ -41,8 +42,8 @@ func New(options basedb.Options) (basedb.IDb, error) {
 		opt.Dir = ""
 		opt.ValueDir = ""
 	}
-	if options.Logger != nil && options.Reporting {
-		opt.Logger = newLogger(options.Logger)
+	if logger != nil && options.Reporting {
+		opt.Logger = newLogger(logger)
 	}
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 	db, err := badger.Open(opt)
@@ -59,7 +60,6 @@ func New(options basedb.Options) (basedb.IDb, error) {
 
 	_db := BadgerDb{
 		db:     db,
-		logger: options.Logger.With(zap.String("who", "BadgerDb")),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -67,13 +67,13 @@ func New(options basedb.Options) (basedb.IDb, error) {
 	// Start periodic reporting.
 	if options.Reporting && options.Ctx != nil {
 		_db.wg.Add(1)
-		go _db.periodicallyReport(1 * time.Minute)
+		go _db.periodicallyReport(logger, 1*time.Minute)
 	}
 
 	// Start periodic garbage collection.
 	if options.GCInterval > 0 {
 		_db.wg.Add(1)
-		go _db.periodicallyCollectGarbage(options.GCInterval)
+		go _db.periodicallyCollectGarbage(logger, options.GCInterval)
 	}
 
 	return &_db, nil
@@ -116,7 +116,7 @@ func (b *BadgerDb) Get(prefix []byte, key []byte) (basedb.Obj, bool, error) {
 }
 
 // GetMany return values for the given keys
-func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
+func (b *BadgerDb) GetMany(logger *zap.Logger, prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) error {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -126,15 +126,15 @@ func (b *BadgerDb) GetMany(prefix []byte, keys [][]byte, iterator func(basedb.Ob
 			item, err := txn.Get(append(prefix, k...))
 			if err != nil {
 				if isNotFoundError(err) { // in order to couple the not found errors together
-					b.logger.Debug("item not found", zap.String("key", string(k)))
+					logger.Debug("item not found", zap.String("key", string(k)))
 					continue
 				}
-				b.logger.Warn("failed to get item", zap.String("key", string(k)))
+				logger.Warn("failed to get item", zap.String("key", string(k)))
 				return err
 			}
 			value, err = item.ValueCopy(value)
 			if err != nil {
-				b.logger.Warn("failed to copy item value", zap.String("key", string(k)))
+				logger.Warn("failed to copy item value", zap.String("key", string(k)))
 				return err
 			}
 			cp = make([]byte, len(value))
@@ -175,7 +175,7 @@ func (b *BadgerDb) DeleteByPrefix(prefix []byte) (int, error) {
 }
 
 // GetAll returns all the items of a given collection
-func (b *BadgerDb) GetAll(prefix []byte, handler func(int, basedb.Obj) error) error {
+func (b *BadgerDb) GetAll(logger *zap.Logger, prefix []byte, handler func(int, basedb.Obj) error) error {
 	// we got issues when reading more than 100 items with iterator (items get mixed up)
 	// instead, the keys are first fetched using an iterator, and afterwards the values are fetched one by one
 	// to avoid issues
@@ -185,13 +185,13 @@ func (b *BadgerDb) GetAll(prefix []byte, handler func(int, basedb.Obj) error) er
 			trimmedResKey := bytes.TrimPrefix(k, prefix)
 			item, err := txn.Get(k)
 			if err != nil {
-				b.logger.Error("failed to get value", zap.Error(err),
+				logger.Error("failed to get value", zap.Error(err),
 					zap.String("trimmedResKey", string(trimmedResKey)))
 				continue
 			}
 			val, err := item.ValueCopy(nil)
 			if err != nil {
-				b.logger.Error("failed to copy value", zap.Error(err))
+				logger.Error("failed to copy value", zap.Error(err))
 				continue
 			}
 			if err := handler(i, basedb.Obj{
@@ -228,7 +228,7 @@ func (b *BadgerDb) RemoveAllByCollection(prefix []byte) error {
 }
 
 // Close closes the database.
-func (b *BadgerDb) Close() error {
+func (b *BadgerDb) Close(logger *zap.Logger) error {
 	// Stop & wait for background goroutines.
 	b.cancel()
 	b.wg.Wait()
@@ -236,31 +236,33 @@ func (b *BadgerDb) Close() error {
 	// Close the database.
 	err := b.db.Close()
 	if err != nil {
-		b.logger.Fatal("failed to close db", zap.Error(err))
+		logger.Fatal("failed to close db", zap.Error(err))
 	}
 	return err
 }
 
 // report the db size and metrics
-func (b *BadgerDb) report() {
-	logger := b.logger.With(zap.String("who", "BadgerDBReporting"))
-	lsm, vlog := b.db.Size()
-	blockCache := b.db.BlockCacheMetrics()
-	indexCache := b.db.IndexCacheMetrics()
+func (b *BadgerDb) report(logger *zap.Logger) func() {
+	logger = logger.Named("BadgerDBReporting")
+	return func() {
+		lsm, vlog := b.db.Size()
+		blockCache := b.db.BlockCacheMetrics()
+		indexCache := b.db.IndexCacheMetrics()
 
-	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-		zap.String("BlockCacheMetrics", blockCache.String()),
-		zap.String("IndexCacheMetrics", indexCache.String()))
+		logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
+			logging.BlockCacheMetrics(blockCache),
+			logging.IndexCacheMetrics(indexCache))
+	}
 }
 
-func (b *BadgerDb) periodicallyReport(interval time.Duration) {
+func (b *BadgerDb) periodicallyReport(logger *zap.Logger, interval time.Duration) {
 	defer b.wg.Done()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			b.report()
+			b.report(logger)
 		case <-b.ctx.Done():
 			return
 		}
