@@ -21,6 +21,7 @@ vendor/
 /config/config.exporter.yaml
 /config/config.local.yaml
 /config/config.yaml
+/config/config*/
 
 # User-specific stuff:
 .idea/**/workspace.xml
@@ -50,6 +51,7 @@ docker-compose-local.yaml
 
 bin/
 /data/
+/cli/operator/data/
 /db
 /scripts/config
 /scripts/spec_align_report/data

@@ -4,19 +4,19 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/registry/storage"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pkg/errors"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -28,32 +28,33 @@ type RecipientController interface {
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-	Ctx               context.Context
-	BeaconClient      beaconprotocol.Beacon
-	EthNetwork        beaconprotocol.Network
-	ShareStorage      validator.ICollection
-	Ticker            slot_ticker.Ticker
-	OperatorPublicKey string
+	Ctx          context.Context
+	BeaconClient beaconprotocol.Beacon
+	EthNetwork   beaconprotocol.Network
+	ShareStorage validator.ICollection
+	Ticker       slot_ticker.Ticker
+	OperatorData *storage.OperatorData
 }
 
 // recipientController implementation of RecipientController
 type recipientController struct {
-	ctx               context.Context
-	beaconClient      beaconprotocol.Beacon
-	ethNetwork        beaconprotocol.Network
-	shareStorage      validator.ICollection
-	ticker            slot_ticker.Ticker
-	operatorPublicKey string
+	ctx          context.Context
+	beaconClient beaconprotocol.Beacon
+	ethNetwork   beaconprotocol.Network
+	shareStorage validator.ICollection
+	ticker       slot_ticker.Ticker
+	operatorData *storage.OperatorData
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
 	return &recipientController{
-		ctx:               opts.Ctx,
-		beaconClient:      opts.BeaconClient,
-		ethNetwork:        opts.EthNetwork,
-		shareStorage:      opts.ShareStorage,
-		ticker:            opts.Ticker,
-		operatorPublicKey: opts.OperatorPublicKey,
+
+		ctx:          opts.Ctx,
+		beaconClient: opts.BeaconClient,
+		ethNetwork:   opts.EthNetwork,
+		shareStorage: opts.ShareStorage,
+		ticker:       opts.Ticker,
+		operatorData: opts.OperatorData,
 	}
 }
 
@@ -75,7 +76,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 
 		firstTimeSubmitted = true
 		// submit fee recipient
-		shares, err := rc.shareStorage.GetFilteredValidatorShares(logger, validator.NotLiquidatedAndByOperatorPubKey(rc.operatorPublicKey))
+		shares, err := rc.shareStorage.GetFilteredValidatorShares(logger, validator.ByOperatorIDAndNotLiquidated(rc.operatorData.ID))
 		if err != nil {
 			logger.Warn("failed to get validators share", zap.Error(err))
 			continue
@@ -113,13 +114,9 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 
 func toProposalPreparation(m map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, share *types.SSVShare) error {
 	if share.HasBeaconMetadata() {
-		var pubkey [20]byte
-		pubKeyBytes, err := hex.DecodeString(strings.TrimPrefix(share.OwnerAddress, "0x"))
-		if err != nil {
-			return errors.Wrap(err, "failed to decode address")
-		}
-		copy(pubkey[:], pubKeyBytes)
-		m[share.BeaconMetadata.Index] = pubkey
+		var execAddress bellatrix.ExecutionAddress
+		copy(execAddress[:], share.OwnerAddress.Bytes())
+		m[share.BeaconMetadata.Index] = execAddress
 		return nil
 	}
 	return fmt.Errorf("missing meta data for pk %s", hex.EncodeToString(share.ValidatorPubKey))

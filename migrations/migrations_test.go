@@ -3,17 +3,15 @@ package migrations
 import (
 	"context"
 	"fmt"
-	"os"
-	"path"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/logex"
-
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
@@ -110,48 +108,6 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	_, found, err = opt.Db.Get(migrationsPrefix, []byte("second"))
 	require.NoError(t, err)
 	require.False(t, found)
-}
-
-func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
-	ctx := context.Background()
-	logger := logex.Build("migratons", zap.DebugLevel, nil)
-	opt, err := setupOptions(ctx, t)
-	require.NoError(t, err)
-
-	var (
-		exporterPrefix = []byte("exporter/")
-		exporterKey    = []byte("exporterKey")
-		exporterValue  = []byte("exporterValue")
-	)
-	// create temp key/value under exporter collection
-	err = opt.Db.Set(exporterPrefix, exporterKey, exporterValue)
-	require.NoError(t, err)
-
-	// create deprecated oa_pks/migration.txt file
-	tmpDirPath := path.Join(opt.DbPath, "oa_pks")
-	require.NoError(t, os.MkdirAll(tmpDirPath, 0700))
-	tmpFilePath := path.Join(tmpDirPath, "migration.txt")
-	_, err = os.Create(tmpFilePath)
-	require.NoError(t, err)
-
-	migrations := Migrations{
-		migrationCleanAllRegistryData,
-	}
-	applied, err := migrations.Run(ctx, logger, opt)
-	require.NoError(t, err)
-	require.Equal(t, 1, applied)
-
-	// validate that migrationCleanAllRegistryData fake applied
-	obj, found, err := opt.Db.Get(exporterPrefix, exporterKey)
-	require.NoError(t, err)
-	require.NotNil(t, obj)
-	require.True(t, found)
-	require.Equal(t, obj.Key, exporterKey)
-	require.Equal(t, obj.Value, exporterValue)
-
-	_, found, err = opt.Db.Get(migrationsPrefix, []byte(migrationCleanAllRegistryData.Name))
-	require.NoError(t, err)
-	require.True(t, found)
 }
 
 func fakeMigration(name string, returnErr error) Migration {

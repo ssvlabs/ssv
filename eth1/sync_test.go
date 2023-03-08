@@ -96,7 +96,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, nil)
 		require.NotNil(t, so)
-		require.Equal(t, defaultSyncOffset, so.Text(16))
+		require.Equal(t, defaultSyncOffset, so.Text(10))
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {

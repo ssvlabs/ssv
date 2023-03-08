@@ -111,10 +111,11 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.(string))
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
 		if opDataErr == nil && found {
-			opIndex = strconv.FormatUint(operatorData.Index, 10)
-			opName = operatorData.Name
+			opIndex = strconv.FormatUint(uint64(operatorData.ID), 10)
+			// TODO(oleg): do we need to store owner addres instead of name in v3
+			//opName = operatorData.Name
 		}
 	} else {
 		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
@@ -126,8 +127,9 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
-				opIndex = strconv.FormatUint(operator.Index, 10)
-				opName = operator.Name
+				opIndex = strconv.FormatUint(uint64(operator.ID), 10)
+				// TODO(oleg): do we need to store owner addres instead of name in v3
+				//opName = operatorData.Name
 			}
 		}
 	}

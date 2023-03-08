@@ -11,6 +11,10 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -26,8 +30,6 @@ import (
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/logex"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -206,7 +208,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 				BeaconMetadata: &protocolbeacon.ValidatorMetadata{
 					Index: spec.ValidatorIndex(1),
 				},
-				OwnerAddress: "0x0",
+				OwnerAddress: common.HexToAddress("0x0"),
 				Liquidated:   false,
 			},
 		},

@@ -23,7 +23,7 @@ func TestHandleQuery(t *testing.T) {
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
-			{PublicKey: fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From)},
+			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
 		}
 	}, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
@@ -98,7 +98,7 @@ func TestHandleStream(t *testing.T) {
 
 		msg2 := newTestMessage()
 		msg2.Data = []registrystorage.OperatorData{
-			{PublicKey: "pubkey-operator"},
+			{PublicKey: []byte("pubkey-operator")},
 		}
 		ws.out.Send(msg2)
 

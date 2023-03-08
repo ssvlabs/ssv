@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
@@ -43,7 +44,6 @@ func TestValidatorSerializer(t *testing.T) {
 	require.NotNil(t, v1.OperatorID)
 	require.Equal(t, v1.BeaconMetadata, validatorShare.BeaconMetadata)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
-	require.Equal(t, v1.Operators, validatorShare.Operators)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
 }
 
@@ -137,12 +137,8 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.S
 				Status:  2,
 				Index:   3,
 			},
-			OwnerAddress: "0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e",
-			Operators: [][]byte{
-				{1, 1, 1, 1},
-				{2, 2, 2, 2},
-			},
-			Liquidated: true,
+			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+			Liquidated:   true,
 		},
 	}, &sk1
 }

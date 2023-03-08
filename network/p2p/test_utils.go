@@ -124,7 +124,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys.NetKey, format.OperatorID(operatorPubkey), forkVersion, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), forkVersion, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 
