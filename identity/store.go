@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"crypto/ecdsa"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"

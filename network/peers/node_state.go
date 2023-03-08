@@ -1,9 +1,10 @@
 package peers
 
 import (
-	"github.com/libp2p/go-libp2p/core/peer"
 	"sync"
 	"time"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // NodeState is the state of the node

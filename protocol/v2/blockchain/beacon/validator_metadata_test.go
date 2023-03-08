@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
@@ -61,7 +62,7 @@ func TestValidatorMetadata_Status(t *testing.T) {
 }
 
 func TestUpdateValidatorsMetadata(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	var updateCount uint64
 	pks := []string{

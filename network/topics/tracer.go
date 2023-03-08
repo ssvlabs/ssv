@@ -2,8 +2,9 @@ package topics
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging"
 	"sync/atomic"
+
+	"github.com/bloxapp/ssv/logging"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"

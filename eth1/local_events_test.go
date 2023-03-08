@@ -3,10 +3,9 @@ package eth1
 import (
 	"testing"
 
+	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
-
-	"github.com/bloxapp/ssv/eth1/abiparser"
 )
 
 func TestLocalEventsUnmarshalYAML(t *testing.T) {

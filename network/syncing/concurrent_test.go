@@ -6,7 +6,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/logging"
+
 	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -18,7 +19,7 @@ import (
 )
 
 func TestConcurrentSyncer(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -70,7 +71,7 @@ func TestConcurrentSyncer(t *testing.T) {
 }
 
 func TestConcurrentSyncerMemoryUsage(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	for i := 0; i < 4; i++ {
 		var before runtime.MemStats
@@ -114,7 +115,7 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 }
 
 func BenchmarkConcurrentSyncer(b *testing.B) {
-	logger := logex.Build(b.Name(), zap.DebugLevel, nil)
+	logger := logging.Build(b.Name(), zap.DebugLevel, nil)
 
 	for i := 0; i < b.N; i++ {
 		// Test setup

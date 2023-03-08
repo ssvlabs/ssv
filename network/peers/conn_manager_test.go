@@ -5,8 +5,9 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/utils/logex"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -14,7 +15,7 @@ import (
 )
 
 func TestTagBestPeers(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	connMgrMock := newConnMgr()
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
