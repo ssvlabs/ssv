@@ -4,6 +4,8 @@ import (
 	"context"
 	"reflect"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func TestWithFromContext(t *testing.T) {
@@ -21,7 +23,7 @@ func TestWithFromContext(t *testing.T) {
 
 	t.Run("EmptyCtx", func(t *testing.T) {
 		ctx := context.Background()
-		expected := TestLogger(t)
+		expected := zap.L()
 
 		actual := FromContext(ctx)
 		if !reflect.DeepEqual(expected, actual) { // expect that the logger returned is the global logger
