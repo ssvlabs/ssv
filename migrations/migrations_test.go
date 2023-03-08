@@ -23,7 +23,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 		Reporting: true,
 		Ctx:       ctx,
 	}
-	db, err := kv.New(logging.TestLogger(t).Named(logging.NameMigrations), options)
+	db, err := kv.New(logging.TestLogger(t), options)
 	if err != nil {
 		return Options{}, err
 	}
@@ -35,7 +35,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 
 func Test_RunNotMigratingTwice(t *testing.T) {
 	ctx := context.Background()
-	logger := logging.TestLogger(t).Named(logging.NameMigrations)
+	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -63,7 +63,7 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 
 func Test_Rollback(t *testing.T) {
 	ctx := context.Background()
-	logger := logging.TestLogger(t).Named(logging.NameMigrations)
+	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -90,7 +90,7 @@ func Test_Rollback(t *testing.T) {
 
 func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 	ctx := context.Background()
-	logger := logging.TestLogger(t).Named(logging.NameMigrations)
+	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 
@@ -113,7 +113,7 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 
 func Test_DeprecatedMigrationFakeApplied(t *testing.T) {
 	ctx := context.Background()
-	logger := logging.TestLogger(t).Named(logging.NameMigrations)
+	logger := logging.TestLogger(t)
 	opt, err := setupOptions(ctx, t)
 	require.NoError(t, err)
 

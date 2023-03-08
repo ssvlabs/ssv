@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
@@ -37,6 +38,7 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
+	logging.SetGlobalLogger(zap.DebugLevel)
 	logger := zap.L().Named("integration-tests")
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)

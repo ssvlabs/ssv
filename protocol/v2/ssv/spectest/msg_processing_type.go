@@ -4,11 +4,10 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"go.uber.org/zap"
-
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -36,7 +35,7 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := zap.L()
+	logger := logging.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align

@@ -18,6 +18,7 @@ var exportKeysCmd = &cobra.Command{
 	Use:   "export-keys",
 	Short: "exports private/public keys based on given mnemonic",
 	Run: func(cmd *cobra.Command, args []string) {
+		logging.SetGlobalLogger(zap.DPanicLevel)
 		logger := zap.L().Named(logging.NameExportKeys)
 
 		mnemonicKey, err := flags.GetMnemonicFlagValue(cmd)
