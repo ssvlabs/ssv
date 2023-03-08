@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
 )

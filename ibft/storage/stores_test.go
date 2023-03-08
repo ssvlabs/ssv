@@ -3,9 +3,8 @@ package storage
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/stretchr/testify/require"
 )

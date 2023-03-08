@@ -23,7 +23,6 @@ func TestWithFromContext(t *testing.T) {
 
 	t.Run("EmptyCtx", func(t *testing.T) {
 		ctx := context.Background()
-		TestLogger(t) // set the global logger
 		expected := zap.L()
 
 		actual := FromContext(ctx)

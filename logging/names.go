@@ -14,7 +14,9 @@ const (
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
+	NameCreateThreshold   = "CreateThreshold"
 	NameDiscoveryLogger   = "DiscoveryLogger"
+	NameExportKeys        = "ExportKeys"
 	NameOnFork            = "OnFork"
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"

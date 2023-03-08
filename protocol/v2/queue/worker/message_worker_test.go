@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
 
 	"github.com/stretchr/testify/require"

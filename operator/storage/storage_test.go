@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/eth1"

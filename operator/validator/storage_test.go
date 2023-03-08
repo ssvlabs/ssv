@@ -4,9 +4,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 

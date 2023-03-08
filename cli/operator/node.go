@@ -191,10 +191,8 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 		}
 	}
 	loggerLevel, errLogLevel := zapcore.ParseLevel(cfg.LogLevel)
-	logger := logging.Build(commons.GetBuildData(), loggerLevel, &logging.EncodingConfig{
-		Format:       cfg.GlobalConfig.LogFormat,
-		LevelEncoder: logging.LevelEncoder([]byte(cfg.LogLevelFormat)),
-	})
+	logging.SetGlobalLogger(loggerLevel)
+	logger := zap.L().Named(commons.GetBuildData())
 	if errLogLevel != nil {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
 	}

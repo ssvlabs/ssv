@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/common"
