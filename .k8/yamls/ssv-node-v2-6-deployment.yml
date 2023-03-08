@@ -126,7 +126,7 @@ spec:
         - name: GENESIS_EPOCH
           value: "1"
         - name: DB_PATH
-          value: "./data/db"
+          value: "./data/db-shifu-v3"
         - name: METRICS_API_PORT
           value: "15006"
         - name: ENABLE_PROFILE

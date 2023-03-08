@@ -123,7 +123,7 @@ spec:
         - name: LOGGER_LEVEL
           value: "debug"
         - name: DB_PATH
-          value: "./data/db-v3"
+          value: "./data/db-shifu-v3"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
@@ -137,7 +137,7 @@ spec:
         - name: P2P_LOG
           value: "false"
         - name: NETWORK_ID
-          value: "shifu-v2-stage"
+          value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
         volumeMounts:
