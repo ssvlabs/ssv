@@ -1,9 +1,10 @@
 package rsaencryption
 
 import (
+	"testing"
+
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestGenerateKeys(t *testing.T) {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -41,7 +43,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -189,10 +190,10 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 			log.Fatalf("could not read share config %s", err)
 		}
 	}
-	loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-	logger := logex.Build(commons.GetBuildData(), loggerLevel, &logex.EncodingConfig{
+	loggerLevel, errLogLevel := zapcore.ParseLevel(cfg.LogLevel)
+	logger := logging.Build(commons.GetBuildData(), loggerLevel, &logging.EncodingConfig{
 		Format:       cfg.GlobalConfig.LogFormat,
-		LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
+		LevelEncoder: logging.LevelEncoder([]byte(cfg.LogLevelFormat)),
 	})
 	if errLogLevel != nil {
 		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))

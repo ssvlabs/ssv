@@ -3,11 +3,12 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"github.com/pkg/errors"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 const ssvSpecRepo = "git@github.com:bloxapp/ssv-spec.git"

@@ -7,9 +7,9 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"go.uber.org/zap"
 )
 
 // Start starts a Validator.
@@ -65,7 +65,7 @@ func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
 		err := v.Network.SyncHighestDecided(mid)
 		if err != nil {
 			logger.Debug("❌ failed to sync highest decided",
-				logging.MessageID(mid),
+				fields.MessageID(mid),
 				zap.Error(err))
 			retries--
 			if retries > 0 {

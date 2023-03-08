@@ -3,13 +3,14 @@ package api
 import (
 	"context"
 	"fmt"
-	"go.uber.org/zap"
 	"math/rand"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"

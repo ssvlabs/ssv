@@ -1,12 +1,13 @@
 package p2pv1
 
 import (
-	"github.com/bloxapp/ssv/logging"
 	"math/rand"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"

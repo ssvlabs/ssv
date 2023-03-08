@@ -2,9 +2,10 @@ package api
 
 import (
 	"fmt"
-	"go.uber.org/zap"
 	"net"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Connection is an interface to abstract the actual websocket connection implementation

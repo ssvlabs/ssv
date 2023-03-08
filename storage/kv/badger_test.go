@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"
@@ -17,7 +17,7 @@ import (
 func TestBadgerEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
@@ -88,7 +88,7 @@ func TestBadgerEndToEnd(t *testing.T) {
 }
 
 func TestBadgerDb_GetAll(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -120,7 +120,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 }
 
 func TestBadgerDb_GetMany(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -147,7 +147,7 @@ func TestBadgerDb_GetMany(t *testing.T) {
 }
 
 func TestBadgerDb_SetMany(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -181,7 +181,7 @@ func uInt64ToByteSlice(n uint64) []byte {
 }
 
 func getAllTest(t *testing.T, n int, db basedb.IDb) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	// populating DB
 	prefix := []byte("test")
 	for i := 0; i < n; i++ {

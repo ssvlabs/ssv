@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"fmt"
+	"net"
+
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
-	"net"
 )
 
 // createLocalNode create a new enode.LocalNode instance
