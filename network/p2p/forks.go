@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"fmt"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"

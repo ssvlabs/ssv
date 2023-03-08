@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"io"
 	"log"
 	"net"
 	"net/http"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"

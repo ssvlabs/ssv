@@ -1,10 +1,11 @@
 package streams
 
 import (
-	"github.com/libp2p/go-libp2p/core"
-	"github.com/pkg/errors"
 	"io"
 	"time"
+
+	"github.com/libp2p/go-libp2p/core"
+	"github.com/pkg/errors"
 )
 
 // Stream represents a stream in the system

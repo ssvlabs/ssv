@@ -2,10 +2,11 @@ package discovery
 
 import (
 	"context"
+	"time"
+
 	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"

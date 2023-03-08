@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -25,7 +27,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	}
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", logging.Topic(ns))
+		logger.Debug("not a subnet", fields.Topic(ns))
 		return opts.Ttl, nil
 	}
 
@@ -42,7 +44,7 @@ func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...disco
 	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", logging.Topic(ns))
+		logger.Debug("not a subnet", fields.Topic(ns))
 		return nil, nil
 	}
 	cn := make(chan peer.AddrInfo, 32)

@@ -1,9 +1,10 @@
 package utils
 
 import (
-	"github.com/pkg/errors"
 	"io"
 	"os"
+
+	"github.com/pkg/errors"
 )
 
 // Copy copies the contents of the file at srcpath to a regular file at dstpath.

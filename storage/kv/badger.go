@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -250,8 +252,8 @@ func (b *BadgerDb) report(logger *zap.Logger) func() {
 		indexCache := b.db.IndexCacheMetrics()
 
 		logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-			logging.BlockCacheMetrics(blockCache),
-			logging.IndexCacheMetrics(indexCache))
+			fields.BlockCacheMetrics(blockCache),
+			fields.IndexCacheMetrics(indexCache))
 	}
 }
 

@@ -6,13 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestParseOperatorAddedEvent(t *testing.T) {
@@ -30,7 +29,7 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 
 	t.Run("operator added", func(t *testing.T) {
 		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V2)
-		abiParser := NewParser(logex.TestLogger(t), V2)
+		abiParser := NewParser(logging.TestLogger(t), V2)
 		parsed, err := abiParser.ParseOperatorAddedEvent(*LogOperatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
@@ -58,7 +57,7 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 
 	t.Run("v2 validator added", func(t *testing.T) {
 		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V2)
-		abiParser := NewParser(logex.TestLogger(t), V2)
+		abiParser := NewParser(logging.TestLogger(t), V2)
 		parsed, err := abiParser.ParseValidatorAddedEvent(*vLogValidatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)

@@ -3,6 +3,7 @@ package bytesval
 import (
 	"bytes"
 	"errors"
+
 	"github.com/bloxapp/ssv/ibft/valcheck"
 )
 
