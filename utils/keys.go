@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/rand"
 	"encoding/hex"
+
 	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/network/commons"

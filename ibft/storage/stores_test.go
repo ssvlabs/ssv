@@ -1,8 +1,9 @@
 package storage
 
 import (
-	"github.com/bloxapp/ssv/logging"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv-spec/types"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"

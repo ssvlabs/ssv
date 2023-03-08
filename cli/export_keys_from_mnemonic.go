@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"fmt"
+
 	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/eth2-key-manager/core"

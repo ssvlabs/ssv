@@ -3,10 +3,11 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"github.com/bloxapp/ssv/logging/fields"
 	"net"
 	"sync/atomic"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"

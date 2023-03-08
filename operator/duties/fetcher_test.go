@@ -2,8 +2,9 @@ package duties
 
 import (
 	"errors"
-	"github.com/bloxapp/ssv/logging"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"

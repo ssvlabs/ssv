@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 

@@ -2,10 +2,11 @@ package validator
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"

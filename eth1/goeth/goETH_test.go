@@ -3,11 +3,12 @@ package goeth
 import (
 	"context"
 	"encoding/json"
-	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"

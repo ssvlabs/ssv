@@ -3,9 +3,10 @@ package syncing_test
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"runtime"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"go.uber.org/zap"
 

@@ -1,8 +1,9 @@
 package ekm
 
 import (
-	"github.com/bloxapp/ssv/logging"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"

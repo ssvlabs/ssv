@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"go.uber.org/zap"
 

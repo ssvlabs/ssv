@@ -3,9 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"github.com/bloxapp/ssv/logging/fields"
 	"net/url"
 	"sync"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"

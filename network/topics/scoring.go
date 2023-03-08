@@ -1,8 +1,9 @@
 package topics
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"

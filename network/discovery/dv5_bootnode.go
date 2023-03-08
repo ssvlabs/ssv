@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+
 	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/utils"

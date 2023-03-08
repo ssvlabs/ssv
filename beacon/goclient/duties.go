@@ -2,9 +2,10 @@ package goclient
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"go.uber.org/zap"
 

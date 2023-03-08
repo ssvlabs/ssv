@@ -2,8 +2,9 @@ package storage
 
 import (
 	"encoding/base64"
-	"github.com/bloxapp/ssv/logging"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/stretchr/testify/require"
 

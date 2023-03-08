@@ -1,8 +1,9 @@
 package p2pv1
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
 	"math"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"

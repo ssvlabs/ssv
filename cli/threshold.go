@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/bloxapp/ssv/logging"
 
 	"github.com/herumi/bls-eth-go-binary/bls"

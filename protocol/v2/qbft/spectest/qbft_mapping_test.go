@@ -2,11 +2,12 @@ package qbft
 
 import (
 	"encoding/json"
-	"github.com/bloxapp/ssv/logging"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"

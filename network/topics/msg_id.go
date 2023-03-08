@@ -3,9 +3,10 @@ package topics
 import (
 	"bytes"
 	"context"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/network/forks"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"

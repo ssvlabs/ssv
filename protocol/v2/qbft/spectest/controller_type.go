@@ -3,9 +3,10 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging"
 	"reflect"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"

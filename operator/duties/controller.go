@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/bloxapp/ssv/logging/fields"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"

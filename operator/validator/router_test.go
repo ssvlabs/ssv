@@ -3,9 +3,10 @@ package validator
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks/genesis"

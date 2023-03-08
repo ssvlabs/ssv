@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"

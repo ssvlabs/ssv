@@ -2,11 +2,12 @@ package tasks
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/stretchr/testify/require"
 )

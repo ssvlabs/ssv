@@ -2,8 +2,9 @@ package discovery
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/logging/fields"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/libp2p/go-libp2p/core/discovery"

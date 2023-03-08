@@ -2,10 +2,11 @@ package worker
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/logging"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"

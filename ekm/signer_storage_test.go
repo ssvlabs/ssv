@@ -3,9 +3,10 @@ package ekm
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"math/big"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"

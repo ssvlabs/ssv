@@ -2,6 +2,7 @@ package storage
 
 import (
 	"fmt"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"go.uber.org/zap"

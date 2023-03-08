@@ -3,11 +3,12 @@ package spectest
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"os"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"

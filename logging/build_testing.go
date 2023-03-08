@@ -1,9 +1,10 @@
 package logging
 
 import (
-	"go.uber.org/zap"
 	"sync"
 	"testing"
+
+	"go.uber.org/zap"
 )
 
 func TestLogger(t *testing.T) *zap.Logger {

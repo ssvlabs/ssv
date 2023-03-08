@@ -5,8 +5,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"go.uber.org/zap"
 

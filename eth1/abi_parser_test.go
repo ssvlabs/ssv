@@ -3,9 +3,10 @@ package eth1
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/ethereum/go-ethereum/accounts/abi"

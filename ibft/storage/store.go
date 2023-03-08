@@ -2,9 +2,10 @@ package storage
 
 import (
 	"encoding/binary"
-	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"sync"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"

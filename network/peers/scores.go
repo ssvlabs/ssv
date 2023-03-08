@@ -1,9 +1,10 @@
 package peers
 
 import (
-	"github.com/libp2p/go-libp2p/core/peer"
 	"sort"
 	"sync"
+
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 // scoresIndex implements ScoreIndex

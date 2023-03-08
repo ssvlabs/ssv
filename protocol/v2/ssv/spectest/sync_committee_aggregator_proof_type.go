@@ -2,8 +2,9 @@ package spectest
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"

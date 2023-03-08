@@ -1,9 +1,10 @@
 package p2pv1
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"strconv"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"

@@ -2,14 +2,15 @@ package api
 
 import (
 	"context"
+	"net/http"
+	"time"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
-	"net/http"
-	"time"
 )
 
 const (

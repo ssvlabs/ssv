@@ -3,10 +3,11 @@ package migrations
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"

@@ -2,12 +2,13 @@ package beacon
 
 import (
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"

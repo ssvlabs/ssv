@@ -2,9 +2,10 @@ package eth1
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/logging/fields"
 	"math/big"
 	"sync"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/pkg/errors"

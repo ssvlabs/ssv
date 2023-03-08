@@ -3,8 +3,9 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging/fields"
 	"math/rand"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/multiformats/go-multistream"
 

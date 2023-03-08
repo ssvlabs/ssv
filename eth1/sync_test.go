@@ -2,10 +2,11 @@ package eth1
 
 import (
 	"errors"
-	"github.com/bloxapp/ssv/logging"
 	"math/big"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"

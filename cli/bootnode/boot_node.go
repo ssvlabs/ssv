@@ -2,8 +2,9 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"log"
+
+	"github.com/bloxapp/ssv/logging"
 
 	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"

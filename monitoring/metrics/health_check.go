@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"go.uber.org/zap"
 )

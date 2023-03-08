@@ -3,9 +3,10 @@ package syncing
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync/atomic"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

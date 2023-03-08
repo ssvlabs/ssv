@@ -3,9 +3,10 @@ package kv
 import (
 	"bytes"
 	"context"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"

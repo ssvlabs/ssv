@@ -2,9 +2,10 @@ package peers
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/logging"
 	"math/rand"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"

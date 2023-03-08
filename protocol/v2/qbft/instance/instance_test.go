@@ -1,9 +1,10 @@
 package instance
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestInstance_Marshaling(t *testing.T) {

@@ -5,9 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/stretchr/testify/require"

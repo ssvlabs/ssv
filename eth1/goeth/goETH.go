@@ -3,10 +3,11 @@ package goeth
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/logging/fields"
 	"math/big"
 	"strings"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"

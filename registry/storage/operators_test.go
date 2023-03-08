@@ -2,9 +2,10 @@ package storage
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
 	"strings"
 	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"go.uber.org/zap"
 

@@ -3,11 +3,12 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
