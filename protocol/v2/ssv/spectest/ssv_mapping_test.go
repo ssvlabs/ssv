@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
@@ -18,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -47,7 +46,6 @@ func TestSSVMapping(t *testing.T) {
 	}()
 
 	for name, test := range untypedTests {
-		logging.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]

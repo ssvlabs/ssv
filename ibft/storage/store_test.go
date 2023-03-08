@@ -3,10 +3,9 @@ package storage
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

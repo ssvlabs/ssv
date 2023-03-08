@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
 

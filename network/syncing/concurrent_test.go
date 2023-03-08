@@ -6,12 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/syncing/mocks"
 	"github.com/golang/mock/gomock"
@@ -115,7 +112,7 @@ func TestConcurrentSyncerMemoryUsage(t *testing.T) {
 }
 
 func BenchmarkConcurrentSyncer(b *testing.B) {
-	logger := logging.Build(b.Name(), zap.DebugLevel, nil)
+	logger := logging.BenchLogger(b)
 
 	for i := 0; i < b.N; i++ {
 		// Test setup

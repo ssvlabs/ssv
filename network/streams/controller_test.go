@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/forks/genesis"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/protocol"

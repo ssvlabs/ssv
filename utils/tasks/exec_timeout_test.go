@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/stretchr/testify/require"
 )
 

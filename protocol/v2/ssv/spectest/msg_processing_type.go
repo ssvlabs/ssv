@@ -4,11 +4,10 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"

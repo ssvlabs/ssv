@@ -33,7 +33,8 @@ var StartBootNodeCmd = &cobra.Command{
 		}
 
 		loggerLevel, err := zapcore.ParseLevel(cfg.LogLevel)
-		logger := logging.Build(cmd.Parent().Short, loggerLevel, &logging.EncodingConfig{Format: cfg.GlobalConfig.LogFormat})
+		logging.SetGlobalLogger(loggerLevel)
+		logger := zap.L().Named(cmd.Parent().Short)
 
 		if err != nil {
 			logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))

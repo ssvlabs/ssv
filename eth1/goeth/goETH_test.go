@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
