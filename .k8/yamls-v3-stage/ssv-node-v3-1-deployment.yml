@@ -127,13 +127,13 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db"
+          value: "./data/db-shifu-v3"
         - name: METRICS_API_PORT
           value: "15301"
         - name: ENABLE_PROFILE
           value: "true"
         - name: NETWORK_ID
-          value: "shifu-v2-stage"
+          value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: WS_API_PORT

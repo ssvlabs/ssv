@@ -118,8 +118,8 @@ func New(logger *zap.Logger, opts Options) Node {
 			ShareStorage: validator.NewCollection(validator.CollectionOptions{
 				DB: opts.DB,
 			}),
-			Ticker:            ticker,
-			OperatorPublicKey: opts.ValidatorOptions.OperatorPubKey,
+			Ticker:       ticker,
+			OperatorData: opts.ValidatorOptions.OperatorData,
 		}),
 		forkVersion: opts.ForkVersion,
 
@@ -198,9 +198,20 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	if err != nil {
 		logger.Error("failed to get operators", zap.Error(err))
 	}
+	operatorID := n.validatorsCtrl.GetOperatorData().ID
+	operatorValidatorsCount := 0
+	if operatorID != 0 {
+		for _, share := range shares {
+			if share.BelongsToOperator(n.validatorsCtrl.GetOperatorData().ID) {
+				operatorValidatorsCount++
+			}
+		}
+	}
+
 	logger.Info("ETH1 sync history stats",
 		zap.Int("validators count", len(shares)),
 		zap.Int("operators count", len(operators)),
+		zap.Int("my validators count", operatorValidatorsCount),
 	)
 
 	// setup validator controller to listen to new events

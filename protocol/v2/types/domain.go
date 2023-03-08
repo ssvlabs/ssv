@@ -12,6 +12,7 @@ var (
 	//       i.e. use GetDefaultDomain() to get the current domain.
 	ShifuTestnet   = spectypes.DomainType("shifu")
 	ShifuTestnetV2 = spectypes.DomainType("shifu-v2")
+	ShifuTestnetV3 = spectypes.DomainType("shifu-v3")
 )
 
 var (
@@ -23,7 +24,7 @@ var (
 func GetDefaultDomain() spectypes.DomainType {
 	once.Do(func() {
 		if len(domain) == 0 {
-			domain = ShifuTestnetV2
+			domain = ShifuTestnetV3
 		}
 	})
 	return domain

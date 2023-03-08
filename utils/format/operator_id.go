@@ -6,9 +6,9 @@ import (
 )
 
 // OperatorID returns sha256 of the given operator public key
-func OperatorID(operatorPubkey string) string {
-	if len(operatorPubkey) == 0 {
+func OperatorID(operatorPubKey []byte) string {
+	if operatorPubKey == nil {
 		return ""
 	}
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(operatorPubkey)))
+	return fmt.Sprintf("%x", sha256.Sum256(operatorPubKey))
 }
