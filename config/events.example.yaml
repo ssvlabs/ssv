@@ -2,25 +2,25 @@
 - Log: <log>
   Name: OperatorAdded
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
     Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
   Name: OperatorAdded
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
     Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
   Name: OperatorAdded
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
     Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log: <log>
   Name: OperatorAdded
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
     Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log:
@@ -45,13 +45,13 @@
 - Log: <log>
   Name: OperatorAdded
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
     Owner: <owner-address>
     PublicKey: <operator-public-key [rsa public key b64 encoded]>
 - Log:
   Name: OperatorRemoved
   Data:
-    Id: <operator-id>
+    ID: <operator-id>
 - Log:
   Name: ValidatorAdded
   Data:

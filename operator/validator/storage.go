@@ -139,7 +139,7 @@ func (s *Collection) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShar
 // ByOperatorID filters by operator ID.
 func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return share.BelongsToOperatorID(operatorID)
+		return share.BelongsToOperator(operatorID)
 	}
 }
 
@@ -158,9 +158,9 @@ func ByOperatorIDAndNotLiquidated(operatorID spectypes.OperatorID) func(share *t
 }
 
 // ByClusterID filters by cluster id.
-func ByClusterID(podID []byte) func(share *types.SSVShare) bool {
+func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return bytes.Equal(share.ClusterID, podID)
+		return bytes.Equal(share.ClusterID, clusterID)
 	}
 }
 

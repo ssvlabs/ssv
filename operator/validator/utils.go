@@ -39,32 +39,32 @@ func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool,
 // ShareFromValidatorEvent takes the contract event data and creates the corresponding validator share.
 // share could return nil in case operator key is not present/ different
 func ShareFromValidatorEvent(
-	validatorAddedEvent abiparser.ValidatorAddedEvent,
+	event abiparser.ValidatorAddedEvent,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorData *registrystorage.OperatorData,
 ) (*types.SSVShare, *bls.SecretKey, error) {
 	validatorShare := types.SSVShare{}
 
 	publicKey := &bls.PublicKey{}
-	if err := publicKey.Deserialize(validatorAddedEvent.PublicKey); err != nil {
+	if err := publicKey.Deserialize(event.PublicKey); err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize validator public key"),
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
-	validatorShare.OwnerAddress = validatorAddedEvent.Owner
+	validatorShare.OwnerAddress = event.Owner
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
-	for i := range validatorAddedEvent.OperatorIds {
-		operatorID := spectypes.OperatorID(validatorAddedEvent.OperatorIds[i])
+	for i := range event.OperatorIds {
+		operatorID := spectypes.OperatorID(event.OperatorIds[i])
 		committee = append(committee, &spectypes.Operator{
 			OperatorID: operatorID,
-			PubKey:     validatorAddedEvent.SharePublicKeys[i],
+			PubKey:     event.SharePublicKeys[i],
 		})
 		if operatorID == operatorData.ID {
 			validatorShare.OperatorID = operatorID
-			validatorShare.SharePubKey = validatorAddedEvent.SharePublicKeys[i]
+			validatorShare.SharePubKey = event.SharePublicKeys[i]
 
 			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
 			if err != nil {
@@ -75,13 +75,13 @@ func ShareFromValidatorEvent(
 			}
 
 			shareSecret = &bls.SecretKey{}
-			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, validatorAddedEvent.EncryptedKeys[i])
+			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, event.EncryptedKeys[i])
 			if err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to decrypt share private key"),
 				}
 			}
-			if err = shareSecret.SetLittleEndian(decryptedSharePrivateKey); err != nil {
+			if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
 					Err: errors.Wrap(err, "failed to set decrypted share private key"),
 				}

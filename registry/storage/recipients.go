@@ -18,8 +18,8 @@ var (
 
 // RecipientData the public data of a recipient
 type RecipientData struct {
-	FeeRecipient bellatrix.ExecutionAddress `json:"feeRecipientAddress"`
 	Owner        common.Address             `json:"ownerAddress"`
+	FeeRecipient bellatrix.ExecutionAddress `json:"feeRecipientAddress"`
 }
 
 // RecipientsCollection is the interface for managing recipients data

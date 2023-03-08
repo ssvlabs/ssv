@@ -9,34 +9,6 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-func TestSSVShareMetadata_BelongsToOperatorID(t *testing.T) {
-	metadata := &SSVShare{
-		Share: spectypes.Share{
-			Committee: []*spectypes.Operator{
-				{
-					OperatorID: 1,
-					PubKey:     []byte{1, 1, 1, 1},
-				},
-				{
-					OperatorID: 2,
-					PubKey:     []byte{2, 2, 2, 2},
-				},
-				{
-					OperatorID: 3,
-					PubKey:     []byte{3, 3, 3, 3},
-				},
-				{
-					OperatorID: 4,
-					PubKey:     []byte{4, 4, 4, 4},
-				},
-			},
-		},
-	}
-
-	require.True(t, metadata.BelongsToOperatorID(1))
-	require.False(t, metadata.BelongsToOperatorID(10))
-}
-
 func TestSSVShare_BelongsToOperator(t *testing.T) {
 	metadata := &SSVShare{
 		Share: spectypes.Share{

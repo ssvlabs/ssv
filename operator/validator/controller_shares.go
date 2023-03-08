@@ -5,15 +5,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO(oleg): Duplicate
-// func (n *operatorNode) init(opts Options) error {
-//	if opts.ValidatorOptions.CleanRegistryData {
-//		if err := n.storage.CleanRegistryData(); err != nil {
-//			return errors.Wrap(err, "failed to clean registry data")
-//		}
-//	}
-//	return nil
-//	}
 // initShares initializes shares, should be called upon creation of controller
 func (c *controller) initShares(logger *zap.Logger, options ControllerOptions) error {
 	if options.CleanRegistryData {

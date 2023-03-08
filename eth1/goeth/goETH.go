@@ -364,12 +364,13 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 		}
 		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.OperatorRemoved:
-		parsed, err := abiParser.ParseOperatorRemovedEvent(vLog, contractAbi)
+		_, err = abiParser.ParseOperatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
-		ec.fireEvent(vLog, ev.Name, *parsed)
+		// skip
+		//ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorAdded:
 		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)

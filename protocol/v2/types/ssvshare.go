@@ -46,17 +46,7 @@ func (s *SSVShare) Decode(data []byte) error {
 
 // BelongsToOperator checks whether the share belongs to operator.
 func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
-	return s.OperatorID == operatorID
-}
-
-// BelongsToOperatorID checks whether the share belongs to operator ID.
-func (s *SSVShare) BelongsToOperatorID(operatorID spectypes.OperatorID) bool {
-	for _, operator := range s.Committee {
-		if operator.OperatorID == operatorID {
-			return true
-		}
-	}
-	return false
+	return operatorID != 0 && s.OperatorID == operatorID
 }
 
 // HasBeaconMetadata checks whether the BeaconMetadata field is not nil.

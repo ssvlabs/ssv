@@ -1,8 +1,6 @@
 package abiparser
 
 import (
-	"encoding/hex"
-	"fmt"
 	"math/big"
 	"strings"
 
@@ -163,7 +161,6 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 // ParseValidatorRemovedEvent parses ValidatorRemovedEvent
 func (v2 *AbiV2) ParseValidatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	var event ValidatorRemovedEvent
-	fmt.Println("log.Data", hex.EncodeToString(log.Data))
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorRemoved, log.Data)
 	if err != nil {
 		return nil, &MalformedEventError{

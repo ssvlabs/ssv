@@ -42,11 +42,11 @@ func GenerateKeys() ([]byte, []byte, error) {
 	return pkPem, skPem, nil
 }
 
-// DecodeKey with secret key (rsa) and hash (base64), return the decrypted key string
+// DecodeKey with secret key (rsa) and hash (base64), return the decrypted key
 func DecodeKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 	decryptedKey, err := rsa.DecryptPKCS1v15(rand.Reader, sk, hash)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to decrypt key")
+		return nil, errors.Wrap(err, "could not decrypt key")
 	}
 	return decryptedKey, nil
 }

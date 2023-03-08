@@ -174,8 +174,10 @@ func (c *controller) handleValidatorAddedEvent(
 	if isOperatorShare {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
-			// TODO: should we handle error?
-			_, _ = c.onShareStart(logger, validatorShare)
+			_, err = c.onShareStart(logger, validatorShare)
+			if err != nil {
+				logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)), zap.Error(err))
+			}
 		}
 	}
 
@@ -300,11 +302,12 @@ func (c *controller) handleClusterReactivatedEvent(
 
 	if ongoingSync && len(toEnable) > 0 {
 		for _, share := range toEnable {
-			_, _ = c.onShareStart(logger, share)
+			_, err = c.onShareStart(logger, share)
+			if err != nil {
+				logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)), zap.Error(err))
+			}
 		}
 	}
-
-	// TODO(oleg): update km with minimal slashing protection
 
 	logFields := make([]zap.Field, 0)
 	if len(enabledPubKeys) > 0 {
@@ -324,12 +327,12 @@ func (c *controller) processClusterEvent(
 	operatorIds []uint64,
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
-	podID, err := ssvtypes.ComputeClusterIDHash(owner.Bytes(), operatorIds)
+	clusterID, err := ssvtypes.ComputeClusterIDHash(owner.Bytes(), operatorIds)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "could not compute share cluster id")
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByClusterID(podID))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByClusterID(clusterID))
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "could not get validator shares by cluster id")
 	}
