@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network"
@@ -28,7 +28,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var (
@@ -57,7 +58,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		s.shared = GetSharedData(t)
 
-		logger := logex.TestLogger(t)
+		logger := logging.TestLogger(t)
 
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {

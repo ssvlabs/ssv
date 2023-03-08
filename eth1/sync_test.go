@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -15,7 +16,7 @@ import (
 )
 
 func TestSyncEth1(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -41,7 +42,7 @@ func TestSyncEth1(t *testing.T) {
 }
 
 func TestSyncEth1Error(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -64,7 +65,7 @@ func TestSyncEth1Error(t *testing.T) {
 }
 
 func TestSyncEth1HandlerError(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -86,7 +87,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 }
 
 func TestDetermineSyncOffset(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

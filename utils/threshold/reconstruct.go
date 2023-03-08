@@ -2,6 +2,7 @@ package threshold
 
 import (
 	"fmt"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 

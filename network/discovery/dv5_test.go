@@ -6,7 +6,7 @@ package discovery
 //	defer cancel()
 //	n := 4
 //	//logger := zaptest.NewLogger(t)
-//	logger := logex.Build("migratons", zap.DebugLevel, nil)
+//	logger := logging.Build("migratons", zap.DebugLevel, nil)
 //	udpRand := make(v1_testing.UDPPortsRandomizer)
 //	bn, err := createTestBootnode(ctx, logger, udpRand.Next(13001, 13999))
 //	require.NoError(t, err)

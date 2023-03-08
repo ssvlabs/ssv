@@ -1,9 +1,10 @@
 package connections
 
 import (
+	"testing"
+
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestNetworkIDFilter(t *testing.T) {

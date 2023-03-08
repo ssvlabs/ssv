@@ -2,15 +2,16 @@ package streams
 
 import (
 	"context"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/stretchr/testify/require"
-	"sync"
-	"testing"
-	"time"
 )
 
 func TestStream(t *testing.T) {

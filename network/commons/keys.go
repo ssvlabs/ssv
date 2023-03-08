@@ -3,9 +3,10 @@ package commons
 import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
+	"math/big"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
-	"math/big"
 
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/pkg/errors"

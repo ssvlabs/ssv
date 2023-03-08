@@ -5,12 +5,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"go.uber.org/zap"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
 )
 
 func (gc *goClient) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*spectypes.Duty, error) {
@@ -40,7 +41,7 @@ func (gc *goClient) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorI
 	}
 	wg.Wait()
 
-	logger.Debug("fetched duties", zap.Int("count", len(duties)), logging.DurationMilli(start))
+	logger.Debug("fetched duties", zap.Int("count", len(duties)), fields.DurationMilli(start))
 
 	return duties, nil
 }

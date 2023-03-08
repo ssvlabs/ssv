@@ -1,12 +1,13 @@
 package peers
 
 import (
+	"testing"
+	"time"
+
 	"github.com/bloxapp/ssv/network/commons"
 	nettesting "github.com/bloxapp/ssv/network/testing"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestNodeStates(t *testing.T) {

@@ -3,6 +3,8 @@ package ekm
 import (
 	"testing"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -16,7 +18,6 @@ import (
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -30,7 +31,7 @@ const (
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)

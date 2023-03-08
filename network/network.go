@@ -1,8 +1,9 @@
 package network
 
 import (
-	"go.uber.org/zap"
 	"io"
+
+	"go.uber.org/zap"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
