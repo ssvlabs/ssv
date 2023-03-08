@@ -4,7 +4,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -27,6 +29,7 @@ type Validator struct {
 	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger *zap.Logger
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
@@ -48,6 +51,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:         &sync.RWMutex{},
 		ctx:         pctx,
 		cancel:      cancel,
+		logger:      logger.With(logging.PubKey(options.SSVShare.ValidatorPubKey)),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -113,11 +117,11 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 			return errors.New("could not decode post consensus message from network message")
 		}
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
+			return dutyRunner.ProcessPostConsensus(v.logger, signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(signedMsg)
 	case message.SSVEventMsgType:
-		return v.handleEventMessage(logger, msg, dutyRunner)
+		return v.handleEventMessage(v.logger, msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
