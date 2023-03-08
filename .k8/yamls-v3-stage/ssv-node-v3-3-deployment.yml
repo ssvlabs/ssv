@@ -133,7 +133,7 @@ spec:
         - name: ENABLE_PROFILE
           value: "true"
         - name: NETWORK_ID
-          value: "shifu-v3-stage-ssz"
+          value: "0x09090909"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: WS_API_PORT
