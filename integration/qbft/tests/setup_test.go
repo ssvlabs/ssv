@@ -4,9 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
@@ -14,7 +13,6 @@ import (
 	golog "github.com/ipfs/go-log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -40,7 +38,8 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
-	logger := logging.Build("integration-tests", zapcore.DebugLevel, nil)
+	logging.SetGlobalLogger(zap.DebugLevel)
+	logger := zap.L().Named("integration-tests")
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
 

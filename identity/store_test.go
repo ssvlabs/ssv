@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
-
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 

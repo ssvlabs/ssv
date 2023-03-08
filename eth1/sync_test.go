@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"

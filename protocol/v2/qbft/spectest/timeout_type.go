@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/stretchr/testify/require"
 )
