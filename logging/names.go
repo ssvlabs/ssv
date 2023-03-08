@@ -14,12 +14,12 @@ const (
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
+	NameCreateThreshold   = "CreateThreshold"
 	NameDiscoveryLogger   = "DiscoveryLogger"
+	NameExportKeys        = "ExportKeys"
+	NameMigrations        = "Migrations"
 	NameOnFork            = "OnFork"
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
-	NameExportKeys        = "ExportKeys"
-	NameCreateThreshold   = "CreateThreshold"
-	NameMigrations        = "Migrations"
 )
