@@ -3,7 +3,6 @@ package logging
 import (
 	"log"
 	"sync"
-	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -40,13 +39,11 @@ func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger 
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:  "message",
-			LevelKey:    "level",
-			EncodeLevel: ec.LevelEncoder,
-			TimeKey:     "time",
-			EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-				enc.AppendString(t.UTC().Format("2006-01-02T15:04:05.000000Z")) //converting time to ISO 3339 format
-			},
+			MessageKey:     "message",
+			LevelKey:       "level",
+			EncodeLevel:    ec.LevelEncoder,
+			TimeKey:        "time",
+			EncodeTime:     zapcore.RFC3339TimeEncoder,
 			CallerKey:      "caller",
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 			EncodeDuration: zapcore.StringDurationEncoder,

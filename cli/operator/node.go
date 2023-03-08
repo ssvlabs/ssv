@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -189,7 +190,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 			log.Fatalf("could not read share config %s", err)
 		}
 	}
-	loggerLevel, errLogLevel := logging.GetLoggerLevelValue(cfg.LogLevel)
+	loggerLevel, errLogLevel := zapcore.ParseLevel(cfg.LogLevel)
 	logger := logging.Build(commons.GetBuildData(), loggerLevel, &logging.EncodingConfig{
 		Format:       cfg.GlobalConfig.LogFormat,
 		LevelEncoder: logging.LevelEncoder([]byte(cfg.LogLevelFormat)),

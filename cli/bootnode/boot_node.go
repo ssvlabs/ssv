@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/bloxapp/ssv/logging"
+	"go.uber.org/zap/zapcore"
 
 	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
@@ -31,7 +32,7 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		loggerLevel, err := logging.GetLoggerLevelValue(cfg.LogLevel)
+		loggerLevel, err := zapcore.ParseLevel(cfg.LogLevel)
 		logger := logging.Build(cmd.Parent().Short, loggerLevel, &logging.EncodingConfig{Format: cfg.GlobalConfig.LogFormat})
 
 		if err != nil {
