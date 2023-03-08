@@ -234,17 +234,6 @@ func (c *controller) handleValidatorRemovedEvent(
 		}
 	}
 
-	// remove recipient if there are no more validators under the removed validator owner address
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOwnerAddress(share.OwnerAddress))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get validator shares by owner address")
-	}
-	if len(shares) == 0 {
-		if err := c.recipientsCollection.DeleteRecipientData(event.Owner); err != nil {
-			return nil, errors.Wrap(err, "could not delete recipient")
-		}
-	}
-
 	logFields := make([]zap.Field, 0)
 	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
