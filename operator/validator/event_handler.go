@@ -53,7 +53,7 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparser.OperatorAddedEvent) ([]zap.Field, error) {
 	// throw an error if there is an existing operator with the same public key and different operator id
 	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
-		c.operatorData.ID != spectypes.OperatorID(event.ID) {
+		c.operatorData.ID != event.ID {
 		return nil, &abiparser.MalformedEventError{
 			Err: errors.New("operator registered with the same operator public key"),
 		}
@@ -63,7 +63,7 @@ func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparse
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
-		ID:           spectypes.OperatorID(event.ID),
+		ID:           event.ID,
 	}
 	if err := c.operatorsCollection.SaveOperatorData(logger, od); err != nil {
 		return nil, errors.Wrap(err, "could not save operator data")
@@ -77,7 +77,7 @@ func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparse
 	logFields := make([]zap.Field, 0)
 	if isOperatorEvent || c.validatorOptions.FullNode {
 		logFields = append(logFields,
-			zap.Uint64("operatorId", uint64(od.ID)),
+			zap.Uint64("operatorId", od.ID),
 			zap.String("operatorPubKey", string(od.PublicKey)),
 			zap.String("ownerAddress", od.OwnerAddress.String()),
 		)
@@ -92,7 +92,7 @@ func (c *controller) handleOperatorRemovedEvent(
 	event abiparser.OperatorRemovedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	od, found, err := c.operatorsCollection.GetOperatorData(spectypes.OperatorID(event.ID))
+	od, found, err := c.operatorsCollection.GetOperatorData(event.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get operator data")
 	}
@@ -106,7 +106,7 @@ func (c *controller) handleOperatorRemovedEvent(
 	logFields := make([]zap.Field, 0)
 	if isOperatorEvent || c.validatorOptions.FullNode {
 		logFields = append(logFields,
-			zap.Uint64("operatorId", uint64(od.ID)),
+			zap.Uint64("operatorId", od.ID),
 			zap.String("operatorPubKey", string(od.PublicKey)),
 			zap.String("ownerAddress", od.OwnerAddress.String()),
 		)
@@ -117,7 +117,7 @@ func (c *controller) handleOperatorRemovedEvent(
 		return logFields, nil
 	}
 
-	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorID(spectypes.OperatorID(event.ID)))
+	shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorID(event.ID))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get all operator validator shares")
 	}
@@ -134,7 +134,7 @@ func (c *controller) handleOperatorRemovedEvent(
 		}
 	}
 
-	err = c.operatorsCollection.DeleteOperatorData(spectypes.OperatorID(event.ID))
+	err = c.operatorsCollection.DeleteOperatorData(event.ID)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not delete operator data")
 	}

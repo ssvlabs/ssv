@@ -73,7 +73,7 @@ func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.Rec
 func (s *SSVShare) SetClusterID() error {
 	oids := make([]uint64, 0)
 	for _, o := range s.Committee {
-		oids = append(oids, uint64(o.OperatorID))
+		oids = append(oids, o.OperatorID)
 	}
 
 	hash, err := ComputeClusterIDHash(s.OwnerAddress.Bytes(), oids)

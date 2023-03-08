@@ -155,7 +155,7 @@ func SyncResults(msgs protocolp2p.SyncResults) zapcore.Field {
 }
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {
-	return zap.Uint64("operator-id", uint64(operatorId))
+	return zap.Uint64("operator-id", operatorId)
 }
 
 func Height(height specqbft.Height) zap.Field {

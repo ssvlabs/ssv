@@ -57,7 +57,7 @@ func ShareFromValidatorEvent(
 
 	committee := make([]*spectypes.Operator, 0)
 	for i := range event.OperatorIds {
-		operatorID := spectypes.OperatorID(event.OperatorIds[i])
+		var operatorID spectypes.OperatorID = event.OperatorIds[i]
 		committee = append(committee, &spectypes.Operator{
 			OperatorID: operatorID,
 			PubKey:     event.SharePublicKeys[i],

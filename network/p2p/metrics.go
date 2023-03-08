@@ -113,7 +113,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
 		if opDataErr == nil && found {
-			opIndex = strconv.FormatUint(uint64(operatorData.ID), 10)
+			opIndex = strconv.FormatUint(operatorData.ID, 10)
 			// TODO(oleg): do we need to store owner addres instead of name in v3
 			//opName = operatorData.Name
 		}
@@ -127,7 +127,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
-				opIndex = strconv.FormatUint(uint64(operator.ID), 10)
+				opIndex = strconv.FormatUint(operator.ID, 10)
 				// TODO(oleg): do we need to store owner addres instead of name in v3
 				//opName = operatorData.Name
 			}
