@@ -66,6 +66,7 @@ func Build(appName string, level zapcore.Level, ec *EncodingConfig) *zap.Logger 
 			CallerKey:      "caller",
 			EncodeCaller:   zapcore.ShortCallerEncoder,
 			EncodeDuration: zapcore.StringDurationEncoder,
+			NameKey:        "name",
 		},
 	}
 
