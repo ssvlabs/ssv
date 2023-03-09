@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	ipfslog "github.com/ipfs/go-log"
@@ -34,6 +35,7 @@ type Controller struct {
 	NewDecidedHandler   NewDecidedHandler `json:"-"`
 	config              qbft.IConfig
 	fullNode            bool
+	logger              *zap.Logger
 }
 
 func NewController(
@@ -43,6 +45,8 @@ func NewController(
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
+	msgId := spectypes.MessageIDFromBytes(identifier)
+	fields := []zap.Field{logging.PubKey(msgId.GetPubKey()), zap.String("role", msgId.GetRoleType().String())}
 	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
@@ -52,6 +56,7 @@ func NewController(
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 		fullNode:            fullNode,
+		logger:              logger.With(fields...),
 	}
 }
 
@@ -67,7 +72,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 	}
 
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, c.Height)
+	newInstance.Start(c.logger, value, c.Height)
 
 	return nil
 }
@@ -86,11 +91,11 @@ func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMe
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
 	if IsDecidedMsg(c.Share, msg) {
-		return c.UponDecided(logger, msg)
+		return c.UponDecided(c.logger, msg)
 	} else if msg.Message.Height > c.Height {
-		return c.UponFutureMsg(logger, msg)
+		return c.UponFutureMsg(c.logger, msg)
 	} else {
-		return c.UponExistingInstanceMsg(logger, msg)
+		return c.UponExistingInstanceMsg(c.logger, msg)
 	}
 }
 
