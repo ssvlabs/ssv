@@ -153,7 +153,9 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		psOpts = append(psOpts, pubsub.WithDirectPeers(cfg.StaticPeers))
 	}
 
-	psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger, cfg.TraceLog)))
+	if cfg.TraceLog {
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger)))
+	}
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
 	if err != nil {

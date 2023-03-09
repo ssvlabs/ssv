@@ -30,12 +30,11 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices, false)
-		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
+		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.ExcludeLoggers, false); err != nil {
 			log.Fatal(err)
 		}
 
-		logger := zap.L().Named(cmd.Parent().Short)
+		logger := zap.L()
 
 		bootNode := bootnode.New(cfg.Options)
 		if err := bootNode.Start(cmd.Context(), logger); err != nil {

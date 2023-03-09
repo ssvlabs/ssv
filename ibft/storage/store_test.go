@@ -170,7 +170,7 @@ func TestSaveAndFetchState(t *testing.T) {
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
-	db, err := ssvstorage.GetStorageFactory(logger.Named("badger"), basedb.Options{
+	db, err := ssvstorage.GetStorageFactory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
 		Reporting: true,

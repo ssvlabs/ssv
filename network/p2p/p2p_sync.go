@@ -27,8 +27,8 @@ import (
 const extremelyLowPeerCount = 32
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	return n.syncer.SyncHighestDecided(context.Background(), n.logger, mid, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.logger, msg)
+	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(n.interfaceLogger, msg)
 	})
 }
 
@@ -46,7 +46,7 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 	// 	return
 	// }
 	if to > from {
-		n.logger.Warn("failed to sync decided by range: to is higher than from",
+		n.interfaceLogger.Warn("failed to sync decided by range: to is higher than from",
 			zap.Uint64("from", uint64(from)),
 			zap.Uint64("to", uint64(to)))
 		return
@@ -62,11 +62,11 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 		return
 	}
 
-	err := n.syncer.SyncDecidedByRange(context.Background(), n.logger, mid, from, to, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.logger, msg)
+	err := n.syncer.SyncDecidedByRange(context.Background(), n.interfaceLogger, mid, from, to, func(msg spectypes.SSVMessage) {
+		n.msgRouter.Route(n.interfaceLogger, msg)
 	})
 	if err != nil {
-		n.logger.Error("failed to sync decided by range", zap.Error(err))
+		n.interfaceLogger.Error("failed to sync decided by range", zap.Error(err))
 	}
 }
 
@@ -252,7 +252,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 	if err != nil {
 		return nil, err
 	}
-	logger = logger.With(zap.String("protocol", string(protocol)), fields.Identifier(mid))
+	logger = logger.With(zap.String("protocol", string(protocol)))
 	msgID := n.fork.MsgID()
 	distinct := make(map[string]struct{})
 	for _, pid := range peers {

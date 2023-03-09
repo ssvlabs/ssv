@@ -2,7 +2,6 @@ package topics
 
 import (
 	"encoding/hex"
-	"sync/atomic"
 
 	"github.com/bloxapp/ssv/logging"
 
@@ -12,34 +11,20 @@ import (
 	"go.uber.org/zap"
 )
 
-// pubsub tracer states
-const (
-	psTraceStateWithReporting uint32 = 0
-	psTraceStateWithLogging   uint32 = 1
-)
-
 // psTracer helps to trace pubsub events
 // it can run with logging in addition to reporting (on by default)
 type psTracer struct {
 	logger *zap.Logger // struct logger to implement pubsub.EventTracer
-	state  uint32
 }
 
 // newTracer creates an instance of psTracer
-func newTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
-	state := psTraceStateWithReporting
-	if withLogging {
-		state = psTraceStateWithLogging
-	}
-	return &psTracer{logger: logger.Named(logging.NamePubsubTrace), state: state}
+func newTracer(logger *zap.Logger) pubsub.EventTracer {
+	return &psTracer{logger: logger.Named(logging.NamePubsubTrace)}
 }
 
 // Trace handles events, implementation of pubsub.EventTracer
 func (pst *psTracer) Trace(evt *ps_pb.TraceEvent) {
 	pst.report(evt)
-	if atomic.LoadUint32(&pst.state) < psTraceStateWithLogging {
-		return
-	}
 	pst.log(pst.logger, evt)
 }
 

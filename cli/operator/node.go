@@ -77,7 +77,7 @@ var StartNodeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		logger, err := setupGlobal(cmd)
 		if err != nil {
-			logger.Fatal("could not create logger", zap.Error(err))
+			log.Fatal("could not create logger", err)
 		}
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
@@ -181,22 +181,19 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
 	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-		log.Fatalf("could not read config %s", err)
+		return nil, fmt.Errorf("could not read config: %w", err)
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			log.Fatalf("could not read share config %s", err)
+			return nil, fmt.Errorf("could not read share config: %W", err)
 		}
 	}
 
-	logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices, cfg.P2pNetworkConfig.PubSubTrace)
-	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.ExcludeLoggers, cfg.P2pNetworkConfig.PubSubTrace); err != nil {
 		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 
-	logger := zap.L().Named(commons.GetBuildData())
-
-	return logger, nil
+	return zap.L(), nil
 }
 
 func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
