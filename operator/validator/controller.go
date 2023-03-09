@@ -341,7 +341,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 	// Create a disposable NonCommitteeValidator to process the message.
 	// TODO: consider caching highest instance heights for each validator instead of creating a new validator & loading from storage each time.
-	v := validator.NewNonCommitteeValidator(msg.GetID(), opts)
+	v := validator.NewNonCommitteeValidator(logger, msg.GetID(), opts)
 	v.ProcessMessage(logger, msg)
 
 	return nil

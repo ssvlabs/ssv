@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/hex"
 	"fmt"
+	"log"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/ssv/logging"
@@ -18,7 +19,10 @@ var exportKeysCmd = &cobra.Command{
 	Use:   "export-keys",
 	Short: "exports private/public keys based on given mnemonic",
 	Run: func(cmd *cobra.Command, args []string) {
-		logging.SetGlobalLogger(zap.DPanicLevel)
+		if err := logging.SetGlobalLogger("dpanic", "capital"); err != nil {
+			log.Fatal(err)
+		}
+
 		logger := zap.L().Named(logging.NameExportKeys)
 
 		mnemonicKey, err := flags.GetMnemonicFlagValue(cmd)

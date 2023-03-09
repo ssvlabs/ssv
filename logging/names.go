@@ -10,7 +10,7 @@ const (
 	NameOperator         = "Operator"
 	NameP2PNetwork       = "P2PNetwork"
 	NameValidator        = "Validator"
-	NameWsServer         = "WsServer"
+	NameWSServer         = "WSServer"
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
