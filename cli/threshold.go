@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -17,7 +18,9 @@ var createThresholdCmd = &cobra.Command{
 	Use:   "create-threshold",
 	Short: "Turns a private key into a threshold key",
 	Run: func(cmd *cobra.Command, args []string) {
-		logging.SetGlobalLogger(zap.DebugLevel)
+		if err := logging.SetGlobalLogger("debug", "capital"); err != nil {
+			log.Fatal(err)
+		}
 		logger := zap.L().Named(logging.NameCreateThreshold)
 
 		privKey, err := flags.GetPrivKeyFlagValue(cmd)

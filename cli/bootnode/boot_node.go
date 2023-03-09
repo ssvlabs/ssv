@@ -1,11 +1,9 @@
 package bootnode
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/bloxapp/ssv/logging"
-	"go.uber.org/zap/zapcore"
 
 	global_config "github.com/bloxapp/ssv/cli/config"
 	bootnode "github.com/bloxapp/ssv/utils/boot_node"
@@ -32,13 +30,12 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		loggerLevel, err := zapcore.ParseLevel(cfg.LogLevel)
-		logging.SetGlobalLogger(loggerLevel)
-		logger := zap.L().Named(cmd.Parent().Short)
-
-		if err != nil {
-			logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(err))
+		logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices)
+		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
+			log.Fatal(err)
 		}
+
+		logger := zap.L().Named(cmd.Parent().Short)
 
 		bootNode := bootnode.New(cfg.Options)
 		if err := bootNode.Start(cmd.Context(), logger); err != nil {

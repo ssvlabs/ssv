@@ -38,7 +38,10 @@ func TestMain(m *testing.M) {
 	}
 
 	ctx := context.Background()
-	logging.SetGlobalLogger(zap.DebugLevel)
+	if err := logging.SetGlobalLogger("debug", "capital"); err != nil {
+		panic(err)
+	}
+
 	logger := zap.L().Named("integration-tests")
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
