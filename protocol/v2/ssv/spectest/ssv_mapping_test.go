@@ -34,6 +34,8 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
+	logger := logging.TestLogger(t)
+
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
@@ -133,7 +135,7 @@ func TestSSVMapping(t *testing.T) {
 			}
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
+				typedTest.Run(t, logger)
 			})
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)

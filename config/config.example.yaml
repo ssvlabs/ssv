@@ -1,9 +1,8 @@
 global:
   LogLevel: info
-  LoggerLevels:
-      # [level] : [regex]
-      Info: "Operator.*"
-      Debug: "*.Controller.*"
+  DebugServices:
+    - "Operator"
+    - "Controller"
 
 db:
   Path: ./data/db

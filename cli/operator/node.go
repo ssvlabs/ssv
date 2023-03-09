@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
-	golog "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -190,35 +188,13 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 			log.Fatalf("could not read share config %s", err)
 		}
 	}
-	loggerLevel, errLogLevel := zapcore.ParseLevel(cfg.LogLevel)
-	logging.SetGlobalLogger(loggerLevel)
+
+	logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices, cfg.P2pNetworkConfig.PubSubTrace)
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
+		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
+	}
+
 	logger := zap.L().Named(commons.GetBuildData())
-	if errLogLevel != nil {
-		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
-	}
-	if len(cfg.DebugServices) > 0 {
-		if err := golog.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String()); err != nil {
-			return nil, err
-		}
-	}
-
-	if v := cfg.GlobalConfig.LogLevels.Debug; len(v) > 0 {
-		if err := golog.SetLogLevelRegex(v, "debug"); err != nil {
-			return nil, err
-		}
-	}
-
-	if v := cfg.GlobalConfig.LogLevels.Info; len(v) > 0 {
-		if err := golog.SetLogLevelRegex(v, "info"); err != nil {
-			return nil, err
-		}
-	}
-
-	if v := cfg.GlobalConfig.LogLevels.Warn; len(v) > 0 {
-		if err := golog.SetLogLevelRegex(v, "warn"); err != nil {
-			return nil, err
-		}
-	}
 
 	return logger, nil
 }
