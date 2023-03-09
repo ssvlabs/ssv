@@ -103,7 +103,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	logger = logger.With(fields.MessageID(msg.GetID()))
+	logger = logger.With(fields.PubKey(v.Share.ValidatorPubKey), fields.MessageID(msg.GetID()))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
