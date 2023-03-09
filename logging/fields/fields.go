@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
+	FieldDutyID              = "dutyID"
 	FieldENR                 = "ENR"
 	FieldErrors              = "errors"
 	FieldEventID             = "eventID"
@@ -212,4 +214,13 @@ func Errors(val []error) zap.Field {
 
 func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
+}
+
+func DutyID(runner runner.Runner, duty *spectypes.Duty) zap.Field {
+	return zap.Stringer(FieldDutyID, funcStringer{
+		fn: func() string {
+			epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+			return fmt.Sprintf("T:%v::E:%v::S:%v::V:%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+		},
+	})
 }

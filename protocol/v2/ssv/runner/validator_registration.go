@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"go.uber.org/zap"
-
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -13,6 +11,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type ValidatorRegistrationRunner struct {
