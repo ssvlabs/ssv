@@ -30,7 +30,7 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices)
+		logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices, false)
 		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
 			log.Fatal(err)
 		}

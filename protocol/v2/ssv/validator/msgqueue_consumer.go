@@ -16,7 +16,7 @@ import (
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(msg *queue.DecodedSSVMessage) error
+type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -101,7 +101,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 
 		// Handle the message.
-		if err := handler(msg); err != nil {
+		if err := handler(logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}

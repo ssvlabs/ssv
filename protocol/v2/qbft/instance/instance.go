@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"sync"
 
-	ipfslog "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -13,8 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
@@ -101,7 +98,7 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}

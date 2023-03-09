@@ -19,7 +19,7 @@ type debugServicesEncoder struct {
 	loggerNameSubstrings []string
 }
 
-func SetDebugServicesEncoder(logFormat string, debugServices []string) {
+func SetDebugServicesEncoder(logFormat string, debugServices []string, pubSubTrace bool) {
 	err := zap.RegisterEncoder(debugServicesEncoderName, func(config zapcore.EncoderConfig) (zapcore.Encoder, error) {
 
 		var enc zapcore.Encoder
@@ -30,6 +30,10 @@ func SetDebugServicesEncoder(logFormat string, debugServices []string) {
 			enc = zapcore.NewJSONEncoder(config)
 		default:
 			return nil, fmt.Errorf("invalid log level format: %s", logFormat)
+		}
+
+		if pubSubTrace {
+			debugServices = append(debugServices, NamePubsubTrace)
 		}
 
 		return debugServicesEncoder{
