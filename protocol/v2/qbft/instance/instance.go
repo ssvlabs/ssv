@@ -23,11 +23,9 @@ type Instance struct {
 	StartValue  []byte
 
 	metrics *metrics
-	logger  *zap.Logger
 }
 
 func NewInstance(
-	logger *zap.Logger,
 	config qbft.IConfig,
 	share *spectypes.Share,
 	identifier []byte,
@@ -49,14 +47,11 @@ func NewInstance(
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
 		metrics:     newMetrics(msgId),
-		logger:      logger.Named("qbftInstance"),
 	}
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(value []byte, height specqbft.Height) {
-	logger := i.logger.Named("Start")
-
+func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
@@ -65,19 +60,19 @@ func (i *Instance) Start(value []byte, height specqbft.Height) {
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		i.logger.Debug("starting QBFT instance")
+		logger.Debug("ℹ️ starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("failed to create proposal", zap.Error(err))
+				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					logger.Warn("failed to broadcast proposal", zap.Error(err))
+					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}
@@ -102,7 +97,7 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
@@ -110,18 +105,18 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(i.logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(i.logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
+			return i.uponPrepare(logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(i.logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(i.logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}

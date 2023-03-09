@@ -10,5 +10,5 @@ import (
 
 func getTaskUniqueID(runner runner.Runner, duty *spectypes.Duty) string {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
-	return fmt.Sprintf("<%v-e<%v>-s<%v>-v<%v>", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+	return fmt.Sprintf("T:%v::E:%v::S:%v::V:%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }

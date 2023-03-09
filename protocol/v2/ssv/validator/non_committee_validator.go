@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -18,7 +19,7 @@ type NonCommitteeValidator struct {
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
-	logger = logger.Named("NonCommitteeValidator").With(zap.String("identifier", identifier.String()))
+	logger = logger.With(fields.Identifier(identifier))
 
 	// currently, only need domain & storage
 	config := &qbft.Config{
@@ -28,8 +29,8 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
 	ctrl.NewDecidedHandler = opts.NewDecidedHandler
-	if err := ctrl.LoadHighestInstance(logger, identifier[:]); err != nil {
-		logger.Debug("failed to load highest instance", zap.Error(err))
+	if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
+		logger.Debug("❗ failed to load highest instance", zap.Error(err))
 	}
 
 	return &NonCommitteeValidator{
@@ -42,7 +43,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	logger = logger.With(zap.String("id", msg.GetID().String()))
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Debug("got invalid message", zap.Error(err))
+		logger.Debug("❌ got invalid message", zap.Error(err))
 		return
 	}
 
@@ -50,11 +51,11 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			logger.Debug("failed to get consensus Message from network Message", zap.Error(err))
+			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
 		if signedMsg == nil || signedMsg.Message == nil {
-			logger.Debug("got empty message")
+			logger.Debug("❗ got empty message")
 			return
 		}
 		// only supports decided msg's
@@ -63,7 +64,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 		}
 
 		if decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg); err != nil {
-			logger.Debug("failed to process message",
+			logger.Debug("❌ failed to process message",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 				zap.Any("signers", signedMsg.Signers),
 				zap.Error(err))
@@ -75,9 +76,9 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 					zap.Any("signers", signedMsg.Signers),
 				)
 				if err = ncv.qbftController.SaveInstance(inst, signedMsg); err != nil {
-					logger.Debug("failed to save instance", zap.Error(err))
+					logger.Debug("❗failed to save instance", zap.Error(err))
 				} else {
-					logger.Debug("saved instance")
+					logger.Debug("💾 saved instance")
 				}
 			}
 		}

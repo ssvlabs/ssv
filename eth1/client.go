@@ -1,8 +1,9 @@
 package eth1
 
 import (
-	"go.uber.org/zap"
 	"math/big"
+
+	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -48,7 +48,7 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",

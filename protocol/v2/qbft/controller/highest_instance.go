@@ -3,14 +3,13 @@ package controller
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
-func (c *Controller) LoadHighestInstance(logger *zap.Logger, identifier []byte) error {
-	highestInstance, err := c.getHighestInstance(logger, identifier[:])
+func (c *Controller) LoadHighestInstance(identifier []byte) error {
+	highestInstance, err := c.getHighestInstance(identifier[:])
 	if err != nil {
 		return err
 	}
@@ -23,7 +22,7 @@ func (c *Controller) LoadHighestInstance(logger *zap.Logger, identifier []byte) 
 	return nil
 }
 
-func (c *Controller) getHighestInstance(logger *zap.Logger, identifier []byte) (*instance.Instance, error) {
+func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, error) {
 	highestInstance, err := c.config.GetStorage().GetHighestInstance(identifier)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not fetch highest instance")
@@ -36,7 +35,6 @@ func (c *Controller) getHighestInstance(logger *zap.Logger, identifier []byte) (
 	instance.Compact(highestInstance.State, highestInstance.DecidedMessage)
 
 	i := instance.NewInstance(
-		logger,
 		c.config,
 		highestInstance.State.Share,
 		identifier,

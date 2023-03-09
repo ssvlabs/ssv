@@ -7,7 +7,7 @@ import (
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	newRound := i.State.Round + 1
-	logger.Debug("round timed out", zap.Uint64("round", uint64(newRound)))
+	logger.Debug("⌛ round timed out", zap.Uint64("round", uint64(newRound)))
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)

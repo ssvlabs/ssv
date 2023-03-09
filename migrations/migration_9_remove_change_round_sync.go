@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+
 	"go.uber.org/zap"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"

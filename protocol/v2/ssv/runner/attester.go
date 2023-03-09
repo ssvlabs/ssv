@@ -115,11 +115,11 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 }
 
 func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-	logger.Debug("got partial signatures",
+	logger.Debug("🧩 got partial signatures",
 		zap.Any("signer", signedMsg.Signer),
 		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
 
@@ -139,7 +139,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		duty := r.GetState().DecidedValue.Duty
 
-		logger.Debug("reconstructed partial signatures",
+		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
 			zap.Int64("slot", int64(duty.Slot)))
 
@@ -156,7 +156,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-			logger.Error("failed to submit attestation to Beacon node",
+			logger.Error("❌ failed to submit attestation to Beacon node",
 				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
@@ -165,7 +165,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successfully submitted attestation",
+		logger.Debug("✅ successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))

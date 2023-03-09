@@ -63,8 +63,8 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, value []byte) error {
 		c.bumpHeight()
 	}
 
-	newInstance := c.addAndStoreNewInstance(logger)
-	newInstance.Start(value, c.Height)
+	newInstance := c.addAndStoreNewInstance()
+	newInstance.Start(logger, value, c.Height)
 
 	return nil
 }
@@ -99,7 +99,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 
 	prevDecided, _ := inst.IsDecided()
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
@@ -117,7 +117,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		logger.Debug("failed to broadcast decided message", zap.Error(err))
+		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
 	}
 
 	if prevDecided {
@@ -149,7 +149,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	}
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
-		logger.Debug("could not load instance from storage",
+		logger.Debug("❗ could not load instance from storage",
 			zap.Uint64("height", uint64(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
@@ -158,7 +158,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(logger, c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -173,8 +173,8 @@ func (c *Controller) GetIdentifier() []byte {
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
-func (c *Controller) addAndStoreNewInstance(logger *zap.Logger) *instance.Instance {
-	i := instance.NewInstance(logger, c.GetConfig(), c.Share, c.Identifier, c.Height)
+func (c *Controller) addAndStoreNewInstance() *instance.Instance {
+	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

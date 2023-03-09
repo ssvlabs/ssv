@@ -15,6 +15,6 @@ func (b *BaseRunner) registerTimeoutHandler(logger *zap.Logger, instance *instan
 	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
 	timer, ok := instance.GetConfig().GetTimer().(*roundtimer.RoundTimer)
 	if ok {
-		timer.OnTimeout(b.TimeoutF(logger.Named("OnTimeout"), identifier, height))
+		timer.OnTimeout(b.TimeoutF(logger, identifier, height))
 	}
 }

@@ -2,10 +2,11 @@ package genesis
 
 import (
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestForkV1_ValidatorTopicID(t *testing.T) {

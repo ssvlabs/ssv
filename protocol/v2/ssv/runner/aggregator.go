@@ -26,6 +26,8 @@ type AggregatorRunner struct {
 	metrics  metrics.ConsensusMetrics
 }
 
+var _ Runner = &AggregatorRunner{}
+
 func NewAggregatorRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
@@ -151,7 +153,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 }
 
 func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -186,7 +188,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.EndDutyFullFlow()
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successful submitted aggregate")
+		logger.Debug("✅ successful submitted aggregate")
 	}
 	r.GetState().Finished = true
 

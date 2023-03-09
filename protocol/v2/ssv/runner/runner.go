@@ -114,9 +114,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 				zap.Any("signers", msg.Signers),
 			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				logger.Debug("failed to save instance", zap.Error(err))
+				logger.Debug("❗ failed to save instance", zap.Error(err))
 			} else {
-				logger.Debug("saved instance")
+				logger.Debug("💾 saved instance")
 			}
 		}
 	}
@@ -142,7 +142,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg *specssv.SignedPartialSignatureMessage) (bool, [][]byte, error) {
 	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}

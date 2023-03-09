@@ -8,9 +8,9 @@ import (
 	"github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -26,8 +26,7 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 	return test.Name
 }
 
-func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
-	logger := logex.TestLogger(t)
+func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
 	err := test.Runner.StartNewDuty(logger, test.Duty)
 	if len(test.ExpectedError) > 0 {
 		require.EqualError(t, err, test.ExpectedError)
@@ -95,11 +94,11 @@ func (tests *MultiStartNewRunnerDutySpecTest) TestName() string {
 	return tests.Name
 }
 
-func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T) {
+func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
 	for _, test := range tests.Tests {
 		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
-			test.Run(t)
+			test.Run(t, logger)
 		})
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -91,9 +93,10 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 
 // Start listens to slot ticker and dispatches duties execution
 func (dc *dutyController) Start(logger *zap.Logger) {
+	logger = logger.Named(logging.NameDutyController)
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices(logger)
-	logger.Debug("warming up indices", zap.Int("count", len(indices)))
+	logger.Debug("warming up indices", fields.Count(len(indices)))
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
@@ -333,11 +336,11 @@ func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *specty
 	return logger.
 		With(zap.String("role", duty.Type.String())).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(logging.CurrentSlot(dc.ethNetwork)).
+		With(fields.CurrentSlot(dc.ethNetwork)).
 		With(zap.Uint64("slot", uint64(duty.Slot))).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
-		With(logging.PubKey(duty.PubKey[:])).
-		With(logging.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
+		With(fields.PubKey(duty.PubKey[:])).
+		With(fields.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
@@ -351,6 +354,6 @@ func (e *readOnlyDutyExec) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
 		zap.Uint64("slot", uint64(duty.Slot)),
-		logging.PubKey(duty.PubKey[:]))
+		fields.PubKey(duty.PubKey[:]))
 	return nil
 }

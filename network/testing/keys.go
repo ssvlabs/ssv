@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"crypto/rsa"
+
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"

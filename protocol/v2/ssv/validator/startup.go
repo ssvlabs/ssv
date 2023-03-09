@@ -7,6 +7,8 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
@@ -14,7 +16,7 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) error {
-	logger = logger.Named("ValidatorStart")
+	logger = logger.Named(logging.NameValidator)
 
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		n, ok := v.Network.(p2p.Subscriber)
@@ -24,12 +26,12 @@ func (v *Validator) Start(logger *zap.Logger) error {
 		for role, r := range v.DutyRunners {
 			share := r.GetBaseRunner().Share
 			if share == nil { // TODO: handle missing share?
-				logger.Warn("share is missing", zap.String("role", role.String()))
+				logger.Warn("❗ share is missing", zap.String("role", role.String()))
 				continue
 			}
 			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
-			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(logger, identifier[:]); err != nil {
-				logger.Warn("failed to load highest instance",
+			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
+				logger.Warn("❗ failed to load highest instance",
 					zap.String("identifier", identifier.String()),
 					zap.Error(err))
 			}
@@ -64,8 +66,8 @@ func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
 	for ctx.Err() == nil {
 		err := v.Network.SyncHighestDecided(mid)
 		if err != nil {
-			logger.Debug("failed to sync highest decided",
-				logging.MessageID(mid),
+			logger.Debug("❌ failed to sync highest decided",
+				fields.MessageID(mid),
 				zap.Error(err))
 			retries--
 			if retries > 0 {

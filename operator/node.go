@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -145,6 +147,8 @@ func (n *operatorNode) init(opts Options) error {
 
 // Start starts to stream duties and run IBFT instances
 func (n *operatorNode) Start(logger *zap.Logger) error {
+	logger.Named(logging.NameOperator)
+
 	logger.Info("All required services are ready. OPERATOR SUCCESSFULLY CONFIGURED AND NOW RUNNING!")
 
 	go func() {

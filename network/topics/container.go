@@ -1,8 +1,9 @@
 package topics
 
 import (
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"sync"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 type onTopicJoined func(ps *pubsub.PubSub, topic *pubsub.Topic)

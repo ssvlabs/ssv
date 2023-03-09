@@ -76,8 +76,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	logger = logger.Named("StartDuty")
-
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
@@ -87,22 +85,9 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
-	logger = logger.Named("ProcessMessage")
-
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
 	if dutyRunner == nil {
 		return errors.Errorf("could not get duty runner for msg ID")
-	}
-
-	if br := dutyRunner.GetBaseRunner(); br != nil && br.State != nil {
-		var duty *spectypes.Duty
-		if dv := br.State.DecidedValue; dv != nil && dv.Duty != nil {
-			duty = dv.Duty
-		} else if d := br.State.StartingDuty; d != nil {
-			duty = d
-		}
-
-		logger = logger.With(zap.String("taskUniqueID", getTaskUniqueID(dutyRunner, duty)))
 	}
 
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
@@ -115,8 +100,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-
-		return dutyRunner.ProcessConsensus(logger.Named("ProcessConsensus"), signedMsg)
+		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
 		if !ok {
@@ -124,10 +108,9 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(logger.Named("ProcessPostConsensus"), signedMsg)
+			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
-
-		return dutyRunner.ProcessPreConsensus(logger.Named("ProcessPreConsensus"), signedMsg)
+		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(logger, msg, dutyRunner)
 	default:

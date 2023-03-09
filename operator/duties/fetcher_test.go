@@ -4,10 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/logex"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
@@ -18,7 +17,7 @@ import (
 )
 
 func TestDutyFetcher_GetDuties(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -92,7 +91,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
-		logger:     logex.TestLogger(t),
+		logger:     logging.TestLogger(t),
 		ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
 	}
 	tests := []struct {
