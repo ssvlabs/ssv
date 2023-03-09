@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -99,6 +100,8 @@ func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
 		return errors.Wrap(err, "Message invalid")
 	}
+
+	logger = logger.With(logging.PubKey(v.Share.ValidatorPubKey))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
