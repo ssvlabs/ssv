@@ -7,14 +7,16 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
+
 	"github.com/bloxapp/ssv/logging/fields"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) error {
-	logger.Named(logging.NameValidator)
+	logger = logger.Named(logging.NameValidator)
 
 	if atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		n, ok := v.Network.(p2p.Subscriber)
