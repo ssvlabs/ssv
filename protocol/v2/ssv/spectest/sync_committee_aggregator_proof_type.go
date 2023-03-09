@@ -22,14 +22,14 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 	v.Beacon = r.GetBeaconNode()
 
-	lastErr := v.StartDuty(testingutils.TestingSyncCommitteeContributionDuty)
+	lastErr := v.StartDuty(logger, testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
 		dmsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(dmsg)
+		err = v.ProcessMessage(logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}
