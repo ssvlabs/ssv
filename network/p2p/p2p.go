@@ -7,6 +7,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -82,7 +85,7 @@ type p2pNetwork struct {
 func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
-	logger = logger.Named("p2pNetwork")
+	logger = logger.Named(logging.NameP2PNetwork)
 	if !cfg.P2pLog {
 		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
 	}
@@ -129,12 +132,14 @@ func (n *p2pNetwork) Close() error {
 
 // Start starts the discovery service, garbage collector (peer index), and reporting.
 func (n *p2pNetwork) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.NameP2PNetwork)
+
 	if atomic.SwapInt32(&n.state, stateReady) == stateReady {
 		// return errors.New("could not setup network: in ready state")
 		return nil
 	}
 
-	logger.Info("starting p2p network service")
+	logger.Info("starting")
 
 	go n.startDiscovery(logger)
 
@@ -196,7 +201,7 @@ func (n *p2pNetwork) startDiscovery(logger *zap.Logger) {
 			select {
 			case discoveredPeers <- e.AddrInfo:
 			default:
-				logger.Warn("connector queue is full, skipping new peer", zap.String("peerID", e.AddrInfo.ID.String()))
+				logger.Warn("connector queue is full, skipping new peer", fields.PeerID(e.AddrInfo.ID))
 			}
 		})
 	}, 3)
@@ -212,6 +217,8 @@ func (n *p2pNetwork) isReady() bool {
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
+	logger = logger.Named(logging.NameP2PNetwork)
+
 	visited := make(map[int]bool)
 	n.activeValidatorsLock.Lock()
 	last := make([]byte, len(n.subnets))
@@ -248,7 +255,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
 
-	err := n.disc.RegisterSubnets(logger, subnetsToAdd...)
+	err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
 	if err != nil {
 		logger.Warn("could not register subnets", zap.Error(err))
 		return

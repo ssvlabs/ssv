@@ -4,6 +4,8 @@ import (
 	"encoding/hex"
 	"sync/atomic"
 
+	"github.com/bloxapp/ssv/logging"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -29,7 +31,7 @@ func newTracer(logger *zap.Logger, withLogging bool) pubsub.EventTracer {
 	if withLogging {
 		state = psTraceStateWithLogging
 	}
-	return &psTracer{logger: logger.Named("pubsubTrace"), state: state}
+	return &psTracer{logger: logger.Named(logging.NamePubsubTrace), state: state}
 }
 
 // Trace handles events, implementation of pubsub.EventTracer

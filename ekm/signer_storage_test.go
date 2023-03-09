@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/google/uuid"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,6 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -36,14 +36,14 @@ func getBaseStorage(logger *zap.Logger) (basedb.IDb, error) {
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
 	}
 	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), logger)
 	return s, func() {
-		db.Close(logex.TestLogger(t))
+		db.Close(logging.TestLogger(t))
 	}
 }
 

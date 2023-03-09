@@ -4,20 +4,19 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	storage, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()
@@ -111,7 +110,7 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 }
 
 func TestStorage_ListOperators(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	storage, done := newOperatorStorageForTest(logger)
 	require.NotNil(t, storage)
 	defer done()

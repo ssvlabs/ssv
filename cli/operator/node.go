@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
-	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -41,7 +42,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type config struct {
@@ -75,7 +75,10 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := setupGlobal(cmd)
+		logger, err := setupGlobal(cmd)
+		if err != nil {
+			logger.Fatal("could not create logger", zap.Error(err))
+		}
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
@@ -174,7 +177,7 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal(cmd *cobra.Command) *zap.Logger {
+func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
 	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
@@ -185,19 +188,15 @@ func setupGlobal(cmd *cobra.Command) *zap.Logger {
 			log.Fatalf("could not read share config %s", err)
 		}
 	}
-	loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-	logger := logex.Build(commons.GetBuildData(), loggerLevel, &logex.EncodingConfig{
-		Format:       cfg.GlobalConfig.LogFormat,
-		LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
-	})
-	if errLogLevel != nil {
-		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
-	}
-	if len(cfg.DebugServices) > 0 {
-		_ = logging.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String())
+
+	logging.SetDebugServicesEncoder(cfg.LogFormat, cfg.DebugServices, cfg.P2pNetworkConfig.PubSubTrace)
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat); err != nil {
+		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 
-	return logger
+	logger := zap.L().Named(commons.GetBuildData())
+
+	return logger, nil
 }
 
 func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
@@ -350,12 +349,13 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
+	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start metrics handler", zap.Error(err))
+		logger.Error("failed to start", zap.Error(err))
 	}
 }
 

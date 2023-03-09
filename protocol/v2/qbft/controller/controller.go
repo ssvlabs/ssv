@@ -12,10 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	ipfslog "github.com/ipfs/go-log"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/controller").Desugar()
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
@@ -56,7 +53,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(value []byte) error {
+func (c *Controller) StartNewInstance(logger *zap.Logger, value []byte) error {
 	if err := c.canStartInstanceForValue(value); err != nil {
 		return errors.Wrap(err, "can't start new QBFT instance")
 	}
@@ -73,7 +70,7 @@ func (c *Controller) StartNewInstance(value []byte) error {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -102,7 +99,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 
 	prevDecided, _ := inst.IsDecided()
 
-	decided, _, decidedMsg, err := inst.ProcessMsg(msg)
+	decided, _, decidedMsg, err := inst.ProcessMsg(logger, msg)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not process msg")
 	}
@@ -120,7 +117,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 
 	if err := c.broadcastDecided(decidedMsg); err != nil {
 		// no need to fail processing instance deciding if failed to save/ broadcast
-		logger.Debug("failed to broadcast decided message", zap.Error(err))
+		logger.Debug("❌ failed to broadcast decided message", zap.Error(err))
 	}
 
 	if prevDecided {
@@ -152,7 +149,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	}
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
-		logger.Debug("could not load instance from storage",
+		logger.Debug("❗ could not load instance from storage",
 			zap.Uint64("height", uint64(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
