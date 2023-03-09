@@ -2,6 +2,7 @@ package validator
 
 import (
 	"context"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -89,14 +90,17 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
+	messageID := msg.GetID()
+	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		return errors.Errorf("could not get duty runner for msg ID")
+		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
-		return errors.Wrap(err, "Message invalid")
+		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
+
+	logger = logger.With(fields.MessageID(msg.GetID()))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
