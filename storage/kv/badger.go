@@ -38,15 +38,19 @@ func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
-	opt.Logger = nil // remove default logger (INFO)
+
 	if options.Type == "badger-memory" {
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""
 	}
+
+	// TODO: we should set the default logger here to log Error and higher levels
+	opt.Logger = newLogger(zap.NewNop())
 	if logger != nil && options.Reporting {
 		opt.Logger = newLogger(logger)
 	}
+
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 	db, err := badger.Open(opt)
 	if err != nil {
