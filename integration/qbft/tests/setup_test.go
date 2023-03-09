@@ -10,7 +10,6 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	golog "github.com/ipfs/go-log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -33,12 +32,11 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 }
 
 func TestMain(m *testing.M) {
-	if err := golog.SetLogLevelRegex("ssv/.*", "debug"); err != nil {
+	ctx := context.Background()
+	if err := logging.SetGlobalLogger("debug", "capital"); err != nil {
 		panic(err)
 	}
 
-	ctx := context.Background()
-	logging.SetGlobalLogger(zap.DebugLevel)
 	logger := zap.L().Named("integration-tests")
 
 	types.SetDefaultDomain(spectypes.PrimusTestnet)
