@@ -1,9 +1,10 @@
 package controller
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // OnTimeout is trigger upon timeout for the given height

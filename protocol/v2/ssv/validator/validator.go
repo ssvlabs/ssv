@@ -2,17 +2,18 @@ package validator
 
 import (
 	"context"
+	"fmt"
 	"sync"
-
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -84,19 +85,25 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
+
+	logger = logger.With(fields.DutyID(dutyRunner, duty))
+
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
+	messageID := msg.GetID()
+	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		return errors.Errorf("could not get duty runner for msg ID")
+		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
-		return errors.Wrap(err, "Message invalid")
+		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
+
+	logger = logger.With(fields.MessageID(msg.GetID()))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
@@ -110,6 +117,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+
 		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}

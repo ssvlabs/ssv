@@ -6,6 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -18,7 +19,7 @@ type NonCommitteeValidator struct {
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
-	logger = logger.With(zap.String("identifier", identifier.String()))
+	logger = logger.With(fields.Identifier(identifier))
 
 	// currently, only need domain & storage
 	config := &qbft.Config{
