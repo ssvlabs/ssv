@@ -74,6 +74,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		fork:         forksfactory.NewFork(discOpts.ForkVersion),
 		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
+
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
 		return nil, err
@@ -194,6 +195,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	if err != nil {
 		return errors.Wrap(err, "could not create local node")
 	}
+
 	dv5Cfg, err := opts.DiscV5Cfg(logger)
 	if err != nil {
 		return err

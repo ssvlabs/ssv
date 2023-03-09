@@ -7,6 +7,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -32,7 +33,7 @@ func init() {
 
 // ReportValidatorStatus reports the current status of validator
 func ReportValidatorStatus(pk string, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
-	logger = logger.With(zap.String("pubKey", pk), zap.Any("metadata", meta))
+	logger = logger.With(fields.PubKey([]byte(pk)), fields.ValidatorMetadata(meta))
 	if meta == nil {
 		logger.Debug("validator metadata not found")
 		metricsValidatorStatus.WithLabelValues(pk).Set(float64(validatorStatusNotFound))

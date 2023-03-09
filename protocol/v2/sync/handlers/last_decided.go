@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -16,7 +17,7 @@ import (
 // TODO: add msg validation and report scores
 func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))
+		logger := plogger.With(fields.PubKey(msg.MsgID.GetPubKey()))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {

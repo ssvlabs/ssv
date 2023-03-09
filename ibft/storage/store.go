@@ -5,8 +5,6 @@ import (
 	"log"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -175,7 +173,7 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 		return errors.Wrap(err, "failed to remove decided")
 	}
 
-	logger.Debug("removed decided", zap.Int("count", n), fields.IdentifierBytes(msgID))
+	logger.Debug("removed decided", zap.Int("count", n))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

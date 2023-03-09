@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-v2-4
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-v2-4
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12004
           name: port-12004
           protocol: UDP
-          hostPort: 12004            
+          hostPort: 12004
         - containerPort: 13004
           name: port-13004
           hostPort: 13004
@@ -120,8 +120,6 @@ spec:
           value: "13004"
         - name: UDP_PORT
           value: "12004"
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
           value: "./data/db-shifu-v3"
         - name: DB_REPORTING
@@ -130,8 +128,6 @@ spec:
           value: "15004"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: P2P_LOG
-          value: "false"
         - name: DISCOVERY_TRACE
           value: 'false'
         - name: PUBSUB_TRACE
@@ -177,4 +173,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true          
+      hostNetwork: true

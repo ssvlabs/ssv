@@ -15,7 +15,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -55,9 +54,9 @@ type p2pNetwork struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 
-	logger *zap.Logger // struct logger to log in io.Closer interface
-	fork   forks.Fork
-	cfg    *Config
+	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
+	fork            forks.Fork
+	cfg             *Config
 
 	host        host.Host
 	streamCtrl  streams.StreamController
@@ -86,14 +85,12 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
-	if !cfg.P2pLog {
-		logger = logger.WithOptions(zap.IncreaseLevel(zapcore.InfoLevel))
-	}
+
 	return &p2pNetwork{
 		parentCtx:            cfg.Ctx,
 		ctx:                  ctx,
 		cancel:               cancel,
-		logger:               logger,
+		interfaceLogger:      logger,
 		fork:                 forksfactory.NewFork(cfg.ForkVersion),
 		cfg:                  cfg,
 		msgRouter:            cfg.Router,
@@ -116,16 +113,16 @@ func (n *p2pNetwork) Close() error {
 	defer atomic.StoreInt32(&n.state, stateClosed)
 	n.cancel()
 	if err := n.libConnManager.Close(); err != nil {
-		n.logger.Warn("could not close discovery", zap.Error(err))
+		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.disc.Close(); err != nil {
-		n.logger.Warn("could not close discovery", zap.Error(err))
+		n.interfaceLogger.Warn("could not close discovery", zap.Error(err))
 	}
 	if err := n.idx.Close(); err != nil {
-		n.logger.Warn("could not close index", zap.Error(err))
+		n.interfaceLogger.Warn("could not close index", zap.Error(err))
 	}
 	if err := n.topicsCtrl.Close(); err != nil {
-		n.logger.Warn("could not close topics controller", zap.Error(err))
+		n.interfaceLogger.Warn("could not close topics controller", zap.Error(err))
 	}
 	return n.host.Close()
 }

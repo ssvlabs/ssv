@@ -1,6 +1,8 @@
 global:
   LogLevel: debug
-  DebugServices: ".*"
+  ExcludeLoggers:
+    - "Operator"
+    - "Controller"
 
 db:
   Path: ./data/db

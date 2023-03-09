@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-v2-6
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-v2-6
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12006
           name: port-12006
           protocol: UDP
-          hostPort: 12006            
+          hostPort: 12006
         - containerPort: 13006
           name: port-13006
           hostPort: 13006
@@ -116,8 +116,6 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
           value: "./data/db-shifu-v3"
         - name: DB_REPORTING
@@ -134,8 +132,6 @@ spec:
           value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
-        - name: P2P_LOG
-          value: "false"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         volumeMounts:
@@ -173,4 +169,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true          
+      hostNetwork: true

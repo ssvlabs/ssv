@@ -1,6 +1,6 @@
 global:
   LogLevel: info
-  DebugServices:
+  ExcludeLoggers:
     - "Operator"
     - "Controller"
 

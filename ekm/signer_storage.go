@@ -15,6 +15,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -51,7 +52,7 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 	return &storage{
 		db:      db,
 		network: network,
-		logger:  logger.Named(fmt.Sprintf("%sstorage", prefix)),
+		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
 		lock:    sync.RWMutex{},
 	}
 }

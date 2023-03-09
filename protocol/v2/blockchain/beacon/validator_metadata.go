@@ -68,6 +68,8 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")
 	}
+
+	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
 

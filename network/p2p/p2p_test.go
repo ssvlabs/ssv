@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -246,9 +245,7 @@ type dummyRouter struct {
 
 func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message",
-		fields.Identifier(message.GetID()),
-		zap.Uint64("count", c))
+	logger.Debug("got message", zap.Uint64("count", c))
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {

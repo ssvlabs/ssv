@@ -57,7 +57,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
+			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
@@ -73,7 +73,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.setValidatorStateSubscribing(pkHex) {
 		return nil
 	}
-	err := n.subscribe(n.logger, pk)
+	err := n.subscribe(n.interfaceLogger, pk)
 	if err != nil {
 		return err
 	}

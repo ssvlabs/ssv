@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/utils"
@@ -51,7 +52,7 @@ func (b *Bootnode) Close() error {
 }
 
 func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
-	privKey, err := utils.ECDSAPrivateKey(logger.Named("bootnode"), opts.PrivateKey)
+	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

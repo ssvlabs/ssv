@@ -34,6 +34,8 @@ type DiscV5Options struct {
 	Subnets []byte
 	// OperatorID is the operator id (optional)
 	OperatorID string
+	// EnableLogging when true enables logs to be emitted
+	EnableLogging bool
 }
 
 // DefaultOptions returns the default options
@@ -93,10 +95,9 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 		dv5Cfg.Bootnodes = bootnodes
 	}
 
-	if logger != nil {
-		logger.Info("discovery trace is active")
+	if opts.EnableLogging {
 		newLogger := log.New()
-		newLogger.SetHandler(&dv5Logger{logger.Named(logging.NameDiscoveryLogger)})
+		newLogger.SetHandler(&dv5Logger{logger.Named(logging.NameDiscoveryV5Logger)})
 		dv5Cfg.Log = newLogger
 	}
 

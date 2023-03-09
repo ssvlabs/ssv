@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-v2-6
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-v2-6
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12006
           name: port-12006
           protocol: UDP
-          hostPort: 12006            
+          hostPort: 12006
         - containerPort: 13006
           name: port-13006
           hostPort: 13006
@@ -108,12 +108,10 @@ spec:
               key: abi_version
               optional: true
         - name: LOG_LEVEL
-          value: "info"
+          value: "debug"
         - name: DB_REPORTING
           value: "false"
         - name: PUBSUB_TRACE
-          value: "false"
-        - name: P2P_LOG
           value: "false"
         - name: NETWORK
           value: "prater"
@@ -166,4 +164,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true          
+      hostNetwork: true

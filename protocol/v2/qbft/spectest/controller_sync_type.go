@@ -8,6 +8,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +31,7 @@ func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 
 	var lastErr error
 	for _, msg := range test.InputMessages {
+		logger = logger.With(fields.Height(msg.Message.Height))
 		_, err := contr.ProcessMsg(logger, msg)
 		if err != nil {
 			lastErr = err

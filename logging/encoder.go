@@ -15,12 +15,11 @@ const (
 
 type debugServicesEncoder struct {
 	zapcore.Encoder
-	childEncoder         zapcore.Encoder
-	loggerNameSubstrings []string
+	excludeLoggers []string
 }
 
-func SetDebugServicesEncoder(logFormat string, debugServices []string, pubSubTrace bool) {
-	err := zap.RegisterEncoder(debugServicesEncoderName, func(config zapcore.EncoderConfig) (zapcore.Encoder, error) {
+func setDebugServicesEncoder(logFormat string, excludeLoggers []string, pubSubTrace bool) error {
+	return zap.RegisterEncoder(debugServicesEncoderName, func(config zapcore.EncoderConfig) (zapcore.Encoder, error) {
 
 		var enc zapcore.Encoder
 		switch logFormat {
@@ -32,28 +31,33 @@ func SetDebugServicesEncoder(logFormat string, debugServices []string, pubSubTra
 			return nil, fmt.Errorf("invalid log level format: %s", logFormat)
 		}
 
-		if pubSubTrace {
-			debugServices = append(debugServices, NamePubsubTrace)
+		if !pubSubTrace {
+			excludeLoggers = append(excludeLoggers, NamePubsubTrace)
 		}
 
 		return debugServicesEncoder{
-			Encoder:              enc,
-			childEncoder:         enc,
-			loggerNameSubstrings: debugServices,
+			Encoder:        enc,
+			excludeLoggers: excludeLoggers,
 		}, nil
 	})
-	if err != nil {
-		panic(err)
-	}
 }
 
 func (d debugServicesEncoder) EncodeEntry(entry zapcore.Entry, fields []zapcore.Field) (*buffer.Buffer, error) {
-	for _, loggerNameSubstring := range d.loggerNameSubstrings {
-		if strings.Contains(entry.LoggerName, loggerNameSubstring) {
-			entry.Level = zap.DebugLevel
-			break
+	if entry.Level == zap.DebugLevel {
+		for _, loggerNameSubstring := range d.excludeLoggers {
+			if strings.Contains(entry.LoggerName, loggerNameSubstring) {
+				return buffer.NewPool().Get(), nil
+			}
 		}
 	}
 
-	return d.childEncoder.EncodeEntry(entry, fields)
+	return d.Encoder.EncodeEntry(entry, fields)
+}
+
+func (d debugServicesEncoder) Clone() zapcore.Encoder {
+	enc := d.Encoder.Clone()
+	return debugServicesEncoder{
+		Encoder:        enc,
+		excludeLoggers: d.excludeLoggers,
+	}
 }

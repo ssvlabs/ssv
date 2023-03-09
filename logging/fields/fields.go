@@ -37,9 +37,7 @@ const (
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
 	FieldHeight              = "height"
-	FieldIdentifier          = "identifier"
 	FieldIndexCacheMetrics   = "indexCacheMetrics"
-	FieldMessageID           = "messageID"
 	FieldName                = "name"
 	FieldOperatorId          = "operatorID"
 	FieldPeerID              = "peerID"
@@ -57,6 +55,7 @@ const (
 	FieldTxHash              = "txHash"
 	FieldUpdatedENRLocalNode = "updatedENR"
 	FieldValidator           = "validator"
+	FieldValidatorMetadata   = "validatorMetadata"
 	FiledEvent               = "event"
 )
 
@@ -74,14 +73,6 @@ func TxHash(val fmt.Stringer) zapcore.Field {
 
 func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
-}
-
-func Identifier(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldIdentifier, val)
-}
-
-func IdentifierBytes(val []byte) zapcore.Field {
-	return zap.Stringer(FieldIdentifier, hexStringer{val})
 }
 
 func PubKey(val []byte) zapcore.Field {
@@ -130,10 +121,6 @@ func PeerID(val peer.ID) zapcore.Field {
 
 func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
-}
-
-func MessageID(val spectypes.MessageID) zapcore.Field {
-	return zap.Stringer(FieldMessageID, val)
 }
 
 func DurationMilli(val time.Time) zapcore.Field {
@@ -186,6 +173,10 @@ func Role(val spectypes.BeaconRole) zap.Field {
 
 func EventName(val string) zap.Field {
 	return zap.String(FiledEvent, val)
+}
+
+func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
+	return zap.Any(FieldValidatorMetadata, val)
 }
 
 func BlockNumber(val uint64) zap.Field {

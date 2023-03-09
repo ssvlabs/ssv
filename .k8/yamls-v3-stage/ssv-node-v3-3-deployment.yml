@@ -28,7 +28,7 @@ spec:
   selector:
     app: ssv-node-v3-3
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -55,10 +55,10 @@ spec:
                   - key: kubernetes.io/role
                     operator: In
                     values:
-                      - ssv-main        
+                      - ssv-main
       containers:
       - name: ssv-node-v3-3
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
@@ -69,7 +69,7 @@ spec:
         - containerPort: 12303
           name: port-12303
           protocol: UDP
-          hostPort: 12303            
+          hostPort: 12303
         - containerPort: 13303
           name: port-13303
           hostPort: 13303
@@ -113,8 +113,6 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: PUBSUB_TRACE
-          value: "false"
-        - name: P2P_LOG
           value: "false"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"

@@ -52,9 +52,9 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
+
 	// set a seed for rand values
 	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
-
 	logger.Info("configuring")
 
 	n.initCfg()
@@ -63,6 +63,7 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
+
 	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
 	logger.Debug("host configured")
 
@@ -216,13 +217,14 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
-			IP:         ipAddr.String(),
-			BindIP:     net.IPv4zero.String(),
-			Port:       n.cfg.UDPPort,
-			TCPPort:    n.cfg.TCPPort,
-			NetworkKey: n.cfg.NetworkPrivateKey,
-			Bootnodes:  n.cfg.TransformBootnodes(),
-			OperatorID: n.cfg.OperatorID,
+			IP:            ipAddr.String(),
+			BindIP:        net.IPv4zero.String(),
+			Port:          n.cfg.UDPPort,
+			TCPPort:       n.cfg.TCPPort,
+			NetworkKey:    n.cfg.NetworkPrivateKey,
+			Bootnodes:     n.cfg.TransformBootnodes(),
+			OperatorID:    n.cfg.OperatorID,
+			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
 			discV5Opts.Subnets = n.subnets

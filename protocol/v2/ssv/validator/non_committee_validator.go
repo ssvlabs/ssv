@@ -19,8 +19,6 @@ type NonCommitteeValidator struct {
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
-	logger = logger.With(fields.Identifier(identifier))
-
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:  types.GetDefaultDomain(),
@@ -41,7 +39,8 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 }
 
 func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
-	logger = logger.With(zap.String("id", msg.GetID().String()))
+	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
+
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))
 		return
@@ -62,6 +61,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 		if signedMsg.Message.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.Signers)) {
 			return
 		}
+
+		logger = logger.With(fields.Height(signedMsg.Message.Height))
 
 		if decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg); err != nil {
 			logger.Debug("❌ failed to process message",
