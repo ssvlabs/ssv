@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15006
       name: port-15006
+    - port: 40006
+      protocol: TCP
+      targetPort: 40006
+      name: port-40006
   selector:
     app: ssv-node-v2-6
 ---
@@ -138,6 +142,8 @@ spec:
           value: "false"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
+        - name: DEBUG_PORT
+          value: "40006"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-6

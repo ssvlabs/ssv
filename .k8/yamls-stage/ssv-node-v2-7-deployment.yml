@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15007
       name: port-15007
+    - port: 40007
+      protocol: TCP
+      targetPort: 40007
+      name: port-40007
   selector:
     app: ssv-node-v2-7
 ---
@@ -134,6 +138,8 @@ spec:
           value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
+        - name: DEBUG_PORT
+          value: "40007"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-7

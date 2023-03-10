@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15010
       name: port-15010
+    - port: 40010
+      protocol: TCP
+      targetPort: 40010
+      name: port-40010
   selector:
     app: ssv-node-10
 ---
@@ -134,6 +138,8 @@ spec:
           value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
+        - name: DEBUG_PORT
+          value: "40010"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-10

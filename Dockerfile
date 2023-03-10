@@ -1,12 +1,12 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.19 AS preparer
+FROM golang:1.19-alpine AS preparer
 
-RUN apt-get update                                                        && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl git zip unzip wget g++ gcc-aarch64-linux-gnu bzip2 make      \
-  && rm -rf /var/lib/apt/lists/*
+RUN apk update && apk add --no-cache \
+  curl git zip unzip wget g++ bzip2 make && \
+  rm /var/cache/apk/*
+
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
 RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2" -o jemalloc.tar.bz2 \
@@ -37,6 +37,10 @@ ARG APP_VERSION
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
+  go install github.com/go-delve/delve/cmd/dlv@latest
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+  --mount=type=cache,mode=0755,target=/go/pkg \
   git fetch --tags
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
@@ -56,6 +60,8 @@ RUN apk -v --update add ca-certificates bash make  bind-tools && \
   rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
+COPY --from=builder /go/bin/dlv /bin/dlv
+
 COPY ./Makefile .env* ./
 COPY config/* ./config/
 

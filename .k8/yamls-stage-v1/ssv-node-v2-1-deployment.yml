@@ -72,6 +72,10 @@ spec:
         - containerPort: 15001
           name: port-15001
           hostPort: 15001
+        - port: 40001
+          protocol: TCP
+          targetPort: 40001
+          name: port-40001
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -138,6 +142,8 @@ spec:
           value: "152834"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
+        - name: DEBUG_PORT
+          value: "40001"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-1

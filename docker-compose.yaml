@@ -94,8 +94,8 @@ services:
   ssv-node-1-dev:
     <<: *default-dev
     container_name: ssv-node-1-dev
-    #    ports:
-    #      - "40005:40005"
+    ports:
+      - "40005:40005"
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -108,8 +108,8 @@ services:
   ssv-node-2-dev:
     <<: *default-dev
     container_name: ssv-node-2-dev
-    #    ports:
-    #      - 40006:40006
+    ports:
+      - 40006:40006
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -120,8 +120,8 @@ services:
   ssv-node-3-dev:
     <<: *default-dev
     container_name: ssv-node-3-dev
-    #    ports:
-    #      - 40007:40007
+    ports:
+      - 40007:40007
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -132,8 +132,8 @@ services:
   ssv-node-4-dev:
     <<: *default-dev
     container_name: ssv-node-4-dev
-    #    ports:
-    #      - 40008:40008
+    ports:
+      - 40008:40008
     environment:
       RUN_CMD: start-node
       BUILD_PATH: /bin/tmp/ssv
@@ -144,8 +144,8 @@ services:
   exporter-node-dev:
     <<: *default-dev
     container_name: exporter-node-dev
-    #    ports:
-    #      - 40009:40009
+    ports:
+      - 40009:40009
     environment:
       RUN_CMD: start-exporter
       BUILD_PATH: /bin/tmp/ssv
