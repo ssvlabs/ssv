@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/operator/slot_ticker"
-	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
@@ -31,7 +30,7 @@ type ControllerOptions struct {
 	Ctx          context.Context
 	BeaconClient beaconprotocol.Beacon
 	EthNetwork   beaconprotocol.Network
-	ShareStorage validator.ICollection
+	ShareStorage storage.Shares
 	Ticker       slot_ticker.Ticker
 	OperatorData *storage.OperatorData
 }
@@ -41,14 +40,13 @@ type recipientController struct {
 	ctx          context.Context
 	beaconClient beaconprotocol.Beacon
 	ethNetwork   beaconprotocol.Network
-	shareStorage validator.ICollection
+	shareStorage storage.Shares
 	ticker       slot_ticker.Ticker
 	operatorData *storage.OperatorData
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
 	return &recipientController{
-
 		ctx:          opts.Ctx,
 		beaconClient: opts.BeaconClient,
 		ethNetwork:   opts.EthNetwork,
@@ -76,7 +74,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 
 		firstTimeSubmitted = true
 		// submit fee recipient
-		shares, err := rc.shareStorage.GetFilteredValidatorShares(logger, validator.ByOperatorIDAndNotLiquidated(rc.operatorData.ID))
+		shares, err := rc.shareStorage.GetFilteredShares(logger, storage.ByOperatorIDAndNotLiquidated(rc.operatorData.ID))
 		if err != nil {
 			logger.Warn("failed to get validators share", zap.Error(err))
 			continue

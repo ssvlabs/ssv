@@ -14,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 // SSVShare is a combination of spectypes.Share and its Metadata.
@@ -54,20 +53,20 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.BeaconMetadata != nil
 }
 
-func (s *SSVShare) SetShareFeeRecipient(recipientsCollection registrystorage.RecipientsCollection) error {
-	r, found, err := recipientsCollection.GetRecipientData(s.OwnerAddress)
-	if err != nil {
-		return errors.Wrap(err, "could not get recipient data")
-	}
-	if !found {
-		// use owner address as a default for the fee recipient
-		copy(s.FeeRecipient[:], s.OwnerAddress.Bytes())
-		return nil
-	}
-
-	s.FeeRecipient = r.FeeRecipient
-	return nil
-}
+//func (s *SSVShare) SetFeeRecipient(recipientsStorage registrystorage.Recipients) error {
+//	r, found, err := recipientsStorage.GetRecipientData(s.OwnerAddress)
+//	if err != nil {
+//		return errors.Wrap(err, "could not get recipient data")
+//	}
+//	if !found {
+//		// use owner address as a default for the fee recipient
+//		copy(s.FeeRecipient[:], s.OwnerAddress.Bytes())
+//		return nil
+//	}
+//
+//	s.FeeRecipient = r.FeeRecipient
+//	return nil
+//}
 
 // SetClusterID set the given share object with computed cluster ID
 func (s *SSVShare) SetClusterID() error {

@@ -101,7 +101,7 @@ func New(logger *zap.Logger, opts Options) Node {
 		beacon:         opts.Beacon,
 		net:            opts.Network,
 		eth1Client:     opts.Eth1Client,
-		storage:        storage.NewNodeStorage(opts.DB),
+		storage:        opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:    storageMap,
 		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
 			Ctx:                 opts.Context,
@@ -117,9 +117,7 @@ func New(logger *zap.Logger, opts Options) Node {
 			Ctx:          opts.Context,
 			BeaconClient: opts.Beacon,
 			EthNetwork:   opts.ETHNetwork,
-			ShareStorage: validator.NewCollection(validator.CollectionOptions{
-				DB: opts.DB,
-			}),
+			ShareStorage: opts.ValidatorOptions.RegistryStorage,
 			Ticker:       ticker,
 			OperatorData: opts.ValidatorOptions.OperatorData,
 		}),
@@ -194,7 +192,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	logger.Info("manage to sync contract events")
-	shares, err := n.validatorsCtrl.GetAllValidatorShares(logger)
+	shares, err := n.storage.GetAllShares(logger)
 	if err != nil {
 		logger.Error("failed to get validator shares", zap.Error(err))
 	}
@@ -206,7 +204,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	operatorValidatorsCount := 0
 	if operatorID != 0 {
 		for _, share := range shares {
-			if share.BelongsToOperator(n.validatorsCtrl.GetOperatorData().ID) {
+			if share.BelongsToOperator(operatorID) {
 				operatorValidatorsCount++
 			}
 		}

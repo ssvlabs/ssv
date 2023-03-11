@@ -22,8 +22,8 @@ type RecipientData struct {
 	FeeRecipient bellatrix.ExecutionAddress `json:"feeRecipientAddress"`
 }
 
-// RecipientsCollection is the interface for managing recipients data
-type RecipientsCollection interface {
+// Recipients is the interface for managing recipients data
+type Recipients interface {
 	GetRecipientData(owner common.Address) (*RecipientData, bool, error)
 	SaveRecipientData(recipientData *RecipientData) (*RecipientData, error)
 	DeleteRecipientData(owner common.Address) error
@@ -37,7 +37,7 @@ type recipientsStorage struct {
 }
 
 // NewRecipientsStorage creates a new instance of Storage
-func NewRecipientsStorage(db basedb.IDb, prefix []byte) RecipientsCollection {
+func NewRecipientsStorage(db basedb.IDb, prefix []byte) Recipients {
 	return &recipientsStorage{
 		db:     db,
 		prefix: prefix,

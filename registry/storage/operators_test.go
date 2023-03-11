@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -141,7 +142,7 @@ func TestStorage_ListOperators(t *testing.T) {
 	})
 }
 
-func newOperatorStorageForTest(logger *zap.Logger) (storage.OperatorsCollection, func()) {
+func newOperatorStorageForTest(logger *zap.Logger) (Operators, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",

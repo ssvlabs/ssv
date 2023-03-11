@@ -98,7 +98,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 }
 
-func newRecipientStorageForTest(logger *zap.Logger) (storage.RecipientsCollection, func()) {
+func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
