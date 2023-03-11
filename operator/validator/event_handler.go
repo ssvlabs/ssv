@@ -102,42 +102,12 @@ func (c *controller) handleOperatorRemovedEvent(
 		}
 	}
 
-	isOperatorEvent := od.ID == c.operatorData.ID
 	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.Uint64("operatorId", od.ID),
-			zap.String("operatorPubKey", string(od.PublicKey)),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
-
-	if !isOperatorEvent {
-		// TODO: remove this check when we will support operator removal for non-operator (mark as inactive)
-		return logFields, nil
-	}
-
-	shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorID(event.ID))
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get all operator validator shares")
-	}
-
-	// TODO: delete many
-	for _, share := range shares {
-		if err := c.sharesStorage.DeleteShare(share.ValidatorPubKey); err != nil {
-			return nil, errors.Wrap(err, "could not remove validator share")
-		}
-		if ongoingSync {
-			if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), true); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	err = c.operatorsStorage.DeleteOperatorData(event.ID)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not delete operator data")
-	}
+	logFields = append(logFields,
+		zap.Uint64("operatorId", uint64(od.ID)),
+		zap.String("operatorPubKey", string(od.PublicKey)),
+		zap.String("ownerAddress", od.OwnerAddress.String()),
+	)
 
 	return logFields, nil
 }
@@ -313,10 +283,10 @@ func (c *controller) handleClusterReactivatedEvent(
 func (c *controller) processClusterEvent(
 	logger *zap.Logger,
 	owner common.Address,
-	operatorIds []uint64,
+	operatorIDs []uint64,
 	toLiquidate bool,
 ) ([]*types.SSVShare, []string, error) {
-	clusterID, err := types.ComputeClusterIDHash(owner.Bytes(), operatorIds)
+	clusterID, err := types.ComputeClusterIDHash(owner.Bytes(), operatorIDs)
 	if err != nil {
 		return nil, nil, errors.Wrapf(err, "could not compute share cluster id")
 	}
@@ -371,5 +341,27 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 		})
 	}
 
-	return nil, nil
+	var isOperatorEvent bool
+	if c.operatorData.ID != 0 {
+		shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorID(c.operatorData.ID))
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get validator shares by operator id")
+		}
+		for _, share := range shares {
+			if bytes.Equal(share.OwnerAddress.Bytes(), event.Owner.Bytes()) {
+				isOperatorEvent = true
+				break
+			}
+		}
+	}
+
+	logFields := make([]zap.Field, 0)
+	if isOperatorEvent || c.validatorOptions.FullNode {
+		logFields = append(logFields,
+			zap.String("ownerAddress", event.Owner.String()),
+			zap.String("feeRecipient", event.RecipientAddress.String()),
+		)
+	}
+
+	return logFields, nil
 }

@@ -11,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -53,35 +52,8 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.BeaconMetadata != nil
 }
 
-//func (s *SSVShare) SetFeeRecipient(recipientsStorage registrystorage.Recipients) error {
-//	r, found, err := recipientsStorage.GetRecipientData(s.OwnerAddress)
-//	if err != nil {
-//		return errors.Wrap(err, "could not get recipient data")
-//	}
-//	if !found {
-//		// use owner address as a default for the fee recipient
-//		copy(s.FeeRecipient[:], s.OwnerAddress.Bytes())
-//		return nil
-//	}
-//
-//	s.FeeRecipient = r.FeeRecipient
-//	return nil
-//}
-
-// SetClusterID set the given share object with computed cluster ID
-func (s *SSVShare) SetClusterID() error {
-	oids := make([]uint64, 0)
-	for _, o := range s.Committee {
-		oids = append(oids, o.OperatorID)
-	}
-
-	hash, err := ComputeClusterIDHash(s.OwnerAddress.Bytes(), oids)
-	if err != nil {
-		return errors.New("could not compute share cluster id")
-	}
-
-	s.ClusterID = hash
-	return nil
+func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
+	s.FeeRecipient = feeRecipient
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
@@ -112,6 +84,5 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
-	ClusterID      []byte
 	FeeRecipient   bellatrix.ExecutionAddress
 }

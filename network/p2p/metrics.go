@@ -92,7 +92,7 @@ func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
-	opPKHash, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
+	opPKHash, opIndex, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
 		opPKHash = unknown
@@ -112,8 +112,6 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
 		if opDataErr == nil && found {
 			opIndex = strconv.FormatUint(operatorData.ID, 10)
-			// TODO(oleg): do we need to store owner addres instead of name in v3
-			//opName = operatorData.Name
 		}
 	} else {
 		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
@@ -126,8 +124,6 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
 				opIndex = strconv.FormatUint(operator.ID, 10)
-				// TODO(oleg): do we need to store owner addres instead of name in v3
-				//opName = operatorData.Name
 			}
 		}
 	}
@@ -138,12 +134,11 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
 		zap.String("opPKHash", opPKHash),
-		zap.String("opIndex", opName),
-		zap.String("opName", opIndex),
+		zap.String("opIndex", opIndex),
 		zap.String("nodeType", nodeType),
 		zap.String("nodeState", nodeState.String()),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //

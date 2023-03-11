@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -166,14 +165,13 @@ func ByOperatorIDAndActive(operatorID spectypes.OperatorID) func(share *types.SS
 // ByClusterID filters by cluster id.
 func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
-		return bytes.Equal(share.ClusterID, clusterID)
-	}
-}
+		var operatorIDs []uint64
+		for _, op := range share.Committee {
+			operatorIDs = append(operatorIDs, uint64(op.OperatorID))
+		}
 
-// ByOwnerAddress filters by owner address.
-func ByOwnerAddress(ownerAddress common.Address) func(share *types.SSVShare) bool {
-	return func(share *types.SSVShare) bool {
-		return bytes.Equal(share.OwnerAddress.Bytes(), ownerAddress.Bytes())
+		shareClusterID, _ := types.ComputeClusterIDHash(share.OwnerAddress.Bytes(), operatorIDs)
+		return bytes.Equal(shareClusterID, clusterID)
 	}
 }
 

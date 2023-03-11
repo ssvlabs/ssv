@@ -15,9 +15,8 @@ import (
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
 
 const (
-	// prod contract genesis
-	defaultSyncOffset string = "5140591"
-	// stage contract genesis -> 49e08f
+	// prod contract genesis block
+	defaultPraterSyncOffset string = "5140591"
 )
 
 // SyncOffset is the type of variable used for passing around the offset
@@ -36,7 +35,7 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return StringToSyncOffset(defaultSyncOffset)
+	return StringToSyncOffset(defaultPraterSyncOffset)
 }
 
 // StringToSyncOffset converts string to SyncOffset

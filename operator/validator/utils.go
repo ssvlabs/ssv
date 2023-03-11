@@ -5,12 +5,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -97,6 +97,22 @@ func ShareFromValidatorEvent(
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
+}
+
+func SetShareFeeRecipient(share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
+	var feeRecipient bellatrix.ExecutionAddress
+	data, found, err := getRecipientData(share.OwnerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		copy(feeRecipient[:], share.OwnerAddress.Bytes())
+	} else {
+		feeRecipient = data.FeeRecipient
+	}
+	share.SetFeeRecipient(feeRecipient)
+
+	return nil
 }
 
 func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {

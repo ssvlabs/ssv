@@ -6,12 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/bloxapp/ssv/eth1/abiparser"
-
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth1/abiparser"
 )
 
 var (
@@ -23,15 +23,15 @@ type Version int64
 
 // Version types
 const (
-	V2 Version = iota
+	V1 Version = iota
 )
 
 func (v Version) String() string {
 	switch v {
-	case V2:
-		return "v2"
+	case V1:
+		return "v1"
 	}
-	return "v2"
+	return "v1"
 }
 
 // AbiParser serves as a parsing client for events from contract
@@ -43,8 +43,8 @@ type AbiParser struct {
 func NewParser(logger *zap.Logger, version Version) AbiParser {
 	var parserVersion AbiVersion
 	switch version {
-	case V2:
-		parserVersion = &abiparser.AbiV2{}
+	case V1:
+		parserVersion = &abiparser.AbiV1{}
 	}
 	return AbiParser{Version: parserVersion}
 }
@@ -128,7 +128,7 @@ func LoadABI(logger *zap.Logger, abiFilePath string) error {
 // ContractABI abi of the ssv-network contract
 func ContractABI(abiVersion Version) string {
 	switch abiVersion {
-	case V2:
+	case V1:
 		return contractABI
 	default:
 		return contractABI

@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -19,7 +20,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	require.NotNil(t, storageCollection)
 	defer done()
 
-	recipientData := storage.RecipientData{
+	recipientData := &storage.RecipientData{
 		Owner: common.BytesToAddress([]byte("0x1")),
 	}
 	copy(recipientData.FeeRecipient[:], "0x2")
@@ -32,7 +33,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 
 	t.Run("create and get recipient", func(t *testing.T) {
-		rd, err := storageCollection.SaveRecipientData(&recipientData)
+		rd, err := storageCollection.SaveRecipientData(recipientData)
 		require.NoError(t, err)
 		recipientDataFromDB, found, err := storageCollection.GetRecipientData(recipientData.Owner)
 		require.NoError(t, err)
@@ -95,6 +96,29 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, rdFromDB)
+	})
+
+	t.Run("create and get many recipients", func(t *testing.T) {
+		var ownerAddresses []common.Address
+		var savedRecipients []*RecipientData
+		for i := 0; i < 10; i++ {
+			rd := RecipientData{
+				Owner: common.BytesToAddress([]byte(fmt.Sprintf("0x%d", i))),
+			}
+			copy(recipientData.FeeRecipient[:], fmt.Sprintf("0x%d", i))
+			ownerAddresses = append(ownerAddresses, rd.Owner)
+			_, err := storage.SaveRecipientData(&rd)
+			require.NoError(t, err)
+			savedRecipients = append(savedRecipients, &rd)
+		}
+
+		recipients, err := storage.GetRecipientDataMany(ownerAddresses)
+		require.NoError(t, err)
+		require.Equal(t, len(ownerAddresses), len(recipients))
+
+		for _, r := range savedRecipients {
+			require.Equal(t, r.FeeRecipient, recipients[r.Owner])
+		}
 	})
 }
 

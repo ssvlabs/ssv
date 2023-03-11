@@ -566,11 +566,6 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 
 		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
-		// TODO(oleg): should we care about non-committee podIds?
-		if err = share.SetClusterID(); err != nil {
-			return nil, errors.Wrap(err, "could not set share cluster id")
-		}
-
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
@@ -617,6 +612,10 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 
+	}
+
+	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 
 	// Start a committee validator.

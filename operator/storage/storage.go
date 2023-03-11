@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"math/big"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
@@ -19,7 +20,7 @@ import (
 )
 
 var (
-	storagePrefix = []byte("operator-")
+	storagePrefix = []byte("operator/")
 	syncOffsetKey = []byte("syncOffset")
 )
 
@@ -103,6 +104,10 @@ func (s *storage) GetOperatorsPrefix() []byte {
 
 func (s *storage) GetRecipientData(owner common.Address) (*registrystorage.RecipientData, bool, error) {
 	return s.recipientStore.GetRecipientData(owner)
+}
+
+func (s *storage) GetRecipientDataMany(owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+	return s.recipientStore.GetRecipientDataMany(owners)
 }
 
 func (s *storage) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
