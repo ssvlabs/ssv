@@ -3,7 +3,7 @@ package runner
 import (
 	"sync"
 
-	logging "github.com/ipfs/go-log"
+	ipfslog "github.com/ipfs/go-log"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,10 +14,11 @@ import (
 
 	"github.com/pkg/errors"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
-var logger = logging.Logger("ssv/protocol/ssv/runner").Desugar()
+var logger = ipfslog.Logger("ssv/protocol/ssv/runner").Desugar()
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
@@ -127,11 +128,12 @@ func (b *BaseRunner) baseConsensusMsgProcessing(runner Runner, msg *specqbft.Sig
 				zap.Uint64("msg_height", uint64(msg.Message.Height)),
 				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
 				zap.Any("signers", msg.Signers),
+				logging.PubKey(b.Share.ValidatorPubKey),
 			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				logger.Debug("failed to save instance", zap.Error(err))
+				logger.Debug("failed to save instance", logging.PubKey(b.Share.ValidatorPubKey), zap.Error(err))
 			} else {
-				logger.Debug("saved instance")
+				logger.Debug("saved instance", logging.PubKey(b.Share.ValidatorPubKey))
 			}
 		}
 	}
@@ -220,7 +222,7 @@ func (b *BaseRunner) decide(runner Runner, input *spectypes.ConsensusData) error
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(byts); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
-	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)
+	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger.With(logging.PubKey(b.Share.ValidatorPubKey)), runner.GetBaseRunner().QBFTController.Height)
 	if newInstance == nil {
 		return errors.New("could not find newly created QBFT instance")
 	}

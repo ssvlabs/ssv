@@ -6,6 +6,7 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
@@ -27,6 +28,8 @@ type queueContainer struct {
 func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
+
+	logger = logger.With(logging.PubKey(v.Share.ValidatorPubKey))
 
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(msg)
@@ -123,6 +126,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
 	fields = append([]zap.Field{
+		logging.PubKey(v.Share.ValidatorPubKey),
 		zap.String("role", msg.MsgID.GetRoleType().String()),
 	}, fields...)
 	switch msg.SSVMessage.MsgType {
