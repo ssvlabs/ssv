@@ -296,6 +296,7 @@ func (r *ProposerRunner) executeDuty(duty *spectypes.Duty) error {
 	}
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.RandaoPartialSig,
+		Slot:     duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 

@@ -338,6 +338,7 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(duty *spectypes.Duty) error 
 	// sign selection proofs
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.ContributionProofs,
+		Slot:     duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
 	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
