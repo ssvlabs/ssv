@@ -36,6 +36,10 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 
 // GetSyncCommitteeContribution returns
 func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
+	if len(selectionProofs) != len(subnetIDs) {
+		return nil, DataVersionNil, errors.New("mismatching number of selection proofs and subnet IDs")
+	}
+
 	gc.waitOneThirdOrValidBlock(slot)
 
 	scDataReqStart := time.Now()
@@ -57,10 +61,10 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		contributions   = make(spectypes.Contributions, 0, len(subnetIDs))
 		g               errgroup.Group
 	)
-	for _, subnetID := range subnetIDs {
-		subnetID := subnetID
+	for i := range subnetIDs {
+		index := i
 		g.Go(func() error {
-			contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
+			contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetIDs[index], *blockRoot)
 			if err != nil {
 				return err
 			}
@@ -68,7 +72,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 				return errors.New("contribution is nil")
 			}
 			contributions = append(contributions, &spectypes.Contribution{
-				SelectionProofSig: selectionProofs[subnetID],
+				SelectionProofSig: selectionProofs[index],
 				Contribution:      *contribution,
 			})
 			return nil
