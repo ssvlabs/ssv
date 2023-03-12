@@ -8,6 +8,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -25,7 +26,7 @@ type RecipientData struct {
 // Recipients is the interface for managing recipients data
 type Recipients interface {
 	GetRecipientData(owner common.Address) (*RecipientData, bool, error)
-	GetRecipientDataMany(owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
+	GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
 	SaveRecipientData(recipientData *RecipientData) (*RecipientData, error)
 	DeleteRecipientData(owner common.Address) error
 	GetRecipientsPrefix() []byte
@@ -71,7 +72,7 @@ func (s *recipientsStorage) getRecipientData(owner common.Address) (*RecipientDa
 	return &recipientData, found, err
 }
 
-func (s *recipientsStorage) GetRecipientDataMany(owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+func (s *recipientsStorage) GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -80,7 +81,7 @@ func (s *recipientsStorage) GetRecipientDataMany(owners []common.Address) (map[c
 		keys = append(keys, buildRecipientKey(owner))
 	}
 	results := make(map[common.Address]bellatrix.ExecutionAddress)
-	err := s.db.GetMany(nil, s.prefix, keys, func(obj basedb.Obj) error {
+	err := s.db.GetMany(logger, s.prefix, keys, func(obj basedb.Obj) error {
 		var recipient RecipientData
 		err := json.Unmarshal(obj.Value, &recipient)
 		if err != nil {

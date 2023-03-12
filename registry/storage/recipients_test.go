@@ -112,7 +112,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 			savedRecipients = append(savedRecipients, &rd)
 		}
 
-		recipients, err := storage.GetRecipientDataMany(ownerAddresses)
+		recipients, err := storage.GetRecipientDataMany(logger, ownerAddresses)
 		require.NoError(t, err)
 		require.Equal(t, len(ownerAddresses), len(recipients))
 

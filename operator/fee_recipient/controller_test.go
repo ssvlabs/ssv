@@ -37,16 +37,17 @@ func TestSubmitProposal(t *testing.T) {
 		ID: 123456789,
 	}
 
-	db, shareStorage := createStorage(t)
+	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close(logger)
 	network := beacon.NewNetwork(core.PraterNetwork, 0)
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
-		Ctx:          context.TODO(),
-		EthNetwork:   network,
-		ShareStorage: shareStorage,
-		OperatorData: operatorData,
+		Ctx:              context.TODO(),
+		EthNetwork:       network,
+		ShareStorage:     shareStorage,
+		RecipientStorage: recipientStorage,
+		OperatorData:     operatorData,
 	})
 
 	t.Run("submit first time or first slot in epoch", func(t *testing.T) {
@@ -103,7 +104,7 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares) {
+func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
@@ -113,7 +114,7 @@ func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares) {
 	db, err := storage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
 
-	return db, registrystorage.NewSharesStorage(db, []byte("test"))
+	return db, registrystorage.NewSharesStorage(db, []byte("test")), registrystorage.NewRecipientsStorage(db, []byte("test"))
 }
 
 func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {

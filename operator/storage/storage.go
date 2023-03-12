@@ -106,8 +106,8 @@ func (s *storage) GetRecipientData(owner common.Address) (*registrystorage.Recip
 	return s.recipientStore.GetRecipientData(owner)
 }
 
-func (s *storage) GetRecipientDataMany(owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	return s.recipientStore.GetRecipientDataMany(owners)
+func (s *storage) GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+	return s.recipientStore.GetRecipientDataMany(logger, owners)
 }
 
 func (s *storage) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {

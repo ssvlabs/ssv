@@ -98,7 +98,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 			batch := shares[start:end]
 
 			g.Go(func() error {
-				m, err := rc.toProposalPreparation(batch)
+				m, err := rc.toProposalPreparation(logger, batch)
 				if err != nil {
 					return errors.Wrap(err, "could not build proposal preparation")
 				}
@@ -114,7 +114,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 	}
 }
 
-func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
+func (rc *recipientController) toProposalPreparation(logger *zap.Logger, shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
 	// build unique owners
 	keys := make(map[common.Address]bool)
 	var uniq []common.Address
@@ -126,7 +126,7 @@ func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (
 	}
 
 	// get recipients
-	rds, err := rc.recipientStorage.GetRecipientDataMany(uniq)
+	rds, err := rc.recipientStorage.GetRecipientDataMany(logger, uniq)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get recipients data")
 	}
