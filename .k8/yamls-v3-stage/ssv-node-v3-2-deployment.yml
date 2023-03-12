@@ -123,7 +123,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db-shifu-v3-ssz"
+          value: "./data/db-shifu-v3-ssz-2"
         - name: METRICS_API_PORT
           value: "15302"
         - name: ENABLE_PROFILE
