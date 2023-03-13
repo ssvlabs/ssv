@@ -11,7 +11,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
@@ -27,8 +26,6 @@ type Instance struct {
 	startOnce   sync.Once
 	StartValue  []byte
 
-	logger  *zap.Logger
-	fields  []zap.Field
 	metrics *metrics
 }
 
@@ -39,7 +36,6 @@ func NewInstance(
 	height specqbft.Height,
 ) *Instance {
 	msgId := spectypes.MessageIDFromBytes(identifier)
-	fields := []zap.Field{logging.PubKey(msgId.GetPubKey()), zap.String("role", msgId.GetRoleType().String())}
 	return &Instance{
 		State: &specqbft.State{
 			Share:                share,
@@ -54,15 +50,12 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		logger:      logger.With(fields...),
-		fields:      fields,
 		metrics:     newMetrics(msgId),
 	}
 }
 
 // Start is an interface implementation
 func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
-	i.logger = logger.With(append(i.fields, logging.Height(height))...)
 	i.startOnce.Do(func() {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
@@ -116,18 +109,18 @@ func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decide
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			return i.uponProposal(i.logger, msg, i.State.ProposeContainer)
+			return i.uponProposal(logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(i.logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
+			return i.uponPrepare(logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
 		case specqbft.CommitMsgType:
-			decided, decidedValue, aggregatedCommit, err = i.UponCommit(i.logger, msg, i.State.CommitContainer)
+			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(i.logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}
