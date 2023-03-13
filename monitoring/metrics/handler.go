@@ -103,7 +103,7 @@ func (mh *metricsHandler) handleValidators(w http.ResponseWriter, r *http.Reques
 		DB: mh.db,
 	})
 	shares, err := col.GetFilteredValidatorShares(zap.NewNop(), func(share *types.SSVShare) bool {
-		return share.HasBeaconMetadata() && !share.Liquidated && share.BeaconMetadata.IsActive()
+		return !share.Liquidated && share.BeaconMetadata.IsActive()
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
