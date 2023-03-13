@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -166,7 +164,6 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 			zap.Any("slot", msg.Slot),
 			zap.Any("height", r.BaseRunner.QBFTController.Height),
 			zap.Any("msg", msg),
-			zap.String("data_ssz", fmt.Sprintf("%x", r.GetState().DecidedValue.DataSSZ)),
 		)
 	}
 	r.GetState().Finished = true
@@ -209,10 +206,6 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 		Version: ver,
 		DataSSZ: root[:],
 	}
-
-	logger.Info("starting duty",
-		logging.PubKey(r.GetShare().ValidatorPubKey), zap.String("role", "sync_committee"), zap.Any("slot", duty.Slot),
-		zap.String("root", fmt.Sprintf("%#x", root)), zap.String("version", ver.String()))
 
 	if err := r.BaseRunner.decide(r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
