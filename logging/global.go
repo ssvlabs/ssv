@@ -2,7 +2,6 @@ package logging
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -26,15 +25,7 @@ func parseConfigLevelEncoder(levelEncoderName string) zapcore.LevelEncoder {
 	}
 }
 
-var once sync.Once
-
 func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string, excludeServices []string, pubSubTrace bool) error {
-	once.Do(func() {
-		if err := setDebugServicesEncoder(logFormat, excludeServices, pubSubTrace); err != nil {
-			panic(err)
-		}
-	})
-
 	level, err := parseConfigLevel(levelName)
 	if err != nil {
 		return err
@@ -43,7 +34,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	levelEncoder := parseConfigLevelEncoder(levelEncoderName)
 
 	cfg := zap.Config{
-		Encoding:    debugServicesEncoderName,
+		Encoding:    logFormat,
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
