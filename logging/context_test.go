@@ -5,14 +5,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bloxapp/ssv/utils/logex"
 	"go.uber.org/zap"
 )
 
 func TestWithFromContext(t *testing.T) {
 	t.Run("NamedCheck", func(t *testing.T) {
 		ctx := context.Background()
-		expected := logex.TestLogger(t)
+		expected := TestLogger(t)
 		expected = expected.Named("test")
 		ctx = WithContext(ctx, expected)
 
@@ -24,7 +23,6 @@ func TestWithFromContext(t *testing.T) {
 
 	t.Run("EmptyCtx", func(t *testing.T) {
 		ctx := context.Background()
-		logex.TestLogger(t) // set the global logger
 		expected := zap.L()
 
 		actual := FromContext(ctx)

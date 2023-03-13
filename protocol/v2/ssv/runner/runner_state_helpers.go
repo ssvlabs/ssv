@@ -2,6 +2,7 @@ package runner
 
 import (
 	"encoding/hex"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 

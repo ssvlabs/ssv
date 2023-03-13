@@ -2,12 +2,14 @@ package discovery
 
 import (
 	"context"
+	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"time"
 )
 
 // implementing discovery.Discovery
@@ -15,7 +17,7 @@ import (
 // Advertise advertises a service
 // implementation of discovery.Advertiser
 func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...discovery.Option) (time.Duration, error) {
-	logger := logging.FromContext(ctx).Named("discv5")
+	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
 	opts := discovery.Options{}
 	if err := opts.Apply(opt...); err != nil {
 		return 0, errors.Wrap(err, "could not apply options")
@@ -25,7 +27,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	}
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", zap.String("ns", ns))
+		logger.Debug("not a subnet", fields.Topic(ns))
 		return opts.Ttl, nil
 	}
 
@@ -39,10 +41,10 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 // FindPeers discovers peers providing a service
 // implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
-	logger := logging.FromContext(ctx).Named("discv5")
+	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
 	subnet := nsToSubnet(ns)
 	if subnet < 0 {
-		logger.Debug("not a subnet", zap.String("ns", ns))
+		logger.Debug("not a subnet", fields.Topic(ns))
 		return nil, nil
 	}
 	cn := make(chan peer.AddrInfo, 32)

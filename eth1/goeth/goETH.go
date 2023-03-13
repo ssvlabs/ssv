@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging"
@@ -84,6 +86,7 @@ func (ec *eth1Client) EventsFeed() *event.Feed {
 
 // Start streams events from the contract
 func (ec *eth1Client) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.NameEthClient)
 	err := ec.streamSmartContractEvents(logger)
 	if err != nil {
 		logger.Error("Failed to init operator contract address subject", zap.Error(err))
@@ -143,19 +146,19 @@ func (ec *eth1Client) connect(logger *zap.Logger) error {
 func (ec *eth1Client) reconnect(logger *zap.Logger) {
 	limit := 64 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		logger.Info("reconnecting to eth1 node")
+		logger.Info("reconnecting")
 		if err := ec.connect(logger); err != nil {
 			// continue until reaching to limit, and then panic as eth1 connection is required
 			if lastTick >= limit {
-				logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
+				logger.Panic("failed to reconnect", zap.Error(err))
 			} else {
-				logger.Warn("could not reconnect to eth1 node, still trying", zap.Error(err))
+				logger.Warn("could not reconnect, still trying", zap.Error(err))
 			}
 			return false, false
 		}
 		return true, false
 	}, 1*time.Second, limit+(1*time.Second))
-	logger.Debug("managed to reconnect to eth1 node")
+	logger.Debug("managed to reconnect")
 	if err := ec.streamSmartContractEvents(logger); err != nil {
 		// TODO: panic?
 		logger.Error("failed to stream events after reconnection", zap.Error(err))
@@ -236,7 +239,7 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *big.Int) error {
-	logger.Debug("syncing smart contract events", logging.FromBlock(fromBlock))
+	logger.Debug("syncing smart contract events", fields.FromBlock(fromBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
@@ -344,10 +347,9 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	ev, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
-			logging.EventID(vLog.Topics[0]),
-
+			fields.EventID(vLog.Topics[0]),
 			zap.Uint64("block", vLog.BlockNumber),
-			logging.TxHash(vLog.TxHash),
+			fields.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
 		return "", nil

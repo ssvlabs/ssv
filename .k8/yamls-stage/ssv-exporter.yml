@@ -174,8 +174,6 @@ spec:
               value: "1"
             - name: NETWORK_ID
               value: "shifu-v3-stage"
-            - name: P2P_LOG
-              value: "false"
             - name: DISCOVERY_TRACE
               value: "false"
             - name: PUBSUB_TRACE

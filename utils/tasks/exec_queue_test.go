@@ -1,11 +1,12 @@
 package tasks
 
 import (
-	"github.com/stretchr/testify/require"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestExecQueue(t *testing.T) {

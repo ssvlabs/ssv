@@ -7,6 +7,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -339,7 +342,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 	// Create a disposable NonCommitteeValidator to process the message.
 	// TODO: consider caching highest instance heights for each validator instead of creating a new validator & loading from storage each time.
-	v := validator.NewNonCommitteeValidator(msg.GetID(), opts)
+	v := validator.NewNonCommitteeValidator(logger, msg.GetID(), opts)
 	v.ProcessMessage(logger, msg)
 
 	return nil
@@ -347,6 +350,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 // ListenToEth1Events is listening to events coming from eth1 client
 func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
+	logger = logger.Named(logging.NameController)
 	cn := make(chan *eth1.Event)
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
@@ -366,6 +370,8 @@ func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	if c.validatorOptions.Exporter {
 		c.setupNonCommitteeValidators(logger)
 		return
@@ -454,6 +460,8 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	// first, set stream handlers
 	if err := c.setupNetworkHandlers(logger); err != nil {
 		logger.Panic("could not register stream handlers", zap.Error(err))
@@ -503,6 +511,8 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 // GetValidatorsIndices returns a list of all the active validators indices
 // and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+	logger = logger.Named(logging.NameController)
+
 	var toFetch [][]byte
 	var indices []phase0.ValidatorIndex
 
@@ -613,8 +623,9 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-		logger.Warn("could not start validator as metadata not found", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)))
+		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
+
 	}
 
 	// Start a committee validator.
@@ -640,6 +651,8 @@ func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) 
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	go c.metadataUpdateQueue.Start()
 
 	for {

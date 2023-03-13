@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -17,14 +19,13 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
 	go ctr.handleRouterMessages(logger)
 
@@ -127,7 +128,7 @@ func TestGetIndices(t *testing.T) {
 		}),
 	}
 
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ctr := setupController(logger, validators)
 	indices := ctr.GetValidatorsIndices(logger)
 	logger.Info("result", zap.Any("indices", indices))

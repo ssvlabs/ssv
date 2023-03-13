@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/dgraph-io/badger/v3"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -36,15 +38,19 @@ func New(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
-	opt.Logger = nil // remove default logger (INFO)
+
 	if options.Type == "badger-memory" {
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""
 	}
+
+	// TODO: we should set the default logger here to log Error and higher levels
+	opt.Logger = newLogger(zap.NewNop())
 	if logger != nil && options.Reporting {
 		opt.Logger = newLogger(logger)
 	}
+
 	opt.ValueLogFileSize = 1024 * 1024 * 100 // TODO:need to set the vlog proper (max) size
 	db, err := badger.Open(opt)
 	if err != nil {
@@ -243,15 +249,15 @@ func (b *BadgerDb) Close(logger *zap.Logger) error {
 
 // report the db size and metrics
 func (b *BadgerDb) report(logger *zap.Logger) func() {
-	logger = logger.Named("BadgerDBReporting")
+	logger = logger.Named(logging.NameBadgerDBReporting)
 	return func() {
 		lsm, vlog := b.db.Size()
 		blockCache := b.db.BlockCacheMetrics()
 		indexCache := b.db.IndexCacheMetrics()
 
 		logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-			logging.BlockCacheMetrics(blockCache),
-			logging.IndexCacheMetrics(indexCache))
+			fields.BlockCacheMetrics(blockCache),
+			fields.IndexCacheMetrics(indexCache))
 	}
 }
 

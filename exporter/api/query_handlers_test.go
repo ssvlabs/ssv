@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/bloxapp/ssv/logging"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -18,11 +20,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	nm := NetworkMessage{
 		Msg: Message{
@@ -40,7 +41,7 @@ func TestHandleUnknownQuery(t *testing.T) {
 }
 
 func TestHandleErrorQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		expectedErr string
@@ -79,7 +80,7 @@ func TestHandleErrorQuery(t *testing.T) {
 }
 
 func TestHandleDecidedQuery(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()

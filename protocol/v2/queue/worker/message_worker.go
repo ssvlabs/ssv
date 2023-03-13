@@ -56,7 +56,6 @@ type Worker struct {
 // NewWorker return new Worker
 func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
-	logger = logger.Named("messageWorker")
 
 	w := &Worker{
 		ctx:           ctx,
@@ -129,12 +128,12 @@ func (w *Worker) Size() int {
 // process the msg's from queue
 func (w *Worker) process(logger *zap.Logger, msg *spectypes.SSVMessage) {
 	if w.handler == nil {
-		logger.Warn("no handler for worker")
+		logger.Warn("❗ no handler for worker")
 		return
 	}
 	if err := w.handler(logger, msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			logger.Debug("failed to handle message", zap.Error(handlerErr))
+			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}

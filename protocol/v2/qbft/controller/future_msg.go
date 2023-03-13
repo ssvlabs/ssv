@@ -3,9 +3,10 @@ package controller
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
 func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
@@ -16,7 +17,7 @@ func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessa
 		return nil, errors.New("discarded future msg")
 	}
 	if c.f1SyncTrigger() {
-		logger.Debug("triggered f+1 sync",
+		logger.Debug("🔀 triggered f+1 sync",
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Uint64("msg_height", uint64(msg.Message.Height)))
 		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))

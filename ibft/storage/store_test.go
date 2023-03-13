@@ -5,6 +5,7 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -13,11 +14,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestCleanInstances(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logging.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveHighestInstance(instance))
@@ -150,7 +150,7 @@ func TestSaveAndFetchState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logex.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logging.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveInstance(instance))
@@ -171,7 +171,7 @@ func TestSaveAndFetchState(t *testing.T) {
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
-	db, err := ssvstorage.GetStorageFactory(logger.Named("badger"), basedb.Options{
+	db, err := ssvstorage.GetStorageFactory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
 		Reporting: true,

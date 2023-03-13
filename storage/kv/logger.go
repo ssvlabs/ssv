@@ -3,6 +3,8 @@ package kv
 import (
 	"fmt"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/dgraph-io/badger/v3"
 	"go.uber.org/zap"
 )
@@ -14,7 +16,7 @@ type badgerLogger struct {
 
 // newLogger creates a new instance of logger
 func newLogger(l *zap.Logger) badger.Logger {
-	return &badgerLogger{l.Named("badgerLog")}
+	return &badgerLogger{l.Named(logging.NameBadgerDBLog)}
 }
 
 // Errorf implements badger.Logger

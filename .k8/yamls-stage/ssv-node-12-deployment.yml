@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-12
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-12
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12012
           name: port-12012
           protocol: UDP
-          hostPort: 12012            
+          hostPort: 12012
         - containerPort: 13012
           name: port-13012
           hostPort: 13012
@@ -116,8 +116,6 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
           value: "./data/db-shifu-v3-ssz"
         - name: DB_REPORTING
@@ -169,4 +167,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true   
+      hostNetwork: true

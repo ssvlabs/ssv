@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -15,13 +16,12 @@ import (
 // LastDecidedHandler handler for last-decided protocol
 // TODO: add msg validation and report scores
 func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, reporting protocolp2p.ValidationReporting) protocolp2p.RequestHandler {
-	plogger = plogger.Named("LastDecidedHandler")
 	return func(msg *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
-		logger := plogger.With(zap.String("identifier", msg.MsgID.String()))
+		logger := plogger.With(fields.PubKey(msg.MsgID.GetPubKey()))
 		sm := &message.SyncMessage{}
 		err := sm.Decode(msg.Data)
 		if err != nil {
-			logger.Debug("failed to decode message data", zap.Error(err))
+			logger.Debug("❌ failed to decode message data", zap.Error(err))
 			reporting.ReportValidation(logger, msg, protocolp2p.ValidationRejectLow)
 			sm.Status = message.StatusBadRequest
 		} else if sm.Protocol != message.LastDecidedType {
@@ -36,7 +36,7 @@ func LastDecidedHandler(plogger *zap.Logger, storeMap *storage.QBFTStores, repor
 			}
 			instance, err := store.GetHighestInstance(msgID[:])
 			if err != nil {
-				logger.Debug("failed to get highest instance", zap.Error(err))
+				logger.Debug("❗ failed to get highest instance", zap.Error(err))
 			} else if instance != nil {
 				sm.UpdateResults(err, instance.DecidedMessage)
 			}

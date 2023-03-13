@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
@@ -72,6 +74,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		fork:         forksfactory.NewFork(discOpts.ForkVersion),
 		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
+
 	logger.Debug("configuring discv5 discovery", zap.Any("discOpts", discOpts))
 	if err := dvs.initDiscV5Listener(logger, discOpts); err != nil {
 		return nil, err
@@ -102,6 +105,8 @@ func (dvs *DiscV5Service) Self() *enode.LocalNode {
 
 // UpdateForkVersion updates the fork version used to filter nodes, and also the entry in ENR
 func (dvs *DiscV5Service) UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error {
+	logger = logger.Named(logging.NameDiscoveryService)
+
 	if dvs.forkv == forkv {
 		return nil
 	}
@@ -145,18 +150,18 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
-			logger.Debug("could not read subnets", logging.Enr(e.Node))
+			logger.Debug("could not read subnets", fields.ENR(e.Node))
 			return
 		}
 		if bytes.Equal(zeroSubnets, nodeSubnets) {
-			logger.Debug("skipping zero subnets", logging.Enr(e.Node))
+			logger.Debug("skipping zero subnets", fields.ENR(e.Node))
 			return
 		}
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 		if updated {
-			logger.Debug("[discv5] peer subnets were updated", logging.Enr(e.Node),
-				logging.PeerID(e.AddrInfo.ID),
-				logging.Subnets(records.Subnets(nodeSubnets)))
+			logger.Debug("[discv5] peer subnets were updated", fields.ENR(e.Node),
+				fields.PeerID(e.AddrInfo.ID),
+				fields.Subnets(records.Subnets(nodeSubnets)))
 		}
 		if !dvs.limitNodeFilter(e.Node) {
 			if !dvs.sharedSubnetsFilter(1)(e.Node) {
@@ -190,6 +195,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	if err != nil {
 		return errors.Wrap(err, "could not create local node")
 	}
+
 	dv5Cfg, err := opts.DiscV5Cfg(logger)
 	if err != nil {
 		return err
@@ -201,8 +207,8 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.dv5Listener = dv5Listener
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
-	logger.Debug("started discv5 listener (UDP)", logging.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), logging.EnrLocalNode(localNode), zap.String("OperatorID", opts.OperatorID))
+	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
+		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID))
 
 	return nil
 }
@@ -263,7 +269,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 	}
 	if updated != nil {
 		dvs.subnets = updated
-		logger.Debug("updated subnets", logging.UpdatedEnrLocalNode(dvs.dv5Listener.LocalNode()))
+		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		go dvs.publishENR(logger)
 	}
 	return nil
@@ -271,6 +277,8 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 
 // DeregisterSubnets removes the given subnets and publish the updated node record
 func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
+	logger = logger.Named(logging.NameDiscoveryService)
+
 	if len(subnets) == 0 {
 		return nil
 	}
@@ -280,7 +288,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 	}
 	if updated != nil {
 		dvs.subnets = updated
-		logger.Debug("updated subnets", logging.UpdatedEnrLocalNode(dvs.dv5Listener.LocalNode()))
+		logger.Debug("updated subnets", fields.UpdatedENRLocalNode(dvs.dv5Listener.LocalNode()))
 		go dvs.publishENR(logger)
 	}
 	return nil
@@ -304,7 +312,7 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 				// ignore
 				return
 			}
-			logger.Warn("could not ping node", logging.TargetNodeEnr(e.Node), zap.Error(err))
+			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
 			return
 		}
 		metricPublishEnrPongs.Inc()
@@ -331,7 +339,7 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", logging.EnrLocalNode(localNode), zap.String("oid", opts.OperatorID), zap.Any("subnets", opts.Subnets))
+	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
 }

@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/bloxapp/ssv/logging"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -82,7 +84,8 @@ func (h *handler) httpHandler(logger *zap.Logger) func(w http.ResponseWriter, _ 
 
 // Start implements Node interface
 func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
-	privKey, err := utils.ECDSAPrivateKey(logger.Named("p2pNetworkPrivateKey"), n.privateKey)
+	logger = logger.Named(logging.NameBootNode)
+	privKey, err := utils.ECDSAPrivateKey(logger, n.privateKey)
 	if err != nil {
 		log.Fatal("Failed to get p2p privateKey", zap.Error(err))
 	}
@@ -97,7 +100,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	}
 	listener := n.createListener(logger, ipAddr, n.discv5port, cfg)
 	node := listener.Self()
-	logger.Info("Running bootnode", zap.String("node", node.String()))
+	logger.Info("Running", zap.String("node", node.String()))
 
 	handler := &handler{
 		listener: listener,

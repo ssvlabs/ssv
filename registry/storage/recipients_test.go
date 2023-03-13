@@ -1,4 +1,4 @@
-package storage
+package storage_test
 
 import (
 	"testing"
@@ -7,33 +7,34 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
-	logger := logex.TestLogger(t)
-	storage, done := newRecipientStorageForTest(logger)
-	require.NotNil(t, storage)
+	logger := logging.TestLogger(t)
+	storageCollection, done := newRecipientStorageForTest(logger)
+	require.NotNil(t, storageCollection)
 	defer done()
 
-	recipientData := RecipientData{
+	recipientData := storage.RecipientData{
 		Owner: common.BytesToAddress([]byte("0x1")),
 	}
 	copy(recipientData.FeeRecipient[:], "0x2")
 
 	t.Run("get non-existing recipient", func(t *testing.T) {
-		nonExistingRecipient, found, err := storage.GetRecipientData(recipientData.Owner)
+		nonExistingRecipient, found, err := storageCollection.GetRecipientData(recipientData.Owner)
 		require.NoError(t, err)
 		require.Nil(t, nonExistingRecipient)
 		require.False(t, found)
 	})
 
 	t.Run("create and get recipient", func(t *testing.T) {
-		rd, err := storage.SaveRecipientData(&recipientData)
+		rd, err := storageCollection.SaveRecipientData(&recipientData)
 		require.NoError(t, err)
-		recipientDataFromDB, found, err := storage.GetRecipientData(recipientData.Owner)
+		recipientDataFromDB, found, err := storageCollection.GetRecipientData(recipientData.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, recipientData.Owner, recipientDataFromDB.Owner)
@@ -43,36 +44,36 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 
 	t.Run("create existing recipient", func(t *testing.T) {
-		rdToSave := &RecipientData{
+		rdToSave := &storage.RecipientData{
 			Owner: common.BytesToAddress([]byte("0x2")),
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
-		rd, err := storage.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
-		rdDup, err := storage.SaveRecipientData(rdToSave)
+		rdDup, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.Nil(t, rdDup)
-		rdFromDB, found, err := storage.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, rdFromDB)
 	})
 
 	t.Run("update existing recipient", func(t *testing.T) {
-		rdToSave := &RecipientData{
+		rdToSave := &storage.RecipientData{
 			Owner: common.BytesToAddress([]byte("0x3")),
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
-		rd, err := storage.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
 		copy(rdToSave.FeeRecipient[:], "0x3")
-		rdNew, err := storage.SaveRecipientData(rdToSave)
+		rdNew, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rdNew)
-		rdFromDB, found, err := storage.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, rdNew.Owner, rdFromDB.Owner)
@@ -80,24 +81,24 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	})
 
 	t.Run("delete recipient", func(t *testing.T) {
-		rdToSave := &RecipientData{
+		rdToSave := &storage.RecipientData{
 			Owner: common.BytesToAddress([]byte("0x4")),
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
-		rd, err := storage.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storage.DeleteRecipientData(rd.Owner)
+		err = storageCollection.DeleteRecipientData(rd.Owner)
 		require.NoError(t, err)
-		rdFromDB, found, err := storage.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, rdFromDB)
 	})
 }
 
-func newRecipientStorageForTest(logger *zap.Logger) (RecipientsCollection, func()) {
+func newRecipientStorageForTest(logger *zap.Logger) (storage.RecipientsCollection, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -105,7 +106,7 @@ func newRecipientStorageForTest(logger *zap.Logger) (RecipientsCollection, func(
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewRecipientsStorage(db, []byte("test"))
+	s := storage.NewRecipientsStorage(db, []byte("test"))
 	return s, func() {
 		db.Close(logger)
 	}
