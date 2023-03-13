@@ -172,8 +172,6 @@ spec:
               value: "true"
             - name: GENESIS_EPOCH
               value: "1"
-            - name: NETWORK_ID
-              value: "shifu-v3-stage"
             - name: DISCOVERY_TRACE
               value: "false"
             - name: PUBSUB_TRACE

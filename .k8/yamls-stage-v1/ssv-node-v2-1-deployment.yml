@@ -128,8 +128,6 @@ spec:
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
-        - name: NETWORK_ID
-          value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: CLEAN_REGISTRY_DATA
