@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/binary"
 	"encoding/hex"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -28,7 +29,9 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger.Debug("🔄 got change round",
-		zap.String("instanceId", hex.EncodeToString(i.State.ID)),
+		//TODO: in ssv-spec message constants should be exported so we don't use magic numbers
+		zap.String("validator-id", hex.EncodeToString(i.State.ID[0:48])),
+		zap.String("duty-type", spectypes.BeaconRole(binary.LittleEndian.Uint32(i.State.ID[48:])).String()),
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Uint64("height", uint64(i.State.Height)),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
