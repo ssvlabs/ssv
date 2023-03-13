@@ -11,8 +11,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -84,7 +82,6 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 		},
 	))
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
-	mux.HandleFunc("/database/validators", mh.handleValidators)
 	mux.HandleFunc("/health", mh.handleHealth)
 
 	go func() {
@@ -96,23 +93,6 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	}()
 
 	return nil
-}
-
-func (mh *metricsHandler) handleValidators(w http.ResponseWriter, r *http.Request) {
-	col := validator.NewCollection(validator.CollectionOptions{
-		DB: mh.db,
-	})
-	shares, err := col.GetFilteredValidatorShares(zap.NewNop(), func(share *types.SSVShare) bool {
-		return !share.Liquidated && share.BeaconMetadata.IsActive()
-	})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := json.NewEncoder(w).Encode(shares); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 }
 
 // handleCountByCollection responds with the number of key in the database by collection.
