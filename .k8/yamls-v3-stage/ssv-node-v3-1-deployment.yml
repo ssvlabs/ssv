@@ -130,8 +130,6 @@ spec:
           value: "15301"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: NETWORK_ID
-          value: "0x09090909"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: WS_API_PORT
