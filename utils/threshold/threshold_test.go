@@ -1,9 +1,10 @@
 package threshold
 
 import (
+	"testing"
+
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 type shareSet struct {

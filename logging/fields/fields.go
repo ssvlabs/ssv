@@ -1,4 +1,4 @@
-package logging
+package fields
 
 import (
 	"fmt"
@@ -19,31 +19,44 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 const (
 	FieldAddress             = "address"
 	FieldBindIP              = "bindIP"
+	FieldBlock               = "block"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
+	FieldConnectionID        = "connectionID"
+	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
-	FieldEnr                 = "enr"
+	FieldDutyID              = "dutyID"
+	FieldENR                 = "ENR"
+	FieldErrors              = "errors"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
-	FieldIdentifier          = "identifier"
+	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "indexCacheMetrics"
-	FieldMessageID           = "messageID"
+	FieldName                = "name"
+	FieldOperatorId          = "operatorID"
 	FieldPeerID              = "peerID"
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
-	FieldSyncResults         = "syncResults"
+	FieldRole                = "role"
+	FieldRound               = "round"
 	FieldStartTimeUnixMilli  = "startTimeUnixMilli"
+	FieldStartTimeUnixNano   = "startTimeUnixNano"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
-	FieldTargetNodeEnr       = "targetNodeEnr"
+	FieldSyncResults         = "syncResults"
+	FieldTargetNodeENR       = "targetNodeENR"
+	FieldTopic               = "topic"
 	FieldTxHash              = "txHash"
-	FieldUpdatedEnrLocalNode = "updated_enr"
+	FieldUpdatedENRLocalNode = "updatedENR"
 	FieldValidator           = "validator"
+	FieldValidatorMetadata   = "validatorMetadata"
+	FiledEvent               = "event"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -62,14 +75,6 @@ func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
 }
 
-func Identifier(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldIdentifier, val)
-}
-
-func IdentifierBytes(val []byte) zapcore.Field {
-	return zap.Stringer(FieldIdentifier, hexStringer{val})
-}
-
 func PubKey(val []byte) zapcore.Field {
 	return zap.Stringer(FieldPubKey, hexStringer{val})
 }
@@ -82,24 +87,28 @@ func Validator(val []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, hexStringer{val})
 }
 
-func Address(val url.URL) zapcore.Field {
+func AddressURL(val url.URL) zapcore.Field {
 	return zap.Stringer(FieldAddress, &val)
 }
 
-func Enr(val *enode.Node) zapcore.Field {
-	return zap.Stringer(FieldEnr, val)
+func ENR(val *enode.Node) zapcore.Field {
+	return zap.Stringer(FieldENR, val)
 }
 
-func TargetNodeEnr(val *enode.Node) zapcore.Field {
-	return zap.Stringer(FieldTargetNodeEnr, val)
+func ENRStr(val string) zapcore.Field {
+	return zap.String(FieldENR, val)
 }
 
-func EnrLocalNode(val *enode.LocalNode) zapcore.Field {
-	return zap.Stringer(FieldEnr, val.Node())
+func TargetNodeENR(val *enode.Node) zapcore.Field {
+	return zap.Stringer(FieldTargetNodeENR, val)
 }
 
-func UpdatedEnrLocalNode(val *enode.LocalNode) zapcore.Field {
-	return zap.Stringer(FieldUpdatedEnrLocalNode, val.Node())
+func ENRLocalNode(val *enode.LocalNode) zapcore.Field {
+	return zap.Stringer(FieldENR, val.Node())
+}
+
+func UpdatedENRLocalNode(val *enode.LocalNode) zapcore.Field {
+	return zap.Stringer(FieldUpdatedENRLocalNode, val.Node())
 }
 
 func Subnets(val records.Subnets) zapcore.Field {
@@ -114,24 +123,12 @@ func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
 }
 
-func MessageID(val spectypes.MessageID) zapcore.Field {
-	return zap.Stringer(FieldMessageID, val)
-}
-
 func DurationMilli(val time.Time) zapcore.Field {
 	return zap.Stringer(FieldDurationMilli, int64Stringer{time.Since(val).Milliseconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, uint64Stringer{uint64(network.EstimatedCurrentSlot())})
-}
-
-type funcStringer struct {
-	fn func() string
-}
-
-func (s funcStringer) String() string {
-	return s.fn()
 }
 
 func StartTimeUnixMilli(network beacon.Network, slot spec.Slot) zapcore.Field {
@@ -158,10 +155,63 @@ func OperatorID(operatorId spectypes.OperatorID) zap.Field {
 	return zap.Uint64("operator-id", uint64(operatorId))
 }
 
+func OperatorIDStr(operatorId string) zap.Field { //todo cleanup it
+	return zap.String(FieldOperatorId, operatorId)
+}
+
 func Height(height specqbft.Height) zap.Field {
 	return zap.Uint64("height", uint64(height))
 }
 
 func Round(round specqbft.Round) zap.Field {
-	return zap.Uint64("round", uint64(round))
+	return zap.Stringer(FieldRound, uint64Stringer{uint64(round)})
+}
+
+func Role(val spectypes.BeaconRole) zap.Field {
+	return zap.Stringer(FieldRole, val)
+}
+
+func EventName(val string) zap.Field {
+	return zap.String(FiledEvent, val)
+}
+
+func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
+	return zap.Any(FieldValidatorMetadata, val)
+}
+
+func BlockNumber(val uint64) zap.Field {
+	return zap.Stringer(FieldBlock, uint64Stringer{val})
+}
+
+func Name(val string) zap.Field {
+	return zap.String(FieldName, val)
+}
+
+func ConnectionID(val string) zap.Field {
+	return zap.String(FieldConnectionID, val)
+}
+
+func Count(val int) zap.Field {
+	return zap.Int(FieldCount, val)
+}
+
+func ErrorStrs(val []string) zap.Field {
+	return zap.Any(FieldErrors, val)
+}
+
+func Errors(val []error) zap.Field {
+	return zap.Any(FieldErrors, val)
+}
+
+func Topic(val string) zap.Field {
+	return zap.String(FieldTopic, val)
+}
+
+func DutyID(runner runner.Runner, duty *spectypes.Duty) zap.Field {
+	return zap.Stringer(FieldDutyID, funcStringer{
+		fn: func() string {
+			epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+			return fmt.Sprintf("T:%v::E:%v::S:%v::V:%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+		},
+	})
 }

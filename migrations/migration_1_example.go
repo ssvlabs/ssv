@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"fmt"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"

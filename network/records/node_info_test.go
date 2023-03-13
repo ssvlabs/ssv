@@ -2,10 +2,11 @@ package records
 
 import (
 	crand "crypto/rand"
+	"testing"
+
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func TestNodeInfo_Seal_Consume(t *testing.T) {

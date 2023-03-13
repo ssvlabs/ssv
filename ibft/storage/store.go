@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage/forks"
 	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -61,7 +60,6 @@ func (i *ibftStorage) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkV
 	i.forkLock.Lock()
 	defer i.forkLock.Unlock()
 
-	logger = logger.Named("OnFork")
 	logger.Info("forking ibft storage")
 	i.fork = forksfactory.NewFork(forkVersion)
 	return nil
@@ -175,7 +173,7 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 		return errors.Wrap(err, "failed to remove decided")
 	}
 
-	logger.Debug("removed decided", zap.Int("count", n), logging.IdentifierBytes(msgID))
+	logger.Debug("removed decided", zap.Int("count", n))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

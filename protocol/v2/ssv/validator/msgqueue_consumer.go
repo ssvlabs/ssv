@@ -7,15 +7,17 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageHandler process the msg. return error if exist
-type MessageHandler func(msg *queue.DecodedSSVMessage) error
+type MessageHandler func(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
 
 // queueContainer wraps a queue with its corresponding state
 type queueContainer struct {
@@ -32,7 +34,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
-			logger.Warn("failed to decode message",
+			logger.Warn("❗ failed to decode message",
 				zap.Error(err),
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msg.MsgID.String()),
@@ -41,12 +43,12 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 		}
 		if pushed := q.Q.TryPush(decodedMsg); !pushed {
 			msgID := msg.MsgID.String()
-			logger.Warn("dropping message because the queue is full",
+			logger.Warn("❗ dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
 	} else {
-		logger.Error("missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
+		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
 }
 
@@ -58,7 +60,7 @@ func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.Messa
 	for ctx.Err() == nil {
 		err := v.ConsumeQueue(logger, msgID, handler)
 		if err != nil {
-			logger.Debug("failed consuming queue", zap.Error(err))
+			logger.Debug("❗ failed consuming queue", zap.Error(err))
 		}
 	}
 }
@@ -84,8 +86,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		return err
 	}
 
-	logger = logger.With(zap.String("identifier", msgID.String()))
-	logger.Debug("queue consumer is running")
+	logger = logger.With(fields.PubKey(msgID.GetPubKey()))
+	logger.Debug("📬 queue consumer is running")
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
@@ -108,17 +110,17 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			break
 		}
 		if msg == nil {
-			logger.Error("got nil message from queue, but context is not done!")
+			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
 
 		// Handle the message.
-		if err := handler(msg); err != nil {
-			v.logMsg(logger, msg, "could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
+		if err := handler(logger, msg); err != nil {
+			v.logMsg(logger, msg, "❗ could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
 
-	logger.Debug("queue consumer is closed")
+	logger.Debug("📪 queue consumer is closed")
 	return nil
 }
 

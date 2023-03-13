@@ -42,7 +42,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 		return errors.Wrap(err, "could not create prepare msg")
 	}
 
-	logger.Debug("got proposal, broadcasting prepare message",
+	logger.Debug("📢 got proposal, broadcasting prepare message",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))

@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -26,13 +27,14 @@ import (
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestSSVMapping(t *testing.T) {
 	path, _ := os.Getwd()
 	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
+
+	logger := logging.TestLogger(t)
 
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -46,7 +48,6 @@ func TestSSVMapping(t *testing.T) {
 	}()
 
 	for name, test := range untypedTests {
-		logex.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]
@@ -134,7 +135,7 @@ func TestSSVMapping(t *testing.T) {
 			}
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
+				typedTest.Run(t, logger)
 			})
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
@@ -229,7 +230,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
@@ -239,7 +240,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	}
 
 	if ret.GetBaseRunner().QBFTController != nil {
-		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)
+		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
 				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
@@ -250,8 +251,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	return ret
 }
 
-func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	logger := logex.TestLogger(t)
+func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,

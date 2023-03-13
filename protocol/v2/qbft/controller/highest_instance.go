@@ -2,10 +2,10 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/pkg/errors"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-
-	"github.com/pkg/errors"
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) error {
@@ -31,7 +31,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 		return nil, nil
 	}
 
-	// Compact the instance to reduce it's memory footprint.
+	// Compact the instance to reduce its memory footprint.
 	instance.Compact(highestInstance.State, highestInstance.DecidedMessage)
 
 	i := instance.NewInstance(

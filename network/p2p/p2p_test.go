@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/logging"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -109,7 +109,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 func TestP2pNetwork_Stream(t *testing.T) {
 	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	defer cancel()
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
@@ -178,7 +178,7 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), forkVersion, n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
@@ -245,9 +245,7 @@ type dummyRouter struct {
 
 func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message",
-		zap.String("identifier", message.GetID().String()),
-		zap.Uint64("count", c))
+	logger.Debug("got message", zap.Uint64("count", c))
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {

@@ -1,10 +1,11 @@
 package tests
 
 import (
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"time"
 )
 
 const (

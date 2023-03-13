@@ -4,17 +4,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	ipfslog "github.com/ipfs/go-log"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
@@ -64,19 +60,19 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		logger.Debug("starting QBFT instance")
+		logger.Debug("ℹ️ starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("failed to create proposal", zap.Error(err))
+				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
 				if err := i.Broadcast(proposal); err != nil {
-					logger.Warn("failed to broadcast proposal", zap.Error(err))
+					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}
@@ -101,7 +97,7 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
