@@ -1,6 +1,7 @@
 package instance
 
 import (
+	"encoding/hex"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -27,6 +28,7 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger.Debug("🔄 got change round",
+		zap.String("instanceId", hex.EncodeToString(i.State.ID)),
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Uint64("height", uint64(i.State.Height)),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
