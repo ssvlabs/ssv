@@ -5,6 +5,7 @@
 
 # SSV - Debugging Guide
 
+
 ## Attach to local network
 
 1. Run local network for debugging:
@@ -24,6 +25,12 @@
       - Create a new `Go Remote` configuration
       - Fill `Host` and `Port` fields
       - Press Debug button
+   2. VSCode:
+      - Press `Run` -> `Add configuration` in the VSCode menu
+      - Select `Go`, then `Go: Connect to server`
+      - Fill hostname and port
+      - Go to the `Run and Debug` tab
+      - Select the created configuration and run it
 
 
 ## Attach to remote network (k8s)
@@ -59,3 +66,24 @@
       - Create a new `Go Remote` configuration
       - Fill `Host` and `Port` fields
       - Press Debug button
+   2. VSCode:
+      - Press `Run` -> `Add configuration` in the VSCode menu
+      - Select `Go`, then `Go: Connect to server`
+      - Fill hostname and port
+      - Go to the `Run and Debug` tab
+      - Select the created configuration and run it
+
+
+## Conditional breakpoints
+
+### Goland
+
+1. Go to a line number where you need to set a breakpoint.
+2. Click between line number and code to create a breakpoint, a red circle should appear.
+3. Right-click on the red circle, input the breakpoint condition.
+
+### VSCode
+
+1. Go to a line number where you need to set a breakpoint.
+2. Click on the left to the line number to create a breakpoint, a red circle should appear.
+3. Right-click on the red circle, click on 'Edit breakpoint', input the breakpoint condition.
