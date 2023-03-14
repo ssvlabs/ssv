@@ -110,6 +110,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return errors.New("could not decode consensus message from network message")
 		}
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
+		logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
