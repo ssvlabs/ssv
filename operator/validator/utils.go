@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"encoding/hex"
 	"os"
 	"path/filepath"
@@ -78,12 +79,17 @@ func ShareFromValidatorEvent(
 			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, event.EncryptedKeys[i])
 			if err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.Wrap(err, "failed to decrypt share private key"),
+					Err: errors.Wrap(err, "could not decrypt share private key"),
 				}
 			}
 			if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.Wrap(err, "failed to set decrypted share private key"),
+					Err: errors.Wrap(err, "could not set decrypted share private key"),
+				}
+			}
+			if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
+				return nil, nil, &abiparser.MalformedEventError{
+					Err: errors.New("share private key does not match public key"),
 				}
 			}
 		}
