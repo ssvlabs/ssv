@@ -6,14 +6,20 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
+
+	zap.L().Debug("got partial sig message (pre-consensus)", fields.PubKey(b.Share.SharePubKey), fields.Role(b.BeaconRoleType),
+		zap.Uint64("msg_slot", uint64(signedMsg.Message.Slot)), zap.Uint64("starting_duty_slot", uint64(b.State.StartingDuty.Slot)),
+		zap.Uint64("signer", signedMsg.Signer))
 
 	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.Slot); err != nil {
 		return err
@@ -49,6 +55,10 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectype
 	if err := decidedValue.Decode(decidedValueByts); err != nil {
 		return errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
+
+	zap.L().Debug("got partial sig message (post-consensus)", fields.PubKey(b.Share.SharePubKey), fields.Role(b.BeaconRoleType),
+		zap.Uint64("msg_slot", uint64(signedMsg.Message.Slot)), zap.Uint64("starting_duty_slot", uint64(decidedValue.Duty.Slot)),
+		zap.Uint64("signer", signedMsg.Signer))
 
 	if err := b.validatePartialSigMsgForSlot(signedMsg, decidedValue.Duty.Slot); err != nil {
 		return err
