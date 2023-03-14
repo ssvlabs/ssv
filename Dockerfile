@@ -4,7 +4,7 @@
 FROM golang:1.19-alpine AS preparer
 
 RUN apk update && apk add --no-cache \
-  curl git zip unzip wget g++ bzip2 make && \
+  curl git g++ bzip2 make && \
   rm /var/cache/apk/*
 
 # install jemalloc
@@ -56,7 +56,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM alpine:3.12 AS runner
 
 # Install ca-certificates, bash
-RUN apk -v --update add ca-certificates bash make  bind-tools && \
+RUN apk -v --update add ca-certificates bash make bind-tools && \
   rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
