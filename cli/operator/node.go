@@ -189,7 +189,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 		}
 	}
 
-	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.ExcludeLoggers, cfg.P2pNetworkConfig.PubSubTrace); err != nil {
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat); err != nil {
 		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 
