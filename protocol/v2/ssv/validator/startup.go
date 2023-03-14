@@ -7,10 +7,11 @@ import (
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 )
 
@@ -30,7 +31,7 @@ func (v *Validator) Start(logger *zap.Logger) error {
 				logger.Warn("❗ share is missing", fields.Role(role))
 				continue
 			}
-			identifier := spectypes.NewMsgID(r.GetBaseRunner().Share.ValidatorPubKey, role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), r.GetBaseRunner().Share.ValidatorPubKey, role)
 			if err := r.GetBaseRunner().QBFTController.LoadHighestInstance(identifier[:]); err != nil {
 				logger.Warn("❗ failed to load highest instance", fields.PubKey(identifier.GetPubKey()), zap.Error(err))
 			}

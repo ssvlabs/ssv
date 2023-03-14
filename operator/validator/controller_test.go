@@ -38,7 +38,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	wg.Add(2)
 
-	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 
 	ctr.messageRouter.Route(logger, spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
@@ -169,22 +169,15 @@ func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 }
 
 func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
-	crd := specqbft.RoundChangeData{
-		PreparedValue:            nil,
-		PreparedRound:            0,
-		RoundChangeJustification: nil,
-	}
-	encoded, err := crd.Encode()
-	require.NoError(t, err)
 	sm := specqbft.SignedMessage{
-		Signature: []byte("sig"),
+		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
 		Signers:   []spectypes.OperatorID{1},
-		Message: &specqbft.Message{
+		Message: specqbft.Message{
 			MsgType:    specqbft.RoundChangeMsgType,
 			Height:     0,
 			Round:      1,
 			Identifier: identifier[:],
-			Data:       encoded,
+			Root:       [32]byte{1, 2, 3},
 		},
 	}
 	res, err := sm.Encode()
@@ -193,20 +186,15 @@ func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte
 }
 
 func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
-	cd := specqbft.CommitData{
-		Data: []byte("data"),
-	}
-	encoded, err := cd.Encode()
-	require.NoError(t, err)
 	sm := specqbft.SignedMessage{
-		Signature: []byte("sig"),
+		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
 		Signers:   []spectypes.OperatorID{1, 2, 3},
-		Message: &specqbft.Message{
+		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     0,
 			Round:      1,
 			Identifier: identifier[:],
-			Data:       encoded,
+			Root:       [32]byte{1, 2, 3},
 		},
 	}
 	res, err := sm.Encode()

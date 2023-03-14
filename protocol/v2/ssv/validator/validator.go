@@ -63,7 +63,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
-		msgID := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, role).String()
+		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
 
 		v.Queues[role] = queueContainer{
 			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),
@@ -112,11 +112,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
+		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
+		if signedMsg.Message.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(logger, signedMsg)

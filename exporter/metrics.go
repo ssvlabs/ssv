@@ -29,6 +29,6 @@ func init() {
 // ReportOperatorIndex reporting of new or exist operators
 func ReportOperatorIndex(logger *zap.Logger, op *registrystorage.OperatorData) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(op.PublicKey))
-	metricOperatorIndex.WithLabelValues(pkHash, strconv.FormatUint(uint64(op.ID), 10)).Set(float64(op.ID))
-	logger.Debug("report operator", zap.String("pkHash", pkHash), zap.Uint64("id", uint64(op.ID)))
+	metricOperatorIndex.WithLabelValues(pkHash, strconv.FormatUint(op.ID, 10)).Set(float64(op.ID))
+	logger.Debug("report operator", zap.String("pkHash", pkHash), zap.Uint64("id", op.ID))
 }

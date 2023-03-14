@@ -1,6 +1,8 @@
 package instance
 
 import (
+	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -42,17 +44,14 @@ func (i *Instance) uponRoundChange(
 		return errors.Wrap(err, "could not get proposal justification for leading round")
 	}
 	if justifiedRoundChangeMsg != nil {
-		highestRCData, err := justifiedRoundChangeMsg.Message.GetRoundChangeData()
-		if err != nil {
-			return errors.Wrap(err, "could not round change data from highestJustifiedRoundChangeMsg")
-		}
+		roundChangeJustification, _ := justifiedRoundChangeMsg.Message.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
 		proposal, err := CreateProposal(
 			i.State,
 			i.config,
 			valueToPropose,
 			roundChangeMsgContainer.MessagesForRound(i.State.Round), // TODO - might be optimized to include only necessary quorum
-			highestRCData.RoundChangeJustification,
+			roundChangeJustification,
 		)
 		if err != nil {
 			return errors.Wrap(err, "failed to create proposal")
@@ -127,23 +126,22 @@ func hasReceivedProposalJustificationForLeadingRound(
 	// Important!
 	// We iterate on all round chance msgs for liveliness in case the last round change msg is malicious.
 	for _, msg := range roundChanges {
-		rcData, err := msg.Message.GetRoundChangeData()
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "could not get round change data")
-		}
+
 		// Chose proposal value.
 		// If justifiedRoundChangeMsg has no prepare justification chose state value
 		// If justifiedRoundChangeMsg has prepare justification chose prepared value
 		valueToPropose := instanceStartValue
-		if rcData.Prepared() {
-			valueToPropose = rcData.PreparedValue
+		if msg.Message.RoundChangePrepared() {
+			valueToPropose = signedRoundChange.FullData
 		}
+
+		roundChangeJustification, _ := msg.Message.GetRoundChangeJustifications() // no need to check error, checked on isValidRoundChange
 		if isProposalJustificationForLeadingRound(
 			state,
 			config,
 			msg,
 			roundChanges,
-			rcData.RoundChangeJustification,
+			roundChangeJustification,
 			valueToPropose,
 			valCheck,
 			signedRoundChange.Message.Round,
@@ -215,7 +213,14 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChange(state *specqbft.State, config qbft.IConfig, signedMsg *specqbft.SignedMessage, height specqbft.Height, round specqbft.Round) error {
+func validRoundChangeForData(
+	state *specqbft.State,
+	config qbft.IConfig,
+	signedMsg *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	fullData []byte,
+) error {
 	if signedMsg.Message.MsgType != specqbft.RoundChangeMsgType {
 		return errors.New("round change msg type is wrong")
 	}
@@ -233,36 +238,41 @@ func validRoundChange(state *specqbft.State, config qbft.IConfig, signedMsg *spe
 		return errors.Wrap(err, "msg signature invalid")
 	}
 
-	rcData, err := signedMsg.Message.GetRoundChangeData()
-	if err != nil {
-		return errors.Wrap(err, "could not get roundChange data ")
-	}
-	if err := rcData.Validate(); err != nil {
-		return errors.Wrap(err, "roundChangeData invalid")
+	if err := signedMsg.Message.Validate(); err != nil {
+		return errors.Wrap(err, "roundChange invalid")
 	}
 
 	// Addition to formal spec
 	// We add this extra tests on the msg itself to filter round change msgs with invalid justifications, before they are inserted into msg containers
-	if rcData.Prepared() {
+	if signedMsg.Message.RoundChangePrepared() {
+		r, err := specqbft.HashDataRoot(fullData)
+		if err != nil {
+			return errors.Wrap(err, "could not hash input data")
+		}
+
 		// validate prepare message justifications
-		prepareMsgs := rcData.RoundChangeJustification
+		prepareMsgs, _ := signedMsg.Message.GetRoundChangeJustifications() // no need to check error, checked on signedMsg.Message.Validate()
 		for _, pm := range prepareMsgs {
-			if err := validSignedPrepareForHeightRoundAndValue(
+			if err := validSignedPrepareForHeightRoundAndRoot(
 				config,
 				pm,
 				state.Height,
-				rcData.PreparedRound,
-				rcData.PreparedValue,
+				signedMsg.Message.DataRound,
+				signedMsg.Message.Root,
 				state.Share.Committee); err != nil {
 				return errors.Wrap(err, "round change justification invalid")
 			}
+		}
+
+		if !bytes.Equal(r[:], signedMsg.Message.Root[:]) {
+			return errors.New("H(data) != root")
 		}
 
 		if !specqbft.HasQuorum(state.Share, prepareMsgs) {
 			return errors.New("no justifications quorum")
 		}
 
-		if rcData.PreparedRound > round {
+		if signedMsg.Message.DataRound > round {
 			return errors.New("prepared round > round")
 		}
 
@@ -275,23 +285,14 @@ func validRoundChange(state *specqbft.State, config qbft.IConfig, signedMsg *spe
 func highestPrepared(roundChanges []*specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	var ret *specqbft.SignedMessage
 	for _, rc := range roundChanges {
-		rcData, err := rc.Message.GetRoundChangeData()
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get round change data")
-		}
-
-		if !rcData.Prepared() {
+		if !rc.Message.RoundChangePrepared() {
 			continue
 		}
 
 		if ret == nil {
 			ret = rc
 		} else {
-			retRCData, err := ret.Message.GetRoundChangeData()
-			if err != nil {
-				return nil, errors.Wrap(err, "could not get round change data")
-			}
-			if retRCData.PreparedRound < rcData.PreparedRound {
+			if ret.Message.DataRound < rc.Message.DataRound {
 				ret = rc
 			}
 		}
@@ -310,18 +311,21 @@ func minRound(roundChangeMsgs []*specqbft.SignedMessage) specqbft.Round {
 	return ret
 }
 
-func getRoundChangeData(state *specqbft.State, config qbft.IConfig, instanceStartValue []byte) (*specqbft.RoundChangeData, error) {
+func getRoundChangeData(state *specqbft.State, config qbft.IConfig, instanceStartValue []byte) (specqbft.Round, [32]byte, []byte, []*specqbft.SignedMessage, error) {
 	if state.LastPreparedRound != specqbft.NoRound && state.LastPreparedValue != nil {
-		justifications := getRoundChangeJustification(state, config, state.PrepareContainer)
-		return &specqbft.RoundChangeData{
-			PreparedRound:            state.LastPreparedRound,
-			PreparedValue:            state.LastPreparedValue,
-			RoundChangeJustification: justifications,
-		}, nil
+		justifications, err := getRoundChangeJustification(state, config, state.PrepareContainer)
+		if err != nil {
+			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not get round change justification")
+		}
+
+		r, err := specqbft.HashDataRoot(state.LastPreparedValue)
+		if err != nil {
+			return specqbft.NoRound, [32]byte{}, nil, nil, errors.Wrap(err, "could not hash input data")
+		}
+
+		return state.LastPreparedRound, r, state.LastPreparedValue, justifications, nil
 	}
-	return &specqbft.RoundChangeData{
-		PreparedRound: specqbft.NoRound,
-	}, nil
+	return specqbft.NoRound, [32]byte{}, nil, nil, nil
 }
 
 // CreateRoundChange
@@ -339,21 +343,24 @@ RoundChange(
        )
 */
 func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, instanceStartValue []byte) (*specqbft.SignedMessage, error) {
-	rcData, err := getRoundChangeData(state, config, instanceStartValue)
+	round, root, fullData, justifications, err := getRoundChangeData(state, config, instanceStartValue)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not generate round change data")
 	}
-	dataByts, err := rcData.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not encode round change data")
-	}
 
+	justificationsData, err := specqbft.MarshalJustifications(justifications)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal justifications")
+	}
 	msg := &specqbft.Message{
 		MsgType:    specqbft.RoundChangeMsgType,
 		Height:     state.Height,
 		Round:      newRound,
 		Identifier: state.ID,
-		Data:       dataByts,
+
+		Root:                     root,
+		DataRound:                round,
+		RoundChangeJustification: justificationsData,
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
@@ -363,7 +370,9 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 	signedMsg := &specqbft.SignedMessage{
 		Signature: sig,
 		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
-		Message:   msg,
+		Message:   *msg,
+
+		FullData: fullData,
 	}
 	return signedMsg, nil
 }

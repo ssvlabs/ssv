@@ -16,7 +16,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 	return &qbft.Config{
 		Signer:    testingutils.NewTestingKeyManager(),
 		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:    types.PrimusTestnet,
+		Domain:    testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")
@@ -44,7 +44,7 @@ var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
 		OperatorID:      1,
 		ValidatorPubKey: keysSet.ValidatorPK.Serialize(),
 		SharePubKey:     keysSet.Shares[1].GetPublicKey().Serialize(),
-		DomainType:      types.PrimusTestnet,
+		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keysSet.Threshold,
 		PartialQuorum:   keysSet.PartialThreshold,
 		Committee:       keysSet.Committee(),
@@ -82,7 +82,7 @@ func NewTestingQBFTController(
 	ctrl := controller.NewController(
 		identifier,
 		share,
-		types.PrimusTestnet,
+		testingutils.TestingSSVDomainType,
 		config,
 		fullNode,
 	)

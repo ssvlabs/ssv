@@ -9,6 +9,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
 
@@ -92,7 +93,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -154,7 +155,7 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 		OperatorID:      id,
 		ValidatorPubKey: keySet.ValidatorPK.Serialize(),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keySet.Threshold,
 		PartialQuorum:   keySet.PartialThreshold,
 		Committee:       keySet.Committee(),

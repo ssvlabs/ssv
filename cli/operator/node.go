@@ -276,17 +276,21 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion) {
 	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-		cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
+		cfg.P2pNetworkConfig.NetworkID = format.DomainType(types.GetDefaultDomain()).String()
 	} else {
 		// we have some custom network id, overriding default domain
-		types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
+		domainType, err := format.DomainTypeFromString(cfg.P2pNetworkConfig.NetworkID)
+		if err != nil {
+			logger.Fatal("failed to parse network id", zap.Error(err))
+		}
+		types.SetDefaultDomain(spectypes.DomainType(domainType))
 	}
 	eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
-	logger.Info("setting ssv network", zap.String("domain", string(types.GetDefaultDomain())),
+	logger.Info("setting ssv network", zap.String("domain", format.DomainType(types.GetDefaultDomain()).String()),
 		zap.String("net-id", cfg.P2pNetworkConfig.NetworkID),
 		zap.String("fork", string(forkVersion)))
 	return eth2Network, forkVersion

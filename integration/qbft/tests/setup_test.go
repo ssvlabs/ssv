@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
@@ -39,7 +40,7 @@ func TestMain(m *testing.M) {
 
 	logger := zap.L().Named("integration-tests")
 
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, maxSupportedCommittee, maxSupportedQuorum, false)
 	if err != nil {

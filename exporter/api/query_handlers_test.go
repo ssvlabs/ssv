@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"math"
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -103,19 +104,13 @@ func TestHandleDecidedQuery(t *testing.T) {
 	role := spectypes.BNRoleAttester
 	pk := sks[1].GetPublicKey()
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		commitData := specqbft.CommitData{Data: []byte(fmt.Sprintf("msg-data-%d", height))}
-		commitDataBytes, err := commitData.Encode()
-		if err != nil {
-			panic(err)
-		}
-
-		id := spectypes.NewMsgID(pk.Serialize(), role)
+		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
 			Round:      1,
 			Identifier: id[:],
-			Data:       commitDataBytes,
+			Root:       [32]byte{0x1, 0x2, 0x3},
 		}
 	})
 	require.NoError(t, err)
@@ -130,7 +125,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
-		require.True(t, ok)
+		require.True(t, ok, "expected []*specqbft.SignedMessage, got %+v", nm.Msg.Data)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})
 
@@ -140,7 +135,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
 		require.True(t, ok)
-		require.Equal(t, 0, len(data))
+		require.Equal(t, []string{"no messages"}, data)
 	})
 
 	t.Run("non-existing validator", func(t *testing.T) {
@@ -153,7 +148,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing role", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), -1, 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)

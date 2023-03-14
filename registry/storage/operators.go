@@ -115,7 +115,7 @@ func (s *operatorsStorage) listOperators(logger *zap.Logger, from, to uint64) ([
 		if err := json.Unmarshal(obj.Value, &od); err != nil {
 			return err
 		}
-		if (uint64(od.ID) >= from && uint64(od.ID) <= to) || (to == 0) {
+		if (od.ID >= from && od.ID <= to) || (to == 0) {
 			operators = append(operators, od)
 		}
 		return nil
@@ -136,7 +136,7 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 	if found {
 		logger.Debug("operator already exist",
 			zap.String("pubKey", string(operatorData.PublicKey)),
-			zap.Uint64("index", uint64(operatorData.ID)))
+			zap.Uint64("index", operatorData.ID))
 		return nil
 	}
 
@@ -156,5 +156,5 @@ func (s *operatorsStorage) DeleteOperatorData(id spectypes.OperatorID) error {
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"
 func buildOperatorKey(id spectypes.OperatorID) []byte {
-	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(uint64(id), 10))}, []byte("/"))
+	return bytes.Join([][]byte{operatorsPrefix, []byte(strconv.FormatUint(id, 10))}, []byte("/"))
 }

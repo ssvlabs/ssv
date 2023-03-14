@@ -4,6 +4,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
@@ -12,7 +13,7 @@ var TestingMessage = &specqbft.Message{
 	Height:     specqbft.FirstHeight,
 	Round:      specqbft.FirstRound,
 	Identifier: []byte{1, 2, 3, 4},
-	Data:       []byte{1, 2, 3, 4},
+	Root:       [32]byte{1, 2, 3, 4},
 }
 
 var TestingSignedMsg = func() *specqbft.SignedMessage {
@@ -20,14 +21,14 @@ var TestingSignedMsg = func() *specqbft.SignedMessage {
 }()
 
 var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
-	domain := types.PrimusTestnet
+	domain := testingutils.TestingSSVDomainType
 	sigType := types.QBFTSignatureType
 
 	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
 	sig := sk.SignByte(r)
 
 	return &specqbft.SignedMessage{
-		Message:   msg,
+		Message:   *msg,
 		Signers:   []types.OperatorID{id},
 		Signature: sig.Serialize(),
 	}
@@ -46,7 +47,7 @@ var testingShare = &types.Share{
 	OperatorID:      1,
 	ValidatorPubKey: testingValidatorPK[:],
 	SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-	DomainType:      types.PrimusTestnet,
+	DomainType:      testingutils.TestingSSVDomainType,
 	Quorum:          3,
 	PartialQuorum:   2,
 	Committee: []*types.Operator{
