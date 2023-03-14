@@ -241,7 +241,7 @@ func (c *controller) handleClusterLiquidatedEvent(
 	if len(liquidatedPubKeys) > 0 {
 		logFields = append(logFields,
 			zap.String("ownerAddress", event.Owner.String()),
-			zap.Strings("liquidatedShares", liquidatedPubKeys),
+			zap.Strings("liquidatedValidators", liquidatedPubKeys),
 		)
 	}
 
@@ -272,7 +272,7 @@ func (c *controller) handleClusterReactivatedEvent(
 	if len(enabledPubKeys) > 0 {
 		logFields = append(logFields,
 			zap.String("ownerAddress", event.Owner.String()),
-			zap.Strings("enabledShares", enabledPubKeys),
+			zap.Strings("enabledValidators", enabledPubKeys),
 		)
 	}
 
