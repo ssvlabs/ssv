@@ -151,7 +151,7 @@ spec:
             - name: NETWORK
               value: "prater"
             - name: DB_PATH
-              value: "./data/db-shifu-v3-ssz_temporary-test"
+              value: "./data/db-shifu-v3-ssz_temporary-test2"
             - name: NETWORK_ID
               value: "0xFFFF0301"
             - name: DB_REPORTING
