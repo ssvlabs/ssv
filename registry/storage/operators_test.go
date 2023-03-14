@@ -6,15 +6,16 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestStorage_SaveAndGetOperatorData(t *testing.T) {
@@ -142,7 +143,7 @@ func TestStorage_ListOperators(t *testing.T) {
 	})
 }
 
-func newOperatorStorageForTest(logger *zap.Logger) (Operators, func()) {
+func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",

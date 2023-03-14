@@ -167,7 +167,7 @@ func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {
-			operatorIDs = append(operatorIDs, uint64(op.OperatorID))
+			operatorIDs = append(operatorIDs, op.OperatorID)
 		}
 
 		shareClusterID, _ := types.ComputeClusterIDHash(share.OwnerAddress.Bytes(), operatorIDs)

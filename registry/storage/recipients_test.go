@@ -100,19 +100,19 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 
 	t.Run("create and get many recipients", func(t *testing.T) {
 		var ownerAddresses []common.Address
-		var savedRecipients []*RecipientData
+		var savedRecipients []*storage.RecipientData
 		for i := 0; i < 10; i++ {
-			rd := RecipientData{
+			rd := storage.RecipientData{
 				Owner: common.BytesToAddress([]byte(fmt.Sprintf("0x%d", i))),
 			}
 			copy(recipientData.FeeRecipient[:], fmt.Sprintf("0x%d", i))
 			ownerAddresses = append(ownerAddresses, rd.Owner)
-			_, err := storage.SaveRecipientData(&rd)
+			_, err := storageCollection.SaveRecipientData(&rd)
 			require.NoError(t, err)
 			savedRecipients = append(savedRecipients, &rd)
 		}
 
-		recipients, err := storage.GetRecipientDataMany(logger, ownerAddresses)
+		recipients, err := storageCollection.GetRecipientDataMany(logger, ownerAddresses)
 		require.NoError(t, err)
 		require.Equal(t, len(ownerAddresses), len(recipients))
 

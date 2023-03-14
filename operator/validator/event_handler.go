@@ -104,7 +104,7 @@ func (c *controller) handleOperatorRemovedEvent(
 
 	logFields := make([]zap.Field, 0)
 	logFields = append(logFields,
-		zap.Uint64("operatorId", uint64(od.ID)),
+		zap.Uint64("operatorId", od.ID),
 		zap.String("operatorPubKey", string(od.PublicKey)),
 		zap.String("ownerAddress", od.OwnerAddress.String()),
 	)
