@@ -632,9 +632,6 @@ func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) 
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	if v.Share.BeaconMetadata.Index%2 == 0 {
-		return false, nil
-	}
 	if err := v.Start(logger); err != nil {
 		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
 		return false, errors.Wrap(err, "could not start validator")
