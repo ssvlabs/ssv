@@ -122,6 +122,8 @@ spec:
           value: "12003"
         - name: DB_PATH
           value: "./data/db-shifu-v3-ssz"
+        - name: NETWORK_ID
+          value: "0xFFFF0301"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
