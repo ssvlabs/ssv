@@ -1,8 +1,5 @@
 global:
   LogLevel: debug
-  ExcludeLoggers:
-    - "Operator"
-    - "Controller"
 
 db:
   Path: ./data/db
