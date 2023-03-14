@@ -38,7 +38,7 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 		require.NoError(t, lastErr)
 	}
 
-	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r))
+	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
 func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
@@ -71,7 +71,7 @@ func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage,
 	}
 	config := testingutils.TestingConfig(ks)
 
-	return specqbft.CreateProposal(state, config, test.Value, test.RoundChangeJustifications, test.PrepareJustifications)
+	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
 }
 
 func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
@@ -84,7 +84,7 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessa
 
 	if len(test.PrepareJustifications) > 0 {
 		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
-		state.LastPreparedValue = test.Value
+		state.LastPreparedValue = test.Value[:]
 
 		for _, msg := range test.PrepareJustifications {
 			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(msg)
@@ -94,5 +94,5 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessa
 		}
 	}
 
-	return specqbft.CreateRoundChange(state, config, 1, test.Value)
+	return specqbft.CreateRoundChange(state, config, 1, test.Value[:])
 }

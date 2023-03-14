@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
@@ -42,7 +41,7 @@ func TestSSVMapping(t *testing.T) {
 	}
 
 	origDomain := types.GetDefaultDomain()
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 	defer func() {
 		types.SetDefaultDomain(origDomain)
 	}()
@@ -151,10 +150,10 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	byts, _ := json.Marshal(m["Duty"])
 	require.NoError(t, json.Unmarshal(byts, duty))
 
-	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
 	for _, msg := range m["OutputMessages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		typedMsg := &spectypes.SignedPartialSignatureMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
@@ -189,11 +188,11 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		msgs = append(msgs, typedMsg)
 	}
 
-	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
 	require.NotNilf(t, m["OutputMessages"], "OutputMessages can't be nil")
 	for _, msg := range m["OutputMessages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		typedMsg := &spectypes.SignedPartialSignatureMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}

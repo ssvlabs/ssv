@@ -11,13 +11,14 @@ import (
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 func TestCleanInstances(t *testing.T) {
 	logger := logging.TestLogger(t)
-	msgID := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
 	require.NoError(t, err)
 
@@ -39,12 +40,12 @@ func TestCleanInstances(t *testing.T) {
 			DecidedMessage: &specqbft.SignedMessage{
 				Signature: []byte("sig"),
 				Signers:   []spectypes.OperatorID{1},
-				Message: &specqbft.Message{
+				Message: specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Height:     h,
 					Round:      1,
 					Identifier: id[:],
-					Data:       nil,
+					Root:       [32]byte{},
 				},
 			},
 		}
@@ -57,7 +58,7 @@ func TestCleanInstances(t *testing.T) {
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(msgID, specqbft.Height(msgsCount))))
 
 	// add different msgID
-	differMsgID := spectypes.NewMsgID([]byte("differ_pk"), spectypes.BNRoleAttester)
+	differMsgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("differ_pk"), spectypes.BNRoleAttester)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
 
@@ -91,7 +92,7 @@ func TestCleanInstances(t *testing.T) {
 }
 
 func TestSaveAndFetchLastState(t *testing.T) {
-	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{
@@ -129,7 +130,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 }
 
 func TestSaveAndFetchState(t *testing.T) {
-	identifier := spectypes.NewMsgID([]byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
 
 	instance := &qbftstorage.StoredInstance{
 		State: &specqbft.State{

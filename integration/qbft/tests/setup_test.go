@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
@@ -33,13 +34,13 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	if err := logging.SetGlobalLogger("debug", "capital", "console", nil, false); err != nil {
+	if err := logging.SetGlobalLogger("debug", "capital", "console"); err != nil {
 		panic(err)
 	}
 
 	logger := zap.L().Named("integration-tests")
 
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
 	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, maxSupportedCommittee, maxSupportedQuorum, false)
 	if err != nil {

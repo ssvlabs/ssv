@@ -119,6 +119,6 @@ func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 	}
 	logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey),
-		zap.Uint64("node_id", uint64(s.OperatorID)),
+		zap.Uint64("node_id", s.OperatorID),
 		zap.Strings("committee", committee))
 }

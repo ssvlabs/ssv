@@ -6,9 +6,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // IsSyncCommitteeAggregator returns tru if aggregator
@@ -31,31 +35,56 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 }
 
 // GetSyncCommitteeContribution returns
-func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, subnetID uint64) (*altair.SyncCommitteeContribution, error) {
+func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
+	if len(selectionProofs) != len(subnetIDs) {
+		return nil, DataVersionNil, errors.New("mismatching number of selection proofs and subnet IDs")
+	}
+
 	gc.waitOneThirdOrValidBlock(slot)
 
 	scDataReqStart := time.Now()
 	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
 	if err != nil {
-		return nil, err
+		return nil, DataVersionNil, err
 	}
 	if blockRoot == nil {
-		return nil, errors.New("block root is nil")
+		return nil, DataVersionNil, errors.New("block root is nil")
 	}
 
 	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
 
 	gc.waitToSlotTwoThirds(slot)
 
-	sccDataReqStart := time.Now()
-	contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetID, *blockRoot)
-	if err != nil {
-		return nil, err
+	// Fetch sync committee contributions for each subnet in parallel.
+	var (
+		sccDataReqStart = time.Now()
+		contributions   = make(spectypes.Contributions, 0, len(subnetIDs))
+		g               errgroup.Group
+	)
+	for i := range subnetIDs {
+		index := i
+		g.Go(func() error {
+			contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetIDs[index], *blockRoot)
+			if err != nil {
+				return err
+			}
+			if contribution == nil {
+				return errors.New("contribution is nil")
+			}
+			contributions = append(contributions, &spectypes.Contribution{
+				SelectionProofSig: selectionProofs[index],
+				Contribution:      *contribution,
+			})
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, DataVersionNil, err
 	}
 
 	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
 
-	return contribution, nil
+	return &contributions, spec.DataVersionAltair, nil
 }
 
 // SubmitSignedContributionAndProof broadcasts to the network

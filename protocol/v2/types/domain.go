@@ -1,32 +1,15 @@
 package types
 
 import (
-	"sync"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 var (
-	// ShifuTestnet is the domain for shifu testnet
-	// NOTE: do not use directly unless you want to check domain,
-	//       i.e. use GetDefaultDomain() to get the current domain.
-	ShifuTestnet   = spectypes.DomainType("shifu")
-	ShifuTestnetV2 = spectypes.DomainType("shifu-v2")
-	ShifuTestnetV3 = spectypes.DomainType("shifu-v3")
-)
-
-var (
-	domain spectypes.DomainType
-	once   sync.Once
+	domain = spectypes.V3Testnet
 )
 
 // GetDefaultDomain returns the global domain used across the system
 func GetDefaultDomain() spectypes.DomainType {
-	once.Do(func() {
-		if len(domain) == 0 {
-			domain = ShifuTestnetV3
-		}
-	})
 	return domain
 }
 

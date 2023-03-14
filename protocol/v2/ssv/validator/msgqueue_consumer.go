@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/pkg/errors"
@@ -136,7 +135,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
 			zap.Any("signers", sm.Signers)), fields...)
 	case spectypes.SSVPartialSignatureMsgType:
-		psm := msg.Body.(*ssv.SignedPartialSignatureMessage)
+		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		fields = append([]zap.Field{zap.Int64("signer", int64(psm.Signer))}, fields...)
 	}
 	logger.Debug(logMsg, fields...)

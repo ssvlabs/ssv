@@ -53,10 +53,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
-		if signedMsg == nil || signedMsg.Message == nil {
-			logger.Debug("❗ got empty message")
-			return
-		}
 		// only supports decided msg's
 		if signedMsg.Message.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.Signers)) {
 			return

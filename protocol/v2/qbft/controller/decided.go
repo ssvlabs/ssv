@@ -1,6 +1,8 @@
 package controller
 
 import (
+	"bytes"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -20,12 +22,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		return nil, errors.Wrap(err, "invalid decided msg")
 	}
 
-	// get decided value
-	data, err := msg.Message.GetCommitData()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not get decided data")
-	}
-
+	// try to find instance
 	inst := c.InstanceForHeight(logger, msg.Message.Height)
 	prevDecided := inst != nil && inst.State.Decided
 	isFutureDecided := msg.Message.Height > c.Height
@@ -35,16 +32,16 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
-		i.State.DecidedValue = data.Data
+		i.State.DecidedValue = msg.FullData
 		i.State.CommitContainer.AddMsg(msg)
 		c.StoredInstances.addNewInstance(i)
 	} else if decided, _ := inst.IsDecided(); !decided {
 		inst.State.Decided = true
 		inst.State.Round = msg.Message.Round
-		inst.State.DecidedValue = data.Data
+		inst.State.DecidedValue = msg.FullData
 		inst.State.CommitContainer.AddMsg(msg)
 	} else { // decide previously, add if has more signers
-		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndValue(msg.Message.Round, msg.Message.Data)
+		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(msg.Message.Round, msg.Message.Root)
 		if len(msg.Signers) > len(signers) {
 			inst.State.CommitContainer.AddMsg(msg)
 		} else {
@@ -61,7 +58,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 				zap.Uint64("ctrl_height", uint64(c.Height)),
 				zap.Any("signers", msg.Signers),
 			)
-			if err = c.SaveInstance(inst, msg); err != nil {
+			if err := c.SaveInstance(inst, msg); err != nil {
 				logger.Debug("❗failed to save instance", zap.Error(err))
 			} else {
 				logger.Debug("💾 saved instance upon decided", zap.Error(err))
@@ -101,12 +98,16 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
-	msgDecidedData, err := signedDecided.Message.GetCommitData()
-	if err != nil {
-		return errors.Wrap(err, "could not get msg decided data")
+	if err := signedDecided.Validate(); err != nil {
+		return errors.Wrap(err, "invalid decided")
 	}
-	if err := msgDecidedData.Validate(); err != nil {
-		return errors.Wrap(err, "invalid decided data")
+
+	r, err := specqbft.HashDataRoot(signedDecided.FullData)
+	if err != nil {
+		return errors.Wrap(err, "could not hash input data")
+	}
+	if !bytes.Equal(r[:], signedDecided.Message.Root[:]) {
+		return errors.New("H(data) != root")
 	}
 
 	return nil

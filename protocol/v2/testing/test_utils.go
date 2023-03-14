@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"encoding/json"
 	"os"
 	"path"
 	"path/filepath"
@@ -77,9 +76,9 @@ func CreateMultipleStoredInstances(
 				Round:                sm.Message.Round,
 				Height:               sm.Message.Height,
 				LastPreparedRound:    sm.Message.Round,
-				LastPreparedValue:    sm.Message.Data,
+				LastPreparedValue:    sm.FullData,
 				Decided:              true,
-				DecidedValue:         sm.Message.Data,
+				DecidedValue:         sm.FullData,
 				ProposeContainer:     specqbft.NewMsgContainer(),
 				PrepareContainer:     specqbft.NewMsgContainer(),
 				CommitContainer:      specqbft.NewMsgContainer(),
@@ -120,7 +119,7 @@ func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectyp
 	}
 
 	return &specqbft.SignedMessage{
-		Message:   msg,
+		Message:   *msg,
 		Signature: agg.Serialize(),
 		Signers:   operators,
 	}, nil
@@ -155,13 +154,6 @@ func NewInMemDb(logger *zap.Logger) basedb.IDb {
 		Path: "",
 	})
 	return db
-}
-
-// CommitDataToBytes encode commit data and handle error if exist
-func CommitDataToBytes(t *testing.T, input *specqbft.CommitData) []byte {
-	ret, err := json.Marshal(input)
-	require.NoError(t, err)
-	return ret
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {

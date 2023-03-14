@@ -125,7 +125,9 @@ spec:
         - name: UDP_PORT
           value: "12002"
         - name: DB_PATH
-          value: "./data/db-shifu-v3"
+          value: "./data/db-shifu-v3-ssz"
+        - name: NETWORK_ID
+          value: "0xFFFF0301"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
@@ -136,8 +138,6 @@ spec:
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
-        - name: NETWORK_ID
-          value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: DEBUG_PORT

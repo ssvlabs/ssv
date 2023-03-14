@@ -139,8 +139,6 @@ github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6r
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
 github.com/bloxapp/eth2-key-manager v1.2.0 h1:KhEi6vY25+K023kgGKDChuB4eDGYO1b2iB5RKKgoRAM=
 github.com/bloxapp/eth2-key-manager v1.2.0/go.mod h1:ihH4gGX4nE72AXA3LCTuXWSrN1r/xS5MBD6VW4P0nks=
-github.com/bloxapp/ssv-spec v0.2.8-0.20230118104749-37a78c8e8a93 h1:y6ve7PO+Dhgqerutq1fo0i4pRYl//vtTyQiwG0c79M8=
-github.com/bloxapp/ssv-spec v0.2.8-0.20230118104749-37a78c8e8a93/go.mod h1:w0GcW7zn+EGU9YTUPM0W9L0w8Q7N3kVjIlO2Ha/htqw=
 github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40/go.mod h1:8rLXio+WjiTceGBHIoTvn60HIbs7Hm7bcHjyrSqYB9c=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
@@ -1052,6 +1050,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826/go.mod h1:TaXosZuwdSHYgviHp1DAtfrULt5eUgsSMsZf+YrPgl8=
+github.com/moshe-blox/ssv-spec v0.0.0-20230312142245-8cb3bd9a2728 h1:NiOe2CSk/L7uxVEiN6XSsvRs9Mv3dOZLpqNqMm/DFUU=
+github.com/moshe-blox/ssv-spec v0.0.0-20230312142245-8cb3bd9a2728/go.mod h1:w0GcW7zn+EGU9YTUPM0W9L0w8Q7N3kVjIlO2Ha/htqw=
 github.com/mr-tron/base58 v1.1.0/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.1/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.2/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=

@@ -172,7 +172,7 @@ func mockContainer(rounds ...specqbft.Round) *specqbft.MsgContainer {
 	container := specqbft.NewMsgContainer()
 	for _, round := range rounds {
 		container.AddMsg(&specqbft.SignedMessage{
-			Message: &specqbft.Message{
+			Message: specqbft.Message{
 				Round: round,
 			},
 		})

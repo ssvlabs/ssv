@@ -1,9 +1,9 @@
 package qbft
 
 import (
+	"errors"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 )
@@ -17,39 +17,8 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 			continue
 		}
 
-		switch msg.Message.MsgType {
-		case specqbft.RoundChangeMsgType:
-			rc := specqbft.RoundChangeData{}
-			if err := rc.Decode(msg.Message.Data); err != nil {
-				lastErr = err
-			}
-			if err := rc.Validate(); err != nil {
-				lastErr = err
-			}
-		case specqbft.CommitMsgType:
-			rc := specqbft.CommitData{}
-			if err := rc.Decode(msg.Message.Data); err != nil {
-				lastErr = err
-			}
-			if err := rc.Validate(); err != nil {
-				lastErr = err
-			}
-		case specqbft.PrepareMsgType:
-			rc := specqbft.PrepareData{}
-			if err := rc.Decode(msg.Message.Data); err != nil {
-				lastErr = err
-			}
-			if err := rc.Validate(); err != nil {
-				lastErr = err
-			}
-		case specqbft.ProposalMsgType:
-			rc := specqbft.ProposalData{}
-			if err := rc.Decode(msg.Message.Data); err != nil {
-				lastErr = err
-			}
-			if err := rc.Validate(); err != nil {
-				lastErr = err
-			}
+		if msg.Message.RoundChangePrepared() && len(msg.Message.RoundChangeJustification) == 0 {
+			lastErr = errors.New("round change justification invalid")
 		}
 
 		if len(test.EncodedMessages) > 0 {

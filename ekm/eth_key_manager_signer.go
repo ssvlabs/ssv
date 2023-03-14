@@ -75,7 +75,17 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 	}, nil
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+	sig, rootSlice, err := km.signBeaconObject(obj, domain, pk, domainType)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+	var root [32]byte
+	copy(root[:], rootSlice)
+	return sig, root, nil
+}
+
+func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -167,8 +177,8 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.At
 	return nil
 }
 
-func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, block *bellatrix.BeaconBlock) error {
-	status, err := km.slashingProtector.IsSlashableProposal(pk, block.Slot)
+func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
+	status, err := km.slashingProtector.IsSlashableProposal(pk, slot)
 	if err != nil {
 		return err
 	}
