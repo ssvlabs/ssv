@@ -121,7 +121,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/shifu-v3"
+          value: "./data/shifu-v3-b"
         - name: NETWORK_ID
           value: "0xFFFF0301"
         - name: METRICS_API_PORT
