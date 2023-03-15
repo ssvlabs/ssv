@@ -51,7 +51,7 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),
+		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAttester),
 	}
 }
 
@@ -173,7 +173,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		attestationSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successfully submitted attestation",

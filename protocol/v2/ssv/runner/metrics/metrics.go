@@ -1,10 +1,10 @@
 package metrics
 
 import (
-	"encoding/hex"
 	"log"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -15,35 +15,40 @@ var (
 		Name:    "ssv_validator_consensus_duration_seconds",
 		Help:    "Consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 	metricsPreConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_pre_consensus_duration_seconds",
 		Help:    "Pre-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 	metricsPostConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_post_consensus_duration_seconds",
 		Help:    "Post-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 	metricsBeaconSubmissionDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_beacon_submission_duration_seconds",
 		Help:    "Submission to beacon node duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 	metricsDutyFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_duty_full_flow_duration_seconds",
 		Help:    "Duty full flow duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
+	metricsDutyFullFlowFirstRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_duty_full_flow_first_round_duration_seconds",
+		Help:    "Duty full flow at first round duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
 	metricsRolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_submitted",
 		Help: "Submitted roles",
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 	metricsRolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_failed",
 		Help: "Submitted roles",
-	}, []string{"pubKey", "role"})
+	}, []string{"role"})
 )
 
 func init() {
@@ -71,6 +76,7 @@ type ConsensusMetrics struct {
 	postConsensus                  prometheus.Observer
 	beaconSubmission               prometheus.Observer
 	dutyFullFlow                   prometheus.Observer
+	dutyFullFlowFirstRound         prometheus.Observer
 	rolesSubmitted                 prometheus.Counter
 	rolesSubmissionFailures        prometheus.Counter
 	preConsensusStart              time.Time
@@ -80,14 +86,15 @@ type ConsensusMetrics struct {
 	dutyFullFlowCumulativeDuration time.Duration
 }
 
-func NewConsensusMetrics(pk []byte, role spectypes.BeaconRole) ConsensusMetrics {
-	values := []string{hex.EncodeToString(pk), role.String()}
+func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
+	values := []string{role.String()}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
 		consensus:               metricsConsensusDuration.WithLabelValues(values...),
 		postConsensus:           metricsPostConsensusDuration.WithLabelValues(values...),
 		beaconSubmission:        metricsBeaconSubmissionDuration.WithLabelValues(values...),
 		dutyFullFlow:            metricsDutyFullFlowDuration.WithLabelValues(values...),
+		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
 	}
@@ -162,10 +169,14 @@ func (cm *ConsensusMetrics) ContinueDutyFullFlow() {
 }
 
 // EndDutyFullFlow sends metrics for duty full flow duration.
-func (cm *ConsensusMetrics) EndDutyFullFlow() {
+func (cm *ConsensusMetrics) EndDutyFullFlow(round specqbft.Round) {
 	if cm != nil && cm.dutyFullFlow != nil && !cm.dutyFullFlowStart.IsZero() {
 		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
 		cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
+
+		if round == 1 {
+			cm.dutyFullFlowFirstRound.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
+		}
 
 		cm.dutyFullFlowStart = time.Time{}
 		cm.dutyFullFlowCumulativeDuration = 0

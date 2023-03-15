@@ -48,7 +48,7 @@ func NewAggregatorRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAggregator),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
 	}
 }
 
@@ -206,7 +206,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 
 		proofSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate")
