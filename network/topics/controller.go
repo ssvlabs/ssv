@@ -154,7 +154,11 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 		return err
 	}
 
+	start := time.Now()
 	go func() {
+		d := time.Since(start)
+		ctrl.logger.Debug("goroutine started", zap.Duration("took", d), zap.Bool("very_long", d > time.Millisecond*20))
+
 		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
 		defer done()
 
