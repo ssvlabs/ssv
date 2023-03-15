@@ -42,7 +42,7 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 		logger.Warn(name+" is not healthy, trying again in 1sec", fields.Errors(errs))
 		time.Sleep(1 * time.Second)
 	}
-	logger.Debug(name + " is healthy")
+	logger.Debug(name + ": healthy")
 }
 
 // ReportSSVNodeHealthiness reports SSV node healthiness.
