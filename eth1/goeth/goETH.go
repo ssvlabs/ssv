@@ -104,26 +104,26 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 }
 
 // HealthCheck provides health status of eth1 node
-func (ec *eth1Client) HealthCheck() []string {
+func (ec *eth1Client) HealthCheck() []error {
 	if ec.conn == nil {
-		return []string{"not connected to eth1 node"}
+		return []error{errors.New("not connected to eth1 node")}
 	}
 	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
 	defer cancel()
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
 		reportNodeStatus(statusUnknown)
-		return []string{"could not get eth1 node sync progress"}
+		return []error{errors.New("could not get eth1 node sync progress")}
 	}
 	if sp != nil {
 		reportNodeStatus(statusSyncing)
-		return []string{fmt.Sprintf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
+		return []error{fmt.Errorf("eth1 node is currently syncing: starting=%d, current=%d, highest=%d",
 			sp.StartingBlock, sp.CurrentBlock, sp.HighestBlock)}
 	}
 	// eth1 node is connected and synced
 	reportNodeStatus(statusOK)
 
-	return []string{}
+	return []error{}
 }
 
 // connect connects to eth1 client
@@ -226,9 +226,9 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 			eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 			if err != nil {
 				logger.Warn("could not parse ongoing event, the event is malformed",
-					zap.String("event", eventName),
-					zap.Uint64("block", vLog.BlockNumber),
-					zap.String("txHash", vLog.TxHash.Hex()),
+					fields.EventName(eventName),
+					fields.BlockNumber(vLog.BlockNumber),
+					fields.TxHash(vLog.TxHash),
 					zap.Error(err),
 				)
 				continue
@@ -322,9 +322,9 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 		if err != nil {
 			loggerWith := logger.With(
-				zap.String("event", eventName),
-				zap.Uint64("block", vLog.BlockNumber),
-				zap.String("txHash", vLog.TxHash.Hex()),
+				fields.EventName(eventName),
+				fields.BlockNumber(vLog.BlockNumber),
+				fields.TxHash(vLog.TxHash),
 				zap.Error(err),
 			)
 			var malformedEventErr *abiparser.MalformedEventError
@@ -348,7 +348,7 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
 			fields.EventID(vLog.Topics[0]),
-			zap.Uint64("block", vLog.BlockNumber),
+			fields.BlockNumber(vLog.BlockNumber),
 			fields.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
@@ -412,8 +412,8 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	default:
 		logger.Debug("unsupported contract event was received, skipping",
 			zap.String("eventName", ev.Name),
-			zap.Uint64("block", vLog.BlockNumber),
-			zap.String("txHash", vLog.TxHash.Hex()),
+			fields.BlockNumber(vLog.BlockNumber),
+			fields.TxHash(vLog.TxHash),
 		)
 	}
 	return ev.Name, nil

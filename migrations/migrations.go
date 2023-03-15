@@ -54,7 +54,7 @@ type Options struct {
 
 // nolint
 func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(logger), o.signerStorage(logger)}
+	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(), o.signerStorage(logger)}
 }
 
 // nolint
@@ -65,7 +65,7 @@ func (o Options) validatorStorage() validatorstorage.ICollection {
 }
 
 // nolint
-func (o Options) nodeStorage(logger *zap.Logger) operatorstorage.Storage {
+func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db)
 }
 

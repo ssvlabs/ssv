@@ -10,12 +10,12 @@ import (
 
 // HealthCheckAgent represent an health-check agent
 type HealthCheckAgent interface {
-	HealthCheck() []string
+	HealthCheck() []error
 }
 
 // ProcessAgents takes a slice of HealthCheckAgent, and invokes them
-func ProcessAgents(agents []HealthCheckAgent) []string {
-	var errs []string
+func ProcessAgents(agents []HealthCheckAgent) []error {
+	var errs []error
 
 	// health checks from all agents
 	for _, agent := range agents {
@@ -39,7 +39,7 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 		if len(errs) == 0 {
 			break
 		}
-		logger.Warn(name+" is not healthy, trying again in 1sec", fields.ErrorStrs(errs))
+		logger.Warn(name+" is not healthy, trying again in 1sec", fields.Errors(errs))
 		time.Sleep(1 * time.Second)
 	}
 	logger.Debug(name + " is healthy")
