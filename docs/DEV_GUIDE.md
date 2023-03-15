@@ -119,16 +119,27 @@ $ make build
    2. Locate the executable in the same folder you are running the script
 2. Generate local config using [script](../scripts/generate_local_config.sh) \
    1. Adjust permissions for the script ```chmod +x generate_local_config.sh```
-   2. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KYES_PATH``` \
+   2. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KEYS_PATH``` \
       `OP_SIZE` - number of operators to create [3f+1]. (e.g. 4 or 7 or 10 ...) \
       `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
       `KS_PASSWORD` - keystore password (e.g. 12345678)
       `SSV_KEYS_PATH` - path to ssv-keys executable (default. ./bin/ssv-keys-mac)
 3. Place the generated yaml files to `./config` [directory](../config)
-4. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
-5. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
-   Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
-6. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+4. Add the local events path to [config.yaml](../config/config.yaml) file
+    ```yaml
+    LocalEventsPath: ./config/events.yaml
+    ```
+5. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
+    ```yaml
+    p2p:
+      Discovery: mdns
+    ```
+6. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components:
+    ```yaml 
+    global:
+      DebugServices: ssv/.*
+    ```   
+7Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 #### Use manual steps:
 
@@ -141,10 +152,21 @@ $ make build
    1. fill the operator registration events with the data generated in section 4
    2. fill the validator registration event with the data generated in section 4
 6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)
-7. Add the local events path to [config.yaml](../config/config.yaml) file `LocalEventsPath: ./config/events.yaml`
-8. Override the Bootnodes default value to empty string in [network config](../network/p2p/config.go) in order to use MDNS network. \
-   Validate you are not passing Bootnodes param in [config.yaml](../config/config.yaml)
-9.  Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+7. Add the local events path to [config.yaml](../config/config.yaml) file
+    ```yaml
+    LocalEventsPath: ./config/events.yaml
+    ```
+8. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components: 
+    ```yaml 
+    global:
+      DebugServices: ssv/.*
+    ```
+9. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
+    ```yaml
+    p2p:
+      Discovery: mdns
+    ```
+10. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 ### Run
 

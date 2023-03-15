@@ -5,19 +5,18 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
 
 const (
-	// prod contract genesis
-	defaultSyncOffset string = "5140591"
-	// stage contract genesis -> 49e08f
+	// prod contract genesis block
+	defaultPraterSyncOffset string = "5140591"
 )
 
 // SyncOffset is the type of variable used for passing around the offset
@@ -36,7 +35,7 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return StringToSyncOffset(defaultSyncOffset)
+	return StringToSyncOffset(defaultPraterSyncOffset)
 }
 
 // StringToSyncOffset converts string to SyncOffset
@@ -134,6 +133,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
 	var errs []error
 	syncTitle := "history"
+	var showLog bool
 	if ongoingSync {
 		syncTitle = "ongoing"
 	}
@@ -147,6 +147,7 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 		if len(logFields) > 0 {
 			logger = logger.With(logFields...)
 		}
+		showLog = true
 	}
 	if err != nil {
 		logger = logger.With(zap.Error(err))
@@ -158,7 +159,7 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 			logger.Error(fmt.Sprintf("could not handle %s sync event", syncTitle))
 			errs = append(errs, err)
 		}
-	} else if logger != nil {
+	} else if showLog {
 		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
