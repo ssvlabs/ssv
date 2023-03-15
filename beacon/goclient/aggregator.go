@@ -33,7 +33,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	var data *phase0.AttestationData
 	for try := 0; try < maxRetries; try++ {
 		data, err = gc.client.AttestationData(gc.ctx, slot, committeeIndex)
-		if err == nil {
+		if err == nil && data != nil {
 			break
 		}
 		time.Sleep(1 * time.Second * time.Duration(try))
@@ -57,7 +57,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	var aggregateData *phase0.Attestation
 	for try := 0; try < maxRetries; try++ {
 		aggregateData, err = gc.client.AggregateAttestation(gc.ctx, slot, root)
-		if err == nil {
+		if err == nil && aggregateData != nil {
 			break
 		}
 		time.Sleep(1 * time.Second * time.Duration(try))
