@@ -84,7 +84,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
 				require.NoError(t, err)
-				dec, err := queue.DecodeSSVMessage(ssvMsg)
+				dec, err := queue.DecodeSSVMessage(nil, ssvMsg)
 				require.NoError(t, err)
 
 				s.validators[id].Queues[role].Q.Push(dec)

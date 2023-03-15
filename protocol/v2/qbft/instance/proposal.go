@@ -21,6 +21,11 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	if !addedMsg {
 		return nil // uponProposal was already called
 	}
+
+	logger.Debug("📬 got proposal message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("proposal-signers", signedProposal.Signers))
+
 	newRound := signedProposal.Message.Round
 	i.State.ProposalAcceptedForCurrentRound = signedProposal
 
