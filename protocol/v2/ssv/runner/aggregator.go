@@ -71,10 +71,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Signer),
-		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
-
 	r.metrics.EndPreConsensus()
 
 	// only 1 root, verified by basePreConsensusMsgProcessing
@@ -86,6 +82,11 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	}
 
 	duty := r.GetState().StartingDuty
+
+	logger.Debug("🧩 got partial signature quorum",
+		zap.Any("signer", signedMsg.Signer),
+		zap.Int64("slot", int64(duty.Slot)),
+	)
 
 	r.metrics.PauseDutyFullFlow()
 

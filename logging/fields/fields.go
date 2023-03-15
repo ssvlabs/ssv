@@ -75,16 +75,16 @@ func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
 }
 
-func PubKey(val []byte) zapcore.Field {
-	return zap.Stringer(FieldPubKey, hexStringer{val})
+func PubKey(pubKey []byte) zapcore.Field {
+	return zap.Stringer(FieldPubKey, hexStringer{pubKey})
 }
 
 func PrivKey(val []byte) zapcore.Field {
 	return zap.Stringer(FieldPrivateKey, hexStringer{val})
 }
 
-func Validator(val []byte) zapcore.Field {
-	return zap.Stringer(FieldValidator, hexStringer{val})
+func Validator(pubKey []byte) zapcore.Field {
+	return zap.Stringer(FieldValidator, hexStringer{pubKey})
 }
 
 func AddressURL(val url.URL) zapcore.Field {

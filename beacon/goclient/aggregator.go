@@ -12,11 +12,6 @@ import (
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
 func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	// As specified in spec, an aggregator should wait until two thirds of the way through slot
-	// to broadcast the best aggregate to the global aggregate channel.
-	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(slot)
-
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
@@ -25,6 +20,11 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	if !isAggregator {
 		return nil, DataVersionNil, errors.New("validator is not an aggregator")
 	}
+
+	// As specified in spec, an aggregator should wait until two thirds of the way through slot
+	// to broadcast the best aggregate to the global aggregate channel.
+	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
+	gc.waitToSlotTwoThirds(slot)
 
 	attDataReqStart := time.Now()
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
