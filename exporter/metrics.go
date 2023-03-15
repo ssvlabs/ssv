@@ -3,7 +3,6 @@ package exporter
 import (
 	"crypto/sha256"
 	"fmt"
-	"log"
 	"strconv"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -22,7 +21,7 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricOperatorIndex); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 }
 

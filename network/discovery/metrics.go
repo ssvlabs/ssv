@@ -1,10 +1,9 @@
 package discovery
 
 import (
-	"log"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
@@ -28,15 +27,15 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricFoundNodes); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricRejectedNodes); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricPublishEnrPings); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricPublishEnrPongs); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 }

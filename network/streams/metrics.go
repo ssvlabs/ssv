@@ -1,10 +1,9 @@
 package streams
 
 import (
-	"log"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
@@ -32,18 +31,18 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsStreamOutgoingRequests); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricsStreamRequestsActive); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricsStreamRequestsSuccess); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricsStreamResponses); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricsStreamRequests); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 }

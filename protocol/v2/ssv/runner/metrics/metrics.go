@@ -2,12 +2,12 @@ package metrics
 
 import (
 	"encoding/hex"
-	"log"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
@@ -59,7 +59,7 @@ func init() {
 
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
-			log.Println("could not register prometheus collector")
+			zap.L().Debug("could not register prometheus collector", zap.Error(err))
 		}
 	}
 }

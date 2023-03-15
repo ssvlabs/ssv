@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
@@ -37,7 +36,7 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 }
 

@@ -1,10 +1,9 @@
 package goeth
 
 import (
-	"log"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 type eth1NodeStatus int32
@@ -29,13 +28,13 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsEth1NodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricSyncEventsCountSuccess); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 	if err := prometheus.Register(metricSyncEventsCountSuccess); err != nil {
-		log.Println("could not register prometheus collector")
+		zap.L().Debug("could not register prometheus collector", zap.Error(err))
 	}
 }
 
