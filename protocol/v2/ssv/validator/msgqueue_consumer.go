@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -85,7 +84,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		return err
 	}
 
-	logger = logger.With(fields.PubKey(msgID.GetPubKey()))
 	logger.Debug("📬 queue consumer is running")
 
 	for ctx.Err() == nil {
