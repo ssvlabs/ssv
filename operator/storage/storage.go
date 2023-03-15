@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -250,4 +251,8 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *storage) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beacon.ValidatorMetadata) error {
+	return s.shareStore.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
 }
