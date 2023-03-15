@@ -12,6 +12,9 @@ import (
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
 func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	// TODO: temporary retries -- revert before merging!
+	const maxRetries = 6
+
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
@@ -27,9 +30,16 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	gc.waitToSlotTwoThirds(slot)
 
 	attDataReqStart := time.Now()
-	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+	var data *phase0.AttestationData
+	for try := 0; try < maxRetries; try++ {
+		data, err = gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second * time.Duration(try))
+	}
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, errors.Wrap(err, "failed to get attestation data")
 	}
 	if data == nil {
 		return nil, DataVersionNil, errors.New("attestation data is nil")
@@ -44,7 +54,14 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 
 	aggDataReqStart := time.Now()
-	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
+	var aggregateData *phase0.Attestation
+	for try := 0; try < maxRetries; try++ {
+		aggregateData, err = gc.client.AggregateAttestation(gc.ctx, slot, root)
+		if err == nil {
+			break
+		}
+		time.Sleep(1 * time.Second * time.Duration(try))
+	}
 	if err != nil {
 		return nil, DataVersionNil, errors.Wrap(err, "failed to get aggregate attestation")
 	}
