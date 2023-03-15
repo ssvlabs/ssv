@@ -108,7 +108,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
+		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
 		if ctx.Err() != nil {
 			break
 		}
