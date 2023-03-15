@@ -115,7 +115,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db-shifu-v3-ssz_temporary-test2"
+          value: "./data/shifu-v3"
         - name: NETWORK_ID
           value: "0xFFFF0301"
         - name: DB_REPORTING
