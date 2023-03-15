@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -207,11 +208,11 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func DutyID(runner runner.Runner, duty *spectypes.Duty) zap.Field {
+func DutyID(epoch phase0.Epoch, duty *spectypes.Duty) zap.Field {
 	return zap.Stringer(FieldDutyID, funcStringer{
 		fn: func() string {
 			epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
-			return fmt.Sprintf("T:%v::E:%v::S:%v::V:%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+			return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 		},
 	})
 }
