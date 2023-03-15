@@ -91,6 +91,10 @@ func AddressURL(val url.URL) zapcore.Field {
 	return zap.Stringer(FieldAddress, &val)
 }
 
+func Address(val string) zapcore.Field {
+	return zap.String(FieldAddress, val)
+}
+
 func ENR(val *enode.Node) zapcore.Field {
 	return zap.Stringer(FieldENR, val)
 }

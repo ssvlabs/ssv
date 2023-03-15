@@ -129,7 +129,7 @@ func (ec *eth1Client) HealthCheck() []string {
 // connect connects to eth1 client
 func (ec *eth1Client) connect(logger *zap.Logger) error {
 	// Create an IPC based RPC connection to a remote node
-	logger.Info("connecting to execution client", zap.String("address", ec.nodeAddr))
+	logger.Info("connecting to execution client", fields.Address(ec.nodeAddr))
 	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
 	defer cancel()
 	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
