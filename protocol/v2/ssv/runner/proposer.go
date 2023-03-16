@@ -345,7 +345,7 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.decidedBlindedBlock() {
-		_, data, err := r.GetState().DecidedValue.GetBlockData()
+		_, data, err := r.GetState().DecidedValue.GetBlindedBlockData()
 		if err != nil {
 			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
 		}
