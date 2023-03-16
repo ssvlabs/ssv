@@ -1,6 +1,7 @@
 package bounded
 
 import (
+	"runtime"
 	"time"
 
 	"github.com/paulbellamy/ratecounter"
@@ -19,6 +20,8 @@ var in = make(chan job, goroutines)
 func init() {
 	for i := 0; i < goroutines; i++ {
 		go func() {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
 			for j := range in {
 				j.out <- j.f()
 			}
