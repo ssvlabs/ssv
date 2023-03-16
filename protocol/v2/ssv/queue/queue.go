@@ -79,7 +79,10 @@ func logPop(logger *zap.Logger, msg *DecodedSSVMessage) {
 	if t, ok := queueLagMap.LoadAndDelete(msg.MsgID); !ok {
 		zap.L().Error("TRACE:popped message not recorded as pushed")
 	} else {
-		zap.L().Info("TRACE:queueLag", zap.Int64("lagMilis", time.Since(t.(time.Time)).Milliseconds()))
+		d := time.Since(t.(time.Time))
+		if d >= 1*time.Millisecond {
+			zap.L().Info("TRACE:queueLag", zap.Int64("lagMilis", d.Milliseconds()))
+		}
 	}
 }
 
