@@ -128,9 +128,9 @@ func init() {
 				zap.L().Debug("TRACE: avg channel time",
 					zap.Float64("time_ms", time.Duration(channelCounter.Rate()).Seconds()),
 					zap.Uint64("calls_total", nAbove1ms),
-					zap.String("above_3ms", fmt.Sprintf("%.2f%%", float64(nAbove3ms)/float64(nAbove1ms)*100)),
-					zap.String("above_5ms", fmt.Sprintf("%.2f%%", float64(nAbove5ms)/float64(nAbove1ms)*100)),
-					zap.String("above_10ms", fmt.Sprintf("%.2f%%", float64(nAbove10ms)/float64(nAbove1ms)*100)),
+					zap.String("above_3ms", fmt.Sprintf("%.2f%%", float64(nAbove3ms+nAbove5ms+nAbove10ms+nAbove20ms)/float64(nAbove1ms)*100)),
+					zap.String("above_5ms", fmt.Sprintf("%.2f%%", float64(nAbove5ms+nAbove10ms+nAbove20ms)/float64(nAbove1ms)*100)),
+					zap.String("above_10ms", fmt.Sprintf("%.2f%%", float64(nAbove10ms+nAbove20ms)/float64(nAbove1ms)*100)),
 					zap.String("above_20ms", fmt.Sprintf("%.2f%%", float64(nAbove20ms)/float64(nAbove1ms)*100)),
 				)
 			default:
