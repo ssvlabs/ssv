@@ -3,6 +3,7 @@ package runner
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/bounded"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -57,12 +58,16 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 		return errors.New("invalid partial sig slot")
 	}
 
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
+	if err := bounded.Run(func() error {
+		return signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
+	}); err != nil {
 		return errors.Wrap(err, "failed to verify PartialSignature")
 	}
 
 	for _, msg := range signedMsg.Message.Messages {
-		if err := b.verifyBeaconPartialSignature(msg); err != nil {
+		if err := bounded.Run(func() error {
+			return b.verifyBeaconPartialSignature(msg)
+		}); err != nil {
 			return errors.Wrap(err, "could not verify Beacon partial Signature")
 		}
 	}
