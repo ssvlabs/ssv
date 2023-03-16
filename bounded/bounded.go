@@ -148,9 +148,9 @@ func Run(f func() error) error {
 	// 	counter.Incr(int64(time.Since(start)))
 	// }()
 
-	// out := make(chan error)
-	// in <- job{f, out}
-	// return <-out
+	out := make(chan error)
+	in <- job{f, out}
+	return <-out
 
-	return f()
+	// return f()
 }
