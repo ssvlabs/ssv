@@ -77,9 +77,9 @@ func logPush(msg *DecodedSSVMessage) {
 
 func logPop(logger *zap.Logger, msg *DecodedSSVMessage) {
 	if t, ok := queueLagMap.LoadAndDelete(msg.MsgID); !ok {
-		zap.L().Error("popped message not recorded as pushed")
+		zap.L().Error("TRACE:popped message not recorded as pushed")
 	} else {
-		zap.L().Info("queueLag", zap.Int64("lagMilis", time.Since(t.(time.Time)).Milliseconds()))
+		zap.L().Info("TRACE:queueLag", zap.Int64("lagMilis", time.Since(t.(time.Time)).Milliseconds()))
 	}
 }
 
