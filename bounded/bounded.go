@@ -29,7 +29,10 @@ func init() {
 			defer runtime.UnlockOSThread()
 
 			for j := range in {
-				j.out <- j.f()
+				runtime.Gosched()
+				err := j.f()
+				runtime.Gosched()
+				j.out <- err
 			}
 		}()
 	}
@@ -151,7 +154,6 @@ func Run(f func() error) error {
 	out := make(chan error)
 	in <- job{f, out}
 	err := <-out
-	runtime.Gosched()
 	return err
 
 	// err := f()
