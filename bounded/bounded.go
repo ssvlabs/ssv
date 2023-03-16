@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const goroutines = 3
+const goroutines = 12
 
 type job struct {
 	f   func() error
@@ -21,7 +21,7 @@ type job struct {
 var in = make(chan job, goroutines)
 
 func init() {
-	runtime.GOMAXPROCS(12)
+	runtime.GOMAXPROCS(48)
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
