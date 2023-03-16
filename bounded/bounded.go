@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const goroutines = 6
+const goroutines = 8
 
 type job struct {
 	f   func() error
@@ -148,13 +148,13 @@ func Run(f func() error) error {
 	// 	counter.Incr(int64(time.Since(start)))
 	// }()
 
-	// out := make(chan error)
-	// in <- job{f, out}
-	// err := <-out
-	// runtime.Gosched()
-	// return err
-
-	err := f()
+	out := make(chan error)
+	in <- job{f, out}
+	err := <-out
 	runtime.Gosched()
 	return err
+
+	// err := f()
+	// runtime.Gosched()
+	// return err
 }
