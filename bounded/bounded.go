@@ -40,9 +40,9 @@ func init() {
 	}()
 
 	// Measure the time it takes to start a goroutine.
-	var goroutineCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
-	var printRateTicker = time.NewTicker(5 * time.Second)
 	go func() {
+		var goroutineCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
+		var printRateTicker = time.NewTicker(5 * time.Second)
 		var wg sync.WaitGroup
 		for {
 			start := time.Now()
@@ -67,9 +67,10 @@ func init() {
 	}()
 
 	// Measure the time it takes to send/receive on a channel.
-	var ch = make(chan struct{})
-	var channelCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
 	go func() {
+		var ch = make(chan struct{})
+		var channelCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
+		var printRateTicker = time.NewTicker(5 * time.Second)
 		var wg sync.WaitGroup
 		for {
 			start := time.Now()
