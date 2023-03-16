@@ -1,8 +1,10 @@
 package bounded
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/paulbellamy/ratecounter"
@@ -67,29 +69,70 @@ func init() {
 	}()
 
 	// Measure the time it takes to send/receive on a channel.
+	var above1ms atomic.Uint64
+	var above3ms atomic.Uint64
+	var above5ms atomic.Uint64
+	var above10ms atomic.Uint64
+	var above20ms atomic.Uint64
 	go func() {
-		var ch = make(chan struct{})
+		var ch = make(chan struct{}, 32)
 		var channelCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
 		var printRateTicker = time.NewTicker(5 * time.Second)
-		var wg sync.WaitGroup
-		for {
-			start := time.Now()
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+
+		go func() {
+			for {
+				start := time.Now()
 				<-ch
 				d := time.Since(start)
 				channelCounter.Incr(int64(d))
-				if d >= time.Millisecond*1 {
-					zap.L().Debug("TRACE: channelLag", zap.Int64("time_ms", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
+				time.Sleep(time.Millisecond * 2)
+
+				switch {
+				case d > time.Millisecond*20:
+					above20ms.Add(1)
+				case d > time.Millisecond*10:
+					above10ms.Add(1)
+				case d > time.Millisecond*5:
+					above5ms.Add(1)
+				case d > time.Millisecond*3:
+					above3ms.Add(1)
+				case d > time.Millisecond*1:
+					above1ms.Add(1)
 				}
-			}()
-			wg.Wait()
+			}
+		}()
+
+		for {
+			start := time.Now()
+			ch <- struct{}{}
+			d := time.Since(start)
+			channelCounter.Incr(int64(d))
 			time.Sleep(time.Millisecond * 2)
 
+			switch {
+			case d > time.Millisecond*20:
+				above20ms.Add(1)
+			case d > time.Millisecond*10:
+				above10ms.Add(1)
+			case d > time.Millisecond*5:
+				above5ms.Add(1)
+			case d > time.Millisecond*3:
+				above3ms.Add(1)
+			case d > time.Millisecond*1:
+				above1ms.Add(1)
+			}
+
+			nAbove1ms, nAbove3ms, nAbove5ms, nAbove10ms, nAbove20ms := above1ms.Load(), above3ms.Load(), above5ms.Load(), above10ms.Load(), above20ms.Load()
 			select {
 			case <-printRateTicker.C:
-				zap.L().Debug("TRACE: avg channel time", zap.Float64("time_ms", time.Duration(channelCounter.Rate()).Seconds()))
+				zap.L().Debug("TRACE: avg channel time",
+					zap.Float64("time_ms", time.Duration(channelCounter.Rate()).Seconds()),
+					zap.Uint64("calls_total", nAbove1ms),
+					zap.String("calls_above_3ms", fmt.Sprintf("%.2f%%", float64(nAbove3ms)/float64(nAbove1ms)*100)),
+					zap.String("calls_above_5ms", fmt.Sprintf("%.2f%%", float64(nAbove5ms)/float64(nAbove1ms)*100)),
+					zap.String("calls_above_10ms", fmt.Sprintf("%.2f%%", float64(nAbove10ms)/float64(nAbove1ms)*100)),
+					zap.String("calls_above_20ms", fmt.Sprintf("%.2f%%", float64(nAbove20ms)/float64(nAbove1ms)*100)),
+				)
 			default:
 			}
 		}
