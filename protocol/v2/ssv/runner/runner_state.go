@@ -8,7 +8,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
 
@@ -37,12 +36,7 @@ func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 // ReconstructBeaconSig aggregates collected partial beacon sigs
 func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
-	var signature []byte
-	var err error
-	bounded.Run(func() error {
-		signature, err = container.ReconstructSignature(root, validatorPubKey)
-		return nil
-	})
+	signature, err := container.ReconstructSignature(root, validatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
 	}
