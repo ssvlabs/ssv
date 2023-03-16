@@ -140,7 +140,7 @@ spec:
       - name: ssv-node-1
         persistentVolumeClaim:
           claimName: ssv-node-1
-      - name: ssv-nod-1
+      - name: ssv-node-1
         configMap:
           name: ssv-node-1
       tolerations:
