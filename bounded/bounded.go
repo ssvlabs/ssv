@@ -2,6 +2,7 @@ package bounded
 
 import (
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/paulbellamy/ratecounter"
@@ -39,16 +40,20 @@ func init() {
 	var goroutineCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
 	var printRateTicker = time.NewTicker(5 * time.Second)
 	go func() {
+		var wg sync.WaitGroup
 		for {
 			start := time.Now()
+			wg.Add(1)
 			go func() {
+				defer wg.Done()
 				d := time.Since(start)
 				goroutineCounter.Incr(int64(d))
 				if d >= time.Millisecond*1 {
 					zap.L().Debug("TRACE:goroutineLag", zap.Int64("tookMillis", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
 				}
 			}()
-			time.Sleep(time.Millisecond * 100)
+			wg.Wait()
+			time.Sleep(time.Millisecond * 2)
 
 			select {
 			case <-printRateTicker.C:
