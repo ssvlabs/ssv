@@ -104,7 +104,7 @@ fi
 #fi
 
 if [[ -d .k8/yamls-v3-prod/ ]]; then
-  for file in $(ls -A1 .k8/yamls-v3/); do
+  for file in $(ls -A1 .k8/yamls-v3-prod/); do
    sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" \
           -e "s|REPLACE_DOCKER_REPO|${DOCKERREPO}|g" \
           -e "s|REPLACE_REPLICAS|${REPLICAS}|g" \
