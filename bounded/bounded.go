@@ -148,11 +148,13 @@ func Run(f func() error) error {
 	// 	counter.Incr(int64(time.Since(start)))
 	// }()
 
-	out := make(chan error)
-	in <- job{f, out}
-	err := <-out
+	// out := make(chan error)
+	// in <- job{f, out}
+	// err := <-out
+	// runtime.Gosched()
+	// return err
+
+	err := f()
 	runtime.Gosched()
 	return err
-
-	// return f()
 }
