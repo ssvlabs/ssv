@@ -16,7 +16,7 @@ import (
 
 const (
 	// prod contract genesis block
-	defaultPraterSyncOffset string = "5140591"
+	defaultPraterSyncOffset string = "8661727"
 )
 
 // SyncOffset is the type of variable used for passing around the offset

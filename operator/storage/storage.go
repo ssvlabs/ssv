@@ -86,7 +86,7 @@ func (s *storage) GetOperatorData(id spectypes.OperatorID) (*registrystorage.Ope
 	return s.operatorStore.GetOperatorData(id)
 }
 
-func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) error {
+func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) (bool, error) {
 	return s.operatorStore.SaveOperatorData(logger, operatorData)
 }
 
