@@ -103,7 +103,7 @@ fi
   #done
 #fi
 
-if [[ -d .k8/yamls-v3/ ]]; then
+if [[ -d .k8/yamls-v3-prod/ ]]; then
   for file in $(ls -A1 .k8/yamls-v3/); do
    sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" \
           -e "s|REPLACE_DOCKER_REPO|${DOCKERREPO}|g" \
@@ -113,7 +113,7 @@ if [[ -d .k8/yamls-v3/ ]]; then
           -e "s|REPLACE_HEALTH_IMAGE|${HEALTH_CHECK_IMAGE}|g" \
           -e "s|REPLACE_NODES_CPU_LIMIT|${NODES_CPU_LIMIT}|g" \
           -e "s|REPLACE_NODES_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
-	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls-v3/${file}" || exit 1
+	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/yamls-v3-prod/${file}" || exit 1
   done
 fi
 
