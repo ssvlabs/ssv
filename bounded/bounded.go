@@ -150,7 +150,9 @@ func Run(f func() error) error {
 
 	out := make(chan error)
 	in <- job{f, out}
-	return <-out
+	err := <-out
+	runtime.Gosched()
+	return err
 
 	// return f()
 }
