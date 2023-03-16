@@ -146,14 +146,14 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	// specific duty sig
 	var blkToSign ssz.HashRoot
 	if r.decidedBlindedBlock() {
-		blkToSign, err = decidedValue.GetBlindedBlockHashRoot()
+		_, blkToSign, err = decidedValue.GetBlindedBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get blinded block as a hash root")
+			return errors.Wrap(err, "could not get blinded block data")
 		}
 	} else {
-		blkToSign, err = decidedValue.GetBlockHashRoot()
+		_, blkToSign, err = decidedValue.GetBlockData()
 		if err != nil {
-			return errors.Wrap(err, "could not get block as a hash root")
+			return errors.Wrap(err, "could not get block data")
 		}
 	}
 	if err != nil {
@@ -220,7 +220,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if r.decidedBlindedBlock() {
-			vBlindedBlk, err := r.GetState().DecidedValue.GetBlindedBlockData()
+			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
@@ -257,7 +257,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
-			vBlk, err := r.GetState().DecidedValue.GetBlockData()
+			vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
@@ -333,7 +333,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
-	_, err := r.BaseRunner.State.DecidedValue.GetBlindedBlockData()
+	_, _, err := r.BaseRunner.State.DecidedValue.GetBlindedBlockData()
 	return err == nil
 }
 
@@ -345,16 +345,16 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.decidedBlindedBlock() {
-		data, err := r.GetState().DecidedValue.GetBlindedBlockHashRoot()
+		_, data, err := r.GetState().DecidedValue.GetBlockData()
 		if err != nil {
-			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block as a hash root")
+			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
 		}
 		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
 
-	data, err := r.GetState().DecidedValue.GetBlockHashRoot()
+	_, data, err := r.GetState().DecidedValue.GetBlockData()
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block as a hash root")
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
 	return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 }
