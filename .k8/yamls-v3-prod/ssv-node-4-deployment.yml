@@ -78,7 +78,7 @@ spec:
           hostPort: 15004
         env:
           - name: SHARE_CONFIG
-            value: "./data/share.yaml"
+            value: "./data1/share.yaml"
           - name: CONFIG_PATH
             valueFrom:
               secretKeyRef:
@@ -133,7 +133,7 @@ spec:
         volumeMounts:
         - mountPath: /data
           name: ssv-node-4
-        - mountPath: /data/share.yaml
+        - mountPath: /data1/share.yaml
           subPath: share.yaml
           name: ssv-node-4-cm
       volumes:

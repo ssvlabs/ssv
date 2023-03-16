@@ -78,7 +78,7 @@ spec:
           hostPort: 15001
         env:
           - name: SHARE_CONFIG
-            value: "./data/share.yaml"
+            value: "./data1/share.yaml"
           - name: CONFIG_PATH
             valueFrom:
               secretKeyRef:
@@ -133,16 +133,16 @@ spec:
         volumeMounts:
         - mountPath: /data
           name: ssv-node-1
-        - mountPath: /data/share.yaml
+        - mountPath: /data1/share.yaml
           subPath: share.yaml
-          name: cm-ssv-node-1
+          name: ssv-node-1-cm
       volumes:
       - name: ssv-node-1
         persistentVolumeClaim:
           claimName: ssv-node-1
-      - name: cm-ssv-node-1
+      - name: ssv-node-1-cm
         configMap:
-          name: cm-ssv-node-1
+          name: ssv-node-1-cm
       tolerations:
         - effect: NoSchedule
           key: kubernetes.io/role
