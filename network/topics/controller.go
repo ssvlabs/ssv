@@ -158,7 +158,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 	go func() {
 		d := time.Since(start)
 		if d >= time.Millisecond*1 {
-			ctrl.logger.Debug("TRACE:goroutineLag", zap.Duration("took", d), zap.Bool("very_long", d > time.Millisecond*20))
+			ctrl.logger.Debug("TRACE:goroutineLag", zap.Int64("tookMillis", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
 		}
 
 		ctx, done := context.WithTimeout(ctrl.ctx, timeout)
