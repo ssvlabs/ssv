@@ -1,8 +1,6 @@
 package abiparser
 
 import (
-	"encoding/hex"
-	"fmt"
 	"math/big"
 	"strings"
 
@@ -119,14 +117,6 @@ func (v1 *AbiV1) ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*O
 	}
 	event.OperatorId = log.Topics[1].Big().Uint64()
 	event.Owner = common.HexToAddress(log.Topics[2].Hex())
-
-	fmt.Println("OperatorRemovedEvent", hex.EncodeToString(log.Data))
-	fmt.Println("OperatorRemovedEvent", hex.EncodeToString(log.Topics[0].Bytes()))
-	fmt.Println("OperatorRemovedEvent", hex.EncodeToString(log.Topics[1].Bytes()))
-	fmt.Println("OperatorRemovedEvent", hex.EncodeToString(log.Topics[2].Bytes()))
-	fmt.Println("OperatorRemovedEvent", hex.EncodeToString(log.TxHash.Bytes()))
-	fmt.Println("OperatorRemovedEvent", log.BlockNumber)
-	fmt.Println("OperatorRemovedEvent", log.BlockNumber)
 
 	return &event, nil
 }
