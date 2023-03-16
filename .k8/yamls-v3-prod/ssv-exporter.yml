@@ -61,7 +61,7 @@ spec:
   selector:
     app: ssv-exporter
 ---
-apiVersion: REPLACE_API_VERSION
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
