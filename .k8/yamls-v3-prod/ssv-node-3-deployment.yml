@@ -135,14 +135,14 @@ spec:
           name: ssv-node-3
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-node-3
+          name: ssv-node-3-cm
       volumes:
       - name: ssv-node-3
         persistentVolumeClaim:
           claimName: ssv-node-3
-      - name: ssv-node-3
+      - name: ssv-node-3-cm
         configMap:
-          name: ssv-node-3
+          name: ssv-node-3-cm
       tolerations:
         - effect: NoSchedule
           key: kubernetes.io/role
