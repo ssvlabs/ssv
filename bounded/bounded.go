@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const goroutines = 4
+const goroutines = 6
 
 type job struct {
 	f   func() error
@@ -19,10 +19,13 @@ type job struct {
 var in = make(chan job, goroutines)
 
 func init() {
+	runtime.GOMAXPROCS(12)
+
 	for i := 0; i < goroutines; i++ {
 		go func() {
 			runtime.LockOSThread()
 			defer runtime.UnlockOSThread()
+
 			for j := range in {
 				j.out <- j.f()
 			}
@@ -49,7 +52,7 @@ func init() {
 				d := time.Since(start)
 				goroutineCounter.Incr(int64(d))
 				if d >= time.Millisecond*1 {
-					zap.L().Debug("TRACE:goroutineLag", zap.Int64("tookMillis", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
+					zap.L().Debug("TRACE: goroutineLag", zap.Int64("time_ms", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
 				}
 			}()
 			wg.Wait()
@@ -57,7 +60,35 @@ func init() {
 
 			select {
 			case <-printRateTicker.C:
-				zap.L().Debug("goroutine average start time", zap.Float64("time_ms", time.Duration(goroutineCounter.Rate()).Seconds()))
+				zap.L().Debug("TRACE: avg goroutine start time", zap.Float64("time_ms", time.Duration(goroutineCounter.Rate()).Seconds()))
+			default:
+			}
+		}
+	}()
+
+	// Measure the time it takes to send/receive on a channel.
+	var ch = make(chan struct{})
+	var channelCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
+	go func() {
+		var wg sync.WaitGroup
+		for {
+			start := time.Now()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				<-ch
+				d := time.Since(start)
+				channelCounter.Incr(int64(d))
+				if d >= time.Millisecond*1 {
+					zap.L().Debug("TRACE: channelLag", zap.Int64("time_ms", d.Milliseconds()), zap.Bool("very_long", d > time.Millisecond*20))
+				}
+			}()
+			wg.Wait()
+			time.Sleep(time.Millisecond * 2)
+
+			select {
+			case <-printRateTicker.C:
+				zap.L().Debug("TRACE: avg channel time", zap.Float64("time_ms", time.Duration(channelCounter.Rate()).Seconds()))
 			default:
 			}
 		}
