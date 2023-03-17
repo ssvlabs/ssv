@@ -79,11 +79,6 @@ spec:
         env:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
-          - name: CONFIG_PATH
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: config_path
           - name: BOOTNODES
             valueFrom:
               secretKeyRef:

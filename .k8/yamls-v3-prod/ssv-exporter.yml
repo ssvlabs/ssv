@@ -124,11 +124,6 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: eth1_addr
-          - name: CONFIG_PATH
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: config_path
           - name: BOOTNODES
             valueFrom:
               secretKeyRef:
