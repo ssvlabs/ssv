@@ -128,7 +128,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: config-secrets
-                key: boot_node
+                key: bootnodes
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
