@@ -1,0 +1,150 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-3-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12003
+      protocol: UDP
+      targetPort: 12003
+      name: port-12003
+    - port: 13003
+      protocol: TCP
+      targetPort: 13003
+      name: port-13003
+    - port: 15003
+      protocol: TCP
+      targetPort: 15003
+      name: port-15003
+  selector:
+    app: ssv-node-3
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-3
+  name: ssv-node-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-3
+  template:
+    metadata:
+      labels:
+        app: ssv-node-3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main
+                  - key: beta.kubernetes.io/instance-type
+                    operator: In
+                    values:
+                      - m5a.4xlarge
+      containers:
+      - name: ssv-node-3
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: REPLACE_NODES_CPU_LIMIT
+            memory: REPLACE_NODES_MEM_LIMIT
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12003
+          name: port-12003
+          hostPort: 12003
+          protocol: UDP
+        - containerPort: 13003
+          name: port-13003
+          hostPort: 13003
+        - containerPort: 15003
+          name: port-15003
+          hostPort: 15003
+        env:
+          - name: SHARE_CONFIG
+            value: "./data1/share.yaml"
+          - name: CONFIG_PATH
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: config_path
+          - name: BOOTNODES
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node
+          - name: REGISTRY_CONTRACT_ADDR_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: smart_contract_addr_key
+          - name: ETH_1_SYNC_OFFSET
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: eth_1_sync_offset
+                optional: true
+          - name: ABI_VERSION
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: abi_version
+                optional: true
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: DB_REPORTING
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: DISCOVERY_TYPE_KEY
+            value: "discv5"
+          - name: NETWORK
+            value: "prater"
+          - name: CONSENSUS_TYPE
+            value: "validation"
+          - name: HOST_DNS
+            value: ""
+          - name: HOST_ADDRESS
+            value: ""
+          - name: GENESIS_EPOCH
+            value: "1"
+          - name: DB_PATH
+            value: "./data/db-shifu-v3"
+          - name: METRICS_API_PORT
+            value: "15003"
+          - name: ENABLE_PROFILE
+            value: "true"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-node-3
+        - mountPath: /data1/share.yaml
+          subPath: share.yaml
+          name: ssv-node-3-cm
+      volumes:
+      - name: ssv-node-3
+        persistentVolumeClaim:
+          claimName: ssv-node-3
+      - name: ssv-node-3-cm
+        configMap:
+          name: ssv-node-3-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true
