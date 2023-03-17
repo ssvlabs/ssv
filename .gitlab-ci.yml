@@ -157,7 +157,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - os/align-ssv-network-contract-v0.3.0-rc.0
+    - stage
 
 Deploy v3 ssv-nodes to blox-infra-prod cluster:
   stage: deploy
@@ -175,7 +175,7 @@ Deploy v3 ssv-nodes to blox-infra-prod cluster:
     - mv ./kubectl /usr/bin/kubectl
     - .k8/scripts/deploy-ssv-node-v3-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
   only:
-    - os/align-ssv-network-contract-v0.3.0-rc.0
+    - stage
 
 
 Deploy ssv exporter to blox-infra-prod cluster:
@@ -192,4 +192,4 @@ Deploy ssv exporter to blox-infra-prod cluster:
     - mv ./kubectl /usr/bin/kubectl
     - .k8/scripts/deploy-exporter-v3-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - os/align-ssv-network-contract-v0.3.0-rc.0
+    - stage
