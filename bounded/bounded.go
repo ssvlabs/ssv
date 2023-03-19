@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const goroutines = 1
+const goroutines = 2
 
 type job struct {
 	f   func() error
@@ -29,9 +29,9 @@ func init() {
 			defer runtime.UnlockOSThread()
 
 			for j := range in {
-				runtime.Gosched()
+				// runtime.Gosched()
 				err := j.f()
-				runtime.Gosched()
+				// runtime.Gosched()
 				j.out <- err
 			}
 		}()

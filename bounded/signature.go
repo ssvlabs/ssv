@@ -1,8 +1,6 @@
 package bounded
 
 import (
-	"runtime"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -19,7 +17,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "failed to deserialize signature")
 	}
 
-	runtime.Gosched()
+	// runtime.Gosched()
 
 	// find operators
 	pks := make([]bls.PublicKey, 0)
@@ -40,7 +38,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 				}
 				pkCache.Set(pkStr, pk)
 
-				runtime.Gosched()
+				// runtime.Gosched()
 
 				pks = append(pks, pk)
 				found = true
