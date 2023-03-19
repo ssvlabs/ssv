@@ -2,7 +2,7 @@ package genesis
 
 import (
 	"github.com/bloxapp/ssv/network/forks"
-	scrypto "github.com/bloxapp/ssv/utils/crypto"
+	"github.com/cespare/xxhash/v2"
 )
 
 // MsgID returns msg_id for the given message
@@ -12,8 +12,9 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 			return ""
 		}
 		// TODO: check performance
-		h := scrypto.Sha256Hash(msg)
-		return string(h[20:])
+		// h := scrypto.Sha256Hash(msg)
+		// return string(h[20:])
+		return string(xxhash.Sum64(msg))
 	}
 }
 

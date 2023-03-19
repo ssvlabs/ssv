@@ -4,6 +4,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/bounded"
+	"github.com/cornelk/hashmap"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -81,6 +82,8 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	return nil
 }
 
+var pkCache = hashmap.New[string, *bls.PublicKey]()
+
 func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatureMessage) error {
 	signer := msg.Signer
 	signature := msg.PartialSignature
@@ -88,9 +91,15 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 
 	for _, n := range b.Share.Committee {
 		if n.GetID() == signer {
-			pk := &bls.PublicKey{}
-			if err := pk.Deserialize(n.GetPublicKey()); err != nil {
-				return errors.Wrap(err, "could not deserialized pk")
+			var pk *bls.PublicKey
+			if v, ok := pkCache.Get(string(n.GetPublicKey())); ok {
+				pk = v
+			} else {
+				pk = &bls.PublicKey{}
+				if err := pk.Deserialize(n.GetPublicKey()); err != nil {
+					return errors.Wrap(err, "could not deserialized pk")
+				}
+				pkCache.Set(string(n.GetPublicKey()), pk)
 			}
 			sig := &bls.Sign{}
 			if err := sig.Deserialize(signature); err != nil {
