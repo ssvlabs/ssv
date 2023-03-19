@@ -193,7 +193,10 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 		logger := withIncomingMsgFields(logger, msg, ssvMsg).With(
 			zap.String("p2p_id", p2pID),
 			zap.String("topic", topic),
-			zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+			zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)),
+		)
+
+		logger.Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 		n.msgRouter.Route(logger, *ssvMsg)
