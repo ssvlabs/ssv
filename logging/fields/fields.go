@@ -44,9 +44,7 @@ const (
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
 	FieldRole                = "role"
-	FieldRound               = "round"
 	FieldStartTimeUnixMilli  = "startTimeUnixMilli"
-	FieldStartTimeUnixNano   = "startTimeUnixNano"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
 	FieldSyncResults         = "syncResults"
@@ -89,6 +87,10 @@ func Validator(pubKey []byte) zapcore.Field {
 
 func AddressURL(val url.URL) zapcore.Field {
 	return zap.Stringer(FieldAddress, &val)
+}
+
+func Address(val string) zapcore.Field {
+	return zap.String(FieldAddress, val)
 }
 
 func ENR(val *enode.Node) zapcore.Field {
@@ -152,19 +154,15 @@ func SyncResults(msgs protocolp2p.SyncResults) zapcore.Field {
 }
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {
-	return zap.Uint64("operator-id", operatorId)
+	return zap.Uint64(FieldOperatorId, operatorId)
 }
 
-func OperatorIDStr(operatorId string) zap.Field { //todo cleanup it
+func OperatorIDStr(operatorId string) zap.Field {
 	return zap.String(FieldOperatorId, operatorId)
 }
 
 func Height(height specqbft.Height) zap.Field {
-	return zap.Uint64("height", uint64(height))
-}
-
-func Round(round specqbft.Round) zap.Field {
-	return zap.Stringer(FieldRound, uint64Stringer{uint64(round)})
+	return zap.Uint64(FieldHeight, uint64(height))
 }
 
 func Role(val spectypes.BeaconRole) zap.Field {
@@ -195,12 +193,8 @@ func Count(val int) zap.Field {
 	return zap.Int(FieldCount, val)
 }
 
-func ErrorStrs(val []string) zap.Field {
-	return zap.Any(FieldErrors, val)
-}
-
 func Errors(val []error) zap.Field {
-	return zap.Any(FieldErrors, val)
+	return zap.Errors(FieldErrors, val)
 }
 
 func Topic(val string) zap.Field {

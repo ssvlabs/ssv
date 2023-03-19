@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -112,7 +113,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	logger.Info("connecting to consensus client...", zap.String("address", opt.BeaconNodeAddr), zap.String("network", opt.Network))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), zap.String("network", opt.Network))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -125,7 +126,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger.Info("successfully connected to consensus client", zap.String("name", httpClient.Name()), zap.String("address", httpClient.Address()))
+	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
