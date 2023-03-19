@@ -3,8 +3,10 @@ package api
 import (
 	"encoding/hex"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/types"
 )
 
 // Message represents an exporter message
@@ -15,6 +17,14 @@ type Message struct {
 	Filter MessageFilter `json:"filter"`
 	// Values holds the results, optional as it's relevant for response
 	Data interface{} `json:"data,omitempty"`
+}
+
+type SignedMessageAPI struct {
+	Signature types.Signature
+	Signers   []types.OperatorID
+	Message   specqbft.Message
+
+	FullData *types.ConsensusData
 }
 
 // NewDecidedAPIMsg creates a new message from the given message
@@ -48,7 +58,26 @@ func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
-	return msgs, nil
+
+	apiMsgs := make([]*SignedMessageAPI, 0)
+	for _, msg := range msgs {
+		if msg == nil {
+			return nil, errors.New("nil message")
+		}
+
+		apiMsg := &SignedMessageAPI{
+			Signature: msg.Signature,
+			Signers:   msg.Signers,
+			Message:   msg.Message,
+		}
+		err := apiMsg.FullData.UnmarshalSSZ(msg.FullData)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal consensus data")
+		}
+		apiMsgs = append(apiMsgs, apiMsg)
+	}
+
+	return apiMsgs, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses
