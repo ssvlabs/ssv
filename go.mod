@@ -4,8 +4,8 @@ go 1.19
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.15.2
-	github.com/bloxapp/eth2-key-manager v1.2.0
+	github.com/attestantio/go-eth2-client v0.15.7
+	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
 	github.com/bloxapp/ssv-spec v0.2.8-0.20230302114248-61a10845523b
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
 	github.com/cornelk/hashmap v1.0.8
@@ -182,4 +182,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/moshe-blox/ssv-spec v0.0.0-20230312142245-8cb3bd9a2728
+replace github.com/bloxapp/ssv-spec => github.com/olegshmuelov/ssv-spec v0.0.0-20230316101051-2509fee73647

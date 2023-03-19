@@ -22,6 +22,11 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 	if !addMsg {
 		return false, nil, nil, nil // UponCommit was already called
 	}
+
+	logger.Debug("📬 got commit message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("commit-signers", signedCommit.Signers))
+
 	// calculate commit quorum and act upon it
 	quorum, commitMsgs, err := commitQuorumForRoundRoot(i.State, commitMsgContainer, signedCommit.Message.Root, signedCommit.Message.Round)
 	if err != nil {

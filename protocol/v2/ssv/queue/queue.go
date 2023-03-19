@@ -2,7 +2,10 @@ package queue
 
 import (
 	"context"
+	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const (
@@ -21,10 +24,10 @@ type Queue interface {
 
 	// Pop returns and removes the next message in the queue, or blocks until a message is available.
 	// When the context is canceled, Pop returns immediately with any leftover message or nil.
-	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
+	Pop(context.Context, *zap.Logger, MessagePrioritizer) *DecodedSSVMessage
 
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
-	TryPop(MessagePrioritizer) *DecodedSSVMessage
+	TryPop(*zap.Logger, MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
@@ -51,31 +54,53 @@ func NewDefault() Queue {
 }
 
 func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
+	logPush(msg)
 	q.inbox <- msg
 }
 
 func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
+	logPush(msg)
 	select {
 	case q.inbox <- msg:
 		return true
 	default:
+		queueLagMap.Delete(msg.MsgID)
 		return false
 	}
 }
 
-func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
+var queueLagMap = &sync.Map{}
+
+func logPush(msg *DecodedSSVMessage) {
+	queueLagMap.Store(msg.MsgID, time.Now())
+}
+
+func logPop(logger *zap.Logger, msg *DecodedSSVMessage) {
+	if t, ok := queueLagMap.LoadAndDelete(msg.MsgID); !ok {
+		zap.L().Error("TRACE:popped message not recorded as pushed")
+	} else {
+		d := time.Since(t.(time.Time))
+		if d >= 1*time.Millisecond {
+			zap.L().Info("TRACE:queueLag", zap.Int64("lagMilis", d.Milliseconds()))
+		}
+	}
+}
+
+func (q *priorityQueue) TryPop(logger *zap.Logger, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox.
 	q.readInbox()
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		return q.pop(prioritizer)
+		msg := q.pop(prioritizer)
+		logPop(logger, msg)
+		return msg
 	}
 
 	return nil
 }
 
-func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox, if enough time has passed.
 	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
 	// since reading the inbox is more expensive than just reading the head.
@@ -85,7 +110,9 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer)
 
 	// Try to pop immediately.
 	if q.head != nil {
-		return q.pop(prioritizer)
+		msg := q.pop(prioritizer)
+		logPop(logger, msg)
+		return msg
 	}
 
 	// Wait for a message to be pushed.
@@ -100,7 +127,9 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer)
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		return q.pop(prioritizer)
+		msg := q.pop(prioritizer)
+		logPop(logger, msg)
+		return msg
 	}
 
 	return nil

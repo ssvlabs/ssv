@@ -29,8 +29,12 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
+	logger.Debug("📬 handling SSV message",
+		zap.Uint64("type", uint64(msg.MsgType)),
+		fields.Role(msg.MsgID.GetRoleType()))
+
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
-		decodedMsg, err := queue.DecodeSSVMessage(msg)
+		decodedMsg, err := queue.DecodeSSVMessage(logger, msg)
 		if err != nil {
 			logger.Warn("❗ failed to decode message",
 				zap.Error(err),
@@ -102,7 +106,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
+		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
 		if ctx.Err() != nil {
 			break
 		}

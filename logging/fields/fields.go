@@ -13,13 +13,13 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 const (
@@ -73,16 +73,16 @@ func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
 }
 
-func PubKey(val []byte) zapcore.Field {
-	return zap.Stringer(FieldPubKey, hexStringer{val})
+func PubKey(pubKey []byte) zapcore.Field {
+	return zap.Stringer(FieldPubKey, hexStringer{pubKey})
 }
 
 func PrivKey(val []byte) zapcore.Field {
 	return zap.Stringer(FieldPrivateKey, hexStringer{val})
 }
 
-func Validator(val []byte) zapcore.Field {
-	return zap.Stringer(FieldValidator, hexStringer{val})
+func Validator(pubKey []byte) zapcore.Field {
+	return zap.Stringer(FieldValidator, hexStringer{pubKey})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -201,11 +201,10 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func DutyID(runner runner.Runner, duty *spectypes.Duty) zap.Field {
+func DutyID(epoch phase0.Epoch, duty *spectypes.Duty) zap.Field {
 	return zap.Stringer(FieldDutyID, funcStringer{
 		fn: func() string {
-			epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot)
-			return fmt.Sprintf("T:%v::E:%v::S:%v::V:%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+			return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 		},
 	})
 }

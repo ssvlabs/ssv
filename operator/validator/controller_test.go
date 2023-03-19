@@ -138,7 +138,7 @@ func TestGetIndices(t *testing.T) {
 func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
 	return controller{
 		context:                    context.Background(),
-		collection:                 nil,
+		sharesStorage:              nil,
 		beacon:                     nil,
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,

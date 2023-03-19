@@ -28,8 +28,8 @@ func TestParseOperatorAddedEvent(t *testing.T) {
 }`
 
 	t.Run("operator added", func(t *testing.T) {
-		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V2)
-		abiParser := NewParser(logging.TestLogger(t), V2)
+		LogOperatorAdded, contractAbi := unmarshalLog(t, rawOperatorAdded, V1)
+		abiParser := NewParser(logging.TestLogger(t), V1)
 		parsed, err := abiParser.ParseOperatorAddedEvent(*LogOperatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
@@ -55,9 +55,9 @@ func TestParseValidatorAddedEvent(t *testing.T) {
   "transactionHash": "0x56f069d696c03aad5cf40681a0e55c27bcf5659c1ea40e9ba46b1e0f163de281"
 }`
 
-	t.Run("v2 validator added", func(t *testing.T) {
-		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V2)
-		abiParser := NewParser(logging.TestLogger(t), V2)
+	t.Run("validator added", func(t *testing.T) {
+		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V1)
+		abiParser := NewParser(logging.TestLogger(t), V1)
 		parsed, err := abiParser.ParseValidatorAddedEvent(*vLogValidatorAdded, contractAbi)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)

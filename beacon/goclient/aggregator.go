@@ -12,10 +12,8 @@ import (
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
 func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	// As specified in spec, an aggregator should wait until two thirds of the way through slot
-	// to broadcast the best aggregate to the global aggregate channel.
-	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
-	gc.waitToSlotTwoThirds(slot)
+	// TODO: temporary retries -- revert before merging!
+	const maxRetries = 6
 
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
@@ -26,10 +24,22 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, errors.New("validator is not an aggregator")
 	}
 
+	// As specified in spec, an aggregator should wait until two thirds of the way through slot
+	// to broadcast the best aggregate to the global aggregate channel.
+	// https://github.com/ethereum/consensus-specs/blob/v0.9.3/specs/validator/0_beacon-chain-validator.md#broadcast-aggregate
+	gc.waitToSlotTwoThirds(slot)
+
 	attDataReqStart := time.Now()
-	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+	var data *phase0.AttestationData
+	for try := 0; try < maxRetries; try++ {
+		data, err = gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+		if err == nil && data != nil {
+			break
+		}
+		time.Sleep(1 * time.Second * time.Duration(try))
+	}
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, errors.Wrap(err, "failed to get attestation data")
 	}
 	if data == nil {
 		return nil, DataVersionNil, errors.New("attestation data is nil")
@@ -44,7 +54,14 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 
 	aggDataReqStart := time.Now()
-	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
+	var aggregateData *phase0.Attestation
+	for try := 0; try < maxRetries; try++ {
+		aggregateData, err = gc.client.AggregateAttestation(gc.ctx, slot, root)
+		if err == nil && aggregateData != nil {
+			break
+		}
+		time.Sleep(1 * time.Second * time.Duration(try))
+	}
 	if err != nil {
 		return nil, DataVersionNil, errors.Wrap(err, "failed to get aggregate attestation")
 	}

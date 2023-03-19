@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
@@ -80,6 +81,8 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
+
+		logger.Info("maxProcs", zap.Int("maxProcs", runtime.GOMAXPROCS(0)))
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
@@ -304,12 +307,12 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
 
+	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, db, forkVersion, operatorData.ID)
+		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.GetFilteredShares, forkVersion, operatorData.ID)
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
@@ -365,18 +368,13 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(
 	logger *zap.Logger,
-	db basedb.IDb,
+	getFiltered registrystorage.FilteredSharesFunc,
 	ssvForkVersion forksprotocol.ForkVersion,
 	operatorID spectypes.OperatorID,
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
-	sharesStorage := validator.NewCollection(validator.CollectionOptions{
-		DB: db,
-	})
 	subnetsMap := make(map[int]bool)
-	shares, err := sharesStorage.GetFilteredValidatorShares(logger, func(share *types.SSVShare) bool {
-		return !share.Liquidated && share.BelongsToOperator(operatorID)
-	})
+	shares, err := getFiltered(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorID))
 	if err != nil {
 		logger.Warn("could not read validators to bootstrap subnets")
 		return nil

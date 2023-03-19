@@ -28,8 +28,8 @@ type OperatorData struct {
 // GetOperatorData is a function that returns the operator data
 type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
-// OperatorsCollection is the interface for managing operators data
-type OperatorsCollection interface {
+// Operators is the interface for managing operators data
+type Operators interface {
 	GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(id spectypes.OperatorID) (*OperatorData, bool, error)
 	SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error
@@ -45,7 +45,7 @@ type operatorsStorage struct {
 }
 
 // NewOperatorsStorage creates a new instance of Storage
-func NewOperatorsStorage(db basedb.IDb, prefix []byte) OperatorsCollection {
+func NewOperatorsStorage(db basedb.IDb, prefix []byte) Operators {
 	return &operatorsStorage{
 		db:     db,
 		prefix: prefix,

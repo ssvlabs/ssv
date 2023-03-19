@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -33,17 +34,17 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 	require.False(t, queue.Empty())
 
 	// Pop 1st message.
-	popped := queue.TryPop(NewMessagePrioritizer(mockState))
+	popped := queue.TryPop(zap.L(), NewMessagePrioritizer(mockState))
 	require.Equal(t, msg, popped)
 
 	// Pop 2nd message.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState))
+	popped = queue.TryPop(zap.L(), NewMessagePrioritizer(mockState))
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState))
+	popped = queue.TryPop(zap.L(), NewMessagePrioritizer(mockState))
 	require.Nil(t, popped)
 }
 
@@ -60,7 +61,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	queue := New(capacity)
 	require.True(t, queue.Empty())
 
-	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeSSVMessage(nil, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 
 	// Push messages.
@@ -71,7 +72,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Should pop everything immediately.
 	for i := 0; i < capacity; i++ {
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, zap.L(), NewMessagePrioritizer(mockState))
 		require.Equal(t, msg, popped)
 	}
 	require.True(t, queue.Empty())
@@ -81,7 +82,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
 		defer cancel()
 		expectedEnd := time.Now().Add(contextTimeout)
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, zap.L(), NewMessagePrioritizer(mockState))
 		require.Nil(t, popped)
 		require.WithinDuration(t, expectedEnd, time.Now(), precision)
 	}
@@ -97,7 +98,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	// Should wait for the messages to be pushed.
 	expectedEnd := time.Now().Add(pushDelay * time.Duration(capacity))
 	for i := 0; i < capacity; i++ {
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, zap.L(), NewMessagePrioritizer(mockState))
 		require.Equal(t, msg, popped)
 	}
 	require.True(t, queue.Empty())
@@ -114,7 +115,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
-				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
+				mm, err := DecodeSSVMessage(nil, m.ssvMessage(test.state))
 				require.NoError(t, err)
 				messages[i] = mm
 			}
@@ -127,7 +128,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 
 				// Pop messages from the queue and compare to the expected order.
 				for i, excepted := range messages {
-					actual := q.TryPop(NewMessagePrioritizer(test.state))
+					actual := q.TryPop(zap.L(), NewMessagePrioritizer(test.state))
 					require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 				}
 			}
@@ -147,7 +148,7 @@ func TestWithMetrics(t *testing.T) {
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
-	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeSSVMessage(nil, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 	pushed := queue.TryPush(msg)
 	require.True(t, pushed)
@@ -185,7 +186,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 	messages := make([]*DecodedSSVMessage, messageCount)
 	for i := range messages {
 		var err error
-		msg, err := DecodeSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		msg, err := DecodeSSVMessage(nil, mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 		require.NoError(b, err)
 		messages[i] = msg
 	}
@@ -250,7 +251,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 			go func() {
 				defer poppersWg.Done()
 				for {
-					msg := queue.Pop(poppingCtx, NewMessagePrioritizer(mockState))
+					msg := queue.Pop(poppingCtx, zap.L(), NewMessagePrioritizer(mockState))
 					if msg == nil {
 						return
 					}
@@ -310,7 +311,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	for _, i := range rand.Perm(messageCount) {
 		height := qbft.FirstHeight + qbft.Height(i)
 		for _, t := range types {
-			decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
+			decoded, err := DecodeSSVMessage(nil, mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
 			require.NoError(b, err)
 			msgs <- decoded
 		}
@@ -348,7 +349,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	go func() {
 		defer popperWg.Done()
 		for n := b.N; n > 0; n-- {
-			msg := queue.Pop(pushersCtx, prioritizer)
+			msg := queue.Pop(pushersCtx, zap.L(), prioritizer)
 			if msg == nil {
 				return
 			}
@@ -363,7 +364,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 }
 
 func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *DecodedSSVMessage {
-	decoded, err := DecodeSSVMessage(msg.ssvMessage(state))
+	decoded, err := DecodeSSVMessage(nil, msg.ssvMessage(state))
 	require.NoError(t, err)
 	queue.Push(decoded)
 	return decoded

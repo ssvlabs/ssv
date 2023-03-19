@@ -48,7 +48,7 @@ func NewAggregatorRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAggregator),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
 	}
 }
 
@@ -82,6 +82,11 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	}
 
 	duty := r.GetState().StartingDuty
+
+	logger.Debug("🧩 got partial signature quorum",
+		zap.Any("signer", signedMsg.Signer),
+		zap.Int64("slot", int64(duty.Slot)),
+	)
 
 	r.metrics.PauseDutyFullFlow()
 
@@ -201,7 +206,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 
 		proofSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate")

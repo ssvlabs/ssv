@@ -86,7 +86,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 
-	logger = logger.With(fields.DutyID(dutyRunner, duty))
+	logger = logger.With(fields.DutyID(dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }

@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	validatorstorage "github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -54,14 +54,7 @@ type Options struct {
 
 // nolint
 func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(), o.signerStorage(logger)}
-}
-
-// nolint
-func (o Options) validatorStorage() validatorstorage.ICollection {
-	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
-		DB: o.Db,
-	})
+	return []eth1.RegistryStore{o.nodeStorage(), o.signerStorage(logger)}
 }
 
 // nolint
