@@ -17,7 +17,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
 
-	if err := i.Broadcast(roundChange); err != nil {
+	if err := i.Broadcast(logger, roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
 

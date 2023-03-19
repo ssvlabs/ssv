@@ -57,7 +57,7 @@ func (i *Instance) uponPrepare(
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		zap.Any("commit-singers", commitMsg.Signers))
 
-	if err := i.Broadcast(commitMsg); err != nil {
+	if err := i.Broadcast(logger, commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
 

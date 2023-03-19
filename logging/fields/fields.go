@@ -33,7 +33,6 @@ const (
 	FieldDurationMilli       = "durationMilli"
 	FieldDutyID              = "dutyID"
 	FieldENR                 = "ENR"
-	FieldErrors              = "errors"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
 	FieldHeight              = "height"
@@ -46,6 +45,7 @@ const (
 	FieldPrivateKey          = "privKey"
 	FieldPubKey              = "pubKey"
 	FieldRole                = "role"
+	FieldRound               = "round"
 	FieldStartTimeUnixMilli  = "startTimeUnixMilli"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "syncOffset"
@@ -167,6 +167,10 @@ func Height(height specqbft.Height) zap.Field {
 	return zap.Uint64(FieldHeight, uint64(height))
 }
 
+func Round(round specqbft.Round) zap.Field {
+	return zap.Uint64(FieldRound, uint64(round))
+}
+
 func Role(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
@@ -212,10 +216,6 @@ func ConnectionID(val string) zap.Field {
 
 func Count(val int) zap.Field {
 	return zap.Int(FieldCount, val)
-}
-
-func Errors(val []error) zap.Field {
-	return zap.Errors(FieldErrors, val)
 }
 
 func Topic(val string) zap.Field {
