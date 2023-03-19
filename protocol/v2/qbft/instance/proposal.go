@@ -78,7 +78,7 @@ func isValidProposal(
 	}
 	if err := bounded.Run(func() error {
 		// return signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return nil
+		return bounded.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}

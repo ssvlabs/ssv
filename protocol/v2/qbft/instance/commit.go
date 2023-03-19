@@ -163,7 +163,7 @@ func BaseCommitValidation(
 	// verify signature
 	if err := bounded.Run(func() error {
 		// return signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return nil
+		return bounded.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}

@@ -237,7 +237,7 @@ func validRoundChangeForData(
 
 	if err := bounded.Run(func() error {
 		// return signedMsg.Signature.VerifyByOperators(signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee)
-		return nil
+		return bounded.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}

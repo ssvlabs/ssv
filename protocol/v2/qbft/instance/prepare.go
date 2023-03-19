@@ -148,6 +148,7 @@ func validSignedPrepareForHeightRoundAndRoot(
 
 	if err := bounded.Run(func() error {
 		// return signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
+		return bounded.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
