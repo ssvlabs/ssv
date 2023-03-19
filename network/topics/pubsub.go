@@ -146,7 +146,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 	}
 
 	if cfg.MsgIDHandler != nil {
-		psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID(logger)))
+		// psOpts = append(psOpts, pubsub.WithMessageIdFn(cfg.MsgIDHandler.MsgID(logger)))
 	}
 
 	if len(cfg.StaticPeers) > 0 {
