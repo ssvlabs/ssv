@@ -81,7 +81,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 }
 
 func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
-	logger.Debug("Broadcast", zap.Any("msg", msg),
+	logger.Debug("Broadcast",
 		zap.Any("MsgType", msg.Message.MsgType),
 		fields.Round(msg.Message.Round),
 		zap.Any("DataRound", msg.Message.DataRound),
