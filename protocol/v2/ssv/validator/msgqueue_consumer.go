@@ -6,6 +6,7 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
