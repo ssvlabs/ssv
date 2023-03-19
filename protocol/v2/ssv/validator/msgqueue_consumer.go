@@ -50,6 +50,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
+		logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
@@ -108,7 +109,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
-		logger.Debug("📬 queue consumer popped message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 		if ctx.Err() != nil {
 			break
 		}
