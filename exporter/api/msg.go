@@ -65,14 +65,16 @@ func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 			return nil, errors.New("nil message")
 		}
 
+		var cd types.ConsensusData
+		if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal consensus data")
+		}
+
 		apiMsg := &SignedMessageAPI{
 			Signature: msg.Signature,
 			Signers:   msg.Signers,
 			Message:   msg.Message,
-		}
-		err := apiMsg.FullData.UnmarshalSSZ(msg.FullData)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to unmarshal consensus data")
+			FullData:  &cd,
 		}
 		apiMsgs = append(apiMsgs, apiMsg)
 	}
