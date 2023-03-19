@@ -50,6 +50,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
+		logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
