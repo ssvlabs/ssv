@@ -31,6 +31,9 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
+// b64 encrypted key length is 258
+const encryptedKeyLength = 256
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	OperatorId uint64         // indexed
@@ -144,7 +147,16 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	pubKeysOffset := len(event.OperatorIds)*phase0.PublicKeyLength + 2
+	// the 2 first bytes are unnecessary for parsing
+	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
+	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
+
+	if sharesExpectedLength != len(event.Shares) {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event shares length is not correct", ValidatorAdded),
+		}
+	}
+
 	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
 	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
 
