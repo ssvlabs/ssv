@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const goroutines = 4
+const goroutines = 1
 
 type job struct {
 	f   func() error
