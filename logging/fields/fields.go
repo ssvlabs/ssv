@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -222,10 +222,17 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func DutyID(epoch phase0.Epoch, duty *spectypes.Duty) zap.Field {
+func DutyID(dutyRunner runner.Runner) zap.Field {
 	return zap.Stringer(FieldDutyID, funcStringer{
 		fn: func() string {
-			return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+			startingDuty := dutyRunner.GetBaseRunner().State.StartingDuty
+
+			dutyType := startingDuty.Type.String()
+			epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
+			slot := startingDuty.Slot
+			validatorIndex := startingDuty.ValidatorIndex
+
+			return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
 		},
 	})
 }
