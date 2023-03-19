@@ -27,7 +27,7 @@ if [[ -z $5 ]]; then
   exit 1
 fi
 
-if [[ -z $6 ]]; then 
+if [[ -z $6 ]]; then
   echo "Please provide k8s context"
   exit 1
 fi
@@ -93,7 +93,7 @@ fi
 #if [[ -d .k8/configmaps/ ]]; then
 #config
   #for file in $(ls -A1 .k8/configmaps/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}" 
+    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}"
   #done
 #fi
 
@@ -146,10 +146,10 @@ fi
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-2-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-3-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-4-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-5-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-6-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-7-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-8-deployment.yml || exit 1
+# kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-5-deployment.yml || exit 1
+# kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-6-deployment.yml || exit 1
+# kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-7-deployment.yml || exit 1
+# kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-v2-8-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-9-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-10-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/ssv-node-11-deployment.yml || exit 1
