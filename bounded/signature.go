@@ -4,9 +4,12 @@ import (
 	"runtime"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
+
+var pkCache = hashmap.New[string, bls.PublicKey]()
 
 // VerifyByOperators verifies signature by the provided operators
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
@@ -24,10 +27,18 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		found := false
 		for _, n := range operators {
 			if id == n.GetID() {
+				pkStr := string(n.GetPublicKey())
+				if pk, ok := pkCache.Get(pkStr); ok {
+					pks = append(pks, pk)
+					found = true
+					continue
+				}
+
 				pk := bls.PublicKey{}
 				if err := pk.Deserialize(n.GetPublicKey()); err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}
+				pkCache.Set(pkStr, pk)
 
 				runtime.Gosched()
 
@@ -47,9 +58,9 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	}
 
 	// verify
-	// if res := sign.FastAggregateVerify(pks, computedRoot); !res {
-	// 	return errors.New("failed to verify signature")
-	// }
+	if res := sign.FastAggregateVerify(pks, computedRoot); !res {
+		return errors.New("failed to verify signature")
+	}
 
 	_ = computedRoot
 	return nil
