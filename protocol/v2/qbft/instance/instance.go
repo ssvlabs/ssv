@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
@@ -71,7 +72,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
-				if err := i.Broadcast(proposal); err != nil {
+				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
 			}
@@ -79,7 +80,14 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 	})
 }
 
-func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
+func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+	logger.Debug("Broadcast", zap.Any("msg", msg),
+		zap.Any("MsgType", msg.Message.MsgType),
+		fields.Round(msg.Message.Round),
+		zap.Any("DataRound", msg.Message.DataRound),
+		fields.Height(msg.Message.Height),
+	)
+
 	byts, err := msg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode message")
