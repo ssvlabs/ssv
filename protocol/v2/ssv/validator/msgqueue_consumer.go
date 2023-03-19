@@ -108,6 +108,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
+		logger.Debug("📬 queue consumer popped message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 		if ctx.Err() != nil {
 			break
 		}

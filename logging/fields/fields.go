@@ -37,6 +37,8 @@ const (
 	FieldFromBlock           = "fromBlock"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "indexCacheMetrics"
+	FieldMessageID           = "messageID"
+	FieldMessageType         = "messageType"
 	FieldName                = "name"
 	FieldOperatorId          = "operatorID"
 	FieldPeerID              = "peerID"
@@ -171,6 +173,25 @@ func Round(round specqbft.Round) zap.Field {
 
 func Role(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
+}
+
+func MessageID(val spectypes.MessageID) zap.Field {
+	return zap.Stringer(FieldMessageID, val)
+}
+
+func MessageType(val spectypes.MsgType) zap.Field {
+	return zap.Stringer(FieldMessageType, funcStringer{fn: func() string {
+		switch val {
+		case spectypes.SSVConsensusMsgType:
+			return "SSVConsensusMsgType"
+		case spectypes.SSVPartialSignatureMsgType:
+			return "SSVPartialSignatureMsgType"
+		case spectypes.DKGMsgType:
+			return "DKGMsgType"
+		default:
+			return "Unknown"
+		}
+	}})
 }
 
 func EventName(val string) zap.Field {
