@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/logging/fields"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -142,7 +143,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	copy(pk[:], duty.PubKey[:])
 
 	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(pk[:]); err != nil {
+	if err := bounded.Run(func() error { return pubKey.Deserialize(pk[:]) }); err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
