@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -37,16 +38,16 @@ var (
 
 func init() {
 	if err := prometheus.Register(MetricsAllConnectedPeers); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsRouterIncoming); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 }
 

@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"time"
@@ -65,7 +66,7 @@ var (
 func init() {
 	for _, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
-			zap.L().Debug("could not register prometheus collector", zap.Error(err))
+			log.Println("could not register prometheus collector")
 		}
 	}
 }

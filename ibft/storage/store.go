@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/binary"
+	"log"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -32,7 +33,7 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsHighestDecided); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 }
 

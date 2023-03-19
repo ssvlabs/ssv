@@ -1,9 +1,10 @@
 package connections
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"go.uber.org/zap"
 )
 
 var (
@@ -23,12 +24,12 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricsStreams); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsConnections); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsFilteredConnections); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 }

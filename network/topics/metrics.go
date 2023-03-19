@@ -1,9 +1,10 @@
 package topics
 
 import (
+	"log"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"go.uber.org/zap"
 )
 
 var (
@@ -35,22 +36,22 @@ var (
 
 func init() {
 	if err := prometheus.Register(metricPubsubTrace); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubMsgValidationResults); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubOutbound); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubInbound); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubActiveMsgValidation); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubPeerScoreInspect); err != nil {
-		zap.L().Debug("could not register prometheus collector", zap.Error(err))
+		log.Println("could not register prometheus collector")
 	}
 }
 
