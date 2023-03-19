@@ -21,7 +21,7 @@ type job struct {
 var in = make(chan job, goroutines)
 
 func init() {
-	runtime.GOMAXPROCS(12)
+	runtime.GOMAXPROCS(6)
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
@@ -151,12 +151,12 @@ func Run(f func() error) error {
 	// 	counter.Incr(int64(time.Since(start)))
 	// }()
 
-	// out := make(chan error)
-	// in <- job{f, out}
-	// err := <-out
-	// return err
-
-	err := f()
-	runtime.Gosched()
+	out := make(chan error)
+	in <- job{f, out}
+	err := <-out
 	return err
+
+	// err := f()
+	// runtime.Gosched()
+	// return err
 }
