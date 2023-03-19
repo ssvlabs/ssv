@@ -141,24 +141,24 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 }
 
 // HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() []error {
+func (gc *goClient) HealthCheck() []string {
 	if gc.client == nil {
-		return []error{errors.New("not connected to beacon node")}
+		return []string{"not connected to beacon node"}
 	}
 	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
 	defer cancel()
 	syncState, err := gc.client.NodeSyncing(ctx)
 	if err != nil {
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return []error{errors.New("could not get beacon node sync state")}
+		return []string{"could not get beacon node sync state"}
 	}
 	if syncState != nil && syncState.IsSyncing {
 		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return []error{fmt.Errorf("beacon node is currently syncing: head=%d, distance=%d",
+		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
 			syncState.HeadSlot, syncState.SyncDistance)}
 	}
 	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return []error{}
+	return []string{}
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

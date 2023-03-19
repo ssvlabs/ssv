@@ -135,7 +135,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
 	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
 		metricsNodeStatus.Set(float64(statusNotHealthy))
-		result := map[string][]error{
+		result := map[string][]string{
 			"errors": errs,
 		}
 		if raw, err := json.Marshal(result); err != nil {
