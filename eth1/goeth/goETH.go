@@ -129,15 +129,15 @@ func (ec *eth1Client) HealthCheck() []string {
 // connect connects to eth1 client
 func (ec *eth1Client) connect(logger *zap.Logger) error {
 	// Create an IPC based RPC connection to a remote node
-	logger.Info("connecting to execution client", zap.String("address", ec.nodeAddr))
+	logger.Info("execution client: connecting", fields.Address(ec.nodeAddr))
 	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
 	defer cancel()
 	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		logger.Error("could not connect to the execution client", zap.Error(err))
+		logger.Error("execution client: can't connect", zap.Error(err))
 		return err
 	}
-	logger.Info("successfully connected to execution client")
+	logger.Info("execution client: connected")
 	ec.conn = conn
 	return nil
 }
@@ -226,9 +226,9 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 			eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 			if err != nil {
 				logger.Warn("could not parse ongoing event, the event is malformed",
-					zap.String("event", eventName),
-					zap.Uint64("block", vLog.BlockNumber),
-					zap.String("txHash", vLog.TxHash.Hex()),
+					fields.EventName(eventName),
+					fields.BlockNumber(vLog.BlockNumber),
+					fields.TxHash(vLog.TxHash),
 					zap.Error(err),
 				)
 				continue
@@ -322,9 +322,9 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 		if err != nil {
 			loggerWith := logger.With(
-				zap.String("event", eventName),
-				zap.Uint64("block", vLog.BlockNumber),
-				zap.String("txHash", vLog.TxHash.Hex()),
+				fields.EventName(eventName),
+				fields.BlockNumber(vLog.BlockNumber),
+				fields.TxHash(vLog.TxHash),
 				zap.Error(err),
 			)
 			var malformedEventErr *abiparser.MalformedEventError
@@ -348,7 +348,7 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
 			fields.EventID(vLog.Topics[0]),
-			zap.Uint64("block", vLog.BlockNumber),
+			fields.BlockNumber(vLog.BlockNumber),
 			fields.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
@@ -412,8 +412,8 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	default:
 		logger.Debug("unsupported contract event was received, skipping",
 			zap.String("eventName", ev.Name),
-			zap.Uint64("block", vLog.BlockNumber),
-			zap.String("txHash", vLog.TxHash.Hex()),
+			fields.BlockNumber(vLog.BlockNumber),
+			fields.TxHash(vLog.TxHash),
 		)
 	}
 	return ev.Name, nil
