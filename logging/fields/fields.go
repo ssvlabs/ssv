@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -179,18 +180,7 @@ func MessageID(val spectypes.MessageID) zap.Field {
 }
 
 func MessageType(val spectypes.MsgType) zap.Field {
-	return zap.Stringer(FieldMessageType, stringer.FuncStringer{Fn: func() string {
-		switch val {
-		case spectypes.SSVConsensusMsgType:
-			return "SSVConsensusMsgType"
-		case spectypes.SSVPartialSignatureMsgType:
-			return "SSVPartialSignatureMsgType"
-		case spectypes.DKGMsgType:
-			return "DKGMsgType"
-		default:
-			return strconv.FormatUint(uint64(val), 10)
-		}
-	}})
+	return zap.String(FieldMessageType, message.MsgTypeToString(val))
 }
 
 func EventName(val string) zap.Field {
