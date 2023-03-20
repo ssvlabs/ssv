@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/utils/crypto"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -129,8 +129,6 @@ func (dc *dutyController) warmUpDuties(logger *zap.Logger) {
 	}
 }
 
-var pkCache = hashmap.New[string, *bls.PublicKey]()
-
 // ExecuteDuty tries to execute the given duty
 func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if dc.executor != nil {
@@ -144,18 +142,12 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	var pubKey *bls.PublicKey
-	if v, ok := pkCache.Get(string(pk[:])); ok {
-		pubKey = v
-	} else {
-		pubKey = &bls.PublicKey{}
-		if err := bounded.Run(func() error { return pubKey.Deserialize(pk[:]) }); err != nil {
-			return errors.Wrap(err, "failed to deserialize pubkey from duty")
-		}
-		pkCache.Set(string(pk[:]), pubKey)
+	pubKey, err := crypto.DeserializeBLSPublicKey(pk[:])
+	if err != nil {
+		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
 		if err != nil {
 			return err
 		}

@@ -18,6 +18,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/utils/crypto"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -46,8 +47,8 @@ func ShareFromValidatorEvent(
 ) (*types.SSVShare, *bls.SecretKey, error) {
 	validatorShare := types.SSVShare{}
 
-	publicKey := &bls.PublicKey{}
-	if err := publicKey.Deserialize(event.PublicKey); err != nil {
+	publicKey, err := crypto.DeserializeBLSPublicKey(event.PublicKey)
+	if err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize validator public key"),
 		}

@@ -1,13 +1,14 @@
-package bounded
+package types
 
 import (
+	"encoding/hex"
+
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/cornelk/hashmap"
+	"github.com/bloxapp/ssv/utils/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
-
-var pkCache = hashmap.New[string, bls.PublicKey]()
 
 // VerifyByOperators verifies signature by the provided operators
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
@@ -17,28 +18,16 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "failed to deserialize signature")
 	}
 
-	// runtime.Gosched()
-
 	// find operators
 	pks := make([]bls.PublicKey, 0)
 	for _, id := range data.GetSigners() {
 		found := false
 		for _, n := range operators {
 			if id == n.GetID() {
-				pkStr := string(n.GetPublicKey())
-				if pk, ok := pkCache.Get(pkStr); ok {
-					pks = append(pks, pk)
-					found = true
-					continue
-				}
-
-				pk := bls.PublicKey{}
-				if err := pk.Deserialize(n.GetPublicKey()); err != nil {
+				pk, err := crypto.DeserializeBLSPublicKey(n.GetPublicKey())
+				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}
-				pkCache.Set(pkStr, pk)
-
-				// runtime.Gosched()
 
 				pks = append(pks, pk)
 				found = true
@@ -59,7 +48,34 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	if res := sign.FastAggregateVerify(pks, computedRoot); !res {
 		return errors.New("failed to verify signature")
 	}
-
-	_ = computedRoot
 	return nil
+}
+
+func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
+	// Reconstruct signatures
+	signature, err := spectypes.ReconstructSignatures(ps.Signatures[rootHex(root)])
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to reconstruct signatures")
+	}
+	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
+	}
+	return signature.Serialize(), nil
+}
+
+func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
+	pk, err := crypto.DeserializeBLSPublicKey(validatorPubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not deserialize validator pk")
+	}
+
+	// verify reconstructed sig
+	if res := sig.VerifyByte(&pk, root[:]); !res {
+		return errors.New("could not reconstruct a valid signature")
+	}
+	return nil
+}
+
+func rootHex(r [32]byte) string {
+	return hex.EncodeToString(r[:])
 }

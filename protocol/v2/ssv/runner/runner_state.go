@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // State holds all the relevant progress the duty execution progress
@@ -40,7 +41,7 @@ func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, r
 	var signature []byte
 	var err error
 	bounded.Run(func() error {
-		signature, err = container.ReconstructSignature(root, validatorPubKey)
+		signature, err = types.ReconstructSignature(container, root, validatorPubKey)
 		return nil
 	})
 	if err != nil {
