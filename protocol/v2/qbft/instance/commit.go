@@ -65,15 +65,11 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage, fullData []byte) (*spec
 		return nil, errors.New("can't aggregate zero commit msgs")
 	}
 
-	var ret *specqbft.SignedMessage
+	ret := msgs[0].DeepCopy()
 	err := bounded.Run(func() error {
-		for _, m := range msgs {
-			if ret == nil {
-				ret = m.DeepCopy()
-			} else {
-				if err := ret.Aggregate(m); err != nil {
-					return errors.Wrap(err, "could not aggregate commit msg")
-				}
+		for _, m := range msgs[1:] {
+			if err := ret.Aggregate(m); err != nil {
+				return errors.Wrap(err, "could not aggregate commit msg")
 			}
 		}
 		return nil
@@ -162,10 +158,7 @@ func BaseCommitValidation(
 	}
 
 	// verify signature
-	if err := bounded.Run(func() error {
-		// return signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-	}); err != nil {
+	if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 

@@ -41,10 +41,7 @@ func ValidateFutureMsg(
 	}
 
 	// verify signature
-	if err := bounded.Run(func() error {
-		// return msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-	}); err != nil {
+	if err := types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 

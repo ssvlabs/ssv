@@ -65,10 +65,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 		return errors.New("invalid partial sig slot")
 	}
 
-	if err := bounded.Run(func() error {
-		// return signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
-		return types.VerifyByOperators(signedMsg.GetSignature(), signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
-	}); err != nil {
+	if err := types.VerifyByOperators(signedMsg.GetSignature(), signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
 		return errors.Wrap(err, "failed to verify PartialSignature")
 	}
 

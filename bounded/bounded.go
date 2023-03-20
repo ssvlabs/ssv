@@ -21,7 +21,7 @@ type job struct {
 var in = make(chan job, 1024)
 
 func init() {
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(8)
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
