@@ -1,3 +1,5 @@
+// runner declares logging fields used by the github.com/bloxapp/ssv/protocol/v2/ssv/runner package. this is a
+// separate package from github.com/bloxapp/ssv/logging/fields in order to avoid an import cycle
 package runner
 
 import (
