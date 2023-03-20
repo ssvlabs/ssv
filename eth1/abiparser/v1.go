@@ -31,7 +31,7 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
-// b64 encrypted key length is 258
+// b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
 // OperatorAddedEvent struct represents event received by the smart contract
