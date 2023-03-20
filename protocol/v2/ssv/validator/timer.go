@@ -34,7 +34,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeSSVMessage(msg)
+		dec, err := queue.DecodeSSVMessage(logger, msg)
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
@@ -44,6 +44,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				zap.String("role", identifier.GetRoleType().String()))
 		}
+		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
 }
 

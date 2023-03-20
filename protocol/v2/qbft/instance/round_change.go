@@ -60,7 +60,7 @@ func (i *Instance) uponRoundChange(
 		logger.Debug("📢 got justified change round, broadcasting proposal message",
 			zap.Uint64("round", uint64(i.State.Round)))
 
-		if err := i.Broadcast(proposal); err != nil {
+		if err := i.Broadcast(logger, proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
 		}
 	} else if partialQuorum, rcs := hasReceivedPartialQuorum(i.State, roundChangeMsgContainer); partialQuorum {
@@ -68,7 +68,7 @@ func (i *Instance) uponRoundChange(
 		if newRound <= i.State.Round {
 			return nil // no need to advance round
 		}
-		err := i.uponChangeRoundPartialQuorum(newRound, instanceStartValue)
+		err := i.uponChangeRoundPartialQuorum(logger, newRound, instanceStartValue)
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (i *Instance) uponRoundChange(
 	return nil
 }
 
-func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanceStartValue []byte) error {
+func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)
@@ -85,7 +85,7 @@ func (i *Instance) uponChangeRoundPartialQuorum(newRound specqbft.Round, instanc
 		return errors.Wrap(err, "failed to create round change message")
 	}
 
-	if err := i.Broadcast(roundChange); err != nil {
+	if err := i.Broadcast(logger, roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
 

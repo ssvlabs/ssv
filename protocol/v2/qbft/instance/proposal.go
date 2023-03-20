@@ -21,6 +21,11 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	if !addedMsg {
 		return nil // uponProposal was already called
 	}
+
+	logger.Debug("📬 got proposal message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("proposal-signers", signedProposal.Signers))
+
 	newRound := signedProposal.Message.Round
 	i.State.ProposalAcceptedForCurrentRound = signedProposal
 
@@ -48,7 +53,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))
 
-	if err := i.Broadcast(prepare); err != nil {
+	if err := i.Broadcast(logger, prepare); err != nil {
 		return errors.Wrap(err, "failed to broadcast prepare message")
 	}
 	return nil

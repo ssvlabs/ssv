@@ -29,7 +29,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	attDataReqStart := time.Now()
 	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, errors.Wrap(err, "failed to get attestation data")
 	}
 	if data == nil {
 		return nil, DataVersionNil, errors.New("attestation data is nil")

@@ -58,7 +58,7 @@ func NewProposerRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
 	}
 }
 
@@ -319,7 +319,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		blockSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully proposed block!")

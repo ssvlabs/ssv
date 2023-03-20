@@ -27,6 +27,10 @@ func (i *Instance) uponPrepare(
 		return nil // uponPrepare was already called
 	}
 
+	logger.Debug("📬 got prepare message",
+		zap.Uint64("round", uint64(i.State.Round)),
+		zap.Any("prepare-signers", signedPrepare.Signers))
+
 	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
@@ -47,12 +51,13 @@ func (i *Instance) uponPrepare(
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
+	// TODO: "prepare-signers" in log should log all unique signers or all prepare messages.
 	logger.Debug("📢 got prepare quorum, broadcasting commit message",
 		zap.Uint64("round", uint64(i.State.Round)),
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		zap.Any("commit-singers", commitMsg.Signers))
 
-	if err := i.Broadcast(commitMsg); err != nil {
+	if err := i.Broadcast(logger, commitMsg); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
 

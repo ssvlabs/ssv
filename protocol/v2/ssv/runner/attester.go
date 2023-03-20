@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -14,6 +15,7 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -26,6 +28,7 @@ type AttesterRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
+	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
@@ -51,7 +54,7 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),
+		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAttester),
 	}
 }
 
@@ -173,12 +176,13 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		attestationSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
+			fields.ConsensusTimeMillis(time.Since(r.started)),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true
@@ -212,6 +216,8 @@ func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
+
+	r.started = time.Now()
 
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
