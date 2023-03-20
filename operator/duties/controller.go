@@ -134,7 +134,6 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(logger, duty)
 	}
-	logger = dc.loggerWithDutyContext(logger, duty)
 
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
@@ -157,7 +156,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
-		logger.Debug("📬 queue: pushed message", fields.PubKey(pk[:]), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+		logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find validator")
 	}
