@@ -11,12 +11,6 @@ var pkCache = hashmap.New[string, bls.PublicKey]()
 
 // VerifyByOperators verifies signature by the provided operators
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	err := verifyByOperators(true, s, data, domain, sigType, operators)
-	return err
-}
-
-// VerifyByOperators verifies signature by the provided operators
-func verifyByOperators(cache bool, s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
 	// decode sig
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
@@ -32,12 +26,10 @@ func verifyByOperators(cache bool, s spectypes.Signature, data spectypes.Message
 		for _, n := range operators {
 			if id == n.GetID() {
 				pkStr := string(n.GetPublicKey())
-				if cache {
-					if pk, ok := pkCache.Get(pkStr); ok {
-						pks = append(pks, pk)
-						found = true
-						continue
-					}
+				if pk, ok := pkCache.Get(pkStr); ok {
+					pks = append(pks, pk)
+					found = true
+					continue
 				}
 
 				pk := bls.PublicKey{}
