@@ -22,6 +22,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		}
 		log.Printf("SameResult: %v", err)
 	}
+
 	return err
 }
 
