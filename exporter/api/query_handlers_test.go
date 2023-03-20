@@ -124,8 +124,8 @@ func TestHandleDecidedQuery(t *testing.T) {
 		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
-		msgs, ok := nm.Msg.Data.([]*specqbft.SignedMessage)
-		require.True(t, ok, "expected []*specqbft.SignedMessage, got %+v", nm.Msg.Data)
+		msgs, ok := nm.Msg.Data.([]*SignedMessageAPI)
+		require.True(t, ok, "expected []*SignedMessageAPI, got %+v", nm.Msg.Data)
 		require.Equal(t, 251, len(msgs)) // seq 0 - 250
 	})
 

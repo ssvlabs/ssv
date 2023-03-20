@@ -47,7 +47,7 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 	})
 
 	t.Run("create and get operator", func(t *testing.T) {
-		err := storageCollection.SaveOperatorData(logger, &operatorData)
+		_, err := storageCollection.SaveOperatorData(logger, &operatorData)
 		require.NoError(t, err)
 		operatorDataFromDB, found, err := storageCollection.GetOperatorData(operatorData.ID)
 		require.NoError(t, err)
@@ -67,14 +67,14 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 			OwnerAddress: common.Address{},
 			ID:           1,
 		}
-		err := storageCollection.SaveOperatorData(logger, &od)
+		_, err := storageCollection.SaveOperatorData(logger, &od)
 		require.NoError(t, err)
 		odDup := storage.OperatorData{
 			PublicKey:    []byte("010101010101"),
 			OwnerAddress: common.Address{},
 			ID:           1,
 		}
-		err = storageCollection.SaveOperatorData(logger, &odDup)
+		_, err = storageCollection.SaveOperatorData(logger, &odDup)
 		require.NoError(t, err)
 		_, found, err := storageCollection.GetOperatorData(od.ID)
 		require.NoError(t, err)
@@ -99,7 +99,8 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 		}
 		for _, od := range ods {
 			odCopy := od
-			require.NoError(t, storageCollection.SaveOperatorData(logger, &odCopy))
+			_, err := storageCollection.SaveOperatorData(logger, &odCopy)
+			require.NoError(t, err)
 		}
 
 		for _, od := range ods {
@@ -126,7 +127,7 @@ func TestStorage_ListOperators(t *testing.T) {
 			PublicKey: pk,
 			ID:        spectypes.OperatorID(i),
 		}
-		err = storageCollection.SaveOperatorData(logger, &operator)
+		_, err = storageCollection.SaveOperatorData(logger, &operator)
 		require.NoError(t, err)
 	}
 
