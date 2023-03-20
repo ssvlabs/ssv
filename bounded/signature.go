@@ -1,10 +1,6 @@
 package bounded
 
 import (
-	"log"
-	"math/rand"
-	"time"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -15,19 +11,7 @@ var pkCache = hashmap.New[string, bls.PublicKey]()
 
 // VerifyByOperators verifies signature by the provided operators
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	err := verifyByOperators(false, s, data, domain, sigType, operators)
-	if rand.Intn(10) == 0 {
-		err2 := verifyByOperators(true, s, data, domain, sigType, operators)
-		if err != err2 {
-			log.Printf("DifferentResult: %v, %v", err, err2)
-			time.Sleep(3 * time.Second)
-			panic("DifferentResult")
-		}
-		if rand.Intn(10) == 0 {
-			log.Printf("SameResult: %v", err)
-		}
-	}
-
+	err := verifyByOperators(true, s, data, domain, sigType, operators)
 	return err
 }
 
