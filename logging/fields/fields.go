@@ -212,6 +212,6 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func ConsensusTime(val time.Time) zap.Field {
-	return zap.Stringer(FieldConsensusTime, stringer.SinceSeconds{Val: val})
+func ConsensusTimeMillis(val time.Duration) zap.Field {
+	return zap.Int64(FieldConsensusTime, val.Milliseconds())
 }
