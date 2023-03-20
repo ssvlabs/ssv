@@ -29,9 +29,7 @@ func init() {
 			defer runtime.UnlockOSThread()
 
 			for j := range in {
-				// runtime.Gosched()
 				err := j.f()
-				// runtime.Gosched()
 				j.out <- err
 			}
 		}()
