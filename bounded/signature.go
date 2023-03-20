@@ -1,6 +1,9 @@
 package bounded
 
 import (
+	"log"
+	"math/rand"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -11,6 +14,19 @@ var pkCache = hashmap.New[string, bls.PublicKey]()
 
 // VerifyByOperators verifies signature by the provided operators
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+	err := verifyByOperators(false, s, data, domain, sigType, operators)
+	if rand.Intn(10) == 0 {
+		err2 := verifyByOperators(true, s, data, domain, sigType, operators)
+		if err != err2 {
+			log.Fatalf("DifferentResult: %v, %v", err, err2)
+		}
+		log.Printf("SameResult: %v", err)
+	}
+	return err
+}
+
+// VerifyByOperators verifies signature by the provided operators
+func verifyByOperators(cache bool, s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
 	// decode sig
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
@@ -26,10 +42,12 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		for _, n := range operators {
 			if id == n.GetID() {
 				pkStr := string(n.GetPublicKey())
-				if pk, ok := pkCache.Get(pkStr); ok {
-					pks = append(pks, pk)
-					found = true
-					continue
+				if cache {
+					if pk, ok := pkCache.Get(pkStr); ok {
+						pks = append(pks, pk)
+						found = true
+						continue
+					}
 				}
 
 				pk := bls.PublicKey{}
