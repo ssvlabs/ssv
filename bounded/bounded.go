@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/paulbellamy/ratecounter"
-	"go.uber.org/automaxprocs/maxprocs"
 	"go.uber.org/zap"
 )
 
@@ -22,11 +21,8 @@ type job struct {
 var in = make(chan job, 1024)
 
 func init() {
-	maxprocs.Set(maxprocs.Logger(func(template string, args ...interface{}) {
-		zap.L().Debug(fmt.Sprintf(template, args...))
-	}))
 	zap.L().Debug("GOMAXPROCS", zap.Int("procs", runtime.GOMAXPROCS(0)), zap.Int("numcpu", runtime.NumCPU()))
-	// runtime.GOMAXPROCS(6)
+	runtime.GOMAXPROCS(10)
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
