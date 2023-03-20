@@ -57,6 +57,8 @@ spec:
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
+          requests:
+            cpu: 2000m
           limits:
             cpu: 2000m
             memory: REPLACE_NODES_MEM_LIMIT
