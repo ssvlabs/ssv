@@ -21,22 +21,22 @@ type job struct {
 var in = make(chan job, 1024)
 
 func init() {
-	runtime.GOMAXPROCS(10)
+	runtime.GOMAXPROCS(12)
 
-	// for i := 0; i < goroutines; i++ {
-	// 	go func() {
-	// 		runtime.LockOSThread()
-	// 		defer runtime.UnlockOSThread()
+	for i := 0; i < goroutines; i++ {
+		go func() {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
 
-	// 		for j := range in {
-	// 			err := j.f()
-	// 			j.out <- err
-	// 		}
-	// 	}()
-	// }
+			for j := range in {
+				err := j.f()
+				j.out <- err
+			}
+		}()
+	}
 
 	go func() {
-		t := time.NewTicker(1 * time.Second)
+		t := time.NewTicker(15 * time.Second)
 		for range t.C {
 			zap.L().Debug("bounded cgo average time", zap.Float64("time_ms", time.Duration(runCounter.Rate()).Seconds()))
 		}
@@ -45,7 +45,7 @@ func init() {
 	// Measure the time it takes to start a goroutine.
 	go func() {
 		var goroutineCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
-		var printRateTicker = time.NewTicker(5 * time.Second)
+		var printRateTicker = time.NewTicker(15 * time.Second)
 		var wg sync.WaitGroup
 		for {
 			start := time.Now()
@@ -78,7 +78,7 @@ func init() {
 	go func() {
 		var ch = make(chan struct{}, 32)
 		var channelCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
-		var printRateTicker = time.NewTicker(5 * time.Second)
+		var printRateTicker = time.NewTicker(15 * time.Second)
 
 		go func() {
 			for {
@@ -144,17 +144,16 @@ var runCounter = ratecounter.NewAvgRateCounter(60 * time.Second)
 
 // Run runs the function f in a goroutine.
 func Run(f func() error) error {
-	// start := time.Now()
-	// defer func() {
-	// 	counter.Incr(int64(time.Since(start)))
-	// }()
+	start := time.Now()
 
-	// out := make(chan error)
-	// in <- job{f, out}
-	// err := <-out
-	// return err
-
-	err := f()
-	// runtime.Gosched()
+	out := make(chan error)
+	in <- job{f, out}
+	err := <-out
+	runCounter.Incr(int64(time.Since(start)))
 	return err
+
+	// err := f()
+	// // runtime.Gosched()
+	// runCounter.Incr(int64(time.Since(start)))
+	// return err
 }
