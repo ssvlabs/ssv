@@ -31,17 +31,20 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
+// b64 encrypted key length is 256
+const encryptedKeyLength = 256
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
-	ID        uint64         // indexed
-	Owner     common.Address // indexed
-	PublicKey []byte
-	Fee       *big.Int
+	OperatorId uint64         // indexed
+	Owner      common.Address // indexed
+	PublicKey  []byte
+	Fee        *big.Int
 }
 
 // OperatorRemovedEvent struct represents event received by the smart contract
 type OperatorRemovedEvent struct {
-	ID uint64 // indexed
+	OperatorId uint64 // indexed
 }
 
 // ValidatorAddedEvent struct represents event received by the smart contract
@@ -115,7 +118,7 @@ func (v1 *AbiV1) ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*O
 			Err: errors.Errorf("%s event missing topics", OperatorAdded),
 		}
 	}
-	event.ID = log.Topics[1].Big().Uint64()
+	event.OperatorId = log.Topics[1].Big().Uint64()
 	event.Owner = common.HexToAddress(log.Topics[2].Hex())
 
 	return &event, nil
@@ -129,7 +132,7 @@ func (v1 *AbiV1) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (
 			Err: errors.Errorf("%s event missing topics", OperatorRemoved),
 		}
 	}
-	event.ID = log.Topics[1].Big().Uint64()
+	event.OperatorId = log.Topics[1].Big().Uint64()
 
 	return &event, nil
 }
@@ -144,7 +147,16 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	pubKeysOffset := len(event.OperatorIds)*phase0.PublicKeyLength + 2
+	// the 2 first bytes are unnecessary for parsing
+	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
+	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
+
+	if sharesExpectedLength != len(event.Shares) {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event shares length is not correct", ValidatorAdded),
+		}
+	}
+
 	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
 	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
 

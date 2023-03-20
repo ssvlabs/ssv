@@ -180,8 +180,10 @@ func init() {
 func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
-	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-		return nil, fmt.Errorf("could not read config: %w", err)
+	if globalArgs.ConfigPath != "" {
+		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+			return nil, fmt.Errorf("could not read config: %w", err)
+		}
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {

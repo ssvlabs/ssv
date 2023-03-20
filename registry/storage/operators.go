@@ -32,7 +32,7 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 type Operators interface {
 	GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(id spectypes.OperatorID) (*OperatorData, bool, error)
-	SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error
+	SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) (bool, error)
 	DeleteOperatorData(id spectypes.OperatorID) error
 	ListOperators(logger *zap.Logger, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
@@ -125,26 +125,26 @@ func (s *operatorsStorage) listOperators(logger *zap.Logger, from, to uint64) ([
 }
 
 // SaveOperatorData saves operator data
-func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) error {
+func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *OperatorData) (bool, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	_, found, err := s.getOperatorData(operatorData.ID)
 	if err != nil {
-		return errors.Wrap(err, "could not get operator data")
+		return found, errors.Wrap(err, "could not get operator data")
 	}
 	if found {
 		logger.Debug("operator already exist",
 			zap.String("pubKey", string(operatorData.PublicKey)),
 			zap.Uint64("index", operatorData.ID))
-		return nil
+		return found, nil
 	}
 
 	raw, err := json.Marshal(operatorData)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal operator data")
+		return found, errors.Wrap(err, "could not marshal operator data")
 	}
-	return s.db.Set(s.prefix, buildOperatorKey(operatorData.ID), raw)
+	return found, s.db.Set(s.prefix, buildOperatorKey(operatorData.ID), raw)
 }
 
 func (s *operatorsStorage) DeleteOperatorData(id spectypes.OperatorID) error {

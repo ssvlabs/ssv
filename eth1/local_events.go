@@ -59,15 +59,15 @@ type FeeRecipientAddressUpdatedEventYAML struct {
 
 func (e *operatorAddedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorAddedEvent{
-		ID:        e.ID,
-		Owner:     common.HexToAddress(e.Owner),
-		PublicKey: []byte(e.PublicKey),
+		OperatorId: e.ID,
+		Owner:      common.HexToAddress(e.Owner),
+		PublicKey:  []byte(e.PublicKey),
 	}, nil
 }
 
 func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
 	return abiparser.OperatorRemovedEvent{
-		ID: e.ID,
+		OperatorId: e.ID,
 	}, nil
 }
 
