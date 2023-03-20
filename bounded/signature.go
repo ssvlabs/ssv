@@ -3,6 +3,7 @@ package bounded
 import (
 	"log"
 	"math/rand"
+	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -18,9 +19,13 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	if rand.Intn(10) == 0 {
 		err2 := verifyByOperators(true, s, data, domain, sigType, operators)
 		if err != err2 {
-			log.Fatalf("DifferentResult: %v, %v", err, err2)
+			log.Printf("DifferentResult: %v, %v", err, err2)
+			time.Sleep(3 * time.Second)
+			panic("DifferentResult")
 		}
-		log.Printf("SameResult: %v", err)
+		if rand.Intn(10) == 0 {
+			log.Printf("SameResult: %v", err)
+		}
 	}
 
 	return err
