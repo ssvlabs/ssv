@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -21,17 +21,23 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 	copy(sig[:], randao[:])
 
 	reqStart := time.Now()
-	beaconBlockRoot, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
+	beaconBlock, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
 
-	switch beaconBlockRoot.Version {
+	switch beaconBlock.Version {
+	case spec.DataVersionPhase0:
+		return beaconBlock.Phase0, beaconBlock.Version, nil
+	case spec.DataVersionAltair:
+		return beaconBlock.Altair, beaconBlock.Version, nil
 	case spec.DataVersionBellatrix:
-		return beaconBlockRoot.Bellatrix, spec.DataVersionBellatrix, nil
+		return beaconBlock.Bellatrix, beaconBlock.Version, nil
+	case spec.DataVersionCapella:
+		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
-		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlockRoot.Version))
+		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlock.Version))
 	}
 }
 
@@ -39,18 +45,13 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, committeeIndex phase
 	return nil, DataVersionNil, nil
 }
 
-func (gc *goClient) SubmitBlindedBeaconBlock(block *apiv1bellatrix.SignedBlindedBeaconBlock) error {
+func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedSignedBlindedBeaconBlock) error {
 	return nil
 }
 
 // SubmitBeaconBlock submit the block to the node
-func (gc *goClient) SubmitBeaconBlock(block *bellatrix.SignedBeaconBlock) error {
-	versionedBlock := &spec.VersionedSignedBeaconBlock{
-		Version:   spec.DataVersionBellatrix,
-		Bellatrix: block,
-	}
-
-	return gc.client.SubmitBeaconBlock(gc.ctx, versionedBlock)
+func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedSignedBeaconBlock) error {
+	return gc.client.SubmitBeaconBlock(gc.ctx, block)
 }
 
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
