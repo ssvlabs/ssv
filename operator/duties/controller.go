@@ -149,7 +149,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		if err != nil {
 			return err
 		}
-		dec, err := queue.DecodeSSVMessage(nil, ssvMsg)
+		dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 		if err != nil {
 			return err
 		}
