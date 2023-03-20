@@ -3,8 +3,6 @@ package queue
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 const (
@@ -23,10 +21,10 @@ type Queue interface {
 
 	// Pop returns and removes the next message in the queue, or blocks until a message is available.
 	// When the context is canceled, Pop returns immediately with any leftover message or nil.
-	Pop(context.Context, *zap.Logger, MessagePrioritizer) *DecodedSSVMessage
+	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
-	TryPop(*zap.Logger, MessagePrioritizer) *DecodedSSVMessage
+	TryPop(MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
@@ -65,7 +63,7 @@ func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
 	}
 }
 
-func (q *priorityQueue) TryPop(logger *zap.Logger, prioritizer MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox.
 	q.readInbox()
 
@@ -77,7 +75,7 @@ func (q *priorityQueue) TryPop(logger *zap.Logger, prioritizer MessagePrioritize
 	return nil
 }
 
-func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer MessagePrioritizer) *DecodedSSVMessage {
+func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox, if enough time has passed.
 	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
 	// since reading the inbox is more expensive than just reading the head.
