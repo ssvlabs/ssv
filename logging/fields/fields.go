@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,6 +16,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -31,7 +31,6 @@ const (
 	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
-	FieldDutyID              = "dutyID"
 	FieldENR                 = "ENR"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
@@ -76,15 +75,15 @@ func EventID(val fmt.Stringer) zapcore.Field {
 }
 
 func PubKey(pubKey []byte) zapcore.Field {
-	return zap.Stringer(FieldPubKey, hexStringer{pubKey})
+	return zap.Stringer(FieldPubKey, stringer.HexStringer{Val: pubKey})
 }
 
 func PrivKey(val []byte) zapcore.Field {
-	return zap.Stringer(FieldPrivateKey, hexStringer{val})
+	return zap.Stringer(FieldPrivateKey, stringer.HexStringer{Val: val})
 }
 
 func Validator(pubKey []byte) zapcore.Field {
-	return zap.Stringer(FieldValidator, hexStringer{pubKey})
+	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -128,16 +127,16 @@ func BindIP(val net.IP) zapcore.Field {
 }
 
 func DurationMilli(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDurationMilli, int64Stringer{time.Since(val).Milliseconds()})
+	return zap.Stringer(FieldDurationMilli, stringer.Int64Stringer{Val: time.Since(val).Milliseconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
-	return zap.Stringer(FieldCurrentSlot, uint64Stringer{uint64(network.EstimatedCurrentSlot())})
+	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(network.EstimatedCurrentSlot())})
 }
 
 func StartTimeUnixMilli(network beacon.Network, slot spec.Slot) zapcore.Field {
-	return zap.Stringer(FieldStartTimeUnixMilli, funcStringer{
-		fn: func() string {
+	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
+		Fn: func() string {
 			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixMilli()))
 		},
 	})
@@ -180,7 +179,7 @@ func MessageID(val spectypes.MessageID) zap.Field {
 }
 
 func MessageType(val spectypes.MsgType) zap.Field {
-	return zap.Stringer(FieldMessageType, funcStringer{fn: func() string {
+	return zap.Stringer(FieldMessageType, stringer.FuncStringer{Fn: func() string {
 		switch val {
 		case spectypes.SSVConsensusMsgType:
 			return "SSVConsensusMsgType"
@@ -203,7 +202,7 @@ func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
 }
 
 func BlockNumber(val uint64) zap.Field {
-	return zap.Stringer(FieldBlock, uint64Stringer{val})
+	return zap.Stringer(FieldBlock, stringer.Uint64Stringer{Val: val})
 }
 
 func Name(val string) zap.Field {
@@ -220,19 +219,4 @@ func Count(val int) zap.Field {
 
 func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
-}
-
-func DutyID(dutyRunner runner.Runner) zap.Field {
-	return zap.Stringer(FieldDutyID, funcStringer{
-		fn: func() string {
-			startingDuty := dutyRunner.GetBaseRunner().State.StartingDuty
-
-			dutyType := startingDuty.Type.String()
-			epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
-			slot := startingDuty.Slot
-			validatorIndex := startingDuty.ValidatorIndex
-
-			return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
-		},
-	})
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	runnerfields "github.com/bloxapp/ssv/logging/fields/runner"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -101,7 +102,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	logger = logger.With(fields.DutyID(dutyRunner))
+	logger = logger.With(runnerfields.DutyID(dutyRunner))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
