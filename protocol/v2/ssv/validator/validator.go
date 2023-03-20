@@ -13,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	runnerfields "github.com/bloxapp/ssv/logging/fields/runner"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -86,8 +87,6 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 
-	logger = logger.With(fields.DutyID(dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
-
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
@@ -102,6 +101,8 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
+
+	logger = logger.With(runnerfields.DutyID(dutyRunner))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
