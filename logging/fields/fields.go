@@ -29,10 +29,12 @@ const (
 	FieldBlock               = "block"
 	FieldBlockCacheMetrics   = "blockCacheMetricsField"
 	FieldConnectionID        = "connectionID"
+	FieldConsensusTime       = "ConsensusTime"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "currentSlot"
 	FieldDurationMilli       = "durationMilli"
 	FieldENR                 = "ENR"
+	FieldEvent               = "event"
 	FieldEventID             = "eventID"
 	FieldFromBlock           = "fromBlock"
 	FieldHeight              = "height"
@@ -56,7 +58,6 @@ const (
 	FieldUpdatedENRLocalNode = "updatedENR"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validatorMetadata"
-	FiledEvent               = "event"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -184,7 +185,7 @@ func MessageType(val spectypes.MsgType) zap.Field {
 }
 
 func EventName(val string) zap.Field {
-	return zap.String(FiledEvent, val)
+	return zap.String(FieldEvent, val)
 }
 
 func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
@@ -209,4 +210,8 @@ func Count(val int) zap.Field {
 
 func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
+}
+
+func ConsensusTime(val time.Time) zap.Field {
+	return zap.Stringer(FieldConsensusTime, stringer.SinceSeconds{Val: val})
 }

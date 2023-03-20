@@ -5,7 +5,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -45,7 +44,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Warn("❗️ dropping timeout message because the queue is full",
 				zap.String("role", identifier.GetRoleType().String()))
 		}
-		logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
 }
 

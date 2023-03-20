@@ -6,7 +6,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -30,9 +29,9 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
-	logger.Debug("📬 handling SSV message",
-		zap.Uint64("type", uint64(msg.MsgType)),
-		fields.Role(msg.MsgID.GetRoleType()))
+	// logger.Debug("📬 handling SSV message",
+	// 	zap.Uint64("type", uint64(msg.MsgType)),
+	// 	fields.Role(msg.MsgID.GetRoleType()))
 
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		decodedMsg, err := queue.DecodeSSVMessage(logger, msg)
@@ -50,7 +49,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
-		logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
@@ -109,7 +108,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
-		logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		// logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 		if ctx.Err() != nil {
 			break
 		}

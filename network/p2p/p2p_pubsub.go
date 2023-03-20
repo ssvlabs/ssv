@@ -165,12 +165,6 @@ func (n *p2pNetwork) clearValidatorState(pkHex string) {
 	delete(n.activeValidators, pkHex)
 }
 
-var pubKeysToLog = map[string]struct{}{
-	"a23efab72ad458f7edb626476afab9c6dae2f59d3136c4be76df621927c549a32cda2aa22188266b203dd9fe33b50468": {},
-	"b3b9acf0d47d27b07f398fff103d0db6f0c688cc6257c5201f826bf9cec6a055b99418527fb12b1d1fde627a371e297a": {},
-	"973550aa35e7c22453ab4065965c56e57c84794270b629158dcd81201f530442f2cbbef1f04d7c177f5fff1a66bcde9d": {},
-}
-
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
 func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string, msg *pubsub.Message) error {
 	return func(topic string, msg *pubsub.Message) error {
@@ -195,13 +189,10 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 
 		p2pID := ssvMsg.GetID().String()
 
-		if _, ok := pubKeysToLog[hex.EncodeToString(ssvMsg.MsgID.GetPubKey())]; ok {
-			logger = logger.With(
-				zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-				zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-			)
-			logger.Debug("handlePubsubMessages")
-		}
+		//	logger.With(
+		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
+		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
+		// 	).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 		n.msgRouter.Route(logger, *ssvMsg)

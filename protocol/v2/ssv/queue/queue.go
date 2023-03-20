@@ -2,7 +2,6 @@ package queue
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -54,35 +53,17 @@ func NewDefault() Queue {
 }
 
 func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
-	logPush(msg)
 	q.inbox <- msg
 }
 
 func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
-	logPush(msg)
+
 	select {
 	case q.inbox <- msg:
 		return true
 	default:
-		queueLagMap.Delete(msg.MsgID)
+
 		return false
-	}
-}
-
-var queueLagMap = &sync.Map{}
-
-func logPush(msg *DecodedSSVMessage) {
-	queueLagMap.Store(msg.MsgID, time.Now())
-}
-
-func logPop(logger *zap.Logger, msg *DecodedSSVMessage) {
-	if t, ok := queueLagMap.LoadAndDelete(msg.MsgID); !ok {
-		zap.L().Error("TRACE:popped message not recorded as pushed")
-	} else {
-		d := time.Since(t.(time.Time))
-		if d >= 1*time.Millisecond {
-			zap.L().Info("TRACE:queueLag", zap.Int64("lagMilis", d.Milliseconds()))
-		}
 	}
 }
 
@@ -92,9 +73,7 @@ func (q *priorityQueue) TryPop(logger *zap.Logger, prioritizer MessagePrioritize
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		msg := q.pop(prioritizer)
-		logPop(logger, msg)
-		return msg
+		return q.pop(prioritizer)
 	}
 
 	return nil
@@ -110,9 +89,7 @@ func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer
 
 	// Try to pop immediately.
 	if q.head != nil {
-		msg := q.pop(prioritizer)
-		logPop(logger, msg)
-		return msg
+		return q.pop(prioritizer)
 	}
 
 	// Wait for a message to be pushed.
@@ -128,7 +105,6 @@ func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer
 	// Pop the highest priority message.
 	if q.head != nil {
 		msg := q.pop(prioritizer)
-		logPop(logger, msg)
 		return msg
 	}
 

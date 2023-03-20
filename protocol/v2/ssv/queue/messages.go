@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -29,40 +28,40 @@ func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVM
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedMessage")
 		}
-		if logger != nil {
-			logger.Debug("📬 incoming SSV message details",
-				zap.String("type", "SSVConsensusMsgType"),
-				zap.Uint64("consensus-type", uint64(sm.Message.MsgType)),
-				zap.Any("signers", sm.Signers),
-				fields.Round(sm.Message.Round),
-			)
-		}
+		// if logger != nil {
+		// 	logger.Debug("📬 incoming SSV message details",
+		// 		zap.String("type", "SSVConsensusMsgType"),
+		// 		zap.Uint64("consensus-type", uint64(sm.Message.MsgType)),
+		// 		zap.Any("signers", sm.Signers),
+		// 		fields.Round(sm.Message.Round),
+		// 	)
+		// }
 		body = sm
 	case types.SSVPartialSignatureMsgType:
 		sm := &spectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
 		}
-		if logger != nil {
-			logger.Debug("📬 incoming SSV message details",
-				zap.String("type", "SSVPartialSignatureMsgType"),
-				zap.Uint64("post-consensus-type", uint64(sm.Message.Type)),
-				zap.Any("signer", sm.Signer),
-				zap.Uint64("slot", uint64(sm.Message.Slot)),
-			)
-		}
+		// if logger != nil {
+		// 	logger.Debug("📬 incoming SSV message details",
+		// 		zap.String("type", "SSVPartialSignatureMsgType"),
+		// 		zap.Uint64("post-consensus-type", uint64(sm.Message.Type)),
+		// 		zap.Any("signer", sm.Signer),
+		// 		zap.Uint64("slot", uint64(sm.Message.Slot)),
+		// 	)
+		// }
 		body = sm
 	case ssvmessage.SSVEventMsgType:
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
 		}
-		if logger != nil {
-			logger.Debug("📬 incoming SSV message details",
-				zap.String("type", "EventMsg"),
-				zap.Uint64("post-consensus-type", uint64(msg.Type)),
-			)
-		}
+		// if logger != nil {
+		// 	logger.Debug("📬 incoming SSV message details",
+		// 		zap.String("type", "EventMsg"),
+		// 		zap.Uint64("post-consensus-type", uint64(msg.Type)),
+		// 	)
+		// }
 		body = msg
 	}
 	return &DecodedSSVMessage{
