@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -237,7 +238,7 @@ func validRoundChangeForData(
 
 	if err := bounded.Run(func() error {
 		// return signedMsg.Signature.VerifyByOperators(signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee)
-		return bounded.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee)
+		return types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}

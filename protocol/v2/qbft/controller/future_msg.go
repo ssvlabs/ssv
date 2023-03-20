@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
@@ -42,7 +43,7 @@ func ValidateFutureMsg(
 	// verify signature
 	if err := bounded.Run(func() error {
 		// return msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return bounded.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
+		return types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}

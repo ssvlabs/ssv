@@ -4,6 +4,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/bounded"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/crypto"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -66,7 +67,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 
 	if err := bounded.Run(func() error {
 		// return signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
-		return bounded.VerifyByOperators(signedMsg.GetSignature(), signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
+		return types.VerifyByOperators(signedMsg.GetSignature(), signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee)
 	}); err != nil {
 		return errors.Wrap(err, "failed to verify PartialSignature")
 	}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponPrepare process prepare message
@@ -148,7 +149,7 @@ func validSignedPrepareForHeightRoundAndRoot(
 
 	if err := bounded.Run(func() error {
 		// return signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return bounded.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
+		return types.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 		return nil
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")

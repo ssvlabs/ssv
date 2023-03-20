@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -163,7 +164,7 @@ func BaseCommitValidation(
 	// verify signature
 	if err := bounded.Run(func() error {
 		// return signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
-		return bounded.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
+		return types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators)
 	}); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
