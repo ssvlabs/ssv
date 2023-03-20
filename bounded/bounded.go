@@ -25,8 +25,8 @@ func init() {
 
 	for i := 0; i < goroutines; i++ {
 		go func() {
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
+			// runtime.LockOSThread()
+			// defer runtime.UnlockOSThread()
 
 			for j := range in {
 				// runtime.Gosched()
