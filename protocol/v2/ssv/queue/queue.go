@@ -57,12 +57,10 @@ func (q *priorityQueue) Push(msg *DecodedSSVMessage) {
 }
 
 func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
-
 	select {
 	case q.inbox <- msg:
 		return true
 	default:
-
 		return false
 	}
 }
@@ -104,8 +102,7 @@ func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		msg := q.pop(prioritizer)
-		return msg
+		return q.pop(prioritizer)
 	}
 
 	return nil
