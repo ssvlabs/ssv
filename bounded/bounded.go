@@ -23,17 +23,17 @@ var in = make(chan job, 1024)
 func init() {
 	runtime.GOMAXPROCS(10)
 
-	for i := 0; i < goroutines; i++ {
-		go func() {
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
+	// for i := 0; i < goroutines; i++ {
+	// 	go func() {
+	// 		runtime.LockOSThread()
+	// 		defer runtime.UnlockOSThread()
 
-			for j := range in {
-				err := j.f()
-				j.out <- err
-			}
-		}()
-	}
+	// 		for j := range in {
+	// 			err := j.f()
+	// 			j.out <- err
+	// 		}
+	// 	}()
+	// }
 
 	go func() {
 		t := time.NewTicker(1 * time.Second)
