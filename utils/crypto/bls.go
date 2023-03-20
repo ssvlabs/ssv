@@ -7,6 +7,8 @@ import (
 
 var blsPublicKeyCache = hashmap.New[string, bls.PublicKey]()
 
+// DeserializeBLSPublicKey deserializes a bls.PublicKey from bytes,
+// caching the result to avoid repeated deserialization.
 func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
 	pkStr := string(b)
 	if pk, ok := blsPublicKeyCache.Get(pkStr); ok {
