@@ -188,7 +188,7 @@ func MessageType(val spectypes.MsgType) zap.Field {
 		case spectypes.DKGMsgType:
 			return "DKGMsgType"
 		default:
-			return "Unknown"
+			return strconv.FormatUint(uint64(val), 10)
 		}
 	}})
 }
