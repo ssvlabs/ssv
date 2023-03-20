@@ -53,7 +53,7 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparser.OperatorAddedEvent) ([]zap.Field, error) {
 	// throw an error if there is an existing operator with the same public key and different operator id
 	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
-		c.operatorData.ID != event.ID {
+		c.operatorData.ID != event.OperatorId {
 		return nil, &abiparser.MalformedEventError{
 			Err: errors.New("operator registered with the same operator public key"),
 		}
@@ -63,10 +63,15 @@ func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparse
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
-		ID:           event.ID,
+		ID:           event.OperatorId,
 	}
-	if err := c.operatorsStorage.SaveOperatorData(logger, od); err != nil {
+
+	exists, err := c.operatorsStorage.SaveOperatorData(logger, od)
+	if err != nil {
 		return nil, errors.Wrap(err, "could not save operator data")
+	}
+	if exists {
+		return nil, nil
 	}
 
 	if bytes.Equal(event.PublicKey, c.operatorData.PublicKey) {
@@ -92,7 +97,7 @@ func (c *controller) handleOperatorRemovedEvent(
 	event abiparser.OperatorRemovedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	od, found, err := c.operatorsStorage.GetOperatorData(event.ID)
+	od, found, err := c.operatorsStorage.GetOperatorData(event.OperatorId)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get operator data")
 	}
