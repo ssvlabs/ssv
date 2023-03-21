@@ -41,9 +41,8 @@ func init() {
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
 
-	// Create NumCPU + 1 goroutines to do CGO calls.
+	// Spawn NumCPU + 1 goroutines to do CGO calls.
 	cgoroutines := numCPU + 1
-
 	for i := 0; i < cgoroutines; i++ {
 		go func() {
 			runtime.LockOSThread()
@@ -65,7 +64,7 @@ func init() {
 //
 // This helps bound the number of different goroutines that call CGO
 // to a fixed number of goroutines with locked OS threads, thereby
-// reducing the number of OS threads that CGO creates and destroyes.
+// reducing the number of OS threads that CGO creates and destroys.
 func CGO(f func()) {
 	out := outChanPool.Get().(chan struct{})
 	defer outChanPool.Put(out)
