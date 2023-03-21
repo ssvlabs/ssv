@@ -43,7 +43,7 @@ func init() {
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
 
-	// Create numCPU + 1 goroutines to do CGO calls.
+	// Create NumCPU + 1 goroutines to do CGO calls.
 	cgoroutines := numCPU + 1
 
 	for i := 0; i < cgoroutines; i++ {
