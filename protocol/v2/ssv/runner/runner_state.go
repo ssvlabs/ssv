@@ -40,7 +40,7 @@ func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, r
 	// Reconstruct signatures
 	var signature []byte
 	var err error
-	bounded.Run(func() error {
+	bounded.CGO(func() error {
 		signature, err = types.ReconstructSignature(container, root, validatorPubKey)
 		return nil
 	})

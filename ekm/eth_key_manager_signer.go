@@ -248,7 +248,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 	}
 
 	var sig spectypes.Signature
-	bounded.Run(func() error {
+	bounded.CGO(func() error {
 		sig, err = account.ValidationKeySign(root)
 		return nil
 	})

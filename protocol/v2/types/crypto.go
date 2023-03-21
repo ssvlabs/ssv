@@ -39,7 +39,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
-	return bounded.Run(func() error {
+	return bounded.CGO(func() error {
 		// decode sig
 		sign := &bls.Sign{}
 		if err := sign.Deserialize(s); err != nil {

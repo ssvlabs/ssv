@@ -25,7 +25,7 @@ func (b *BaseRunner) signBeaconObject(
 
 	var sig spectypes.Signature
 	var r [32]byte
-	bounded.Run(func() error {
+	bounded.CGO(func() error {
 		sig, r, err = runner.GetSigner().SignBeaconObject(obj, domain, runner.GetBaseRunner().Share.SharePubKey, domainType)
 		return nil
 	})
@@ -70,7 +70,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	}
 
 	for _, msg := range signedMsg.Message.Messages {
-		if err := bounded.Run(func() error {
+		if err := bounded.CGO(func() error {
 			return b.verifyBeaconPartialSignature(msg)
 		}); err != nil {
 			return errors.Wrap(err, "could not verify Beacon partial Signature")
