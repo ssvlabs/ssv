@@ -50,7 +50,7 @@ func init() {
 	go func() {
 		time.Sleep(3 * time.Second)
 		zap.L().Info("Determined number of CPUs and GOMAXPROCS",
-			zap.Int("numCPU", numCPU),
+			zap.Int("num_cpu", numCPU),
 			zap.Int("GOMAXPROCS", goMaxProcs),
 		)
 	}()
