@@ -1,10 +1,15 @@
 package bounded
 
 import (
+	"fmt"
 	"runtime"
+	"time"
+
+	"go.uber.org/automaxprocs/maxprocs"
+	"go.uber.org/zap"
 )
 
-const goroutines = 3
+var cgoroutines = runtime.NumCPU() + 1
 
 type job struct {
 	f   func() error
@@ -14,9 +19,26 @@ type job struct {
 var in = make(chan job, 1024)
 
 func init() {
-	runtime.GOMAXPROCS(10)
+	go func() {
+		time.Sleep(10 * time.Second)
 
-	for i := 0; i < goroutines; i++ {
+		zap.L().Debug("maxprocs", zap.Int("maxprocs", runtime.GOMAXPROCS(0)), zap.Int("numcpu", runtime.NumCPU()))
+
+		_, err := maxprocs.Set(maxprocs.Logger(func(format string, args ...interface{}) {
+			zap.L().Debug("maxprocs", zap.String("message", fmt.Sprintf(format, args...)))
+		}))
+		if err != nil {
+			panic(err)
+		}
+	}()
+
+	// goMaxProcs := 8
+	// if goMaxProcs < runtime.NumCPU() {
+	// 	goMaxProcs = runtime.NumCPU()
+	// }
+	// runtime.GOMAXPROCS(goMaxProcs)
+
+	for i := 0; i < cgoroutines; i++ {
 		go func() {
 			runtime.LockOSThread()
 			defer runtime.UnlockOSThread()
@@ -29,6 +51,7 @@ func init() {
 	}
 }
 
+// Run runs f in a goroutine, bounded by cgoroutines.
 func Run(f func() error) error {
 	out := make(chan error)
 	in <- job{f, out}
