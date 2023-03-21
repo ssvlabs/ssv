@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	runnerfields "github.com/bloxapp/ssv/logging/fields/runner"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -37,6 +36,9 @@ type Validator struct {
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
 
+	// dutyIDs is a map for logging a unique ID for a given duty
+	dutyIDs map[spectypes.BeaconRole]string
+
 	state uint32
 }
 
@@ -56,6 +58,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
+		dutyIDs:     make(map[spectypes.BeaconRole]string),
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -87,6 +90,9 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 
+	// create the new dutyID for the new duty and update the dutyID map
+	v.dutyIDs[duty.Type] = dutyID(dutyRunner)
+
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
@@ -102,7 +108,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	logger = logger.With(runnerfields.DutyID(dutyRunner))
+	logger = logger.With(fields.DutyID(v.dutyIDs[messageID.GetRoleType()]))
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
@@ -138,4 +144,13 @@ func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func dutyID(dutyRunner runner.Runner) string {
+	startingDuty := dutyRunner.GetBaseRunner().State.StartingDuty
+	dutyType := startingDuty.Type.String()
+	epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
+	slot := startingDuty.Slot
+	validatorIndex := startingDuty.ValidatorIndex
+	return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
 }

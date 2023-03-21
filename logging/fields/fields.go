@@ -33,6 +33,7 @@ const (
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
 	FieldDuration            = "duration"
+	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
@@ -214,4 +215,8 @@ func Topic(val string) zap.Field {
 
 func ConsensusTime(val time.Duration) zap.Field {
 	return zap.Float64(FieldConsensusTime, val.Seconds())
+}
+
+func DutyID(val string) zap.Field {
+	return zap.String(FieldDutyID, val)
 }
