@@ -25,7 +25,7 @@ var in = make(chan job, 1024)
 
 func init() {
 	// TODO: undo
-	if err := os.Setenv("SSV_NUM_CPU", "2"); err != nil {
+	if err := os.Setenv("SSV_NUM_CPU", "3"); err != nil {
 		panic(err)
 	}
 
