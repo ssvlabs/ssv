@@ -12,6 +12,10 @@ import (
 )
 
 // VerifyByOperators verifies signature by the provided operators
+// This is a copy of a function with the same name from the spec, except for it's use of
+// DeserializeBLSPublicKey function and bounded.CGO
+//
+// TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
 	// find operators
 	pks := make([]bls.PublicKey, 0)
