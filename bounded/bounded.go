@@ -36,7 +36,7 @@ func init() {
 	runtime.GOMAXPROCS(goMaxProcs)
 
 	// Spawn NumCPU + 1 goroutines to do CGO calls.
-	cgoroutines := numCPU * 2
+	cgoroutines := numCPU + 1
 	for i := 0; i < cgoroutines; i++ {
 		go func() {
 			runtime.LockOSThread()
