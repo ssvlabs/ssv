@@ -18,16 +18,16 @@ func init() {
 // DeserializeBLSPublicKey deserializes a bls.PublicKey from bytes,
 // caching the result to avoid repeated deserialization.
 func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
-	// pkStr := string(b)
-	// if pk, ok := blsPublicKeyCache.Get(pkStr); ok {
-	// 	return pk, nil
-	// }
+	pkStr := string(b)
+	if pk, ok := blsPublicKeyCache.Get(pkStr); ok {
+		return pk, nil
+	}
 
 	pk := bls.PublicKey{}
 	if err := pk.Deserialize(b); err != nil {
 		return bls.PublicKey{}, err
 	}
-	// blsPublicKeyCache.Add(pkStr, pk)
+	blsPublicKeyCache.Add(pkStr, pk)
 
 	return pk, nil
 }
