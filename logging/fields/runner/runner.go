@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const FieldDutyID = "dutyID"
+const FieldDutyID = "duty_id"
 
 func DutyID(dutyRunner runner.Runner) zap.Field {
 	return zap.Stringer(FieldDutyID, stringer.FuncStringer{

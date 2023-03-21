@@ -182,7 +182,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		logger.Debug("✅ successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			fields.ConsensusTimeMillis(time.Since(r.started)),
+			fields.ConsensusTime(time.Since(r.started)),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true

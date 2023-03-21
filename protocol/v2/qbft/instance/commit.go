@@ -9,7 +9,9 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -63,15 +65,18 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage, fullData []byte) (*spec
 		return nil, errors.New("can't aggregate zero commit msgs")
 	}
 
-	var ret *specqbft.SignedMessage
-	for _, m := range msgs {
-		if ret == nil {
-			ret = m.DeepCopy()
-		} else {
-			if err := ret.Aggregate(m); err != nil {
-				return nil, errors.Wrap(err, "could not aggregate commit msg")
+	var ret = msgs[0].DeepCopy()
+	var err error
+	bounded.CGO(func() {
+		for _, m := range msgs[1:] {
+			if err = ret.Aggregate(m); err != nil {
+				err = errors.Wrap(err, "could not aggregate commit msg")
+				return
 			}
 		}
+	})
+	if err != nil {
+		return nil, err
 	}
 	ret.FullData = fullData
 
@@ -154,7 +159,7 @@ func BaseCommitValidation(
 	}
 
 	// verify signature
-	if err := signedCommit.Signature.VerifyByOperators(signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+	if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 

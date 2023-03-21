@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -75,7 +76,7 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+	if err := types.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
