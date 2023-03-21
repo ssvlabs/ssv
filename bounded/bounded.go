@@ -5,6 +5,9 @@ import (
 	"runtime"
 	"strconv"
 	"sync"
+	"time"
+
+	"go.uber.org/zap"
 )
 
 var outChanPool = sync.Pool{
@@ -42,6 +45,15 @@ func init() {
 		goMaxProcs = 10
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
+
+	// Log the determined number of CPUs and GOMAXPROCS.
+	go func() {
+		time.Sleep(3 * time.Second)
+		zap.L().Info("Determined number of CPUs and GOMAXPROCS",
+			zap.Int("numCPU", numCPU),
+			zap.Int("GOMAXPROCS", goMaxProcs),
+		)
+	}()
 
 	// Create NumCPU + 1 goroutines to do CGO calls.
 	cgoroutines := numCPU + 1

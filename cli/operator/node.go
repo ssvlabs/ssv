@@ -82,8 +82,6 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		logger.Info("maxProcs", zap.Int("maxProcs", runtime.GOMAXPROCS(0)))
-
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
 		cfg.DBOptions.Ctx = cmd.Context()
