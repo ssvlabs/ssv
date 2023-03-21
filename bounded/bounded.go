@@ -28,10 +28,10 @@ func init() {
 		}
 	}
 
-	// Set GOMAXPROCS to the number of available CPUs, but at least 8.
+	// Set GOMAXPROCS to the number of available CPUs, but at least 10.
 	goMaxProcs := numCPU
-	if goMaxProcs < 8 {
-		goMaxProcs = 8
+	if goMaxProcs < 10 {
+		goMaxProcs = 10
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
 
