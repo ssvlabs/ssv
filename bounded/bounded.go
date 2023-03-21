@@ -8,12 +8,6 @@ import (
 	"sync"
 )
 
-var outChanPool = sync.Pool{
-	New: func() interface{} {
-		return make(chan struct{}, 1)
-	},
-}
-
 type job struct {
 	f    func()
 	done chan<- struct{}
@@ -66,9 +60,15 @@ func init() {
 // to a fixed number of goroutines with locked OS threads, thereby
 // reducing the number of OS threads that CGO creates and destroys.
 func CGO(f func()) {
-	out := outChanPool.Get().(chan struct{})
-	defer outChanPool.Put(out)
+	done := doneChanPool.Get().(chan struct{})
+	defer doneChanPool.Put(done)
 
-	in <- job{f, out}
-	<-out
+	in <- job{f, done}
+	<-done
+}
+
+var doneChanPool = sync.Pool{
+	New: func() interface{} {
+		return make(chan struct{}, 1)
+	},
 }

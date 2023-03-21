@@ -58,7 +58,7 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
-            cpu: REPLACE_NODES_CPU_LIMIT
+            cpu: 2000m
             memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
