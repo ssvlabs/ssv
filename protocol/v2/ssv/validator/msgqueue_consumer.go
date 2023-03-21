@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -57,10 +56,10 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
+	// ctx, cancel := context.WithCancel(v.ctx)
+	// defer cancel()
 
-	for ctx.Err() == nil {
+	for {
 		err := v.ConsumeQueue(logger, msgID, handler)
 		if err != nil {
 			logger.Debug("❗ failed consuming queue", zap.Error(err))
@@ -71,8 +70,8 @@ func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.Messa
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
 func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
+	// ctx, cancel := context.WithCancel(v.ctx)
+	// defer cancel()
 
 	var q queueContainer
 	err := func() error {
