@@ -8,6 +8,7 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
 	github.com/bloxapp/ssv-spec v0.2.8-0.20230302114248-61a10845523b
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
+	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v3 v3.2103.4
 	github.com/dgraph-io/ristretto v0.1.1
@@ -19,6 +20,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/hashicorp/go-multierror v1.1.1
+	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.28.1
 	github.com/ilyakaznacheev/cleanenv v1.2.5
 	github.com/libp2p/go-libp2p v0.24.2
@@ -51,7 +53,6 @@ require (
 	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
-	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/containerd/cgroups v1.0.4 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect

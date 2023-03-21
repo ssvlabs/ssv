@@ -23,7 +23,7 @@ func TestSSVMsgID(t *testing.T) {
 		require.NoError(t, err)
 		mid := f.MsgID()(raw)
 		require.Greater(t, len(mid), 0)
-		require.Equal(t, "77bde94b394dd8754713fbe0", fmt.Sprintf("%x", mid))
+		require.Equal(t, "fc0e576e6f9b3f6d00000000", fmt.Sprintf("%x", mid))
 	})
 
 	t.Run("empty msg", func(t *testing.T) {

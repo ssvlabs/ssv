@@ -25,39 +25,39 @@ import (
 
 const (
 	FieldAddress             = "address"
-	FieldBindIP              = "bindIP"
+	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
-	FieldBlockCacheMetrics   = "blockCacheMetricsField"
-	FieldConnectionID        = "connectionID"
-	FieldConsensusTime       = "ConsensusTime"
+	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldConnectionID        = "connection_id"
+	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
-	FieldCurrentSlot         = "currentSlot"
-	FieldDurationMilli       = "durationMilli"
-	FieldENR                 = "ENR"
+	FieldCurrentSlot         = "current_slot"
+	FieldDuration            = "duration"
+	FieldENR                 = "enr"
 	FieldEvent               = "event"
-	FieldEventID             = "eventID"
-	FieldFromBlock           = "fromBlock"
+	FieldEventID             = "event_id"
+	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
-	FieldIndexCacheMetrics   = "indexCacheMetrics"
-	FieldMessageID           = "messageID"
-	FieldMessageType         = "messageType"
+	FieldIndexCacheMetrics   = "index_cache_metrics"
+	FieldMessageID           = "message_id"
+	FieldMessageType         = "message_type"
 	FieldName                = "name"
-	FieldOperatorId          = "operatorID"
-	FieldPeerID              = "peerID"
-	FieldPrivateKey          = "privKey"
-	FieldPubKey              = "pubKey"
+	FieldOperatorId          = "operator_id"
+	FieldPeerID              = "peer_id"
+	FieldPrivateKey          = "privkey"
+	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
-	FieldStartTimeUnixMilli  = "startTimeUnixMilli"
+	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
-	FieldSyncOffset          = "syncOffset"
-	FieldSyncResults         = "syncResults"
-	FieldTargetNodeENR       = "targetNodeENR"
+	FieldSyncOffset          = "sync_offset"
+	FieldSyncResults         = "sync_results"
+	FieldTargetNodeENR       = "target_node_enr"
 	FieldTopic               = "topic"
-	FieldTxHash              = "txHash"
-	FieldUpdatedENRLocalNode = "updatedENR"
+	FieldTxHash              = "tx_hash"
+	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
-	FieldValidatorMetadata   = "validatorMetadata"
+	FieldValidatorMetadata   = "validator_metadata"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -128,8 +128,8 @@ func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
 }
 
-func DurationMilli(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDurationMilli, stringer.Int64Stringer{Val: time.Since(val).Milliseconds()})
+func Duration(val time.Time) zapcore.Field {
+	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
@@ -212,6 +212,6 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func ConsensusTimeMillis(val time.Duration) zap.Field {
-	return zap.Int64(FieldConsensusTime, val.Milliseconds())
+func ConsensusTime(val time.Duration) zap.Field {
+	return zap.Float64(FieldConsensusTime, val.Seconds())
 }

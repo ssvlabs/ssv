@@ -140,12 +140,12 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(pk[:]); err != nil {
+	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
+	if err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
 		if err != nil {
 			return err
 		}

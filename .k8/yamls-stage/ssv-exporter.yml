@@ -115,6 +115,8 @@ spec:
           env:
             - name: SHARE_CONFIG
               value: "./data/share.yaml"
+            - name: SSV_NUM_CPU
+              value: "2"
             - name: CONFIG_PATH
               valueFrom:
                 secretKeyRef:

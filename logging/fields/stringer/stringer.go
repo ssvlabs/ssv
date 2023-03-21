@@ -31,6 +31,14 @@ func (h Uint64Stringer) String() string {
 	return strconv.FormatUint(h.Val, 10)
 }
 
+type Float64Stringer struct {
+	Val float64
+}
+
+func (h Float64Stringer) String() string {
+	return strconv.FormatFloat(h.Val, 'f', -1, 64)
+}
+
 type FuncStringer struct {
 	Fn func() string
 }

@@ -46,8 +46,8 @@ func ShareFromValidatorEvent(
 ) (*types.SSVShare, *bls.SecretKey, error) {
 	validatorShare := types.SSVShare{}
 
-	publicKey := &bls.PublicKey{}
-	if err := publicKey.Deserialize(event.PublicKey); err != nil {
+	publicKey, err := types.DeserializeBLSPublicKey(event.PublicKey)
+	if err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize validator public key"),
 		}

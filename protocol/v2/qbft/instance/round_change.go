@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -234,7 +235,7 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if err := signedMsg.Signature.VerifyByOperators(signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+	if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
 		return errors.Wrap(err, "msg signature invalid")
 	}
 
