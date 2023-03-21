@@ -13,7 +13,7 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 		if len(msg) == 0 {
 			return ""
 		}
-		var b [20]byte
+		var b [12]byte
 		binary.LittleEndian.PutUint64(b[:], xxhash.Sum64(msg))
 		return string(b[:])
 	}
