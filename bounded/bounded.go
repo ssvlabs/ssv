@@ -25,7 +25,9 @@ var in = make(chan job, 1024)
 
 func init() {
 	// TODO: undo
-	os.Setenv("SSV_NUM_CPU", "2")
+	if err := os.Setenv("SSV_NUM_CPU", "2"); err != nil {
+		panic(err)
+	}
 
 	// Get the number of available CPUs.
 	//

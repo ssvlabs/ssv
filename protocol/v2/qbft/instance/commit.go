@@ -65,11 +65,11 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage, fullData []byte) (*spec
 		return nil, errors.New("can't aggregate zero commit msgs")
 	}
 
-	ret := msgs[0].DeepCopy()
+	var ret = msgs[0].DeepCopy()
 	var err error
 	bounded.CGO(func() {
 		for _, m := range msgs[1:] {
-			if err := ret.Aggregate(m); err != nil {
+			if err = ret.Aggregate(m); err != nil {
 				err = errors.Wrap(err, "could not aggregate commit msg")
 				return
 			}
