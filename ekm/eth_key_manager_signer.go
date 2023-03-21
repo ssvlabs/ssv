@@ -95,8 +95,8 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	var sig spectypes.Signature
 	var root []byte
 	var err error
-	bounded.CGO(func() error {
-		f := func() (spectypes.Signature, []byte, error) {
+	bounded.CGO(func() {
+		sig, root, err = func() (spectypes.Signature, []byte, error) {
 			switch domainType {
 			case spectypes.DomainAttester:
 				data, ok := obj.(*phase0.AttestationData)
@@ -204,9 +204,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 			default:
 				return nil, nil, errors.New("domain unknown")
 			}
-		}
-		sig, root, err = f()
-		return nil
+		}()
 	})
 	return sig, root, err
 }
@@ -248,9 +246,8 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 	}
 
 	var sig spectypes.Signature
-	bounded.CGO(func() error {
+	bounded.CGO(func() {
 		sig, err = account.ValidationKeySign(root)
-		return nil
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign message")

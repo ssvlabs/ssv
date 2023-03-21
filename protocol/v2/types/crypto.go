@@ -39,20 +39,21 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
-	return bounded.CGO(func() error {
+	bounded.CGO(func() {
 		// decode sig
 		sign := &bls.Sign{}
-		if err := sign.Deserialize(s); err != nil {
-			return errors.Wrap(err, "failed to deserialize signature")
+		if err = sign.Deserialize(s); err != nil {
+			err = errors.Wrap(err, "failed to deserialize signature")
+			return
 		}
 
 		// verify
 		if res := sign.FastAggregateVerify(pks, computedRoot); !res {
-			return errors.New("failed to verify signature")
+			err = errors.New("failed to verify signature")
+			return
 		}
-
-		return nil
 	})
+	return err
 }
 
 func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {

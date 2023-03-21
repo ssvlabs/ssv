@@ -65,9 +65,11 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	}
 
 	for _, msg := range signedMsg.Message.Messages {
-		if err := bounded.CGO(func() error {
-			return b.verifyBeaconPartialSignature(msg)
-		}); err != nil {
+		var err error
+		bounded.CGO(func() {
+			err = b.verifyBeaconPartialSignature(msg)
+		})
+		if err != nil {
 			return errors.Wrap(err, "could not verify Beacon partial Signature")
 		}
 	}

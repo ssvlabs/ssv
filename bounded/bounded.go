@@ -12,13 +12,13 @@ import (
 
 var outChanPool = sync.Pool{
 	New: func() interface{} {
-		return make(chan error, 1)
+		return make(chan struct{}, 1)
 	},
 }
 
 type job struct {
-	f   func() error
-	out chan<- error
+	f    func()
+	done chan<- struct{}
 }
 
 var in = make(chan job, 1024)
@@ -46,15 +46,6 @@ func init() {
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
 
-	// Log the determined number of CPUs and GOMAXPROCS.
-	go func() {
-		time.Sleep(3 * time.Second)
-		zap.L().Info("Determined number of CPUs and GOMAXPROCS",
-			zap.Int("num_cpu", numCPU),
-			zap.Int("GOMAXPROCS", goMaxProcs),
-		)
-	}()
-
 	// Create NumCPU + 1 goroutines to do CGO calls.
 	cgoroutines := numCPU + 1
 
@@ -64,11 +55,21 @@ func init() {
 			defer runtime.UnlockOSThread()
 
 			for j := range in {
-				err := j.f()
-				j.out <- err
+				j.f()
+				j.done <- struct{}{}
 			}
 		}()
 	}
+
+	// Log the number of CPUs and CGO goroutines.
+	go func() {
+		time.Sleep(3 * time.Second)
+		zap.L().Debug("tuning GOMAXPROCS and CGO goroutines",
+			zap.Int("num_cpu", numCPU),
+			zap.Int("cgoroutines", cgoroutines),
+			zap.Int("GOMAXPROCS", goMaxProcs),
+		)
+	}()
 }
 
 // CGO runs the given function in a goroutine dedicated to CGO calls,
@@ -77,10 +78,10 @@ func init() {
 // This helps bound the number of different goroutines that call CGO
 // to a fixed number of goroutines with locked OS threads, thereby
 // reducing the number of OS threads that CGO creates and destroyes.
-func CGO(f func() error) error {
-	out := outChanPool.Get().(chan error)
+func CGO(f func()) {
+	out := outChanPool.Get().(chan struct{})
 	defer outChanPool.Put(out)
 
 	in <- job{f, out}
-	return <-out
+	<-out
 }
