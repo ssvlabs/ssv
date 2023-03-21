@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/crypto"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -141,7 +140,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey, err := crypto.DeserializeBLSPublicKey(pk[:])
+	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
 	if err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}

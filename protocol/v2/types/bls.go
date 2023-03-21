@@ -1,4 +1,4 @@
-package crypto
+package types
 
 import (
 	lru "github.com/hashicorp/golang-lru/v2"

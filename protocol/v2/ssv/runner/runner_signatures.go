@@ -5,7 +5,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/crypto"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -84,7 +83,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 
 	for _, n := range b.Share.Committee {
 		if n.GetID() == signer {
-			pk, err := crypto.DeserializeBLSPublicKey(n.GetPublicKey())
+			pk, err := types.DeserializeBLSPublicKey(n.GetPublicKey())
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}
