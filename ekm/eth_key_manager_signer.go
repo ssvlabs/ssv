@@ -95,7 +95,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	var sig spectypes.Signature
 	var root []byte
 	var err error
-	func() error {
+	bounded.CGO(func() error {
 		f := func() (spectypes.Signature, []byte, error) {
 			switch domainType {
 			case spectypes.DomainAttester:
@@ -207,7 +207,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		sig, root, err = f()
 		return nil
-	}()
+	})
 	return sig, root, err
 }
 
