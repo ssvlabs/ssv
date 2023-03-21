@@ -26,8 +26,8 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
-	v.mtx.RLock() // read v.Queues
-	defer v.mtx.RUnlock()
+	// v.mtx.RLock() // read v.Queues
+	// defer v.mtx.RUnlock()
 
 	logger.Debug("📬 handling SSV message",
 		zap.Uint64("type", uint64(msg.MsgType)),
@@ -75,8 +75,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	var q queueContainer
 	err := func() error {
-		v.mtx.RLock() // read v.Queues
-		defer v.mtx.RUnlock()
+		// v.mtx.RLock() // read v.Queues
+		// defer v.mtx.RUnlock()
 		var ok bool
 		q, ok = v.Queues[msgID.GetRoleType()]
 		if !ok {
