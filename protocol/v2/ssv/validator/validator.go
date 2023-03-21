@@ -8,6 +8,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -37,7 +38,7 @@ type Validator struct {
 	Queues  map[spectypes.BeaconRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
-	dutyIDs map[spectypes.BeaconRole]string
+	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
 
 	state uint32
 }
@@ -58,7 +59,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
-		dutyIDs:     make(map[spectypes.BeaconRole]string),
+		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -91,7 +92,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	}
 
 	// create the new dutyID for the new duty and update the dutyID map
-	v.dutyIDs[duty.Type] = dutyID(dutyRunner)
+	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner))
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }
@@ -108,7 +109,9 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	logger = logger.With(fields.DutyID(v.dutyIDs[messageID.GetRoleType()]))
+	if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
+		logger = logger.With(fields.DutyID(dutyID))
+	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
@@ -147,7 +150,12 @@ func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 }
 
 func dutyID(dutyRunner runner.Runner) string {
-	startingDuty := dutyRunner.GetBaseRunner().State.StartingDuty
+	state := dutyRunner.GetBaseRunner().State
+	if state == nil {
+		return ""
+	}
+
+	startingDuty := state.StartingDuty
 	dutyType := startingDuty.Type.String()
 	epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
 	slot := startingDuty.Slot
