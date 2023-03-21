@@ -13,9 +13,6 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 		if len(msg) == 0 {
 			return ""
 		}
-		// TODO: check performance
-		// h := scrypto.Sha256Hash(msg)
-		// return string(h[20:])
 		var b [20]byte
 		binary.LittleEndian.PutUint64(b[:], xxhash.Sum64(msg))
 		return string(b[:])
