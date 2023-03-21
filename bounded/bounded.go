@@ -60,6 +60,7 @@ func init() {
 // to a fixed number of goroutines with locked OS threads, thereby
 // reducing the number of OS threads that CGO creates and destroys.
 func CGO(f func()) {
+
 	f()
 
 	// done := doneChanPool.Get().(chan struct{})
