@@ -22,14 +22,16 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
+	// find operators
+	pks := make([]bls.PublicKey, 0, len(data.GetSigners()))
+
 	bounded.CGO(func() {
-		// find operators
-		pks := make([]bls.PublicKey, 0)
 		for _, id := range data.GetSigners() {
 			found := false
 			for _, n := range operators {
 				if id == n.GetID() {
-					pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
+					var pk bls.PublicKey
+					pk, err = DeserializeBLSPublicKey(n.GetPublicKey())
 					if err != nil {
 						err = errors.Wrap(err, "failed to deserialize public key")
 						return
