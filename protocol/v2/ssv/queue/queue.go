@@ -119,7 +119,7 @@ func (q *priorityQueue) Pop(ctx context.Context, logger *zap.Logger, prioritizer
 	select {
 	case msg := <-q.inbox:
 		q.head = &item{message: msg}
-	case <-ctx.Done():
+		// case <-ctx.Done():
 	}
 
 	// Read any messages that were pushed while waiting.

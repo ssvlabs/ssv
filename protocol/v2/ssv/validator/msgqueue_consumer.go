@@ -92,7 +92,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	logger = logger.With(fields.PubKey(msgID.GetPubKey()))
 	logger.Debug("📬 queue consumer is running")
 
-	for ctx.Err() == nil {
+	for {
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -108,10 +108,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
-		if ctx.Err() != nil {
-			break
-		}
+		msg := q.Q.Pop(nil, logger, queue.NewMessagePrioritizer(&state))
+		// if ctx.Err() != nil {
+		// 	break
+		// }
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
