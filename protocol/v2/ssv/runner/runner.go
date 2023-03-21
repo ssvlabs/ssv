@@ -69,9 +69,9 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
 	// b.State but currently does not write to it
 	state := NewRunnerState(b.Share.Quorum, duty)
-	// b.mtx.Lock() // writes to b.State
+	b.mtx.Lock() // writes to b.State
 	b.State = state
-	// b.mtx.Unlock()
+	b.mtx.Unlock()
 
 	return runner.executeDuty(logger, duty)
 }
@@ -228,8 +228,8 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 
 // hasRunningDuty returns true if a new duty didn't start or an existing duty marked as finished
 func (b *BaseRunner) hasRunningDuty() bool {
-	// b.mtx.RLock() // reads b.State
-	// defer b.mtx.RUnlock()
+	b.mtx.RLock() // reads b.State
+	defer b.mtx.RUnlock()
 
 	if b.State == nil {
 		return false

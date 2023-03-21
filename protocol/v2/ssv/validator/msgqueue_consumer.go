@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -26,8 +27,8 @@ type queueContainer struct {
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
 func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
-	// v.mtx.RLock() // read v.Queues
-	// defer v.mtx.RUnlock()
+	v.mtx.RLock() // read v.Queues
+	defer v.mtx.RUnlock()
 
 	logger.Debug("📬 handling SSV message",
 		zap.Uint64("type", uint64(msg.MsgType)),
@@ -56,10 +57,10 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 
 // StartQueueConsumer start ConsumeQueue with handler
 func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
-	// ctx, cancel := context.WithCancel(v.ctx)
-	// defer cancel()
+	ctx, cancel := context.WithCancel(v.ctx)
+	defer cancel()
 
-	for {
+	for ctx.Err() == nil {
 		err := v.ConsumeQueue(logger, msgID, handler)
 		if err != nil {
 			logger.Debug("❗ failed consuming queue", zap.Error(err))
@@ -70,13 +71,13 @@ func (v *Validator) StartQueueConsumer(logger *zap.Logger, msgID spectypes.Messa
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
 func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
-	// ctx, cancel := context.WithCancel(v.ctx)
-	// defer cancel()
+	ctx, cancel := context.WithCancel(v.ctx)
+	defer cancel()
 
 	var q queueContainer
 	err := func() error {
-		// v.mtx.RLock() // read v.Queues
-		// defer v.mtx.RUnlock()
+		v.mtx.RLock() // read v.Queues
+		defer v.mtx.RUnlock()
 		var ok bool
 		q, ok = v.Queues[msgID.GetRoleType()]
 		if !ok {
@@ -91,7 +92,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	logger = logger.With(fields.PubKey(msgID.GetPubKey()))
 	logger.Debug("📬 queue consumer is running")
 
-	for {
+	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
@@ -107,10 +108,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Quorum = v.Share.Quorum
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(nil, logger, queue.NewMessagePrioritizer(&state))
-		// if ctx.Err() != nil {
-		// 	break
-		// }
+		msg := q.Q.Pop(ctx, logger, queue.NewMessagePrioritizer(&state))
+		if ctx.Err() != nil {
+			break
+		}
 		if msg == nil {
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
