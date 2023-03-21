@@ -28,26 +28,26 @@ func init() {
 		}
 	}
 
-	// Set GOMAXPROCS to the number of available CPUs, but at least 10.
+	// Set GOMAXPROCS to the number of available CPUs, but at least 8.
 	goMaxProcs := numCPU
-	if goMaxProcs < 10 {
-		goMaxProcs = 10
+	if goMaxProcs < 8 {
+		goMaxProcs = 8
 	}
 	runtime.GOMAXPROCS(goMaxProcs)
 
 	// Spawn NumCPU + 1 goroutines to do CGO calls.
 	cgoroutines := numCPU + 1
-	for i := 0; i < cgoroutines; i++ {
-		go func() {
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
+	// for i := 0; i < cgoroutines; i++ {
+	// 	go func() {
+	// 		runtime.LockOSThread()
+	// 		defer runtime.UnlockOSThread()
 
-			for j := range in {
-				j.f()
-				j.done <- struct{}{}
-			}
-		}()
-	}
+	// 		for j := range in {
+	// 			j.f()
+	// 			j.done <- struct{}{}
+	// 		}
+	// 	}()
+	// }
 
 	// Log the number of CPUs and CGO goroutines.
 	log.Printf("tuning GOMAXPROCS and CGO goroutines (num_cpu=%d, cgoroutines=%d, GOMAXPROCS=%d)", numCPU, cgoroutines, goMaxProcs)
@@ -60,11 +60,13 @@ func init() {
 // to a fixed number of goroutines with locked OS threads, thereby
 // reducing the number of OS threads that CGO creates and destroys.
 func CGO(f func()) {
-	done := doneChanPool.Get().(chan struct{})
-	defer doneChanPool.Put(done)
+	f()
 
-	in <- job{f, done}
-	<-done
+	// done := doneChanPool.Get().(chan struct{})
+	// defer doneChanPool.Put(done)
+
+	// in <- job{f, done}
+	// <-done
 }
 
 var doneChanPool = sync.Pool{
