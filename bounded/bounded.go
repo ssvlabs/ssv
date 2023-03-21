@@ -21,6 +21,9 @@ type job struct {
 var in = make(chan job, 1024)
 
 func init() {
+	// TODO: undo
+	os.Setenv("SSV_NUM_CPU", "2")
+
 	// Get the number of available CPUs.
 	//
 	// SSV_NUM_CPU is a useful override when running in environments
