@@ -2,10 +2,12 @@ package genesis
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"hash"
 	"sync"
 
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/cespare/xxhash/v2"
 )
 
 // MsgID returns msg_id for the given message
@@ -14,8 +16,11 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 		if len(msg) == 0 {
 			return ""
 		}
-		h := Sha256Hash(msg)
-		return string(h[20:])
+		// h := Sha256Hash(msg)
+		// return string(h[20:])
+		b := make([]byte, 12)
+		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+		return string(b)
 	}
 }
 
