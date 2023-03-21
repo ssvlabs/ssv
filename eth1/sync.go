@@ -140,9 +140,9 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 
 	if err != nil || len(logFields) > 0 {
 		logger = logger.With(
-			zap.String("event", event.Name),
-			zap.Uint64("block", event.Log.BlockNumber),
-			zap.String("txHash", event.Log.TxHash.Hex()),
+			fields.EventName(event.Name),
+			fields.BlockNumber(event.Log.BlockNumber),
+			fields.TxHash(event.Log.TxHash),
 		)
 		if len(logFields) > 0 {
 			logger = logger.With(logFields...)

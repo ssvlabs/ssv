@@ -15,6 +15,7 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -166,8 +167,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		consensusTime := time.Since(r.started)
-
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
@@ -183,7 +182,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		logger.Debug("✅ successfully submitted attestation",
 			zap.Int64("slot", int64(duty.Slot)),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			zap.Float64("consensus_time", consensusTime.Seconds()),
+			fields.ConsensusTimeMillis(time.Since(r.started)),
 			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
 	}
 	r.GetState().Finished = true
