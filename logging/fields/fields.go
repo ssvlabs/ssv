@@ -32,7 +32,7 @@ const (
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
-	FieldDurationMilli       = "duration_milli"
+	FieldDuration            = "duration"
 	FieldENR                 = "enr"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
@@ -128,8 +128,8 @@ func BindIP(val net.IP) zapcore.Field {
 	return zap.Stringer(FieldBindIP, val)
 }
 
-func DurationMilli(val time.Time) zapcore.Field {
-	return zap.Stringer(FieldDurationMilli, stringer.Int64Stringer{Val: time.Since(val).Milliseconds()})
+func Duration(val time.Time) zapcore.Field {
+	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
 func CurrentSlot(network beacon.Network) zapcore.Field {
@@ -212,6 +212,6 @@ func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
 
-func ConsensusTimeMillis(val time.Duration) zap.Field {
-	return zap.Int64(FieldConsensusTime, val.Milliseconds())
+func ConsensusTime(val time.Duration) zap.Field {
+	return zap.Float64(FieldConsensusTime, val.Seconds())
 }

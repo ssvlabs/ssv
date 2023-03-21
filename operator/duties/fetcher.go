@@ -90,7 +90,7 @@ func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]specty
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			fields.DurationMilli(start))
+			fields.Duration(start))
 	}
 
 	return duties, nil
