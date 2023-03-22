@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -60,8 +61,7 @@ func NewMetricsHandler(ctx context.Context, db basedb.IDb, enableProf bool, heal
 }
 
 func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr string) error {
-	logger.Info("setup collection", zap.String("addr", addr),
-		zap.Bool("enableProf", mh.enableProf))
+	logger.Info("setup collection", fields.Address(addr), zap.Bool("enableProf", mh.enableProf))
 
 	if mh.enableProf {
 		mh.configureProfiling()

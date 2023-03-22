@@ -114,7 +114,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 	logger.Debug("got duties",
 		zap.Int("count", len(duties)),
 		zap.Any("duties", toPrint),
-		zap.Duration("duration", time.Since(start)))
+		fields.Duration(start))
 
 	if err := df.processFetchedDuties(logger, duties); err != nil {
 		return errors.Wrap(err, "failed to process fetched duties")

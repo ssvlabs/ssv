@@ -246,7 +246,7 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 		if err := reopenDb(); err != nil {
 			return nil, err
 		}
-		logger.Info("post-migrations garbage collection completed", zap.Duration("duration", time.Since(start)))
+		logger.Info("post-migrations garbage collection completed", fields.Duration(start))
 	}
 
 	return db, nil
@@ -293,9 +293,9 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
-	logger.Info("setting ssv network", zap.String("domain", format.DomainType(types.GetDefaultDomain()).String()),
-		zap.String("net-id", cfg.P2pNetworkConfig.NetworkID),
-		zap.String("fork", string(forkVersion)))
+	logger.Info("setting ssv network", fields.Domain(types.GetDefaultDomain()),
+		fields.NetworkID(cfg.P2pNetworkConfig.NetworkID),
+		fields.Fork(forkVersion))
 	return eth2Network, forkVersion
 }
 
@@ -326,13 +326,13 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	cl, err := goclient.New(logger, cfg.ETH2Options)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
-			zap.String("addr", cfg.ETH2Options.BeaconNodeAddr))
+			fields.Address(cfg.ETH2Options.BeaconNodeAddr))
 	}
 
 	// execution client
-	logger.Info("using registry contract address", fields.Address(cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", fields.Address(cfg.ETH1Options.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
-		logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
+		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
 			logger.Fatal("failed to load ABI JSON", zap.Error(err))
 		}

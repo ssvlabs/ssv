@@ -3,6 +3,7 @@ package peers
 import (
 	"fmt"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/records"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -29,7 +30,7 @@ func (pi *nodeInfoStore) Add(logger *zap.Logger, pid peer.ID, nodeInfo *records.
 		return false, errors.Wrap(err, "could not marshal node info record")
 	}
 	if err := pi.network.Peerstore().Put(pid, formatInfoKey(nodeInfoKey), raw); err != nil {
-		logger.Warn("could not save peer data", zap.Error(err), zap.String("peer", pid.String()))
+		logger.Warn("could not save peer data", zap.Error(err), fields.PeerID(pid))
 		return false, err
 	}
 	return true, nil

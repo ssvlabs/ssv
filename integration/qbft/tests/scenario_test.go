@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -194,7 +194,9 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node network.P2PNetwork) *protocolvalidator.Validator {
 	ctx, cancel := context.WithCancel(pCtx)
 	validatorPubKey := keySet.Shares[id].GetPublicKey().Serialize()
-	logger := pLogger.With(zap.Int("operator-id", int(id)), zap.String("validator", hex.EncodeToString(validatorPubKey)))
+
+	logger := pLogger.With(fields.OperatorID(id), fields.Validator(validatorPubKey))
+
 	km := spectestingutils.NewTestingKeyManager()
 	err := km.AddShare(keySet.Shares[id])
 	require.NoError(t, err)

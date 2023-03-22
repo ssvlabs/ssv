@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/exporter/api"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
@@ -26,9 +27,9 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 			return
 		}
 		c.SetDefault(key, true)
-		logger.Debug("broadcast decided stream",
-			zap.String("identifier", identifier),
-			zap.Uint64("height", uint64(msg.Message.Height)))
+
+		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Height(msg.Message.Height))
+
 		feed.Send(api.NewDecidedAPIMsg(msg))
 	}
 }

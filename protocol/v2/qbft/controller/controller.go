@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 )
@@ -150,7 +151,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
 		logger.Debug("❗ could not load instance from storage",
-			zap.Uint64("height", uint64(height)),
+			fields.Height(height),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
 		return nil
