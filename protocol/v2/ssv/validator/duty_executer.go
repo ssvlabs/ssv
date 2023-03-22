@@ -17,8 +17,10 @@ func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg types.EventMsg) error 
 	if err := v.Start(logger); err != nil {
 		return errors.Wrap(err, "could not start validator")
 	}
+
 	logger.Info("ℹ️ starting duty processing", zap.Any("slot", executeDutyData.Duty.Slot),
 		zap.String("type", executeDutyData.Duty.Type.String()))
+
 	if err := v.StartDuty(logger, executeDutyData.Duty); err != nil {
 		return errors.Wrap(err, "could not start duty")
 	}

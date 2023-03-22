@@ -92,7 +92,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	}
 
 	// create the new dutyID for the new duty and update the dutyID map
-	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner))
+	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner.GetBaseRunner().BeaconNetwork, duty))
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }
@@ -149,16 +149,10 @@ func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	return nil
 }
 
-func dutyID(dutyRunner runner.Runner) string {
-	state := dutyRunner.GetBaseRunner().State
-	if state == nil {
-		return ""
-	}
-
-	startingDuty := state.StartingDuty
-	dutyType := startingDuty.Type.String()
-	epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
-	slot := startingDuty.Slot
-	validatorIndex := startingDuty.ValidatorIndex
+func dutyID(beaconNetwork spectypes.BeaconNetwork, duty *spectypes.Duty) string {
+	dutyType := duty.Type.String()
+	epoch := beaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+	slot := duty.Slot
+	validatorIndex := duty.ValidatorIndex
 	return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
 }
