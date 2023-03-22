@@ -111,7 +111,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 	for _, d := range duties {
 		toPrint = append(toPrint, toSerialized(d))
 	}
-	logger.Debug("got duties",
+	logger.Debug("got duties", //TODO Here PubKey, not pubKey
 		zap.Int("count", len(duties)),
 		zap.Any("duties", toPrint),
 		zap.Duration("duration", time.Since(start)))
@@ -235,9 +235,9 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 }
 
 type serializedDuty struct {
-	PubKey string
-	Type   string
-	Slot   uint64
+	PubKey string `json:"pubkey"`
+	Type   string `json:"type"`
+	Slot   uint64 `json:"slot"`
 }
 
 func toSerialized(d *spectypes.Duty) serializedDuty {
