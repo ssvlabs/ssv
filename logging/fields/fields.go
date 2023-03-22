@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -49,6 +50,7 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
+	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
@@ -219,4 +221,8 @@ func ConsensusTime(val time.Duration) zap.Field {
 
 func DutyID(val string) zap.Field {
 	return zap.String(FieldDutyID, val)
+}
+
+func Slot(val phase0.Slot) zap.Field {
+	return zap.Uint64(FieldSlot, uint64(val))
 }

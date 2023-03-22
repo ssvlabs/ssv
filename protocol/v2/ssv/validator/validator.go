@@ -94,6 +94,10 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	// create the new dutyID for the new duty and update the dutyID map
 	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner.GetBaseRunner().BeaconNetwork, duty))
 
+	logger = trySetDutyID(logger, v.dutyIDs, duty.Type).With(fields.Slot(duty.Slot), fields.Role(duty.Type))
+
+	logger.Info("ℹ️ starting duty processing")
+
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
@@ -109,12 +113,10 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	if dutyID, ok := v.dutyIDs.Get(messageID.GetRoleType()); ok {
-		logger = logger.With(fields.DutyID(dutyID))
-	}
-
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
 		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
@@ -122,6 +124,8 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
 		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
@@ -155,4 +159,11 @@ func dutyID(beaconNetwork spectypes.BeaconNetwork, duty *spectypes.Duty) string 
 	slot := duty.Slot
 	validatorIndex := duty.ValidatorIndex
 	return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
+}
+
+func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
+	if dutyID, ok := dutyIDs.Get(role); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
 }
