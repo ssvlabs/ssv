@@ -24,7 +24,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/bounded"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -92,121 +91,113 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
-	var sig spectypes.Signature
-	var root []byte
-	var err error
-	bounded.CGO(func() {
-		sig, root, err = func() (spectypes.Signature, []byte, error) {
-			switch domainType {
-			case spectypes.DomainAttester:
-				data, ok := obj.(*phase0.AttestationData)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to AttestationData")
+	switch domainType {
+	case spectypes.DomainAttester:
+		data, ok := obj.(*phase0.AttestationData)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to AttestationData")
+		}
+		return km.signer.SignBeaconAttestation(data, domain, pk)
+	case spectypes.DomainProposer:
+		if km.isBlinded {
+			var vBlindedBlock *api.VersionedBlindedBeaconBlock
+			switch v := obj.(type) {
+			case *apiv1bellatrix.BlindedBeaconBlock:
+				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
+					Version:   spec.DataVersionBellatrix,
+					Bellatrix: v,
 				}
-				return km.signer.SignBeaconAttestation(data, domain, pk)
-			case spectypes.DomainProposer:
-				if km.isBlinded {
-					var vBlindedBlock *api.VersionedBlindedBeaconBlock
-					switch v := obj.(type) {
-					case *apiv1bellatrix.BlindedBeaconBlock:
-						vBlindedBlock = &api.VersionedBlindedBeaconBlock{
-							Version:   spec.DataVersionBellatrix,
-							Bellatrix: v,
-						}
-					case *apiv1capella.BlindedBeaconBlock:
-						vBlindedBlock = &api.VersionedBlindedBeaconBlock{
-							Version: spec.DataVersionCapella,
-							Capella: v,
-						}
-					default:
-						return nil, nil, errors.New("obj type is unknown")
-					}
-					return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+			case *apiv1capella.BlindedBeaconBlock:
+				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
+					Version: spec.DataVersionCapella,
+					Capella: v,
 				}
-
-				var vBlock *spec.VersionedBeaconBlock
-				switch v := obj.(type) {
-				case *phase0.BeaconBlock:
-					vBlock = &spec.VersionedBeaconBlock{
-						Version: spec.DataVersionPhase0,
-						Phase0:  v,
-					}
-				case *altair.BeaconBlock:
-					vBlock = &spec.VersionedBeaconBlock{
-						Version: spec.DataVersionAltair,
-						Altair:  v,
-					}
-				case *bellatrix.BeaconBlock:
-					vBlock = &spec.VersionedBeaconBlock{
-						Version:   spec.DataVersionBellatrix,
-						Bellatrix: v,
-					}
-				case *capella.BeaconBlock:
-					vBlock = &spec.VersionedBeaconBlock{
-						Version: spec.DataVersionCapella,
-						Capella: v,
-					}
-				default:
-					return nil, nil, errors.New("obj type is unknown")
-				}
-
-				return km.signer.SignBeaconBlock(vBlock, domain, pk)
-			case spectypes.DomainAggregateAndProof:
-				data, ok := obj.(*phase0.AggregateAndProof)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to AggregateAndProof")
-				}
-				return km.signer.SignAggregateAndProof(data, domain, pk)
-			case spectypes.DomainSelectionProof:
-				data, ok := obj.(spectypes.SSZUint64)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to SSZUint64")
-				}
-
-				return km.signer.SignSlot(phase0.Slot(data), domain, pk)
-			case spectypes.DomainRandao:
-				data, ok := obj.(spectypes.SSZUint64)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to SSZUint64")
-				}
-
-				return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
-			case spectypes.DomainSyncCommittee:
-				data, ok := obj.(spectypes.SSZBytes)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to SSZBytes")
-				}
-				return km.signer.SignSyncCommittee(data, domain, pk)
-			case spectypes.DomainSyncCommitteeSelectionProof:
-				data, ok := obj.(*altair.SyncAggregatorSelectionData)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to SyncAggregatorSelectionData")
-				}
-				return km.signer.SignSyncCommitteeSelectionData(data, domain, pk)
-			case spectypes.DomainContributionAndProof:
-				data, ok := obj.(*altair.ContributionAndProof)
-				if !ok {
-					return nil, nil, errors.New("could not cast obj to ContributionAndProof")
-				}
-				return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
-			case spectypes.DomainApplicationBuilder:
-				var data *api.VersionedValidatorRegistration
-				switch v := obj.(type) {
-				case *eth2apiv1.ValidatorRegistration:
-					data = &api.VersionedValidatorRegistration{
-						Version: spec.BuilderVersionV1,
-						V1:      v,
-					}
-				default:
-					return nil, nil, errors.New("obj type is unknown")
-				}
-				return km.signer.SignRegistration(data, domain, pk)
 			default:
-				return nil, nil, errors.New("domain unknown")
+				return nil, nil, errors.New("obj type is unknown")
 			}
-		}()
-	})
-	return sig, root, err
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+		}
+
+		var vBlock *spec.VersionedBeaconBlock
+		switch v := obj.(type) {
+		case *phase0.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionPhase0,
+				Phase0:  v,
+			}
+		case *altair.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionAltair,
+				Altair:  v,
+			}
+		case *bellatrix.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version:   spec.DataVersionBellatrix,
+				Bellatrix: v,
+			}
+		case *capella.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionCapella,
+				Capella: v,
+			}
+		default:
+			return nil, nil, errors.New("obj type is unknown")
+		}
+
+		return km.signer.SignBeaconBlock(vBlock, domain, pk)
+	case spectypes.DomainAggregateAndProof:
+		data, ok := obj.(*phase0.AggregateAndProof)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to AggregateAndProof")
+		}
+		return km.signer.SignAggregateAndProof(data, domain, pk)
+	case spectypes.DomainSelectionProof:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZUint64")
+		}
+
+		return km.signer.SignSlot(phase0.Slot(data), domain, pk)
+	case spectypes.DomainRandao:
+		data, ok := obj.(spectypes.SSZUint64)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZUint64")
+		}
+
+		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
+	case spectypes.DomainSyncCommittee:
+		data, ok := obj.(spectypes.SSZBytes)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SSZBytes")
+		}
+		return km.signer.SignSyncCommittee(data, domain, pk)
+	case spectypes.DomainSyncCommitteeSelectionProof:
+		data, ok := obj.(*altair.SyncAggregatorSelectionData)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to SyncAggregatorSelectionData")
+		}
+		return km.signer.SignSyncCommitteeSelectionData(data, domain, pk)
+	case spectypes.DomainContributionAndProof:
+		data, ok := obj.(*altair.ContributionAndProof)
+		if !ok {
+			return nil, nil, errors.New("could not cast obj to ContributionAndProof")
+		}
+		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
+	case spectypes.DomainApplicationBuilder:
+		var data *api.VersionedValidatorRegistration
+		switch v := obj.(type) {
+		case *eth2apiv1.ValidatorRegistration:
+			data = &api.VersionedValidatorRegistration{
+				Version: spec.BuilderVersionV1,
+				V1:      v,
+			}
+		default:
+			return nil, nil, errors.New("obj type is unknown")
+		}
+		return km.signer.SignRegistration(data, domain, pk)
+	default:
+		return nil, nil, errors.New("domain unknown")
+	}
 }
 
 func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.AttestationData) error {
@@ -245,10 +236,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	var sig spectypes.Signature
-	bounded.CGO(func() {
-		sig, err = account.ValidationKeySign(root)
-	})
+	sig, err := account.ValidationKeySign(root)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign message")
 	}
