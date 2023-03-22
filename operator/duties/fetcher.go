@@ -111,7 +111,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 	for _, d := range duties {
 		toPrint = append(toPrint, toSerialized(d))
 	}
-	logger.Debug("got duties", //TODO Here PubKey, not pubKey
+	logger.Debug("got duties",
 		zap.Int("count", len(duties)),
 		zap.Any("duties", toPrint),
 		zap.Duration("duration", time.Since(start)))
