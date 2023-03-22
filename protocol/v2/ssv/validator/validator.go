@@ -102,7 +102,9 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
-	logger = logger.With(runnerfields.DutyID(dutyRunner))
+	if dutyRunner.GetBaseRunner().State != nil && dutyRunner.GetBaseRunner().State.StartingDuty != nil {
+		logger = logger.With(runnerfields.DutyID(dutyRunner.GetBaseRunner().BeaconNetwork, dutyRunner.GetBaseRunner().State.StartingDuty))
+	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:

@@ -5,22 +5,20 @@ package runner
 import (
 	"fmt"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"go.uber.org/zap"
 )
 
 const FieldDutyID = "duty_id"
 
-func DutyID(dutyRunner runner.Runner) zap.Field {
+func DutyID(beaconNetwork spectypes.BeaconNetwork, duty *spectypes.Duty) zap.Field {
 	return zap.Stringer(FieldDutyID, stringer.FuncStringer{
 		Fn: func() string {
-			startingDuty := dutyRunner.GetBaseRunner().State.StartingDuty
-
-			dutyType := startingDuty.Type.String()
-			epoch := dutyRunner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(startingDuty.Slot)
-			slot := startingDuty.Slot
-			validatorIndex := startingDuty.ValidatorIndex
+			dutyType := duty.Type.String()
+			epoch := beaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+			slot := duty.Slot
+			validatorIndex := duty.ValidatorIndex
 
 			return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
 		},
