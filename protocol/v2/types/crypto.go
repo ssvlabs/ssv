@@ -5,7 +5,6 @@ import (
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/bounded"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 )
@@ -16,6 +15,12 @@ import (
 //
 // TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+	// decode sig
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(s); err != nil {
+		return errors.Wrap(err, "failed to deserialize signature")
+	}
+
 	// find operators
 	pks := make([]bls.PublicKey, 0)
 	for _, id := range data.GetSigners() {
@@ -42,21 +47,11 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
-	bounded.CGO(func() {
-		// decode sig
-		sign := &bls.Sign{}
-		if err = sign.Deserialize(s); err != nil {
-			err = errors.Wrap(err, "failed to deserialize signature")
-			return
-		}
-
-		// verify
-		if res := sign.FastAggregateVerify(pks, computedRoot); !res {
-			err = errors.New("failed to verify signature")
-			return
-		}
-	})
-	return err
+	// verify
+	if res := sign.FastAggregateVerify(pks, computedRoot); !res {
+		return errors.New("failed to verify signature")
+	}
+	return nil
 }
 
 func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {

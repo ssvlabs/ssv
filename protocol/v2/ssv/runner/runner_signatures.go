@@ -3,7 +3,6 @@ package runner
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/bounded"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -64,11 +63,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	}
 
 	for _, msg := range signedMsg.Message.Messages {
-		var err error
-		bounded.CGO(func() {
-			err = b.verifyBeaconPartialSignature(msg)
-		})
-		if err != nil {
+		if err := b.verifyBeaconPartialSignature(msg); err != nil {
 			return errors.Wrap(err, "could not verify Beacon partial Signature")
 		}
 	}

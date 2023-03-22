@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"runtime"
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
@@ -81,8 +80,6 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-
-		logger.Info("maxProcs", zap.Int("maxProcs", runtime.GOMAXPROCS(0)))
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
