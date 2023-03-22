@@ -489,31 +489,31 @@ func (mr *MockBeaconMockRecorder) SubmitAttestation(attestation interface{}) *go
 }
 
 // SubmitBeaconBlock mocks base method.
-func (m *MockBeacon) SubmitBeaconBlock(block *spec.VersionedSignedBeaconBlock) error {
+func (m *MockBeacon) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitBeaconBlock", block)
+	ret := m.ctrl.Call(m, "SubmitBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitBeaconBlock indicates an expected call of SubmitBeaconBlock.
-func (mr *MockBeaconMockRecorder) SubmitBeaconBlock(block interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) SubmitBeaconBlock(block, sig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).SubmitBeaconBlock), block)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).SubmitBeaconBlock), block, sig)
 }
 
 // SubmitBlindedBeaconBlock mocks base method.
-func (m *MockBeacon) SubmitBlindedBeaconBlock(block *api.VersionedSignedBlindedBeaconBlock) error {
+func (m *MockBeacon) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBlock, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", block)
+	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitBlindedBeaconBlock indicates an expected call of SubmitBlindedBeaconBlock.
-func (mr *MockBeaconMockRecorder) SubmitBlindedBeaconBlock(block interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) SubmitBlindedBeaconBlock(block, sig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBlindedBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).SubmitBlindedBeaconBlock), block)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBlindedBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).SubmitBlindedBeaconBlock), block, sig)
 }
 
 // SubmitProposalPreparation mocks base method.
