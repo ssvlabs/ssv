@@ -4,12 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/api"
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
-	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
-	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -134,7 +128,6 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
-
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		return nil
@@ -156,9 +149,6 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 			return errors.Wrap(err, "could not get block data")
 		}
 	}
-	if err != nil {
-		return errors.Wrap(err, "could not get block")
-	}
 
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
@@ -179,18 +169,15 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if err != nil {
 		return errors.Wrap(err, "could not sign post consensus msg")
 	}
-
 	data, err := postSignedMsg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
-
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
-
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
@@ -202,7 +189,6 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-
 	if !quorum {
 		return nil
 	}
@@ -225,35 +211,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 				return errors.Wrap(err, "could not get blinded block")
 			}
 
-			var blkToSubmit *api.VersionedSignedBlindedBeaconBlock
-			switch vBlindedBlk.Version {
-			case spec.DataVersionBellatrix:
-				if vBlindedBlk.Bellatrix == nil {
-					return errors.New("bellatrix blinded block is nil")
-				}
-				blkToSubmit = &api.VersionedSignedBlindedBeaconBlock{
-					Version: spec.DataVersionBellatrix,
-					Bellatrix: &apiv1bellatrix.SignedBlindedBeaconBlock{
-						Message: vBlindedBlk.Bellatrix,
-					},
-				}
-				copy(blkToSubmit.Bellatrix.Signature[:], specSig[:])
-			case spec.DataVersionCapella:
-				if vBlindedBlk.Capella == nil {
-					return errors.New("capella blinded block is nil")
-				}
-				blkToSubmit = &api.VersionedSignedBlindedBeaconBlock{
-					Version: spec.DataVersionCapella,
-					Capella: &apiv1capella.SignedBlindedBeaconBlock{
-						Message: vBlindedBlk.Capella,
-					},
-				}
-				copy(blkToSubmit.Capella.Signature[:], specSig[:])
-			default:
-				return errors.New("unknown blinded block version")
-			}
+			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
+				r.metrics.RoleSubmissionFailed()
 
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(blkToSubmit); err != nil {
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
@@ -262,58 +222,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 				return errors.Wrap(err, "could not get block")
 			}
 
-			var blkToSubmit *spec.VersionedSignedBeaconBlock
-			switch vBlk.Version {
-			case spec.DataVersionPhase0:
-				if vBlk.Phase0 == nil {
-					return errors.New("phase0 block is nil")
-				}
-				blkToSubmit = &spec.VersionedSignedBeaconBlock{
-					Version: spec.DataVersionPhase0,
-					Phase0: &phase0.SignedBeaconBlock{
-						Message: vBlk.Phase0,
-					},
-				}
-				copy(blkToSubmit.Phase0.Signature[:], specSig[:])
-			case spec.DataVersionAltair:
-				if vBlk.Altair == nil {
-					return errors.New("altair block is nil")
-				}
-				blkToSubmit = &spec.VersionedSignedBeaconBlock{
-					Version: spec.DataVersionAltair,
-					Altair: &altair.SignedBeaconBlock{
-						Message: vBlk.Altair,
-					},
-				}
-				copy(blkToSubmit.Altair.Signature[:], specSig[:])
-			case spec.DataVersionBellatrix:
-				if vBlk.Bellatrix == nil {
-					return errors.New("bellatrix block is nil")
-				}
-				blkToSubmit = &spec.VersionedSignedBeaconBlock{
-					Version: spec.DataVersionBellatrix,
-					Bellatrix: &bellatrix.SignedBeaconBlock{
-						Message: vBlk.Bellatrix,
-					},
-				}
-				copy(blkToSubmit.Bellatrix.Signature[:], specSig[:])
-			case spec.DataVersionCapella:
-				if vBlk.Capella == nil {
-					return errors.New("capella block is nil")
-				}
-				blkToSubmit = &spec.VersionedSignedBeaconBlock{
-					Version: spec.DataVersionCapella,
-					Capella: &capella.SignedBeaconBlock{
-						Message: vBlk.Capella,
-					},
-				}
-				copy(blkToSubmit.Capella.Signature[:], specSig[:])
-			default:
-				return errors.New("unknown block version")
-			}
-
-			if err := r.GetBeaconNode().SubmitBeaconBlock(blkToSubmit); err != nil {
+			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
+
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
@@ -324,9 +235,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		logger.Info("✅ successfully proposed block!")
 	}
-
 	r.GetState().Finished = true
-
 	return nil
 }
 

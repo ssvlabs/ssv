@@ -10,7 +10,7 @@ import (
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	eth1 "github.com/bloxapp/ssv/eth1"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	types "github.com/bloxapp/ssv/protocol/v2/types"
+	storage "github.com/bloxapp/ssv/registry/storage"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/async/event"
 	zap "go.uber.org/zap"
@@ -53,19 +53,18 @@ func (mr *MockControllerMockRecorder) Eth1EventHandler(logger, ongoingSync inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Eth1EventHandler", reflect.TypeOf((*MockController)(nil).Eth1EventHandler), logger, ongoingSync)
 }
 
-// GetAllValidatorShares mocks base method.
-func (m *MockController) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
+// GetOperatorData mocks base method.
+func (m *MockController) GetOperatorData() *storage.OperatorData {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllValidatorShares", logger)
-	ret0, _ := ret[0].([]*types.SSVShare)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "GetOperatorData")
+	ret0, _ := ret[0].(*storage.OperatorData)
+	return ret0
 }
 
-// GetAllValidatorShares indicates an expected call of GetAllValidatorShares.
-func (mr *MockControllerMockRecorder) GetAllValidatorShares(logger interface{}) *gomock.Call {
+// GetOperatorData indicates an expected call of GetOperatorData.
+func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllValidatorShares", reflect.TypeOf((*MockController)(nil).GetAllValidatorShares), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorData", reflect.TypeOf((*MockController)(nil).GetOperatorData))
 }
 
 // GetValidator mocks base method.

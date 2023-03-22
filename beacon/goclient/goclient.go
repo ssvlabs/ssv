@@ -88,6 +88,8 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.BeaconBlockProposalProvider
 	eth2client.BeaconBlockSubmitter
+	eth2client.BlindedBeaconBlockProposalProvider
+	eth2client.BlindedBeaconBlockSubmitter
 	eth2client.DomainProvider
 	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeMessagesSubmitter
