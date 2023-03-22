@@ -94,7 +94,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	// create the new dutyID for the new duty and update the dutyID map
 	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner.GetBaseRunner().BeaconNetwork, duty))
 
-	logger = trySetDutyID(logger, v.dutyIDs, duty.Type).With(fields.Slot(duty.Slot), fields.Role(duty.Type))
+	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
 
 	logger.Info("ℹ️ starting duty processing")
 
