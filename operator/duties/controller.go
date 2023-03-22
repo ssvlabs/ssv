@@ -338,10 +338,10 @@ func (dc *dutyController) shouldExecute(logger *zap.Logger, duty *spectypes.Duty
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	return logger.
-		With(zap.String("role", duty.Type.String())).
+		With(fields.Role(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(dc.ethNetwork)).
-		With(zap.Uint64("slot", uint64(duty.Slot))).
+		With(fields.Slot(duty.Slot)).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(fields.PubKey(duty.PubKey[:])).
 		With(fields.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
@@ -357,7 +357,7 @@ type readOnlyDutyExec struct{}
 func (e *readOnlyDutyExec) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
-		zap.Uint64("slot", uint64(duty.Slot)),
+		fields.Slot(duty.Slot),
 		fields.PubKey(duty.PubKey[:]))
 	return nil
 }

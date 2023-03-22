@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -85,7 +86,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
-		zap.Int64("slot", int64(duty.Slot)),
+		fields.Slot(duty.Slot),
 	)
 
 	r.metrics.PauseDutyFullFlow()

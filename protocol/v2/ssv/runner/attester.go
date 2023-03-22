@@ -128,9 +128,8 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-	logger.Debug("🧩 got partial signatures",
-		zap.Any("signer", signedMsg.Signer),
-		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
+
+	logger.Debug("🧩 got partial signatures", zap.Any("signer", signedMsg.Signer), fields.Slot(r.GetState().DecidedValue.Duty.Slot))
 
 	if !quorum {
 		return nil
@@ -153,9 +152,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		duty := r.GetState().DecidedValue.Duty
 
-		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
-			zap.Int64("slot", int64(duty.Slot)))
+		logger.Debug("🧩 reconstructed partial signatures", zap.Any("signers", getPostConsensusSigners(r.GetState(), root)), fields.Slot(duty.Slot))
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -170,8 +167,9 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-			logger.Error("❌ failed to submit attestation to Beacon node",
-				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
+
+			logger.Error("❌ failed to submit attestation to Beacon node", fields.Slot(duty.Slot), zap.Error(err))
+
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
@@ -180,10 +178,10 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successfully submitted attestation",
-			zap.Int64("slot", int64(duty.Slot)),
+			fields.Slot(duty.Slot),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			fields.ConsensusTime(time.Since(r.started)),
-			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
+			fields.Round(r.GetState().RunningInstance.State.Round))
 	}
 	r.GetState().Finished = true
 
