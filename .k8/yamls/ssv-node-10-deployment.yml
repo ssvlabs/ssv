@@ -75,8 +75,6 @@ spec:
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
-        - name: SSV_NUM_CPU
-          value: "2"
         - name: ETH_1_ADDR
           valueFrom:
             secretKeyRef:
