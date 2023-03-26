@@ -8,6 +8,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -36,6 +37,9 @@ type Validator struct {
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
 
+	// dutyIDs is a map for logging a unique ID for a given duty
+	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
+
 	state uint32
 }
 
@@ -55,6 +59,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
+		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -86,7 +91,12 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
 
-	logger = logger.With(fields.DutyID(dutyRunner, duty))
+	// create the new dutyID for the new duty and update the dutyID map
+	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner.GetBaseRunner().BeaconNetwork, duty))
+
+	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+
+	logger.Info("ℹ️ starting duty processing")
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }
@@ -105,6 +115,8 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
 		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
@@ -112,6 +124,8 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
 		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
@@ -137,4 +151,19 @@ func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func dutyID(beaconNetwork spectypes.BeaconNetwork, duty *spectypes.Duty) string {
+	dutyType := duty.Type.String()
+	epoch := beaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+	slot := duty.Slot
+	validatorIndex := duty.ValidatorIndex
+	return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
+}
+
+func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
+	if dutyID, ok := dutyIDs.Get(role); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
 }

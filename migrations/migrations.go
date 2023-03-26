@@ -5,12 +5,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	validatorstorage "github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -53,18 +54,11 @@ type Options struct {
 
 // nolint
 func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.validatorStorage(), o.nodeStorage(logger), o.signerStorage(logger)}
+	return []eth1.RegistryStore{o.nodeStorage(), o.signerStorage(logger)}
 }
 
 // nolint
-func (o Options) validatorStorage() validatorstorage.ICollection {
-	return validatorstorage.NewCollection(validatorstorage.CollectionOptions{
-		DB: o.Db,
-	})
-}
-
-// nolint
-func (o Options) nodeStorage(logger *zap.Logger) operatorstorage.Storage {
+func (o Options) nodeStorage() operatorstorage.Storage {
 	return operatorstorage.NewNodeStorage(o.Db)
 }
 
@@ -83,7 +77,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 			return applied, err
 		}
 		if bytes.Equal(obj.Value, migrationCompleted) {
-			logger.Debug("migration already applied, skipping", zap.String("name", migration.Name))
+			logger.Debug("migration already applied, skipping", fields.Name(migration.Name))
 			continue
 		}
 
@@ -96,7 +90,7 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 		}
 		applied++
 		logger.Info("migration applied successfully",
-			zap.String("name", migration.Name),
+			fields.Name(migration.Name),
 			zap.Duration("took", time.Since(start)))
 	}
 	if applied == 0 {

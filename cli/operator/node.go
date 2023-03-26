@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -180,8 +181,10 @@ func init() {
 func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
-	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-		return nil, fmt.Errorf("could not read config: %w", err)
+	if globalArgs.ConfigPath != "" {
+		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+			return nil, fmt.Errorf("could not read config: %w", err)
+		}
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
@@ -303,12 +306,12 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
 
+	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, db, forkVersion, operatorData.ID)
+		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.GetFilteredShares, forkVersion, operatorData.ID)
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
@@ -327,7 +330,7 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	}
 
 	// execution client
-	logger.Info("using registry contract address", zap.String("address", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", fields.Address(cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -364,18 +367,13 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(
 	logger *zap.Logger,
-	db basedb.IDb,
+	getFiltered registrystorage.FilteredSharesFunc,
 	ssvForkVersion forksprotocol.ForkVersion,
 	operatorID spectypes.OperatorID,
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
-	sharesStorage := validator.NewCollection(validator.CollectionOptions{
-		DB: db,
-	})
 	subnetsMap := make(map[int]bool)
-	shares, err := sharesStorage.GetFilteredValidatorShares(logger, func(share *types.SSVShare) bool {
-		return !share.Liquidated && share.BelongsToOperator(operatorID)
-	})
+	shares, err := getFiltered(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorID))
 	if err != nil {
 		logger.Warn("could not read validators to bootstrap subnets")
 		return nil

@@ -50,7 +50,7 @@ func NewSyncCommitteeAggregatorRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommitteeContribution),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommitteeContribution),
 	}
 }
 
@@ -258,7 +258,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd()
-			r.metrics.EndDutyFullFlow()
+			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
 
 			logger.Debug("✅ submitted successfully sync committee aggregator!")

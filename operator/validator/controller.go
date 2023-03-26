@@ -14,6 +14,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
@@ -52,6 +53,8 @@ const (
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
+type GetRecipientDataFunc func(owner common.Address) (*registrystorage.RecipientData, bool, error)
+
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *types.SSVShare)
 
@@ -78,7 +81,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
 }
 
@@ -92,7 +95,6 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
 	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
-	GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
@@ -104,11 +106,12 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context              context.Context
-	collection           ICollection
-	operatorsCollection  registrystorage.OperatorsCollection
-	recipientsCollection registrystorage.RecipientsCollection
-	ibftStorageMap       *storage.QBFTStores
+	context context.Context
+
+	sharesStorage     registrystorage.Shares
+	operatorsStorage  registrystorage.Operators
+	recipientsStorage registrystorage.Recipients
+	ibftStorageMap    *storage.QBFTStores
 
 	beacon     beaconprotocol.Beacon
 	keyManager spectypes.KeyManager
@@ -137,10 +140,6 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
-	collection := NewCollection(CollectionOptions{
-		DB: options.DB,
-	})
-
 	logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode))
 	storageMap := storage.NewStores()
 	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, spectypes.BNRoleAttester.String(), options.ForkVersion))
@@ -183,9 +182,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
-		collection:                 collection,
-		operatorsCollection:        options.RegistryStorage,
-		recipientsCollection:       options.RegistryStorage,
+		sharesStorage:              options.RegistryStorage,
+		operatorsStorage:           options.RegistryStorage,
+		recipientsStorage:          options.RegistryStorage,
 		ibftStorageMap:             storageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,
@@ -244,16 +243,12 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 	return nil
 }
 
-func (c *controller) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.collection.GetAllValidatorShares(logger)
-}
-
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
 }
 
 func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
-	allShares, err := c.collection.GetAllValidatorShares(logger)
+	allShares, err := c.sharesStorage.GetAllShares(logger)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -305,7 +300,7 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 // getShare returns the share of the given validator public key
 // TODO: optimize
 func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
-	share, found, err := c.collection.GetValidatorShare(pk)
+	share, found, err := c.sharesStorage.GetShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
 	}
@@ -377,7 +372,7 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 		return
 	}
 
-	shares, err := c.getValidators(logger)
+	shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 	if err != nil {
 		logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -386,10 +381,6 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 		return
 	}
 	c.setupValidators(logger, shares)
-}
-
-func (c *controller) getValidators(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.collection.GetFilteredValidatorShares(logger, ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -424,7 +415,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
-	nonCommitteeShares, err := c.collection.GetFilteredValidatorShares(logger, NotLiquidated())
+	nonCommitteeShares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.NotLiquidated())
 	if err != nil {
 		logger.Fatal("failed to get non-committee validator shares", zap.Error(err))
 	}
@@ -492,7 +483,7 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
+		if err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
 			return err
 		}
 		_, err := c.startValidator(logger, v)
@@ -575,11 +566,6 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 
 		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
-		// TODO(oleg): should we care about non-committee podIds?
-		if err = share.SetClusterID(); err != nil {
-			return nil, errors.Wrap(err, "could not set share cluster id")
-		}
-
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
@@ -594,7 +580,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.collection.SaveValidatorShare(logger, share); err != nil {
+	if err := c.sharesStorage.SaveShare(logger, share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 
@@ -628,6 +614,10 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 
 	}
 
+	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+		return false, errors.Wrap(err, "could not set share fee recipient")
+	}
+
 	// Start a committee validator.
 	v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
 	return c.startValidator(logger, v)
@@ -658,7 +648,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorIDAndNotLiquidated(c.operatorData.ID))
+		shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 		if err != nil {
 			logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue

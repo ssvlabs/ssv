@@ -167,7 +167,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.ForkVersion()
+	fVersion := n.network.GenesisForkVersion()
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)

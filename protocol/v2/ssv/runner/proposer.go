@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	bellatrix2 "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -15,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -53,7 +52,7 @@ func NewProposerRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleProposer),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleProposer),
 	}
 }
 
@@ -129,7 +128,6 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
-
 	// Decided returns true only once so if it is true it must be for the current running instance
 	if !decided {
 		return nil
@@ -141,12 +139,15 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	// specific duty sig
 	var blkToSign ssz.HashRoot
 	if r.decidedBlindedBlock() {
-		blkToSign, err = decidedValue.GetBellatrixBlindedBlockData()
+		_, blkToSign, err = decidedValue.GetBlindedBlockData()
+		if err != nil {
+			return errors.Wrap(err, "could not get blinded block data")
+		}
 	} else {
-		blkToSign, err = decidedValue.GetBellatrixBlockData()
-	}
-	if err != nil {
-		return errors.Wrap(err, "could not get block")
+		_, blkToSign, err = decidedValue.GetBlockData()
+		if err != nil {
+			return errors.Wrap(err, "could not get block data")
+		}
 	}
 
 	msg, err := r.BaseRunner.signBeaconObject(
@@ -168,18 +169,15 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if err != nil {
 		return errors.Wrap(err, "could not sign post consensus msg")
 	}
-
 	data, err := postSignedMsg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "failed to encode post consensus signature msg")
 	}
-
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
 		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
-
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
@@ -191,7 +189,6 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-
 	if !quorum {
 		return nil
 	}
@@ -209,50 +206,43 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		if r.decidedBlindedBlock() {
-			data, err := r.GetState().DecidedValue.GetBellatrixBlindedBlockData()
+			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
 
-			blk := &bellatrix2.SignedBlindedBeaconBlock{
-				Message:   data,
-				Signature: specSig,
-			}
-			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(blk); err != nil {
+			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
+				r.metrics.RoleSubmissionFailed()
+
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
-			data, err := r.GetState().DecidedValue.GetBellatrixBlockData()
+			vBlk, _, err := r.GetState().DecidedValue.GetBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
 
-			blk := &bellatrix.SignedBeaconBlock{
-				Message:   data,
-				Signature: specSig,
-			}
-			if err := r.GetBeaconNode().SubmitBeaconBlock(blk); err != nil {
+			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
+
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
 
 		blockSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully proposed block!")
 	}
-
 	r.GetState().Finished = true
-
 	return nil
 }
 
 // decidedBlindedBlock returns true if decided value has a blinded block, false if regular block
 // WARNING!! should be called after decided only
 func (r *ProposerRunner) decidedBlindedBlock() bool {
-	_, err := r.BaseRunner.State.DecidedValue.GetBellatrixBlindedBlockData()
+	_, _, err := r.BaseRunner.State.DecidedValue.GetBlindedBlockData()
 	return err == nil
 }
 
@@ -264,16 +254,16 @@ func (r *ProposerRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	if r.decidedBlindedBlock() {
-		data, err := r.GetState().DecidedValue.GetBellatrixBlindedBlockData()
+		_, data, err := r.GetState().DecidedValue.GetBlindedBlockData()
 		if err != nil {
-			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block")
+			return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block data")
 		}
 		return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 	}
 
-	data, err := r.GetState().DecidedValue.GetBellatrixBlockData()
+	_, data, err := r.GetState().DecidedValue.GetBlockData()
 	if err != nil {
-		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get blinded block")
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
 	return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
 }

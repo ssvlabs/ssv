@@ -3,6 +3,7 @@ package runner
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -57,7 +58,7 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 		return errors.New("invalid partial sig slot")
 	}
 
-	if err := signedMsg.GetSignature().VerifyByOperators(signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
+	if err := types.VerifyByOperators(signedMsg.GetSignature(), signedMsg, b.Share.DomainType, spectypes.PartialSignatureType, b.Share.Committee); err != nil {
 		return errors.Wrap(err, "failed to verify PartialSignature")
 	}
 
@@ -77,8 +78,8 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 
 	for _, n := range b.Share.Committee {
 		if n.GetID() == signer {
-			pk := &bls.PublicKey{}
-			if err := pk.Deserialize(n.GetPublicKey()); err != nil {
+			pk, err := types.DeserializeBLSPublicKey(n.GetPublicKey())
+			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}
 			sig := &bls.Sign{}
@@ -87,7 +88,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 			}
 
 			// verify
-			if !sig.VerifyByte(pk, root[:]) {
+			if !sig.VerifyByte(&pk, root[:]) {
 				return errors.New("wrong signature")
 			}
 			return nil

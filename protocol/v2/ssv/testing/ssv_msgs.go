@@ -3,7 +3,7 @@ package testing
 import (
 	spec2 "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -52,14 +52,14 @@ var TestAggregatorConsensusDataByts, _ = TestAggregatorConsensusData.Encode()
 
 var TestProposerConsensusData = &spectypes.ConsensusData{
 	Duty:    testingutils.TestingProposerDuty,
-	Version: spec2.DataVersionBellatrix,
+	Version: spec2.DataVersionCapella,
 	DataSSZ: testingutils.TestingBeaconBlockBytes,
 }
 var TestProposerConsensusDataByts, _ = TestProposerConsensusData.Encode()
 
 var TestProposerBlindedBlockConsensusData = &spectypes.ConsensusData{
 	Duty:    testingutils.TestingProposerDuty,
-	Version: spec2.DataVersionBellatrix,
+	Version: spec2.DataVersionCapella,
 	DataSSZ: testingutils.TestingBlindedBeaconBlockBytes,
 }
 var TestProposerBlindedBlockConsensusDataByts, _ = TestProposerBlindedBlockConsensusData.Encode()
@@ -119,12 +119,19 @@ var SSVMsgValidatorRegistration = func(qbftMsg *specqbft.SignedMessage, partialS
 var ssvMsg = func(qbftMsg *specqbft.SignedMessage, postMsg *spectypes.SignedPartialSignatureMessage, msgID spectypes.MessageID) *spectypes.SSVMessage {
 	var msgType spectypes.MsgType
 	var data []byte
+	var err error
 	if qbftMsg != nil {
 		msgType = spectypes.SSVConsensusMsgType
-		data, _ = qbftMsg.Encode()
+		data, err = qbftMsg.Encode()
+		if err != nil {
+			panic(err)
+		}
 	} else if postMsg != nil {
 		msgType = spectypes.SSVPartialSignatureMsgType
-		data, _ = postMsg.Encode()
+		data, err = postMsg.Encode()
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		panic("msg type undefined")
 	}
@@ -301,7 +308,7 @@ var postConsensusBeaconBlockMsg = func(
 	blsSig := spec.BLSSignature{}
 	copy(blsSig[:], sig)
 
-	signed := bellatrix.SignedBeaconBlock{
+	signed := capella.SignedBeaconBlock{
 		Message:   testingutils.TestingBeaconBlock,
 		Signature: blsSig,
 	}

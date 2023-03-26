@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var messagePriorityTests = []struct {
@@ -116,7 +117,7 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSSVMessage(m.ssvMessage(test.state))
+				messages[i], err = DecodeSSVMessage(zap.L(), m.ssvMessage(test.state))
 				require.NoError(t, err)
 			}
 

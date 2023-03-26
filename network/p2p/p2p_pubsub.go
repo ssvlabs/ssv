@@ -189,40 +189,16 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 
 		p2pID := ssvMsg.GetID().String()
 
-		// logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
-		// logger.Debug("incoming pubsub message",
-		// 	zap.String("p2p_id", p2pID),
-		// 	zap.String("topic", topic),
-		// 	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+		//	logger.With(
+		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
+		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
+		// 	).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 		n.msgRouter.Route(logger, *ssvMsg)
 		return nil
 	}
 }
-
-// // withIncomingMsgFields adds fields to the given logger
-// func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-// 	logger = logger.With(
-// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-// 	)
-// 	if ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
-// 		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
-// 		from, err := peer.IDFromBytes(msg.Message.GetFrom())
-// 		if err == nil {
-// 			logger = logger.With(zap.String("msgFrom", from.String()))
-// 		}
-// 		var sm specqbft.SignedMessage
-// 		err = sm.Decode(ssvMsg.Data)
-// 		if err == nil && sm.Message != nil {
-// 			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-// 				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-// 				zap.Any("signers", sm.GetSigners()))
-// 		}
-// 	}
-// 	return logger
-// }
 
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {

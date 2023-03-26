@@ -3,8 +3,6 @@ package metrics
 import (
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"go.uber.org/zap"
 )
 
@@ -39,10 +37,10 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 		if len(errs) == 0 {
 			break
 		}
-		logger.Warn(name+" is not healthy, trying again in 1sec", fields.ErrorStrs(errs))
+		logger.Warn(name+" is not healthy, trying again in 1sec", zap.Any("errors", errs))
 		time.Sleep(1 * time.Second)
 	}
-	logger.Debug(name + " is healthy")
+	logger.Debug(name + ": healthy")
 }
 
 // ReportSSVNodeHealthiness reports SSV node healthiness.

@@ -10,7 +10,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -30,8 +29,12 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
+	// logger.Debug("📬 handling SSV message",
+	// 	zap.Uint64("type", uint64(msg.MsgType)),
+	// 	fields.Role(msg.MsgID.GetRoleType()))
+
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
-		decodedMsg, err := queue.DecodeSSVMessage(msg)
+		decodedMsg, err := queue.DecodeSSVMessage(logger, msg)
 		if err != nil {
 			logger.Warn("❗ failed to decode message",
 				zap.Error(err),
@@ -46,6 +49,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
 	}
@@ -85,7 +89,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		return err
 	}
 
-	logger = logger.With(fields.PubKey(msgID.GetPubKey()))
 	logger.Debug("📬 queue consumer is running")
 
 	for ctx.Err() == nil {
@@ -105,6 +108,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop the highest priority message for the current state.
 		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
+		// logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 		if ctx.Err() != nil {
 			break
 		}
@@ -124,9 +128,6 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 }
 
 func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
-	fields = append([]zap.Field{
-		zap.String("role", msg.MsgID.GetRoleType().String()),
-	}, fields...)
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.SignedMessage)

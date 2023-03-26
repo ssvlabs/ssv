@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -49,7 +50,7 @@ func NewSyncCommitteeRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
 	}
 }
 
@@ -157,11 +158,10 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		}
 
 		messageSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successfully submitted sync committee!", zap.Any("slot", msg.Slot),
-			zap.Any("height", r.BaseRunner.QBFTController.Height))
+		logger.Debug("✅ successfully submitted sync committee!", fields.Slot(msg.Slot), fields.Height(r.BaseRunner.QBFTController.Height))
 	}
 	r.GetState().Finished = true
 

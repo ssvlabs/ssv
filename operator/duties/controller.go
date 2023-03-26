@@ -134,29 +134,29 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(logger, duty)
 	}
-	logger = dc.loggerWithDutyContext(logger, duty)
 
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(pk[:]); err != nil {
+	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
+	if err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
 		if err != nil {
 			return err
 		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 		if err != nil {
 			return err
 		}
 		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find validator")
 	}
@@ -338,10 +338,10 @@ func (dc *dutyController) shouldExecute(logger *zap.Logger, duty *spectypes.Duty
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	return logger.
-		With(zap.String("role", duty.Type.String())).
+		With(fields.Role(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(dc.ethNetwork)).
-		With(zap.Uint64("slot", uint64(duty.Slot))).
+		With(fields.Slot(duty.Slot)).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
 		With(fields.PubKey(duty.PubKey[:])).
 		With(fields.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
@@ -357,7 +357,7 @@ type readOnlyDutyExec struct{}
 func (e *readOnlyDutyExec) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
-		zap.Uint64("slot", uint64(duty.Slot)),
+		fields.Slot(duty.Slot),
 		fields.PubKey(duty.PubKey[:]))
 	return nil
 }

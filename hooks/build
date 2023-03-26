@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# Enable BuildKit
+export DOCKER_BUILDKIT=1
+
+# Extract the Git tag from the SOURCE_COMMIT
+APP_VERSION=$(git describe --tags "${SOURCE_COMMIT}")
+
+# Pass the Git tag as a build argument
+docker build --build-arg APP_VERSION="${APP_VERSION}" -t "${IMAGE_NAME}" .

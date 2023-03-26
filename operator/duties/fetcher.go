@@ -72,7 +72,7 @@ func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]specty
 	var duties []spectypes.Duty
 
 	epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)
-	logger = logger.With(zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(epoch)))
+	logger = logger.With(fields.Slot(slot), zap.Uint64("epoch", uint64(epoch)))
 	start := time.Now()
 	cacheKey := getDutyCacheKey(slot)
 	if raw, exist := df.cache.Get(cacheKey); exist {
@@ -90,7 +90,7 @@ func (df *dutyFetcher) GetDuties(logger *zap.Logger, slot phase0.Slot) ([]specty
 	if len(duties) > 0 {
 		logger.Debug("found duties for slot",
 			zap.Int("count", len(duties)), // zap.Any("duties", duties),
-			fields.DurationMilli(start))
+			fields.Duration(start))
 	}
 
 	return duties, nil

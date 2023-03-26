@@ -29,7 +29,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	}{
 		{
 			name:           "v2 abi contract",
-			version:        eth1.V2,
+			version:        eth1.V1,
 			operatorAdded:  rawOperatorAdded,
 			validatorAdded: rawValidatorAdded,
 		},

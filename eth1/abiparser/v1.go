@@ -31,17 +31,20 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
+// b64 encrypted key length is 256
+const encryptedKeyLength = 256
+
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
-	ID        uint64         // indexed
-	Owner     common.Address // indexed
-	PublicKey []byte
-	Fee       *big.Int
+	OperatorId uint64         // indexed
+	Owner      common.Address // indexed
+	PublicKey  []byte
+	Fee        *big.Int
 }
 
 // OperatorRemovedEvent struct represents event received by the smart contract
 type OperatorRemovedEvent struct {
-	ID uint64 // indexed
+	OperatorId uint64 // indexed
 }
 
 // ValidatorAddedEvent struct represents event received by the smart contract
@@ -91,12 +94,12 @@ type Cluster struct {
 	Active          bool
 }
 
-// AbiV2 parsing events from v2 abi contract
-type AbiV2 struct {
+// AbiV1 parsing events from v1 abi contract
+type AbiV1 struct {
 }
 
 // ParseOperatorAddedEvent parses an OperatorAddedEvent
-func (v2 *AbiV2) ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*OperatorAddedEvent, error) {
+func (v1 *AbiV1) ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*OperatorAddedEvent, error) {
 	var event OperatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&event, OperatorAdded, log.Data)
 	if err != nil {
@@ -115,27 +118,27 @@ func (v2 *AbiV2) ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*O
 			Err: errors.Errorf("%s event missing topics", OperatorAdded),
 		}
 	}
-	event.ID = log.Topics[1].Big().Uint64()
+	event.OperatorId = log.Topics[1].Big().Uint64()
 	event.Owner = common.HexToAddress(log.Topics[2].Hex())
 
 	return &event, nil
 }
 
 // ParseOperatorRemovedEvent parses OperatorRemovedEvent
-func (v2 *AbiV2) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
+func (v1 *AbiV1) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*OperatorRemovedEvent, error) {
 	var event OperatorRemovedEvent
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
 			Err: errors.Errorf("%s event missing topics", OperatorRemoved),
 		}
 	}
-	event.ID = log.Topics[1].Big().Uint64()
+	event.OperatorId = log.Topics[1].Big().Uint64()
 
 	return &event, nil
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v2 *AbiV2) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
+func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
 	var event ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorAdded, log.Data)
 	if err != nil {
@@ -144,7 +147,16 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	pubKeysOffset := len(event.OperatorIds)*phase0.PublicKeyLength + 2
+	// the 2 first bytes are unnecessary for parsing
+	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
+	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
+
+	if sharesExpectedLength != len(event.Shares) {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event shares length is not correct", ValidatorAdded),
+		}
+	}
+
 	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
 	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
 
@@ -159,7 +171,7 @@ func (v2 *AbiV2) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 }
 
 // ParseValidatorRemovedEvent parses ValidatorRemovedEvent
-func (v2 *AbiV2) ParseValidatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
+func (v1 *AbiV1) ParseValidatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorRemovedEvent, error) {
 	var event ValidatorRemovedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorRemoved, log.Data)
 	if err != nil {
@@ -179,7 +191,7 @@ func (v2 *AbiV2) ParseValidatorRemovedEvent(log types.Log, contractAbi abi.ABI) 
 }
 
 // ParseClusterLiquidatedEvent parses ClusterLiquidatedEvent
-func (v2 *AbiV2) ParseClusterLiquidatedEvent(log types.Log, contractAbi abi.ABI) (*ClusterLiquidatedEvent, error) {
+func (v1 *AbiV1) ParseClusterLiquidatedEvent(log types.Log, contractAbi abi.ABI) (*ClusterLiquidatedEvent, error) {
 	var event ClusterLiquidatedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ClusterLiquidated, log.Data)
 	if err != nil {
@@ -199,7 +211,7 @@ func (v2 *AbiV2) ParseClusterLiquidatedEvent(log types.Log, contractAbi abi.ABI)
 }
 
 // ParseClusterReactivatedEvent parses ClusterReactivatedEvent
-func (v2 *AbiV2) ParseClusterReactivatedEvent(log types.Log, contractAbi abi.ABI) (*ClusterReactivatedEvent, error) {
+func (v1 *AbiV1) ParseClusterReactivatedEvent(log types.Log, contractAbi abi.ABI) (*ClusterReactivatedEvent, error) {
 	var event ClusterReactivatedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ClusterReactivated, log.Data)
 	if err != nil {
@@ -219,7 +231,7 @@ func (v2 *AbiV2) ParseClusterReactivatedEvent(log types.Log, contractAbi abi.ABI
 }
 
 // ParseFeeRecipientAddressUpdatedEvent parses FeeRecipientAddressUpdatedEvent
-func (v2 *AbiV2) ParseFeeRecipientAddressUpdatedEvent(log types.Log, contractAbi abi.ABI) (*FeeRecipientAddressUpdatedEvent, error) {
+func (v1 *AbiV1) ParseFeeRecipientAddressUpdatedEvent(log types.Log, contractAbi abi.ABI) (*FeeRecipientAddressUpdatedEvent, error) {
 	var event FeeRecipientAddressUpdatedEvent
 	err := contractAbi.UnpackIntoInterface(&event, FeeRecipientAddressUpdated, log.Data)
 	if err != nil {
