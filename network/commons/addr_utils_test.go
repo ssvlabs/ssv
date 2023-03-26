@@ -3,11 +3,12 @@ package commons
 import (
 	crand "crypto/rand"
 	"fmt"
+	"net"
+	"testing"
+
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"net"
-	"testing"
 )
 
 func Test_BuildMultiAddress(t *testing.T) {

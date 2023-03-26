@@ -3,23 +3,25 @@ package goclient
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
-func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, error) {
+func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
 	gc.waitOneThirdOrValidBlock(slot)
 
 	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
 	if err != nil {
-		return nil, err
+		return nil, DataVersionNil, err
 	}
 
 	metricsAttesterDataRequest.Observe(time.Since(startTime).Seconds())
 
-	return attestationData, nil
+	return attestationData, spec.DataVersionPhase0, nil
 }
 
 // SubmitAttestation implements Beacon interface

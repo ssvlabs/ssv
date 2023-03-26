@@ -8,6 +8,7 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -54,7 +55,7 @@ func (t *ticker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 // listenToTicker loop over the given slot channel
 func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		logger.Debug("slot ticker", zap.Uint64("slot", uint64(currentSlot)), zap.Uint64("position", uint64(currentSlot%32+1)))
+		logger.Debug("slot ticker", fields.Slot(currentSlot), zap.Uint64("position", uint64(currentSlot%32+1)))
 		if !t.genesisEpochEffective(logger) {
 			continue
 		}

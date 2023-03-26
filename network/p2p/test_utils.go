@@ -190,6 +190,5 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion f
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
-		P2pLog:            false,
 	}
 }

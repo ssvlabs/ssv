@@ -2,25 +2,23 @@ package validator
 
 import (
 	"context"
+	"fmt"
 	"sync"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ipsflog "github.com/ipfs/go-log"
+	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
-
-var logger = ipsflog.Logger("ssv/protocol/ssv/validator").Desugar() // TODO REVIEW
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
 // Every validator has a validatorID which is validator's public key.
@@ -29,7 +27,6 @@ type Validator struct {
 	mtx    *sync.RWMutex
 	ctx    context.Context
 	cancel context.CancelFunc
-	logger *zap.Logger
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
@@ -39,6 +36,9 @@ type Validator struct {
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
+
+	// dutyIDs is a map for logging a unique ID for a given duty
+	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
 
 	state uint32
 }
@@ -51,7 +51,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:         &sync.RWMutex{},
 		ctx:         pctx,
 		cancel:      cancel,
-		logger:      logger.With(logging.PubKey(options.SSVShare.ValidatorPubKey)),
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
@@ -60,6 +59,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
+		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -68,7 +68,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
-		msgID := spectypes.NewMsgID(options.SSVShare.ValidatorPubKey, role).String()
+		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
 
 		v.Queues[role] = queueContainer{
 			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),
@@ -85,43 +85,57 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(duty *spectypes.Duty) error {
+func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("duty type %s not supported", duty.Type.String())
 	}
-	return dutyRunner.StartNewDuty(duty)
+
+	// create the new dutyID for the new duty and update the dutyID map
+	v.dutyIDs.Set(duty.Type, dutyID(dutyRunner.GetBaseRunner().BeaconNetwork, duty))
+
+	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+
+	logger.Info("ℹ️ starting duty processing")
+
+	return dutyRunner.StartNewDuty(logger, duty)
 }
 
 // ProcessMessage processes Network Message of all types
-func (v *Validator) ProcessMessage(msg *queue.DecodedSSVMessage) error {
-	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(msg.GetID())
+func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+	messageID := msg.GetID()
+	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
-		return errors.Errorf("could not get duty runner for msg ID")
+		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
 	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
-		return errors.Wrap(err, "Message invalid")
+		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
 		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-		return dutyRunner.ProcessConsensus(signedMsg)
+		logger = logger.With(fields.Height(signedMsg.Message.Height))
+		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		signedMsg, ok := msg.Body.(*specssv.SignedPartialSignatureMessage)
+		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
+
+		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		if signedMsg.Message.Type == specssv.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(v.logger, signedMsg)
+		if signedMsg.Message.Type == spectypes.PostConsensusPartialSig {
+			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
-		return dutyRunner.ProcessPreConsensus(signedMsg)
+		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
 	case message.SSVEventMsgType:
-		return v.handleEventMessage(v.logger, msg, dutyRunner)
+		return v.handleEventMessage(logger, msg, dutyRunner)
 	default:
 		return errors.New("unknown msg")
 	}
@@ -137,4 +151,19 @@ func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
 	}
 
 	return nil
+}
+
+func dutyID(beaconNetwork spectypes.BeaconNetwork, duty *spectypes.Duty) string {
+	dutyType := duty.Type.String()
+	epoch := beaconNetwork.EstimatedEpochAtSlot(duty.Slot)
+	slot := duty.Slot
+	validatorIndex := duty.ValidatorIndex
+	return fmt.Sprintf("%v-e%v-s%v-v%v", dutyType, epoch, slot, validatorIndex)
+}
+
+func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
+	if dutyID, ok := dutyIDs.Get(role); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
 }

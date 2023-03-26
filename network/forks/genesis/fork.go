@@ -1,9 +1,10 @@
 package genesis
 
 import (
+	"time"
+
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p"
-	"time"
 )
 
 // ForkGenesis is the genesis version 0 implementation

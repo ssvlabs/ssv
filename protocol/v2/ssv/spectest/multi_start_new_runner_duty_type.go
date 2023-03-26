@@ -4,10 +4,11 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
@@ -17,7 +18,7 @@ type StartNewRunnerDutySpecTest struct {
 	Runner                  runner.Runner
 	Duty                    *types.Duty
 	PostDutyRunnerStateRoot string
-	OutputMessages          []*ssv.SignedPartialSignatureMessage
+	OutputMessages          []*spectypes.SignedPartialSignatureMessage
 	ExpectedError           string
 }
 
@@ -25,8 +26,8 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 	return test.Name
 }
 
-func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
-	err := test.Runner.StartNewDuty(test.Duty)
+func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
+	err := test.Runner.StartNewDuty(logger, test.Duty)
 	if len(test.ExpectedError) > 0 {
 		require.EqualError(t, err, test.ExpectedError)
 	} else {
@@ -42,7 +43,7 @@ func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
 				continue
 			}
 
-			msg1 := &ssv.SignedPartialSignatureMessage{}
+			msg1 := &spectypes.SignedPartialSignatureMessage{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
 			require.Len(t, msg1.Message.Messages, len(msg2.Message.Messages))
@@ -52,20 +53,20 @@ func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
 			for i, partialSigMsg2 := range msg2.Message.Messages {
 				r2, err := partialSigMsg2.GetRoot()
 				require.NoError(t, err)
-				if _, found := roots[hex.EncodeToString(r2)]; !found {
-					roots[hex.EncodeToString(r2)] = ""
+				if _, found := roots[hex.EncodeToString(r2[:])]; !found {
+					roots[hex.EncodeToString(r2[:])] = ""
 				} else {
-					roots[hex.EncodeToString(r2)] = hex.EncodeToString(r2)
+					roots[hex.EncodeToString(r2[:])] = hex.EncodeToString(r2[:])
 				}
 
 				partialSigMsg1 := msg1.Message.Messages[i]
 				r1, err := partialSigMsg1.GetRoot()
 				require.NoError(t, err)
 
-				if _, found := roots[hex.EncodeToString(r1)]; !found {
-					roots[hex.EncodeToString(r1)] = ""
+				if _, found := roots[hex.EncodeToString(r1[:])]; !found {
+					roots[hex.EncodeToString(r1[:])] = ""
 				} else {
-					roots[hex.EncodeToString(r1)] = hex.EncodeToString(r1)
+					roots[hex.EncodeToString(r1[:])] = hex.EncodeToString(r1[:])
 				}
 			}
 			for k, v := range roots {
@@ -81,7 +82,7 @@ func (test *StartNewRunnerDutySpecTest) Run(t *testing.T) {
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot))
+	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }
 
 type MultiStartNewRunnerDutySpecTest struct {
@@ -93,11 +94,11 @@ func (tests *MultiStartNewRunnerDutySpecTest) TestName() string {
 	return tests.Name
 }
 
-func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T) {
+func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
 	for _, test := range tests.Tests {
 		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
-			test.Run(t)
+			test.Run(t, logger)
 		})
 	}
 }

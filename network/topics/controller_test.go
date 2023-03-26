@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/forks"
@@ -26,7 +26,7 @@ import (
 )
 
 func TestTopicManager(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	nPeers := 4
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
@@ -233,8 +233,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	//
 	if msgValidator {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger.Named("MsgValidator"),
-				fork, h.ID())
+			return NewSSVMsgValidator(fork)
 		}
 	}
 	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)
@@ -264,7 +263,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

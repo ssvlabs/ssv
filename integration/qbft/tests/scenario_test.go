@@ -9,12 +9,12 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -28,7 +28,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var (
@@ -57,7 +58,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		s.shared = GetSharedData(t)
 
-		logger := logex.TestLogger(t)
+		logger := logging.TestLogger(t)
 
 		//initiating validators
 		for id := 1; id <= s.Committee; id++ {
@@ -83,7 +84,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
 				require.NoError(t, err)
-				dec, err := queue.DecodeSSVMessage(ssvMsg)
+				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)
 
 				s.validators[id].Queues[role].Q.Push(dec)
@@ -92,7 +93,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -154,7 +155,7 @@ func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) 
 		OperatorID:      id,
 		ValidatorPubKey: keySet.ValidatorPK.Serialize(),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keySet.Threshold,
 		PartialQuorum:   keySet.PartialThreshold,
 		Committee:       keySet.Committee(),

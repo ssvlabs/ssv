@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging"
@@ -84,6 +86,7 @@ func (ec *eth1Client) EventsFeed() *event.Feed {
 
 // Start streams events from the contract
 func (ec *eth1Client) Start(logger *zap.Logger) error {
+	logger = logger.Named(logging.NameEthClient)
 	err := ec.streamSmartContractEvents(logger)
 	if err != nil {
 		logger.Error("Failed to init operator contract address subject", zap.Error(err))
@@ -126,15 +129,15 @@ func (ec *eth1Client) HealthCheck() []string {
 // connect connects to eth1 client
 func (ec *eth1Client) connect(logger *zap.Logger) error {
 	// Create an IPC based RPC connection to a remote node
-	logger.Info("connecting to execution client", zap.String("address", ec.nodeAddr))
+	logger.Info("execution client: connecting", fields.Address(ec.nodeAddr))
 	ctx, cancel := context.WithTimeout(context.Background(), ec.connectionTimeout)
 	defer cancel()
 	conn, err := ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		logger.Error("could not connect to the execution client", zap.Error(err))
+		logger.Error("execution client: can't connect", zap.Error(err))
 		return err
 	}
-	logger.Info("successfully connected to execution client")
+	logger.Info("execution client: connected")
 	ec.conn = conn
 	return nil
 }
@@ -143,19 +146,19 @@ func (ec *eth1Client) connect(logger *zap.Logger) error {
 func (ec *eth1Client) reconnect(logger *zap.Logger) {
 	limit := 64 * time.Second
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
-		logger.Info("reconnecting to eth1 node")
+		logger.Info("reconnecting")
 		if err := ec.connect(logger); err != nil {
 			// continue until reaching to limit, and then panic as eth1 connection is required
 			if lastTick >= limit {
-				logger.Panic("failed to reconnect to eth1 node", zap.Error(err))
+				logger.Panic("failed to reconnect", zap.Error(err))
 			} else {
-				logger.Warn("could not reconnect to eth1 node, still trying", zap.Error(err))
+				logger.Warn("could not reconnect, still trying", zap.Error(err))
 			}
 			return false, false
 		}
 		return true, false
 	}, 1*time.Second, limit+(1*time.Second))
-	logger.Debug("managed to reconnect to eth1 node")
+	logger.Debug("managed to reconnect")
 	if err := ec.streamSmartContractEvents(logger); err != nil {
 		// TODO: panic?
 		logger.Error("failed to stream events after reconnection", zap.Error(err))
@@ -223,9 +226,9 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 			eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 			if err != nil {
 				logger.Warn("could not parse ongoing event, the event is malformed",
-					zap.String("event", eventName),
-					zap.Uint64("block", vLog.BlockNumber),
-					zap.String("txHash", vLog.TxHash.Hex()),
+					fields.EventName(eventName),
+					fields.BlockNumber(vLog.BlockNumber),
+					fields.TxHash(vLog.TxHash),
 					zap.Error(err),
 				)
 				continue
@@ -236,7 +239,7 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 
 // syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *big.Int) error {
-	logger.Debug("syncing smart contract events", logging.FromBlock(fromBlock))
+	logger.Debug("syncing smart contract events", fields.FromBlock(fromBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
@@ -319,9 +322,9 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 		if err != nil {
 			loggerWith := logger.With(
-				zap.String("event", eventName),
-				zap.Uint64("block", vLog.BlockNumber),
-				zap.String("txHash", vLog.TxHash.Hex()),
+				fields.EventName(eventName),
+				fields.BlockNumber(vLog.BlockNumber),
+				fields.TxHash(vLog.TxHash),
 				zap.Error(err),
 			)
 			var malformedEventErr *abiparser.MalformedEventError
@@ -344,10 +347,9 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	ev, err := contractAbi.EventByID(vLog.Topics[0])
 	if err != nil { // unknown event -> ignored
 		logger.Debug("could not read event by ID",
-			logging.EventID(vLog.Topics[0]),
-
-			zap.Uint64("block", vLog.BlockNumber),
-			logging.TxHash(vLog.TxHash),
+			fields.EventID(vLog.Topics[0]),
+			fields.BlockNumber(vLog.BlockNumber),
+			fields.TxHash(vLog.TxHash),
 			zap.Error(err),
 		)
 		return "", nil
@@ -410,8 +412,8 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 	default:
 		logger.Debug("unsupported contract event was received, skipping",
 			zap.String("eventName", ev.Name),
-			zap.Uint64("block", vLog.BlockNumber),
-			zap.String("txHash", vLog.TxHash.Hex()),
+			fields.BlockNumber(vLog.BlockNumber),
+			fields.TxHash(vLog.TxHash),
 		)
 	}
 	return ev.Name, nil

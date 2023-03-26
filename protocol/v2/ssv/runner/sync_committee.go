@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -49,12 +50,12 @@ func NewSyncCommitteeRunner(
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleSyncCommittee),
+		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleSyncCommittee),
 	}
 }
 
-func (r *SyncCommitteeRunner) StartNewDuty(duty *spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(r, duty)
+func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -62,12 +63,12 @@ func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *SyncCommitteeRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *SyncCommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for sync committee role")
 }
 
-func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
+func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
@@ -81,13 +82,18 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	r.metrics.StartPostConsensus()
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(decidedValue.SyncCommitteeBlockRoot[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
+	root, err := decidedValue.GetSyncCommitteeBlockRoot()
+	if err != nil {
+		return errors.Wrap(err, "could not get sync committee block root")
+	}
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZBytes(root[:]), decidedValue.Duty.Slot, spectypes.DomainSyncCommittee)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &specssv.PartialSignatureMessages{
-		Type:     specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     decidedValue.Duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -102,7 +108,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -112,8 +118,8 @@ func (r *SyncCommitteeRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage
 	return nil
 }
 
-func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
@@ -123,6 +129,11 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 	}
 
 	r.metrics.EndPostConsensus()
+
+	blockRoot, err := r.GetState().DecidedValue.GetSyncCommitteeBlockRoot()
+	if err != nil {
+		return errors.Wrap(err, "could not get sync committee block root")
+	}
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -134,7 +145,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 
 		msg := &altair.SyncCommitteeMessage{
 			Slot:            r.GetState().DecidedValue.Duty.Slot,
-			BeaconBlockRoot: r.GetState().DecidedValue.SyncCommitteeBlockRoot,
+			BeaconBlockRoot: blockRoot,
 			ValidatorIndex:  r.GetState().DecidedValue.Duty.ValidatorIndex,
 			Signature:       specSig,
 		}
@@ -147,11 +158,10 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		}
 
 		messageSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successfully submitted sync committee!", zap.Any("slot", msg.Slot),
-			zap.Any("height", r.BaseRunner.QBFTController.Height))
+		logger.Debug("✅ successfully submitted sync committee!", fields.Slot(msg.Slot), fields.Height(r.BaseRunner.QBFTController.Height))
 	}
 	r.GetState().Finished = true
 
@@ -164,7 +174,12 @@ func (r *SyncCommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRo
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{spectypes.SSZBytes(r.BaseRunner.State.DecidedValue.SyncCommitteeBlockRoot[:])}, spectypes.DomainSyncCommittee, nil
+	root, err := r.GetState().DecidedValue.GetSyncCommitteeBlockRoot()
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get sync committee block root")
+	}
+
+	return []ssz.HashRoot{spectypes.SSZBytes(root[:])}, spectypes.DomainSyncCommittee, nil
 }
 
 // executeDuty steps:
@@ -172,8 +187,10 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 2) start consensus on duty + block root data
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
-func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
-	root, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
+func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	// TODO - waitOneThirdOrValidBlock
+
+	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
 	if err != nil {
 		return errors.Wrap(err, "failed to get sync committee block root")
 	}
@@ -182,11 +199,12 @@ func (r *SyncCommitteeRunner) executeDuty(duty *spectypes.Duty) error {
 	r.metrics.StartConsensus()
 
 	input := &spectypes.ConsensusData{
-		Duty:                   duty,
-		SyncCommitteeBlockRoot: root,
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: root[:],
 	}
 
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil
@@ -231,11 +249,11 @@ func (r *SyncCommitteeRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *SyncCommitteeRunner) GetRoot() ([]byte, error) {
+func (r *SyncCommitteeRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }

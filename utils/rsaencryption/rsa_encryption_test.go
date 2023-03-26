@@ -4,9 +4,8 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
+	"github.com/stretchr/testify/require"
 )
 
 func TestGenerateKeys(t *testing.T) {

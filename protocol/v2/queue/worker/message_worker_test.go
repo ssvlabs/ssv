@@ -7,15 +7,14 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/utils/logex"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestWorker(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	worker := NewWorker(logger, &Config{
 		Ctx:          context.Background(),
 		WorkersCount: 1,
@@ -33,7 +32,7 @@ func TestWorker(t *testing.T) {
 }
 
 func TestManyWorkers(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{
@@ -57,7 +56,7 @@ func TestManyWorkers(t *testing.T) {
 }
 
 func TestBuffer(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	var wg sync.WaitGroup
 
 	worker := NewWorker(logger, &Config{

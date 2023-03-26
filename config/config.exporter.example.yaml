@@ -1,6 +1,5 @@
 global:
   LogLevel: debug
-  DebugServices: ".*"
 
 db:
   Path: ./data/db

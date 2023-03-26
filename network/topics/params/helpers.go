@@ -1,9 +1,10 @@
 package params
 
 import (
-	"github.com/pkg/errors"
 	"math"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // scoreByWeight provides the relevant score by the provided weight and threshold.

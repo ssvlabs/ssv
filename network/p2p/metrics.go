@@ -4,12 +4,13 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -28,7 +29,7 @@ var (
 	MetricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
-	}, []string{"pubKey", "operatorID", "operatorName", "v", "pid", "type"})
+	}, []string{"pubKey", "operatorID", "v", "pid", "type"})
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
@@ -55,8 +56,7 @@ var unknown = "unknown"
 func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
-		logger.Debug("connected peers status",
-			zap.Int("count", len(pids)))
+		logger.Debug("connected peers status", fields.Count(len(pids)))
 		MetricsAllConnectedPeers.Set(float64(len(pids)))
 	}
 }
@@ -74,8 +74,7 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 	return func() {
 		topics := n.topicsCtrl.Topics()
 		nTopics := len(topics)
-		logger.Debug("connected topics",
-			zap.Int("count", nTopics))
+		logger.Debug("connected topics", fields.Count(nTopics))
 		for _, name := range topics {
 			n.reportTopicPeers(logger, name)
 		}
@@ -85,16 +84,15 @@ func (n *p2pNetwork) reportTopics(logger *zap.Logger) func() {
 func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 	peers, err := n.topicsCtrl.Peers(name)
 	if err != nil {
-		logger.Warn("could not get topic peers", zap.String("topic", name), zap.Error(err))
+		logger.Warn("could not get topic peers", fields.Topic(name), zap.Error(err))
 		return
 	}
-	logger.Debug("topic peers status", zap.String("topic", name), zap.Int("count", len(peers)),
-		zap.Any("peers", peers))
+	logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
 	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
-	opPKHash, opIndex, opName, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown, unknown
+	opPKHash, opIndex, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
 	ni, err := n.idx.GetNodeInfo(pid)
 	if err == nil && ni != nil {
 		opPKHash = unknown
@@ -113,9 +111,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
 		if opDataErr == nil && found {
-			opIndex = strconv.FormatUint(uint64(operatorData.ID), 10)
-			// TODO(oleg): do we need to store owner addres instead of name in v3
-			//opName = operatorData.Name
+			opIndex = strconv.FormatUint(operatorData.ID, 10)
 		}
 	} else {
 		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
@@ -127,25 +123,22 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
-				opIndex = strconv.FormatUint(uint64(operator.ID), 10)
-				// TODO(oleg): do we need to store owner addres instead of name in v3
-				//opName = operatorData.Name
+				opIndex = strconv.FormatUint(operator.ID, 10)
 			}
 		}
 	}
 
 	nodeState := n.idx.State(pid)
 	logger.Debug("peer identity",
-		logging.PeerID(pid),
+		fields.PeerID(pid),
 		zap.String("forkv", forkv),
 		zap.String("nodeVersion", nodeVersion),
 		zap.String("opPKHash", opPKHash),
-		zap.String("opIndex", opName),
-		zap.String("opName", opIndex),
+		zap.String("opIndex", opIndex),
 		zap.String("nodeType", nodeType),
 		zap.String("nodeState", nodeState.String()),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, opName, nodeVersion, pid.String(), nodeType).Set(1)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //

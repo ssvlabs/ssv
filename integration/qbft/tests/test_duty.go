@@ -1,10 +1,11 @@
 package tests
 
 import (
+	"time"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"time"
 )
 
 const (
@@ -22,7 +23,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
 
-	var testingDuty *spectypes.Duty
+	var testingDuty spectypes.Duty
 	switch role {
 	case spectypes.BNRoleAttester:
 		testingDuty = spectestingutils.TestingAttesterDuty

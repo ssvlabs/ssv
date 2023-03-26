@@ -7,22 +7,24 @@ import (
 	"testing"
 
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/utils/logex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	logger := logex.TestLogger(t)
-	identifier := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), identifier.GetRoleType())
+	logger := logging.TestLogger(t)
+	identifier := []byte{1, 2, 3, 4}
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
 	contr := qbfttesting.NewTestingQBFTController(
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
@@ -32,7 +34,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 	var lastErr error
 	for _, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, contr, config, identifier, runData); err != nil {
+		if err := runInstanceWithData(t, logger, contr, config, identifier, runData); err != nil {
 			lastErr = err
 		}
 	}
@@ -59,6 +61,7 @@ func testTimer(
 
 func testProcessMsg(
 	t *testing.T,
+	logger *zap.Logger,
 	contr *controller.Controller,
 	config *qbft.Config,
 	runData *spectests.RunInstanceData,
@@ -66,22 +69,21 @@ func testProcessMsg(
 	decidedCnt := 0
 	var lastErr error
 	for _, msg := range runData.InputMessages {
-		decided, err := contr.ProcessMsg(msg)
+		decided, err := contr.ProcessMsg(logger, msg)
 		if err != nil {
 			lastErr = err
 		}
 		if decided != nil {
 			decidedCnt++
 
-			data, _ := decided.Message.GetCommitData()
-			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, data.Data)
+			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
 		}
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt)
 
 	// verify sync decided by range calls
 	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
-		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
+		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*testingutils.TestingNetwork).DecidedByRange)
 	} else {
 		require.EqualValues(t, [2]specqbft.Height{0, 0}, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
 	}
@@ -92,16 +94,21 @@ func testProcessMsg(
 func testBroadcastedDecided(
 	t *testing.T,
 	config *qbft.Config,
-	identifier spectypes.MessageID,
+	identifier []byte,
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {
-			if !bytes.Equal(identifier[:], msg.MsgID[:]) {
+
+			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
+			msgID := spectypes.MessageID{}
+			copy(msgID[:], identifier)
+
+			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
 				continue
 			}
 
@@ -113,7 +120,7 @@ func testBroadcastedDecided(
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
-			if bytes.Equal(r1, r2) &&
+			if r1 == r2 &&
 				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signers, msg1.Signers) &&
 				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signature, msg1.Signature) {
 				require.False(t, found)
@@ -124,8 +131,8 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbft.Config, identifier spectypes.MessageID, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(runData.InputValue)
+func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
+	err := contr.StartNewInstance(logger, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
@@ -133,7 +140,7 @@ func runInstanceWithData(t *testing.T, contr *controller.Controller, config *qbf
 
 	testTimer(t, config, runData)
 
-	if err := testProcessMsg(t, contr, config, runData); err != nil {
+	if err := testProcessMsg(t, logger, contr, config, runData); err != nil {
 		lastErr = err
 	}
 

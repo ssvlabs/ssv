@@ -1,19 +1,20 @@
-package validator
+package storage
 
 import (
 	"encoding/hex"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage"
+	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -48,19 +49,10 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
-	logger := logex.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-
-	db, err := storage.GetStorageFactory(logger, options)
-	require.NoError(t, err)
-	defer db.Close(logger)
-
-	collection := NewCollection(CollectionOptions{
-		DB: db,
-	})
+	logger := logging.TestLogger(t)
+	shareStorage, done := newShareStorageForTest(logger)
+	require.NotNil(t, shareStorage)
+	defer done()
 
 	threshold.Init()
 	const keysCount = 4
@@ -72,22 +64,22 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, collection.SaveValidatorShare(logger, validatorShare))
+	require.NoError(t, shareStorage.SaveShare(logger, validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, collection.SaveValidatorShare(logger, validatorShare2))
+	require.NoError(t, shareStorage.SaveShare(logger, validatorShare2))
 
-	validatorShareByKey, found, err := collection.GetValidatorShare(validatorShare.ValidatorPubKey)
+	validatorShareByKey, found, err := shareStorage.GetShare(validatorShare.ValidatorPubKey)
 	require.True(t, found)
 	require.NoError(t, err)
 	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 
-	validators, err := collection.GetAllValidatorShares(logger)
+	validators, err := shareStorage.GetAllShares(logger)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 
-	require.NoError(t, collection.DeleteValidatorShare(validatorShare.ValidatorPubKey))
-	_, found, err = collection.GetValidatorShare(validatorShare.ValidatorPubKey)
+	require.NoError(t, shareStorage.DeleteShare(validatorShare.ValidatorPubKey))
+	_, found, err = shareStorage.GetShare(validatorShare.ValidatorPubKey)
 	require.NoError(t, err)
 	require.False(t, found)
 }
@@ -141,4 +133,18 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.S
 			Liquidated:   true,
 		},
 	}, &sk1
+}
+
+func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
+	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
+		Type: "badger-memory",
+		Path: "",
+	})
+	if err != nil {
+		return nil, func() {}
+	}
+	s := NewSharesStorage(db, []byte("test"))
+	return s, func() {
+		db.Close(logger)
+	}
 }

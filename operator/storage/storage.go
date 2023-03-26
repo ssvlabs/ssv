@@ -5,20 +5,23 @@ import (
 	"encoding/base64"
 	"math/big"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
-	storagePrefix = []byte("operator-")
+	storagePrefix = []byte("operator/")
 	syncOffsetKey = []byte("syncOffset")
 )
 
@@ -26,8 +29,9 @@ var (
 type Storage interface {
 	eth1.SyncOffsetStorage
 	registry.RegistryStore
-	registrystorage.OperatorsCollection
-	registrystorage.RecipientsCollection
+	registrystorage.Operators
+	registrystorage.Recipients
+	registrystorage.Shares
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
@@ -36,8 +40,9 @@ type Storage interface {
 type storage struct {
 	db basedb.IDb
 
-	operatorStore  registrystorage.OperatorsCollection
-	recipientStore registrystorage.RecipientsCollection
+	operatorStore  registrystorage.Operators
+	recipientStore registrystorage.Recipients
+	shareStore     registrystorage.Shares
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -46,7 +51,32 @@ func NewNodeStorage(db basedb.IDb) Storage {
 		db:             db,
 		operatorStore:  registrystorage.NewOperatorsStorage(db, storagePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(db, storagePrefix),
+		shareStore:     registrystorage.NewSharesStorage(db, storagePrefix),
 	}
+}
+
+func (s *storage) SaveShare(logger *zap.Logger, share *types.SSVShare) error {
+	return s.shareStore.SaveShare(logger, share)
+}
+
+func (s *storage) SaveShareMany(logger *zap.Logger, shares []*types.SSVShare) error {
+	return s.shareStore.SaveShareMany(logger, shares)
+}
+
+func (s *storage) GetShare(key []byte) (*types.SSVShare, bool, error) {
+	return s.shareStore.GetShare(key)
+}
+
+func (s *storage) GetAllShares(logger *zap.Logger) ([]*types.SSVShare, error) {
+	return s.shareStore.GetAllShares(logger)
+}
+
+func (s *storage) GetFilteredShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
+	return s.shareStore.GetFilteredShares(logger, f)
+}
+
+func (s *storage) DeleteShare(key []byte) error {
+	return s.shareStore.DeleteShare(key)
 }
 
 func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
@@ -57,7 +87,7 @@ func (s *storage) GetOperatorData(id spectypes.OperatorID) (*registrystorage.Ope
 	return s.operatorStore.GetOperatorData(id)
 }
 
-func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) error {
+func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) (bool, error) {
 	return s.operatorStore.SaveOperatorData(logger, operatorData)
 }
 
@@ -75,6 +105,10 @@ func (s *storage) GetOperatorsPrefix() []byte {
 
 func (s *storage) GetRecipientData(owner common.Address) (*registrystorage.RecipientData, bool, error) {
 	return s.recipientStore.GetRecipientData(owner)
+}
+
+func (s *storage) GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+	return s.recipientStore.GetRecipientDataMany(logger, owners)
 }
 
 func (s *storage) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
@@ -217,4 +251,8 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *storage) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beacon.ValidatorMetadata) error {
+	return s.shareStore.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
 }

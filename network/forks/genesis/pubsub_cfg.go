@@ -1,8 +1,10 @@
 package genesis
 
 import (
+	"encoding/binary"
+
 	"github.com/bloxapp/ssv/network/forks"
-	scrypto "github.com/bloxapp/ssv/utils/crypto"
+	"github.com/cespare/xxhash/v2"
 )
 
 // MsgID returns msg_id for the given message
@@ -11,9 +13,9 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 		if len(msg) == 0 {
 			return ""
 		}
-		// TODO: check performance
-		h := scrypto.Sha256Hash(msg)
-		return string(h[20:])
+		b := make([]byte, 12)
+		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
+		return string(b)
 	}
 }
 

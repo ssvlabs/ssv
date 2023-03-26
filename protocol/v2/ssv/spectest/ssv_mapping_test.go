@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
@@ -16,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -26,7 +26,6 @@ import (
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestSSVMapping(t *testing.T) {
@@ -34,19 +33,20 @@ func TestSSVMapping(t *testing.T) {
 	jsonTests, err := protocoltesting.GetSpecTestJSON(path, "ssv")
 	require.NoError(t, err)
 
+	logger := logging.TestLogger(t)
+
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
 		panic(err.Error())
 	}
 
 	origDomain := types.GetDefaultDomain()
-	types.SetDefaultDomain(spectypes.PrimusTestnet)
+	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 	defer func() {
 		types.SetDefaultDomain(origDomain)
 	}()
 
 	for name, test := range untypedTests {
-		logex.Reset()
 		name, test := name, test
 
 		testName := strings.Split(name, "_")[1]
@@ -134,7 +134,7 @@ func TestSSVMapping(t *testing.T) {
 			}
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
+				typedTest.Run(t, logger)
 			})
 		default:
 			t.Fatalf("unsupported test type %s [%s]", testType, testName)
@@ -150,10 +150,10 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	byts, _ := json.Marshal(m["Duty"])
 	require.NoError(t, json.Unmarshal(byts, duty))
 
-	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
 	for _, msg := range m["OutputMessages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		typedMsg := &spectypes.SignedPartialSignatureMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
@@ -188,11 +188,11 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 		msgs = append(msgs, typedMsg)
 	}
 
-	outputMsgs := make([]*ssv.SignedPartialSignatureMessage, 0)
+	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
 	require.NotNilf(t, m["OutputMessages"], "OutputMessages can't be nil")
 	for _, msg := range m["OutputMessages"].([]interface{}) {
 		byts, _ = json.Marshal(msg)
-		typedMsg := &ssv.SignedPartialSignatureMessage{}
+		typedMsg := &spectypes.SignedPartialSignatureMessage{}
 		require.NoError(t, json.Unmarshal(byts, typedMsg))
 		outputMsgs = append(outputMsgs, typedMsg)
 	}
@@ -229,7 +229,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
@@ -239,7 +239,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	}
 
 	if ret.GetBaseRunner().QBFTController != nil {
-		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, ret, ret.GetBaseRunner().QBFTController, ks)
+		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
 				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
@@ -250,8 +250,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	return ret
 }
 
-func fixControllerForRun(t *testing.T, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
-	logger := logex.TestLogger(t)
+func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	newContr := controller.NewController(
 		contr.Identifier,

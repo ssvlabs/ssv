@@ -1694,7 +1694,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:network:discovery:found{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:network:discovery:found{instance=~\"$instance.*\"}[5m])",
           "interval": "",
           "legendFormat": "Found",
           "refId": "A"
@@ -1705,7 +1705,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:network:discovery:rejected{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:network:discovery:rejected{instance=~\"$instance.*\"}[5m])",
           "hide": false,
           "interval": "",
           "legendFormat": "Rejected",
@@ -2051,7 +2051,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Rate per second of inbound / outbound topic messages over the last 2 minutes",
+      "description": "Rate per second of inbound / outbound topic messages over the last 5 minutes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2128,7 +2128,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[2m]))",
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[5m]))",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -2141,7 +2141,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"0\"}[2m]))",
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"0\"}[5m]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2155,7 +2155,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"1\"}[2m]))",
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"1\"}[5m]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2169,7 +2169,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"2\"}[2m]))",
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\", msg_type=\"2\"}[5m]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2183,7 +2183,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum (rate(ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m]))",
+          "expr": "sum (rate(ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[5m]))",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2192,7 +2192,7 @@
           "refId": "B"
         }
       ],
-      "title": "Pubsub Messages RPS (2m rate)",
+      "title": "Pubsub Messages RPS (5m rate)",
       "type": "timeseries"
     },
     {
@@ -2200,7 +2200,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Rate per second of incoming topic messages for every topic over the last 2 minutes",
+      "description": "Rate per second of incoming topic messages for every topic over the last 5 minutes",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2281,13 +2281,13 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate (ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate (ssv:p2p:pubsub:msg:in{instance=~\"$instance.*\"}[5m])",
           "interval": "",
           "legendFormat": "{{topic}}",
           "refId": "A"
         }
       ],
-      "title": "Incoming Pubsub Messages RPS (2m rate)",
+      "title": "Incoming Pubsub Messages RPS (5m rate)",
       "type": "timeseries"
     },
     {
@@ -2295,7 +2295,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "description": "Rate per second of outgoing topic messages for every topic over the last 2 minutes.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive are outgoing requests.",
+      "description": "Rate per second of outgoing topic messages for every topic over the last 5 minutes.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive are outgoing requests.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -2375,13 +2375,13 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate (ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate (ssv:p2p:pubsub:msg:out{instance=~\"$instance.*\"}[5m])",
           "interval": "",
           "legendFormat": "{{topic}}",
           "refId": "A"
         }
       ],
-      "title": "Outgoing Pubsub Messages RPS (2m rate)",
+      "title": "Outgoing Pubsub Messages RPS (5m rate)",
       "type": "timeseries"
     },
     {
@@ -2632,7 +2632,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:p2p:streams:res{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:p2p:streams:res{instance=~\"$instance.*\"}[5m])",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -2645,7 +2645,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:p2p:streams:req:count{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:p2p:streams:req:count{instance=~\"$instance.*\"}[5m])",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2659,7 +2659,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:p2p:streams:req:success{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:p2p:streams:req:success{instance=~\"$instance.*\"}[5m])",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2673,7 +2673,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "rate(ssv:p2p:streams:req:active{instance=~\"$instance.*\"}[2m])",
+          "expr": "rate(ssv:p2p:streams:req:active{instance=~\"$instance.*\"}[5m])",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2803,7 +2803,7 @@
     ]
   },
   "time": {
-    "from": "now-15m",
+    "from": "now-6h",
     "to": "now"
   },
   "timepicker": {},

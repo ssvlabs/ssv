@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -15,11 +16,10 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	tests := []struct {
 		name           string
@@ -29,7 +29,7 @@ func TestEth1Client_handleEvent(t *testing.T) {
 	}{
 		{
 			name:           "v2 abi contract",
-			version:        eth1.V2,
+			version:        eth1.V1,
 			operatorAdded:  rawOperatorAdded,
 			validatorAdded: rawValidatorAdded,
 		},

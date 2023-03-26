@@ -7,10 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
@@ -49,6 +53,8 @@ const (
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
+type GetRecipientDataFunc func(owner common.Address) (*registrystorage.RecipientData, bool, error)
+
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *types.SSVShare)
 
@@ -76,7 +82,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 
 	// worker flags
-	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"512" env-description:"Number of goroutines to use for message workers"`
+	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
 }
 
@@ -102,11 +108,12 @@ type Controller interface {
 
 // controller implements Controller
 type controller struct {
-	context              context.Context
-	collection           ICollection
-	operatorsCollection  registrystorage.OperatorsCollection
-	recipientsCollection registrystorage.RecipientsCollection
-	ibftStorageMap       *storage.QBFTStores
+	context context.Context
+
+	sharesStorage     registrystorage.Shares
+	operatorsStorage  registrystorage.Operators
+	recipientsStorage registrystorage.Recipients
+	ibftStorageMap    *storage.QBFTStores
 
 	beacon     beaconprotocol.Beacon
 	keyManager spectypes.KeyManager
@@ -135,10 +142,6 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
-	collection := NewCollection(CollectionOptions{
-		DB: options.DB,
-	})
-
 	logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode), zap.Bool("blinded_supported", options.BlindedSupport))
 	storageMap := storage.NewStores()
 	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, spectypes.BNRoleAttester.String(), options.ForkVersion))
@@ -183,9 +186,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
-		collection:                 collection,
-		operatorsCollection:        options.RegistryStorage,
-		recipientsCollection:       options.RegistryStorage,
+		sharesStorage:              options.RegistryStorage,
+		operatorsStorage:           options.RegistryStorage,
+		recipientsStorage:          options.RegistryStorage,
 		ibftStorageMap:             storageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,
@@ -245,7 +248,7 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 }
 
 func (c *controller) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.collection.GetAllValidatorShares(logger)
+	return c.sharesStorage.GetAllShares(logger)
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
@@ -253,7 +256,7 @@ func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 }
 
 func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
-	allShares, err := c.collection.GetAllValidatorShares(logger)
+	allShares, err := c.sharesStorage.GetAllShares(logger)
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -305,7 +308,7 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 // getShare returns the share of the given validator public key
 // TODO: optimize
 func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
-	share, found, err := c.collection.GetValidatorShare(pk)
+	share, found, err := c.sharesStorage.GetShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
 	}
@@ -342,7 +345,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 	// Create a disposable NonCommitteeValidator to process the message.
 	// TODO: consider caching highest instance heights for each validator instead of creating a new validator & loading from storage each time.
-	v := validator.NewNonCommitteeValidator(msg.GetID(), opts)
+	v := validator.NewNonCommitteeValidator(logger, msg.GetID(), opts)
 	v.ProcessMessage(logger, msg)
 
 	return nil
@@ -350,6 +353,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 // ListenToEth1Events is listening to events coming from eth1 client
 func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
+	logger = logger.Named(logging.NameController)
 	cn := make(chan *eth1.Event)
 	sub := feed.Subscribe(cn)
 	defer sub.Unsubscribe()
@@ -369,12 +373,14 @@ func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
 
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	if c.validatorOptions.Exporter {
 		c.setupNonCommitteeValidators(logger)
 		return
 	}
 
-	shares, err := c.getValidators(logger)
+	shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 	if err != nil {
 		logger.Fatal("failed to get validators shares", zap.Error(err))
 	}
@@ -383,10 +389,6 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 		return
 	}
 	c.setupValidators(logger, shares)
-}
-
-func (c *controller) getValidators(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.collection.GetFilteredValidatorShares(logger, ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -421,7 +423,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
-	nonCommitteeShares, err := c.collection.GetFilteredValidatorShares(logger, NotLiquidated())
+	nonCommitteeShares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.NotLiquidated())
 	if err != nil {
 		logger.Fatal("failed to get non-committee validator shares", zap.Error(err))
 	}
@@ -446,7 +448,7 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			if err != nil {
 				logger.Error("failed to subscribe to network", zap.Error(err))
 			}
-			messageID := spectypes.NewMsgID(validatorShare.ValidatorPubKey, role)
+			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
 			err = c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
@@ -457,6 +459,8 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 
 // StartNetworkHandlers init msg worker that handles network messages
 func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	// first, set stream handlers
 	if err := c.setupNetworkHandlers(logger); err != nil {
 		logger.Panic("could not register stream handlers", zap.Error(err))
@@ -487,7 +491,7 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 	}
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		if err := c.collection.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
+		if err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
 			return err
 		}
 		_, err := c.startValidator(logger, v)
@@ -506,6 +510,8 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 // GetValidatorsIndices returns a list of all the active validators indices
 // and fetch indices for missing once (could be first time attesting or non active once)
 func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+	logger = logger.Named(logging.NameController)
+
 	var toFetch [][]byte
 	var indices []phase0.ValidatorIndex
 
@@ -568,11 +574,6 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 
 		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
 
-		// TODO(oleg): should we care about non-committee podIds?
-		if err = share.SetClusterID(); err != nil {
-			return nil, errors.Wrap(err, "could not set share cluster id")
-		}
-
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
@@ -587,7 +588,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.collection.SaveValidatorShare(logger, share); err != nil {
+	if err := c.sharesStorage.SaveShare(logger, share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 
@@ -616,8 +617,13 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-		logger.Warn("could not start validator as metadata not found", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)))
+		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
+
+	}
+
+	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 
 	// Start a committee validator.
@@ -643,12 +649,14 @@ func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) 
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
+	logger = logger.Named(logging.NameController)
+
 	go c.metadataUpdateQueue.Start()
 
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.collection.GetFilteredValidatorShares(logger, ByOperatorIDAndNotLiquidated(c.operatorData.ID))
+		shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
 		if err != nil {
 			logger.Warn("could not get validators shares for metadata update", zap.Error(err))
 			continue
@@ -697,7 +705,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(options.SSVShare.Share.ValidatorPubKey, role)
+		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl

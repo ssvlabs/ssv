@@ -2,6 +2,10 @@ package discovery
 
 import (
 	"context"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/ssv/utils"
 	"go.uber.org/zap"
 )
@@ -19,7 +23,7 @@ type Bootnode struct {
 	cancel context.CancelFunc
 	disc   Service
 
-	ENR string
+	ENR string // Ethereum Node Records https://eips.ethereum.org/EIPS/eip-778
 }
 
 // NewBootnode creates a new bootnode
@@ -32,7 +36,7 @@ func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions
 	}
 	np := disc.(NodeProvider)
 	enr := np.Self().Node().String()
-	logger.Info("bootnode is ready", zap.String("ENR", enr))
+	logger.Info("bootnode is ready", fields.ENRStr(enr))
 	return &Bootnode{
 		ctx:    ctx,
 		cancel: cancel,
@@ -48,7 +52,7 @@ func (b *Bootnode) Close() error {
 }
 
 func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
-	privKey, err := utils.ECDSAPrivateKey(logger.Named("bootnode"), opts.PrivateKey)
+	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
 	}

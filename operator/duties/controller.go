@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -92,9 +94,10 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 
 // Start listens to slot ticker and dispatches duties execution
 func (dc *dutyController) Start(logger *zap.Logger) {
+	logger = logger.Named(logging.NameDutyController)
 	// warmup
 	indices := dc.validatorController.GetValidatorsIndices(logger)
-	logger.Debug("warming up indices", zap.Int("count", len(indices)))
+	logger.Debug("warming up indices", fields.Count(len(indices)))
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
@@ -132,29 +135,29 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return dc.executor.ExecuteDuty(logger, duty)
 	}
-	logger = dc.loggerWithDutyContext(logger, duty)
 
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey := &bls.PublicKey{}
-	if err := pubKey.Deserialize(pk[:]); err != nil {
+	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
+	if err != nil {
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
 		if err != nil {
 			return err
 		}
-		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 		if err != nil {
 			return err
 		}
 		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find validator")
 	}
@@ -179,7 +182,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(pubKey.Serialize(), duty.Type),
+		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), pubKey.Serialize(), duty.Type),
 		Data:    data,
 	}, nil
 }
@@ -276,12 +279,16 @@ func (dc *dutyController) handleSyncCommittee(logger *zap.Logger, slot phase0.Sl
 	// execute sync committee duties
 	if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
 		toSpecDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {
+			indices := make([]uint64, len(duty.ValidatorSyncCommitteeIndices))
+			for i, index := range duty.ValidatorSyncCommitteeIndices {
+				indices[i] = uint64(index)
+			}
 			return &spectypes.Duty{
 				Type:                          role,
 				PubKey:                        duty.PubKey,
 				Slot:                          slot, // in order for the duty ctrl to execute
 				ValidatorIndex:                duty.ValidatorIndex,
-				ValidatorSyncCommitteeIndices: duty.ValidatorSyncCommitteeIndices,
+				ValidatorSyncCommitteeIndices: indices,
 			}
 		}
 		syncCommitteeDuties.Range(func(index phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty) bool {
@@ -366,13 +373,13 @@ func (dc *dutyController) shouldExecute(logger *zap.Logger, duty *spectypes.Duty
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (dc *dutyController) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	return logger.
-		With(zap.String("role", duty.Type.String())).
+		With(fields.Role(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
-		With(logging.CurrentSlot(dc.ethNetwork)).
-		With(zap.Uint64("slot", uint64(duty.Slot))).
+		With(fields.CurrentSlot(dc.ethNetwork)).
+		With(fields.Slot(duty.Slot)).
 		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
-		With(logging.PubKey(duty.PubKey[:])).
-		With(logging.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
+		With(fields.PubKey(duty.PubKey[:])).
+		With(fields.StartTimeUnixMilli(dc.ethNetwork, duty.Slot))
 }
 
 // NewReadOnlyExecutor creates a dummy executor that is used to run in read mode
@@ -385,7 +392,7 @@ type readOnlyDutyExec struct{}
 func (e *readOnlyDutyExec) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	logger.Debug("skipping duty execution",
 		zap.Uint64("epoch", uint64(duty.Slot)/32),
-		zap.Uint64("slot", uint64(duty.Slot)),
-		logging.PubKey(duty.PubKey[:]))
+		fields.Slot(duty.Slot),
+		fields.PubKey(duty.PubKey[:]))
 	return nil
 }

@@ -72,27 +72,6 @@ The eth2-ssv binaries (i.e. all code inside of the `cmd` directory) is licensed 
 included in our repository in the `LICENSE` file.
 
 ## Road Map
-[X] Free standing, reference iBFT Go implementation\
-[X] SSV specific iBFT implementor\
-[X] Port POC code to Golang\
-[ ] Externalize remote signer\
-[X] Slashing protection
-[X] Multi BN implementation support
-[X] Networking and discovery\
-[X] db, persistence and recovery (Sync)\
-[X] Between instance persistence (prevent starting a new instance if previous not decided)\
-[X] Multi network support (being part of multiple SSV groups)\
-[\\] Aggregation support\
-[\\] Proposal support\
-[ ] Sync committee support\
-[X] Key sharing\
-[X] Deployment\
-[X] Documentation\
-[X] Phase 1 testing\
-[X] Full iBFT spec\
-[ ] Audit\
-[X] Grafana node dashboard\
-[\\] Network refactoring
 
-** X=done, \\=WIP
+For detailed roadmap please check out [ROADMAP.md](./ROADMAP.md) 
 

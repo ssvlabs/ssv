@@ -4,17 +4,13 @@ import (
 	"encoding/json"
 	"sync"
 
-	ipfslog "github.com/ipfs/go-log"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
-
-var logger = ipfslog.Logger("ssv/protocol/qbft/instance").Desugar()
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
@@ -64,26 +60,33 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		logger.Debug("starting QBFT instance")
+		logger.Debug("ℹ️ starting QBFT instance")
 
 		// propose if this node is the proposer
 		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("failed to create proposal", zap.Error(err))
+				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
-				if err := i.Broadcast(proposal); err != nil {
-					logger.Warn("failed to broadcast proposal", zap.Error(err))
+				if err := i.Broadcast(logger, proposal); err != nil {
+					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
 			}
 		}
 	})
 }
 
-func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
+func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+	// logger.Debug("Broadcast",
+	// 	zap.Any("MsgType", msg.Message.MsgType),
+	// 	fields.Round(msg.Message.Round),
+	// 	zap.Any("DataRound", msg.Message.DataRound),
+	// 	fields.Height(msg.Message.Height),
+	// )
+
 	byts, err := msg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode message")
@@ -101,7 +104,7 @@ func (i *Instance) Broadcast(msg *specqbft.SignedMessage) error {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
@@ -154,16 +157,12 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		acceptedProposalData, err := proposedMsg.Message.GetCommitData()
-		if err != nil {
-			return errors.Wrap(err, "could not get accepted proposal data")
-		}
-		return validSignedPrepareForHeightRoundAndValue(
+		return validSignedPrepareForHeightRoundAndRoot(
 			i.config,
 			msg,
 			i.State.Height,
 			i.State.Round,
-			acceptedProposalData.Data,
+			proposedMsg.Message.Root,
 			i.State.Share.Committee,
 		)
 	case specqbft.CommitMsgType:
@@ -180,7 +179,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.State.Share.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChange(i.State, i.config, msg, i.State.Height, msg.Message.Round)
+		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}

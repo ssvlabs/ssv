@@ -4,17 +4,17 @@ import (
 	"encoding/hex"
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type MsgProcessingSpecTest struct {
@@ -24,7 +24,7 @@ type MsgProcessingSpecTest struct {
 	Messages                []*spectypes.SSVMessage
 	PostDutyRunnerStateRoot string
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
-	OutputMessages         []*specssv.SignedPartialSignatureMessage
+	OutputMessages         []*spectypes.SignedPartialSignatureMessage
 	BeaconBroadcastedRoots []string
 	DontStartDuty          bool // if set to true will not start a duty for the runner
 	ExpectedError          string
@@ -35,22 +35,22 @@ func (test *MsgProcessingSpecTest) TestName() string {
 }
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
 
 	var lastErr error
 	if !test.DontStartDuty {
-		lastErr = v.StartDuty(test.Duty)
+		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(msg)
+		dmsg, err := queue.DecodeSSVMessage(logger, msg)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		err = v.ProcessMessage(dmsg)
+		err = v.ProcessMessage(logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}
@@ -71,7 +71,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot))
+	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }
 
 func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
@@ -110,7 +110,7 @@ func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.
 			continue
 		}
 
-		msg1 := &specssv.SignedPartialSignatureMessage{}
+		msg1 := &spectypes.SignedPartialSignatureMessage{}
 		require.NoError(t, msg1.Decode(msg.Data))
 		msg2 := test.OutputMessages[index]
 		require.Len(t, msg1.Message.Messages, len(msg2.Message.Messages))
@@ -120,20 +120,20 @@ func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.
 		for i, partialSigMsg2 := range msg2.Message.Messages {
 			r2, err := partialSigMsg2.GetRoot()
 			require.NoError(t, err)
-			if _, found := roots[hex.EncodeToString(r2)]; !found {
-				roots[hex.EncodeToString(r2)] = ""
+			if _, found := roots[hex.EncodeToString(r2[:])]; !found {
+				roots[hex.EncodeToString(r2[:])] = ""
 			} else {
-				roots[hex.EncodeToString(r2)] = hex.EncodeToString(r2)
+				roots[hex.EncodeToString(r2[:])] = hex.EncodeToString(r2[:])
 			}
 
 			partialSigMsg1 := msg1.Message.Messages[i]
 			r1, err := partialSigMsg1.GetRoot()
 			require.NoError(t, err)
 
-			if _, found := roots[hex.EncodeToString(r1)]; !found {
-				roots[hex.EncodeToString(r1)] = ""
+			if _, found := roots[hex.EncodeToString(r1[:])]; !found {
+				roots[hex.EncodeToString(r1[:])] = ""
 			} else {
-				roots[hex.EncodeToString(r1)] = hex.EncodeToString(r1)
+				roots[hex.EncodeToString(r1[:])] = hex.EncodeToString(r1[:])
 			}
 		}
 		for k, v := range roots {

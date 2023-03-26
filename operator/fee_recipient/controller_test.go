@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -20,17 +21,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
-	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 func TestSubmitProposal(t *testing.T) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -38,17 +37,17 @@ func TestSubmitProposal(t *testing.T) {
 		ID: 123456789,
 	}
 
-	db, collection := createStorage(t)
+	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close(logger)
 	network := beacon.NewNetwork(core.PraterNetwork, 0)
-	populateStorage(t, logger, collection, operatorData)
+	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
-
-		Ctx:          context.TODO(),
-		EthNetwork:   network,
-		ShareStorage: collection,
-		OperatorData: operatorData,
+		Ctx:              context.TODO(),
+		EthNetwork:       network,
+		ShareStorage:     shareStorage,
+		RecipientStorage: recipientStorage,
+		OperatorData:     operatorData,
 	})
 
 	t.Run("submit first time or first slot in epoch", func(t *testing.T) {
@@ -105,8 +104,8 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
-	logger := logex.TestLogger(t)
+func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registrystorage.Recipients) {
+	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -115,12 +114,10 @@ func createStorage(t *testing.T) (basedb.IDb, validator.ICollection) {
 	db, err := storage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
 
-	return db, validator.NewCollection(validator.CollectionOptions{
-		DB: db,
-	})
+	return db, registrystorage.NewSharesStorage(db, []byte("test")), registrystorage.NewRecipientsStorage(db, []byte("test"))
 }
 
-func populateStorage(t *testing.T, logger *zap.Logger, storage validator.ICollection, operatorData *registrystorage.OperatorData) {
+func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
 	createShare := func(index int, operatorID spectypes.OperatorID) *types.SSVShare {
 		ownerAddr := fmt.Sprintf("%d", index)
 		ownerAddrByte := [20]byte{}
@@ -139,13 +136,13 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage validator.ICollec
 	}
 
 	for i := 0; i < 1000; i++ {
-		require.NoError(t, storage.SaveValidatorShare(logger, createShare(i, operatorData.ID)))
+		require.NoError(t, storage.SaveShare(logger, createShare(i, operatorData.ID)))
 	}
 
 	// add none committee share
-	require.NoError(t, storage.SaveValidatorShare(logger, createShare(2000, spectypes.OperatorID(1))))
+	require.NoError(t, storage.SaveShare(logger, createShare(2000, spectypes.OperatorID(1))))
 
-	all, err := storage.GetFilteredValidatorShares(logger, validator.ByOperatorIDAndNotLiquidated(operatorData.ID))
+	all, err := storage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorData.ID))
 	require.NoError(t, err)
 	require.Equal(t, 1000, len(all))
 }

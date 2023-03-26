@@ -24,7 +24,7 @@ spec:
   selector:
     app: ssv-node-10
 ---
-apiVersion: REPLACE_API_VERSION 
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -54,18 +54,18 @@ spec:
                       - ssv-main
       containers:
       - name: ssv-node-10
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
-            memory: REPLACE_NODES_MEM_LIMIT            
+            memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
         - containerPort: 12010
           name: port-12010
           protocol: UDP
-          hostPort: 12010            
+          hostPort: 12010
         - containerPort: 13010
           name: port-13010
           hostPort: 13010
@@ -116,10 +116,10 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
-        - name: LOGGER_LEVEL
-          value: "debug"
         - name: DB_PATH
-          value: "./data/db-shifu-v3"
+          value: "./data/db-v3-shifu"
+        - name: NETWORK_ID
+          value: "0x00003011"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
@@ -130,8 +130,6 @@ spec:
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
-        - name: NETWORK_ID
-          value: "shifu-v3-stage"
         - name: GENESIS_EPOCH
           value: "152834"
         - name: BLINDED_SUPPORT
@@ -171,4 +169,4 @@ spec:
         - effect: NoSchedule
           key: kubernetes.io/role
           operator: Exists
-      hostNetwork: true   
+      hostNetwork: true

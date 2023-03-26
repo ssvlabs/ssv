@@ -11,10 +11,11 @@ import (
 
 	"github.com/aquasecurity/table"
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 var messagePriorityTests = []struct {
@@ -116,7 +117,7 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSSVMessage(m.ssvMessage(test.state))
+				messages[i], err = DecodeSSVMessage(zap.L(), m.ssvMessage(test.state))
 				require.NoError(t, err)
 			}
 
@@ -173,14 +174,18 @@ func (m mockConsensusMessage) ssvMessage(state *State) *types.SSVMessage {
 	factory := ssvMessageFactory(m.Role)
 	return factory(
 		&qbft.SignedMessage{
-			Message: &qbft.Message{
-				MsgType:    typ,
-				Height:     m.Height,
-				Round:      2,
-				Identifier: []byte{1, 2, 3, 4},
-				Data:       []byte{1, 2, 3, 4},
+			Message: qbft.Message{
+				MsgType:                  typ,
+				Height:                   m.Height,
+				Round:                    2,
+				Identifier:               []byte{1, 2, 3, 4},
+				Root:                     [32]byte{1, 2, 3},
+				RoundChangeJustification: [][]byte{{1, 2, 3, 4}},
+				PrepareJustification:     [][]byte{{1, 2, 3, 4}},
 			},
-			Signature: []byte{1, 2, 3, 4},
+
+			FullData:  []byte{1, 2, 3, 4},
+			Signature: make([]byte, 96),
 			Signers:   signers,
 		},
 		nil,
@@ -273,10 +278,10 @@ func (m messageSlice) dump(s *State) string {
 		}
 
 		switch mm := msg.Body.(type) {
-		case *ssv.SignedPartialSignatureMessage:
+		case *spectypes.SignedPartialSignatureMessage:
 			// heightOrSlot = mm.Message.Messages[0].Slot
 			typ = mm.Message.Type
-			if typ == ssv.PostConsensusPartialSig {
+			if typ == spectypes.PostConsensusPartialSig {
 				kind = "post-consensus"
 			} else {
 				kind = "pre-consensus"
@@ -303,7 +308,7 @@ func (m messageSlice) dump(s *State) string {
 	return b.String()
 }
 
-func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *ssv.SignedPartialSignatureMessage) *types.SSVMessage {
+func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *spectypes.SignedPartialSignatureMessage) *types.SSVMessage {
 	switch role {
 	case types.BNRoleAttester:
 		return testingutils.SSVMsgAttester

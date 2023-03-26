@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
-	logging "github.com/ipfs/go-log"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -41,7 +43,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/logex"
 )
 
 type config struct {
@@ -75,7 +76,10 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := setupGlobal(cmd)
+		logger, err := setupGlobal(cmd)
+		if err != nil {
+			log.Fatal("could not create logger", err)
+		}
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
@@ -174,30 +178,25 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal(cmd *cobra.Command) *zap.Logger {
+func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 	log.Printf("starting %s", commons.GetBuildData())
-	if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
-		log.Fatalf("could not read config %s", err)
+	if globalArgs.ConfigPath != "" {
+		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
+			return nil, fmt.Errorf("could not read config: %w", err)
+		}
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			log.Fatalf("could not read share config %s", err)
+			return nil, fmt.Errorf("could not read share config: %W", err)
 		}
 	}
-	loggerLevel, errLogLevel := logex.GetLoggerLevelValue(cfg.LogLevel)
-	logger := logex.Build(commons.GetBuildData(), loggerLevel, &logex.EncodingConfig{
-		Format:       cfg.GlobalConfig.LogFormat,
-		LevelEncoder: logex.LevelEncoder([]byte(cfg.LogLevelFormat)),
-	})
-	if errLogLevel != nil {
-		logger.Warn(fmt.Sprintf("Default log level set to %s", loggerLevel), zap.Error(errLogLevel))
-	}
-	if len(cfg.DebugServices) > 0 {
-		_ = logging.SetLogLevelRegex(cfg.DebugServices, loggerLevel.String())
+
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat); err != nil {
+		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 
-	return logger
+	return zap.L(), nil
 }
 
 func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
@@ -280,17 +279,21 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion) {
 	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-		cfg.P2pNetworkConfig.NetworkID = string(types.GetDefaultDomain())
+		cfg.P2pNetworkConfig.NetworkID = format.DomainType(types.GetDefaultDomain()).String()
 	} else {
 		// we have some custom network id, overriding default domain
-		types.SetDefaultDomain([]byte(cfg.P2pNetworkConfig.NetworkID))
+		domainType, err := format.DomainTypeFromString(cfg.P2pNetworkConfig.NetworkID)
+		if err != nil {
+			logger.Fatal("failed to parse network id", zap.Error(err))
+		}
+		types.SetDefaultDomain(spectypes.DomainType(domainType))
 	}
 	eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
-	logger.Info("setting ssv network", zap.String("domain", string(types.GetDefaultDomain())),
+	logger.Info("setting ssv network", zap.String("domain", format.DomainType(types.GetDefaultDomain()).String()),
 		zap.String("net-id", cfg.P2pNetworkConfig.NetworkID),
 		zap.String("fork", string(forkVersion)))
 	return eth2Network, forkVersion
@@ -303,12 +306,12 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
 
+	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, db, forkVersion, operatorData.ID)
+		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.GetFilteredShares, forkVersion, operatorData.ID)
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
@@ -327,7 +330,7 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	}
 
 	// execution client
-	logger.Info("using registry contract address", zap.String("address", cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", fields.Address(cfg.ETH1Options.RegistryContractAddr), zap.String("abi version", cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", zap.String("abi", cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -350,12 +353,13 @@ func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
+	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start metrics handler", zap.Error(err))
+		logger.Error("failed to start", zap.Error(err))
 	}
 }
 
@@ -363,18 +367,13 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(
 	logger *zap.Logger,
-	db basedb.IDb,
+	getFiltered registrystorage.FilteredSharesFunc,
 	ssvForkVersion forksprotocol.ForkVersion,
 	operatorID spectypes.OperatorID,
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
-	sharesStorage := validator.NewCollection(validator.CollectionOptions{
-		DB: db,
-	})
 	subnetsMap := make(map[int]bool)
-	shares, err := sharesStorage.GetFilteredValidatorShares(logger, func(share *types.SSVShare) bool {
-		return !share.Liquidated && share.BelongsToOperator(operatorID)
-	})
+	shares, err := getFiltered(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorID))
 	if err != nil {
 		logger.Warn("could not read validators to bootstrap subnets")
 		return nil

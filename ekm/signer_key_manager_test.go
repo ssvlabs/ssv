@@ -5,6 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/prysmaticlabs/go-bitfield"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,7 +17,6 @@ import (
 
 	beacon2 "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -30,7 +30,7 @@ const (
 func testKeyManager(t *testing.T) spectypes.KeyManager {
 	threshold.Init()
 
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
@@ -175,22 +175,24 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
+		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
-		require.Nil(t, sig)
+		require.Equal(t, [32]byte{}, sig)
 	})
 
 	t.Run("sign once", func(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
+		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
-		require.Nil(t, sig)
+		require.Equal(t, [32]byte{}, sig)
 	})
 }
 
@@ -204,19 +206,16 @@ func TestSignRoot(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
 
-		commitData, err := (&specqbft.CommitData{Data: []byte("value1")}).Encode()
-		require.NoError(t, err)
-
-		msg := &specqbft.Message{
+		msg := specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(3),
 			Round:      specqbft.Round(2),
 			Identifier: []byte("identifier1"),
-			Data:       commitData,
+			Root:       [32]byte{1, 2, 3},
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify
@@ -236,19 +235,16 @@ func TestSignRoot(t *testing.T) {
 		pk := &bls.PublicKey{}
 		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
 
-		commitData, err := (&specqbft.CommitData{Data: []byte("value2")}).Encode()
-		require.NoError(t, err)
-
-		msg := &specqbft.Message{
+		msg := specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     specqbft.Height(1),
 			Round:      specqbft.Round(3),
 			Identifier: []byte("identifier2"),
-			Data:       commitData,
+			Root:       [32]byte{4, 5, 6},
 		}
 
 		// sign
-		sig, err := km.SignRoot(msg, spectypes.QBFTSignatureType, pk.Serialize())
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
 		require.NoError(t, err)
 
 		// verify

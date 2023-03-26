@@ -2,11 +2,13 @@ package queue
 
 import (
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/pkg/errors"
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
@@ -18,7 +20,7 @@ type DecodedSSVMessage struct {
 }
 
 // DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
-func DecodeSSVMessage(m *types.SSVMessage) (*DecodedSSVMessage, error) {
+func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case types.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
@@ -28,7 +30,7 @@ func DecodeSSVMessage(m *types.SSVMessage) (*DecodedSSVMessage, error) {
 		}
 		body = sm
 	case types.SSVPartialSignatureMsgType:
-		sm := &ssv.SignedPartialSignatureMessage{}
+		sm := &spectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
 		}
@@ -108,8 +110,8 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
-		isPostConsensusMessage = mm.Message.Type == ssv.PostConsensusPartialSig
+	if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
+		isPostConsensusMessage = mm.Message.Type == spectypes.PostConsensusPartialSig
 		isPreConsensusMessage = !isPostConsensusMessage
 	}
 

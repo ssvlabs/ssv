@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -14,6 +15,7 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -26,6 +28,7 @@ type AttesterRunner struct {
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
+	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
@@ -51,12 +54,12 @@ func NewAttesterRunnner(
 		signer:   signer,
 		valCheck: valCheck,
 
-		metrics: metrics.NewConsensusMetrics(share.ValidatorPubKey, spectypes.BNRoleAttester),
+		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleAttester),
 	}
 }
 
-func (r *AttesterRunner) StartNewDuty(duty *spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(r, duty)
+func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -64,12 +67,12 @@ func (r *AttesterRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *AttesterRunner) ProcessPreConsensus(signedMsg *specssv.SignedPartialSignatureMessage) error {
+func (r *AttesterRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for attester role")
 }
 
-func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(r, signedMsg)
+func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
@@ -82,14 +85,20 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
+	attestationData, err := decidedValue.GetAttestationData()
+	if err != nil {
+		return errors.Wrap(err, "could not get attestation data")
+	}
+
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, decidedValue.AttestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
+	msg, err := r.BaseRunner.signBeaconObject(r, attestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
-	postConsensusMsg := &specssv.PartialSignatureMessages{
-		Type:     specssv.PostConsensusPartialSig,
-		Messages: []*specssv.PartialSignatureMessage{msg},
+	postConsensusMsg := &spectypes.PartialSignatureMessages{
+		Type:     spectypes.PostConsensusPartialSig,
+		Slot:     decidedValue.Duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
 	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
@@ -104,7 +113,7 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 
@@ -114,20 +123,24 @@ func (r *AttesterRunner) ProcessConsensus(signedMsg *specqbft.SignedMessage) err
 	return nil
 }
 
-func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *specssv.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(r, signedMsg)
+func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-	logger.Debug("got partial signatures",
-		zap.Any("signer", signedMsg.Signer),
-		zap.Int64("slot", int64(r.GetState().DecidedValue.Duty.Slot)))
+
+	logger.Debug("🧩 got partial signatures", zap.Any("signer", signedMsg.Signer), fields.Slot(r.GetState().DecidedValue.Duty.Slot))
 
 	if !quorum {
 		return nil
 	}
 
 	r.metrics.EndPostConsensus()
+
+	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
+	if err != nil {
+		return errors.Wrap(err, "could not get attestation data")
+	}
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -139,14 +152,12 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		duty := r.GetState().DecidedValue.Duty
 
-		logger.Debug("reconstructed partial signatures",
-			zap.Any("signers", getPostConsensusSigners(r.GetState(), root)),
-			zap.Int64("slot", int64(duty.Slot)))
+		logger.Debug("🧩 reconstructed partial signatures", zap.Any("signers", getPostConsensusSigners(r.GetState(), root)), fields.Slot(duty.Slot))
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
-			Data:            r.GetState().DecidedValue.AttestationData,
+			Data:            attestationData,
 			Signature:       specSig,
 			AggregationBits: aggregationBitfield,
 		}
@@ -156,19 +167,21 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-			logger.Error("failed to submit attestation to Beacon node",
-				zap.Int64("slot", int64(duty.Slot)), zap.Error(err))
+
+			logger.Error("❌ failed to submit attestation to Beacon node", fields.Slot(duty.Slot), zap.Error(err))
+
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
 		attestationSubmissionEnd()
-		r.metrics.EndDutyFullFlow()
+		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("successfully submitted attestation",
-			zap.Int64("slot", int64(duty.Slot)),
+		logger.Debug("✅ successfully submitted attestation",
+			fields.Slot(duty.Slot),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			zap.Int("round", int(r.GetState().RunningInstance.State.Round)))
+			fields.ConsensusTime(time.Since(r.started)),
+			fields.Round(r.GetState().RunningInstance.State.Round))
 	}
 	r.GetState().Finished = true
 
@@ -181,7 +194,12 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{r.BaseRunner.State.DecidedValue.AttestationData}, spectypes.DomainAttester, nil
+	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get attestation data")
+	}
+
+	return []ssz.HashRoot{attestationData}, spectypes.DomainAttester, nil
 }
 
 // executeDuty steps:
@@ -189,24 +207,33 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 2) start consensus on duty + attestation data
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
-func (r *AttesterRunner) executeDuty(duty *spectypes.Duty) error {
-	attData, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
+func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	// TODO - waitOneThirdOrValidBlock
+
+	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 
+	r.started = time.Now()
+
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
 
-	input := &spectypes.ConsensusData{
-		Duty:            duty,
-		AttestationData: attData,
+	attDataByts, err := attData.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal attestation data")
 	}
 
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	input := &spectypes.ConsensusData{
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: attDataByts,
+	}
+
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
-
 	return nil
 }
 
@@ -249,11 +276,11 @@ func (r *AttesterRunner) Decode(data []byte) error {
 }
 
 // GetRoot returns the root used for signing and verification
-func (r *AttesterRunner) GetRoot() ([]byte, error) {
+func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := r.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode DutyRunnerState")
+		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }

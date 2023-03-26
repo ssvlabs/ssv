@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -24,9 +26,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
-	ipsflog "github.com/ipfs/go-log"
 )
 
 const (
@@ -48,13 +47,15 @@ const (
 
 // Setup is used to setup the network
 func (n *p2pNetwork) Setup(logger *zap.Logger) error {
+	logger = logger.Named(logging.NameP2PNetwork)
+
 	if atomic.SwapInt32(&n.state, stateInitializing) == stateReady {
 		return errors.New("could not setup network: in ready state")
 	}
+
 	// set a seed for rand values
 	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
-
-	logger.Info("configuring p2p network service")
+	logger.Info("configuring")
 
 	n.initCfg()
 
@@ -62,14 +63,15 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	if err != nil {
 		return err
 	}
+
 	logger = logger.With(zap.String("selfPeer", n.host.ID().String()))
-	logger.Debug("p2p host was configured")
+	logger.Debug("host configured")
 
 	err = n.SetupServices(logger)
 	if err != nil {
 		return err
 	}
-	logger.Info("p2p services were configured")
+	logger.Info("services configured")
 
 	return nil
 }
@@ -215,13 +217,14 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 	var discV5Opts *discovery.DiscV5Options
 	if n.cfg.Discovery != localDiscvery { // otherwise, we are in local scenario
 		discV5Opts = &discovery.DiscV5Options{
-			IP:         ipAddr.String(),
-			BindIP:     net.IPv4zero.String(),
-			Port:       n.cfg.UDPPort,
-			TCPPort:    n.cfg.TCPPort,
-			NetworkKey: n.cfg.NetworkPrivateKey,
-			Bootnodes:  n.cfg.TransformBootnodes(),
-			OperatorID: n.cfg.OperatorID,
+			IP:            ipAddr.String(),
+			BindIP:        net.IPv4zero.String(),
+			Port:          n.cfg.UDPPort,
+			TCPPort:       n.cfg.TCPPort,
+			NetworkKey:    n.cfg.NetworkPrivateKey,
+			Bootnodes:     n.cfg.TransformBootnodes(),
+			OperatorID:    n.cfg.OperatorID,
+			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
 			discV5Opts.Subnets = n.subnets
@@ -251,17 +254,11 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
-	if n.cfg.PubSubTrace {
-		if err := ipsflog.SetLogLevel("pubsub", zapcore.DebugLevel.String()); err != nil {
-			return errors.Wrap(err, "could not set pubsub logger level")
-		}
-	}
 	cfg := &topics.PububConfig{
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			logger := logger.Named("MsgValidator")
-			return topics.NewSSVMsgValidator(logger, n.fork, n.host.ID())
+			return topics.NewSSVMsgValidator(n.fork)
 		},
 		MsgHandler: n.handlePubsubMessages(logger),
 		ScoreIndex: n.idx,

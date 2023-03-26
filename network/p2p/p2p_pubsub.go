@@ -3,13 +3,14 @@ package p2pv1
 import (
 	"encoding/hex"
 	"fmt"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -56,7 +57,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
-			n.logger.Debug("could not broadcast msg", logging.PubKey(vpk), zap.Error(err))
+			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}
@@ -72,7 +73,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.setValidatorStateSubscribing(pkHex) {
 		return nil
 	}
-	err := n.subscribe(n.logger, pk)
+	err := n.subscribe(n.interfaceLogger, pk)
 	if err != nil {
 		return err
 	}
@@ -188,11 +189,10 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 
 		p2pID := ssvMsg.GetID().String()
 
-		// logger := withIncomingMsgFields(tmpLogger, msg, ssvMsg)
-		// logger.Debug("incoming pubsub message",
-		// 	zap.String("p2p_id", p2pID),
-		// 	zap.String("topic", topic),
-		// 	zap.String("msgType", message.MsgTypeToString(ssvMsg.MsgType)))
+		//	logger.With(
+		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
+		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
+		// 	).Debug("handlePubsubMessages")
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
 		n.msgRouter.Route(logger, *ssvMsg)
@@ -200,35 +200,12 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 	}
 }
 
-// // withIncomingMsgFields adds fields to the given logger
-// func withIncomingMsgFields(logger *zap.Logger, msg *pubsub.Message, ssvMsg *spectypes.SSVMessage) *zap.Logger {
-// 	logger = logger.With(
-// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
-// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
-// 	)
-// 	if ssvMsg.MsgType == spectypes.SSVConsensusMsgType {
-// 		logger = logger.With(zap.String("receivedFrom", msg.GetFrom().String()))
-// 		from, err := peer.IDFromBytes(msg.Message.GetFrom())
-// 		if err == nil {
-// 			logger = logger.With(zap.String("msgFrom", from.String()))
-// 		}
-// 		var sm specqbft.SignedMessage
-// 		err = sm.Decode(ssvMsg.Data)
-// 		if err == nil && sm.Message != nil {
-// 			logger = logger.With(zap.Int64("height", int64(sm.Message.Height)),
-// 				zap.Int("consensusMsgType", int(sm.Message.MsgType)),
-// 				zap.Any("signers", sm.GetSigners()))
-// 		}
-// 	}
-// 	return logger
-// }
-
 // subscribeToSubnets subscribes to all the node's subnets
 func (n *p2pNetwork) subscribeToSubnets(logger *zap.Logger) error {
 	if len(n.subnets) == 0 {
 		return nil
 	}
-	logger.Debug("subscribing to subnets", zap.ByteString("subnets", n.subnets))
+	logger.Debug("subscribing to subnets", fields.Subnets(n.subnets))
 	for i, val := range n.subnets {
 		if val > 0 {
 			subnet := fmt.Sprintf("%d", i)

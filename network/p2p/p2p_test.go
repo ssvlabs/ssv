@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/logex"
+	"github.com/bloxapp/ssv/logging"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -21,6 +21,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -109,7 +110,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 func TestP2pNetwork_Stream(t *testing.T) {
 	n := 12
 	ctx, cancel := context.WithCancel(context.Background())
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	defer cancel()
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
@@ -120,7 +121,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -134,8 +135,9 @@ func TestP2pNetwork_Stream(t *testing.T) {
 		1, 1, 1,
 	}
 	msgCounter := int64(0)
+	errors := make(chan error, len(ln.Nodes))
 	for i, node := range ln.Nodes {
-		registerHandler(logger, node, mid, heights[i], rounds[i], &msgCounter)
+		registerHandler(logger, node, mid, heights[i], rounds[i], &msgCounter, errors)
 	}
 
 	<-time.After(time.Second)
@@ -143,29 +145,35 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	node := ln.Nodes[0]
 	res, err := node.LastDecided(logger, mid)
 	require.NoError(t, err)
+	select {
+	case err := <-errors:
+		require.NoError(t, err)
+	default:
+	}
 	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
 	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
 	require.GreaterOrEqual(t, msgCounter, int64(2))
 }
 
-func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64) {
+func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
 	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
 		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
-				Signature: []byte("xxx"),
+				Signature: make([]byte, 96),
 				Signers:   []spectypes.OperatorID{1, 2, 3},
-				Message: &specqbft.Message{
+				Message: specqbft.Message{
 					MsgType:    specqbft.CommitMsgType,
 					Height:     height,
 					Round:      round,
 					Identifier: mid[:],
-					Data:       []byte("dummy change round message"),
+					Root:       [32]byte{1, 2, 3},
 				},
 			}
 			data, err := sm.Encode()
 			if err != nil {
+				errors <- err
 				return nil, err
 			}
 			return &spectypes.SSVMessage{
@@ -178,7 +186,7 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), forkVersion, n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
@@ -245,9 +253,7 @@ type dummyRouter struct {
 
 func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message",
-		zap.String("identifier", message.GetID().String()),
-		zap.Uint64("count", c))
+	logger.Debug("got message", zap.Uint64("count", c))
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
@@ -255,16 +261,16 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
 	signedMsg := &specqbft.SignedMessage{
-		Message: &specqbft.Message{
+		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Round:      2,
 			Identifier: id[:],
 			Height:     specqbft.Height(height),
-			Data:       []byte("bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="),
+			Root:       [32]byte{0x1, 0x2, 0x3},
 		},
-		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN"),
+		Signature: []byte("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv"),
 		Signers:   []spectypes.OperatorID{1, 3, 4},
 	}
 	data, err := signedMsg.Encode()

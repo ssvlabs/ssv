@@ -16,10 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
+
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/logex"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -36,14 +37,14 @@ func getBaseStorage(logger *zap.Logger) (basedb.IDb, error) {
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
-	logger := logex.TestLogger(t)
+	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	if err != nil {
 		return nil, func() {}
 	}
 	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), logger)
 	return s, func() {
-		db.Close(logex.TestLogger(t))
+		db.Close(logging.TestLogger(t))
 	}
 }
 
@@ -251,8 +252,9 @@ func TestSavingProposal(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			proposal, err := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			proposal, found, err := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.True(t, found)
 			require.NotNil(t, proposal)
 
 			// test equal
@@ -320,8 +322,9 @@ func TestSavingAttestation(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			att, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att, found, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.True(t, found)
 			require.NotNil(t, att)
 
 			// test equal
@@ -393,8 +396,9 @@ func TestSavingHighestAttestation(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			att, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att, found, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.True(t, found)
 			require.NotNil(t, att)
 
 			// test equal
@@ -446,8 +450,9 @@ func TestRemovingHighestAttestation(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			att, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att, found, err := signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.True(t, found)
 			require.NotNil(t, att)
 
 			// test equal
@@ -462,8 +467,9 @@ func TestRemovingHighestAttestation(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			att, err = signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
+			att, found, err = signerStorage.RetrieveHighestAttestation(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.False(t, found)
 			require.Nil(t, att)
 		})
 	}
@@ -496,8 +502,9 @@ func TestRemovingHighestProposal(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			proposal, err := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			proposal, found, err := signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.True(t, found)
 			require.NotNil(t, proposal)
 
 			// test equal
@@ -508,8 +515,9 @@ func TestRemovingHighestProposal(t *testing.T) {
 			require.NoError(t, err)
 
 			// fetch
-			proposal, err = signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
+			proposal, found, err = signerStorage.RetrieveHighestProposal(test.account.ValidatorPublicKey())
 			require.NoError(t, err)
+			require.False(t, found)
 			require.Equal(t, phase0.Slot(0), proposal)
 		})
 	}

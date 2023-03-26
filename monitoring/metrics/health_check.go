@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // HealthCheckAgent represent an health-check agent
@@ -39,7 +40,7 @@ func WaitUntilHealthy(logger *zap.Logger, component interface{}, name string) {
 		logger.Warn(name+" is not healthy, trying again in 1sec", zap.Any("errors", errs))
 		time.Sleep(1 * time.Second)
 	}
-	logger.Debug(name + " is healthy")
+	logger.Debug(name + ": healthy")
 }
 
 // ReportSSVNodeHealthiness reports SSV node healthiness.

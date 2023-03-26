@@ -6,10 +6,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1bbellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
+	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -75,7 +77,17 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 	}, nil
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+	sig, rootSlice, err := km.signBeaconObject(obj, domain, pk, domainType)
+	if err != nil {
+		return nil, [32]byte{}, err
+	}
+	var root [32]byte
+	copy(root[:], rootSlice)
+	return sig, root, nil
+}
+
+func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -88,25 +100,50 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.
 		return km.signer.SignBeaconAttestation(data, domain, pk)
 	case spectypes.DomainProposer:
 		if km.isBlinded {
-			block, ok := obj.(*apiv1bbellatrix.BlindedBeaconBlock)
-			if !ok {
-				return nil, nil, errors.New("could not cast obj to BlindedBeaconBlock")
+			var vBlindedBlock *api.VersionedBlindedBeaconBlock
+			switch v := obj.(type) {
+			case *apiv1bellatrix.BlindedBeaconBlock:
+				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
+					Version:   spec.DataVersionBellatrix,
+					Bellatrix: v,
+				}
+			case *apiv1capella.BlindedBeaconBlock:
+				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
+					Version: spec.DataVersionCapella,
+					Capella: v,
+				}
+			default:
+				return nil, nil, errors.New("obj type is unknown")
 			}
-			vBlock := &api.VersionedBlindedBeaconBlock{
-				Version:   spec.DataVersionBellatrix,
-				Bellatrix: block,
-			}
-			return km.signer.SignBlindedBeaconBlock(vBlock, domain, pk)
+			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		}
 
-		block, ok := obj.(*bellatrix.BeaconBlock)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to BeaconBlock")
+		var vBlock *spec.VersionedBeaconBlock
+		switch v := obj.(type) {
+		case *phase0.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionPhase0,
+				Phase0:  v,
+			}
+		case *altair.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionAltair,
+				Altair:  v,
+			}
+		case *bellatrix.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version:   spec.DataVersionBellatrix,
+				Bellatrix: v,
+			}
+		case *capella.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionCapella,
+				Capella: v,
+			}
+		default:
+			return nil, nil, errors.New("obj type is unknown")
 		}
-		vBlock := &spec.VersionedBeaconBlock{
-			Version:   spec.DataVersionBellatrix,
-			Bellatrix: block,
-		}
+
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
 	case spectypes.DomainAggregateAndProof:
 		data, ok := obj.(*phase0.AggregateAndProof)
@@ -147,9 +184,15 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
 	case spectypes.DomainApplicationBuilder:
-		data, ok := obj.(*eth2apiv1.ValidatorRegistration)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to ValidatorRegistration")
+		var data *api.VersionedValidatorRegistration
+		switch v := obj.(type) {
+		case *eth2apiv1.ValidatorRegistration:
+			data = &api.VersionedValidatorRegistration{
+				Version: spec.BuilderVersionV1,
+				V1:      v,
+			}
+		default:
+			return nil, nil, errors.New("obj type is unknown")
 		}
 		return km.signer.SignRegistration(data, domain, pk)
 	default:
@@ -167,8 +210,8 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.At
 	return nil
 }
 
-func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, block *bellatrix.BeaconBlock) error {
-	status, err := km.slashingProtector.IsSlashableProposal(pk, block.Slot)
+func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slot) error {
+	status, err := km.slashingProtector.IsSlashableProposal(pk, slot)
 	if err != nil {
 		return err
 	}

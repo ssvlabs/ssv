@@ -2,9 +2,11 @@ package discovery
 
 import (
 	"context"
+	"time"
+
+	"github.com/bloxapp/ssv/logging"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"time"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -34,8 +36,8 @@ type localDiscovery struct {
 // NewLocalDiscovery creates an mDNS discovery service and attaches it to the libp2p Host.
 // This lets us automatically discover peers on the same LAN and connect to them.
 func NewLocalDiscovery(ctx context.Context, logger *zap.Logger, host host.Host) (Service, error) {
-	logger = logger.Named("mdns_discovery")
-	logger.Debug("configuring mdns discovery")
+	logger = logger.Named(logging.NameDiscoveryService)
+	logger.Debug("configuring mdns")
 
 	routingDHT, disc, err := NewKadDHT(ctx, host, dht.ModeServer)
 	if err != nil {

@@ -5,7 +5,7 @@
 
 # SSV - Logging
 
-This document describes the logging standards and strategies used in ssv node. 
+This document describes the logging standards and strategies used in ssv node.
 
 ## Logs for Operators
 
@@ -26,9 +26,5 @@ INFO  Slot advanced  {epoch: 1, slot: 32, proposals: "2/2", attestations: "187/1
 INFO  Slot advanced  {epoch: 1, slot: 63, proposals: "0/0", attestations: "161/165", sync_committee: "93/96"}
 INFO  Epoch completed  {epoch: 0, proposals: "3/3", attestations: "2161/2170", sync_committee: "2882/3072"}
 ```
-
-## Logs for Developers
-
-Debug logs can be enabled with the `--debug-services` flag or `DebugServices` environment variable.
 
 🚧 TODO

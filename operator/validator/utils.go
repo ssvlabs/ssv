@@ -1,16 +1,17 @@
 package validator
 
 import (
+	"bytes"
 	"encoding/hex"
 	"os"
 	"path/filepath"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
@@ -45,8 +46,8 @@ func ShareFromValidatorEvent(
 ) (*types.SSVShare, *bls.SecretKey, error) {
 	validatorShare := types.SSVShare{}
 
-	publicKey := &bls.PublicKey{}
-	if err := publicKey.Deserialize(event.PublicKey); err != nil {
+	publicKey, err := types.DeserializeBLSPublicKey(event.PublicKey)
+	if err != nil {
 		return nil, nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to deserialize validator public key"),
 		}
@@ -57,7 +58,7 @@ func ShareFromValidatorEvent(
 
 	committee := make([]*spectypes.Operator, 0)
 	for i := range event.OperatorIds {
-		operatorID := spectypes.OperatorID(event.OperatorIds[i])
+		operatorID := event.OperatorIds[i]
 		committee = append(committee, &spectypes.Operator{
 			OperatorID: operatorID,
 			PubKey:     event.SharePublicKeys[i],
@@ -78,12 +79,17 @@ func ShareFromValidatorEvent(
 			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, event.EncryptedKeys[i])
 			if err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.Wrap(err, "failed to decrypt share private key"),
+					Err: errors.Wrap(err, "could not decrypt share private key"),
 				}
 			}
 			if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.Wrap(err, "failed to set decrypted share private key"),
+					Err: errors.Wrap(err, "could not set decrypted share private key"),
+				}
+			}
+			if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
+				return nil, nil, &abiparser.MalformedEventError{
+					Err: errors.New("share private key does not match public key"),
 				}
 			}
 		}
@@ -97,6 +103,22 @@ func ShareFromValidatorEvent(
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
+}
+
+func SetShareFeeRecipient(share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
+	var feeRecipient bellatrix.ExecutionAddress
+	data, found, err := getRecipientData(share.OwnerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		copy(feeRecipient[:], share.OwnerAddress.Bytes())
+	} else {
+		feeRecipient = data.FeeRecipient
+	}
+	share.SetFeeRecipient(feeRecipient)
+
+	return nil
 }
 
 func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path string) error {
