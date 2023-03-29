@@ -336,9 +336,9 @@ func (mr *MockBeaconMockRecorder) GetAttestationData(slot, committeeIndex interf
 }
 
 // GetBeaconBlock mocks base method.
-func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, committeeIndex, graffiti, randao)
+	ret := m.ctrl.Call(m, "GetBeaconBlock", slot, graffiti, randao)
 	ret0, _ := ret[0].(ssz.Marshaler)
 	ret1, _ := ret[1].(spec.DataVersion)
 	ret2, _ := ret[2].(error)
@@ -346,9 +346,9 @@ func (m *MockBeacon) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Comm
 }
 
 // GetBeaconBlock indicates an expected call of GetBeaconBlock.
-func (mr *MockBeaconMockRecorder) GetBeaconBlock(slot, committeeIndex, graffiti, randao interface{}) *gomock.Call {
+func (mr *MockBeaconMockRecorder) GetBeaconBlock(slot, graffiti, randao interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBeaconBlock), slot, committeeIndex, graffiti, randao)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBeaconBlock", reflect.TypeOf((*MockBeacon)(nil).GetBeaconBlock), slot, graffiti, randao)
 }
 
 // GetBeaconNetwork mocks base method.

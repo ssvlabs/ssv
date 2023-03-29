@@ -19,7 +19,7 @@ import (
 )
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
-func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
