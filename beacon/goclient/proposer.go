@@ -40,7 +40,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 	case spec.DataVersionCapella:
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
-		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlock.Version))
+		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}
 }
 
@@ -65,7 +65,7 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 	case spec.DataVersionCapella:
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
-		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlock.Version))
+		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}
 }
 
