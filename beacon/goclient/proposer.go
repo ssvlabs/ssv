@@ -45,7 +45,28 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, committeeIndex phase0.Commi
 }
 
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	return nil, DataVersionNil, nil
+	sig := phase0.BLSSignature{}
+	copy(sig[:], randao[:])
+
+	reqStart := time.Now()
+	beaconBlock, err := gc.client.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
+	if err != nil {
+		return nil, 0, err
+	}
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+
+	if beaconBlock == nil {
+		return nil, 0, fmt.Errorf("block is nil")
+	}
+
+	switch beaconBlock.Version {
+	case spec.DataVersionBellatrix:
+		return beaconBlock.Bellatrix, beaconBlock.Version, nil
+	case spec.DataVersionCapella:
+		return beaconBlock.Capella, beaconBlock.Version, nil
+	default:
+		return nil, DataVersionNil, errors.New(fmt.Sprintf("beacon block version %s not supported", beaconBlock.Version))
+	}
 }
 
 func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBlock, sig phase0.BLSSignature) error {
