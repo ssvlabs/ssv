@@ -2,7 +2,6 @@ package fee_recipient
 
 import (
 	"context"
-	"sync/atomic"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,8 +13,6 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
-
-	"github.com/hashicorp/go-multierror"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -74,44 +71,61 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 	firstTimeSubmitted := false
 	for currentSlot := range slots {
 		// submit if first time or if first slot in epoch
-		slotsPerEpoch := rc.ethNetwork.SlotsPerEpoch()
-		if firstTimeSubmitted && uint64(currentSlot)%slotsPerEpoch != 0 {
+		if firstTimeSubmitted && uint64(currentSlot)%rc.ethNetwork.SlotsPerEpoch() != 0 {
 			continue
 		}
-
 		firstTimeSubmitted = true
-		// submit fee recipient
-		shares, err := rc.shareStorage.GetFilteredShares(logger, storage.ByOperatorIDAndActive(rc.operatorData.ID))
+
+		err := rc.prepareAndSubmit(logger, currentSlot)
 		if err != nil {
-			logger.Warn("could not get validators shares", zap.Error(err))
-			continue
-		}
-
-		var g multierror.Group
-		const batchSize = 500
-		var counter int32
-		for start, end := 0, 0; start <= len(shares)-1; start = end {
-			end = start + batchSize
-			if end > len(shares) {
-				end = len(shares)
-			}
-			batch := shares[start:end]
-
-			g.Go(func() error {
-				m, err := rc.toProposalPreparation(logger, batch)
-				if err != nil {
-					return errors.Wrap(err, "could not build proposal preparation")
-				}
-				atomic.AddInt32(&counter, int32(len(batch)))
-				return rc.beaconClient.SubmitProposalPreparation(m)
-			})
-		}
-		if err := g.Wait().ErrorOrNil(); err != nil {
-			logger.Warn("failed to submit proposal preparation", zap.Error(err))
-		} else {
-			logger.Debug("proposal preparation submitted", zap.Int32("count", atomic.LoadInt32(&counter)))
+			logger.Warn("could not submit proposal preparations", zap.Error(err))
 		}
 	}
+}
+
+func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
+	shares, err := rc.shareStorage.GetFilteredShares(logger, storage.ByOperatorIDAndActive(rc.operatorData.ID))
+	if err != nil {
+		return errors.Wrap(err, "could not get shares")
+	}
+
+	const batchSize = 500
+	var submitted int
+	for start := 0; start < len(shares); start += batchSize {
+		end := start + batchSize
+		if end > len(shares) {
+			end = len(shares)
+		}
+		batch := shares[start:end]
+
+		count, err := rc.submit(logger, batch)
+		if err != nil {
+			logger.Warn("could not submit proposal preparation batch",
+				zap.Int("start_index", start),
+				zap.Error(err),
+			)
+			continue
+		}
+		submitted += count
+	}
+
+	logger.Debug("✅ successfully submitted proposal preparations",
+		zap.Int("submitted", submitted),
+		zap.Int("total", len(shares)),
+	)
+	return nil
+}
+
+func (rc *recipientController) submit(logger *zap.Logger, shares []*types.SSVShare) (int, error) {
+	m, err := rc.toProposalPreparation(logger, shares)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not build proposal preparation batch")
+	}
+	err = rc.beaconClient.SubmitProposalPreparation(m)
+	if err != nil {
+		return 0, errors.Wrap(err, "could not submit proposal preparation batch")
+	}
+	return len(m), nil
 }
 
 func (rc *recipientController) toProposalPreparation(logger *zap.Logger, shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
