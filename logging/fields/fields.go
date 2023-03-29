@@ -2,12 +2,15 @@ package fields
 
 import (
 	"fmt"
+	"math/big"
 	"net"
 	"net/url"
 	"strconv"
 	"time"
 
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/utils/format"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -25,6 +28,8 @@ import (
 )
 
 const (
+	FieldABI                 = "abi"
+	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
@@ -33,17 +38,22 @@ const (
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
 	FieldCurrentSlot         = "current_slot"
+	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
+	FieldErrors              = "errors"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
+	FieldFork                = "fork"
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
 	FieldMessageID           = "message_id"
 	FieldMessageType         = "message_type"
 	FieldName                = "name"
+	FieldNetwork             = "network"
+	FieldNetworkID           = "network_id"
 	FieldOperatorId          = "operator_id"
 	FieldPeerID              = "peer_id"
 	FieldPrivateKey          = "privkey"
@@ -56,6 +66,7 @@ const (
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
 	FieldTargetNodeENR       = "target_node_enr"
+	FieldToBlock             = "to_block"
 	FieldTopic               = "topic"
 	FieldTxHash              = "tx_hash"
 	FieldUpdatedENRLocalNode = "updated_enr"
@@ -225,4 +236,36 @@ func DutyID(val string) zap.Field {
 
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
+}
+
+func Network(val string) zap.Field {
+	return zap.String(FieldNetwork, val)
+}
+
+func Domain(val spectypes.DomainType) zap.Field {
+	return zap.Stringer(FieldDomain, format.DomainType(val))
+}
+
+func NetworkID(val string) zap.Field {
+	return zap.String(FieldNetworkID, val)
+}
+
+func Fork(val forksprotocol.ForkVersion) zap.Field {
+	return zap.String(FieldFork, string(val))
+}
+
+func ABIVersion(val string) zap.Field {
+	return zap.String(FieldABIVersion, val)
+}
+
+func ABI(val string) zap.Field {
+	return zap.String(FieldABI, val)
+}
+
+func Errors(val []error) zap.Field {
+	return zap.Errors(FieldErrors, val)
+}
+
+func ToBlock(val *big.Int) zap.Field {
+	return zap.Int64(FieldToBlock, val.Int64())
 }

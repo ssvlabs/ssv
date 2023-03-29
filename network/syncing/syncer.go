@@ -2,7 +2,6 @@ package syncing
 
 import (
 	"context"
-	"encoding/hex"
 	"sync/atomic"
 	"time"
 
@@ -87,8 +86,8 @@ func (s *syncer) SyncHighestDecided(
 
 	logger = logger.With(
 		zap.String("what", "SyncHighestDecided"),
-		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
-		zap.String("role", id.GetRoleType().String()))
+		fields.PubKey(id.GetPubKey()),
+		fields.Role(id.GetRoleType()))
 
 	lastDecided, err := s.network.LastDecided(logger, id)
 	if err != nil {
@@ -133,8 +132,8 @@ func (s *syncer) SyncDecidedByRange(
 
 	logger = logger.With(
 		zap.String("what", "SyncDecidedByRange"),
-		zap.String("publicKey", hex.EncodeToString(id.GetPubKey())),
-		zap.String("role", id.GetRoleType().String()),
+		fields.PubKey(id.GetPubKey()),
+		fields.Role(id.GetRoleType()),
 		zap.Uint64("from", uint64(from)),
 		zap.Uint64("to", uint64(to)))
 	logger.Debug("syncing decided by range")

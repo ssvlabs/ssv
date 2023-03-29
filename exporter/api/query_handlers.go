@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -47,7 +48,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 
 	roleStorage := qbftStorage.Get(beaconRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", zap.String("role", beaconRole.String()))
+		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return

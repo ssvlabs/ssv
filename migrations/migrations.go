@@ -89,9 +89,8 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
 		applied++
-		logger.Info("migration applied successfully",
-			fields.Name(migration.Name),
-			zap.Duration("took", time.Since(start)))
+
+		logger.Info("migration applied successfully", fields.Name(migration.Name), fields.Duration(start))
 	}
 	if applied == 0 {
 		logger.Info("no migrations to apply")
