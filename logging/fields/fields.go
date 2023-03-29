@@ -41,7 +41,6 @@ const (
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
 	FieldDutyID              = "duty_id"
-	FieldDutyCount           = "duty_count"
 	FieldENR                 = "enr"
 	FieldErrors              = "errors"
 	FieldEvent               = "event"
@@ -237,10 +236,6 @@ func DutyID(val string) zap.Field {
 
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
-}
-
-func DutyCount(duties []*spectypes.Duty) zap.Field {
-	return zap.Int(FieldDutyCount, len(duties))
 }
 
 func Network(val string) zap.Field {
