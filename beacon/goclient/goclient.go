@@ -118,7 +118,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), zap.String("network", opt.Network))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.

@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -24,7 +25,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	}
 
 	logger.Debug("📬 got proposal message",
-		zap.Uint64("round", uint64(i.State.Round)),
+		fields.Round(i.State.Round),
 		zap.Any("proposal-signers", signedProposal.Signers))
 
 	newRound := signedProposal.Message.Round
@@ -50,7 +51,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
-		zap.Uint64("round", uint64(i.State.Round)),
+		fields.Round(i.State.Round),
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))
 

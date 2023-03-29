@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -25,7 +26,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 	}
 
 	logger.Debug("📬 got commit message",
-		zap.Uint64("round", uint64(i.State.Round)),
+		fields.Round(i.State.Round),
 		zap.Any("commit-signers", signedCommit.Signers))
 
 	// calculate commit quorum and act upon it
@@ -42,7 +43,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 		}
 
 		logger.Debug("🎯 got commit quorum",
-			zap.Uint64("round", uint64(i.State.Round)),
+			fields.Round(i.State.Round),
 			zap.Any("commit-signers", signedCommit.Signers),
 			zap.Any("agg-signers", agg.Signers))
 

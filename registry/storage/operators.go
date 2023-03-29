@@ -11,6 +11,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -135,7 +136,7 @@ func (s *operatorsStorage) SaveOperatorData(logger *zap.Logger, operatorData *Op
 	}
 	if found {
 		logger.Debug("operator already exist",
-			zap.String("pubKey", string(operatorData.PublicKey)),
+			fields.PubKey(operatorData.PublicKey),
 			zap.Uint64("index", operatorData.ID))
 		return found, nil
 	}

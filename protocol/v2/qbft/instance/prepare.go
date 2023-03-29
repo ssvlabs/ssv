@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -29,7 +30,7 @@ func (i *Instance) uponPrepare(
 	}
 
 	logger.Debug("📬 got prepare message",
-		zap.Uint64("round", uint64(i.State.Round)),
+		fields.Round(i.State.Round),
 		zap.Any("prepare-signers", signedPrepare.Signers))
 
 	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
@@ -54,7 +55,7 @@ func (i *Instance) uponPrepare(
 
 	// TODO: "prepare-signers" in log should log all unique signers or all prepare messages.
 	logger.Debug("📢 got prepare quorum, broadcasting commit message",
-		zap.Uint64("round", uint64(i.State.Round)),
+		fields.Round(i.State.Round),
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		zap.Any("commit-singers", commitMsg.Signers))
 

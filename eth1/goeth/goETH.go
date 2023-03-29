@@ -299,7 +299,7 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 }
 
 func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlock *big.Int, contractAbi abi.ABI) ([]types.Log, int, error) {
-	logger = logger.With(zap.Int64("fromBlock", fromBlock.Int64()))
+	logger = logger.With(fields.FromBlock(fromBlock))
 	contractAddress := common.HexToAddress(ec.registryContractAddr)
 	query := ethereum.FilterQuery{
 		Addresses: []common.Address{contractAddress},
@@ -307,7 +307,7 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 	}
 	if toBlock != nil {
 		query.ToBlock = toBlock
-		logger = logger.With(zap.Int64("toBlock", toBlock.Int64()))
+		logger = logger.With(fields.ToBlock(toBlock))
 	}
 	logger.Debug("fetching event logs")
 	logs, err := ec.conn.FilterLogs(ec.ctx, query)

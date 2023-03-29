@@ -401,7 +401,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 	for _, validatorShare := range shares {
 		isStarted, err := c.onShareStart(logger, validatorShare)
 		if err != nil {
-			logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)), zap.Error(err))
+			logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if !isStarted && err == nil {
@@ -572,7 +572,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 			return nil, errors.New("could not decode shareSecret")
 		}
 
-		logger := logger.With(zap.String("pubKey", hex.EncodeToString(share.ValidatorPubKey)))
+		logger := logger.With(fields.PubKey(share.ValidatorPubKey))
 
 		// get metadata
 		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {

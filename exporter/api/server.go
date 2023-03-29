@@ -67,9 +67,8 @@ func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 			logger.Debug("failed to pull messages from feed")
 		}
 	}()
-	logger.Info("starting",
-		zap.String("addr", addr),
-		zap.Strings("endPoints", []string{"/query", "/stream"}))
+
+	logger.Info("starting", fields.Address(addr), zap.Strings("endPoints", []string{"/query", "/stream"}))
 
 	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 	// nolint: gosec

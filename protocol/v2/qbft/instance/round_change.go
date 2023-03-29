@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -30,8 +31,8 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger.Debug("🔄 got change round",
-		zap.Uint64("round", uint64(i.State.Round)),
-		zap.Uint64("height", uint64(i.State.Height)),
+		fields.Round(i.State.Round),
+		fields.Height(i.State.Height),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
 
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
@@ -59,7 +60,7 @@ func (i *Instance) uponRoundChange(
 		}
 
 		logger.Debug("📢 got justified change round, broadcasting proposal message",
-			zap.Uint64("round", uint64(i.State.Round)))
+			fields.Round(i.State.Round))
 
 		if err := i.Broadcast(logger, proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
