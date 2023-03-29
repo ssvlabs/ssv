@@ -150,9 +150,8 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 		V1: &eth2apiv1.SignedValidatorRegistration{
 			Message: &eth2apiv1.ValidatorRegistration{
 				FeeRecipient: feeRecipient,
-				// From Lighthouse at https://github.com/realbigsean/lighthouse/blob/c7f19354d5b9da257f2416488d131c887ef53640/validator_client/src/preparation_service.rs#L269-L270
-				//	TODO(sean) this is geth's default, we should make this configurable and maybe have the default be dynamic.
-				//	Discussion here: https://github.com/ethereum/builder-specs/issues/17
+				// TODO: This is a reasonable default, but we should probably make this configurable.
+				//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
 				GasLimit:  30_000_000,
 				Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
 				Pubkey:    pk,
