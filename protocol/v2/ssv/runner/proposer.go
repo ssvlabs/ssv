@@ -94,13 +94,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			return errors.Wrap(err, "failed to get Beacon block")
+			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			return errors.Wrap(err, "failed to get Beacon block")
+			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
 
