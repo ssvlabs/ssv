@@ -1,10 +1,10 @@
 package cli
 
 import (
+	"encoding/base64"
 	"log"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -24,8 +24,8 @@ var generateOperatorKeysCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("Failed to generate operator keys", zap.Error(err))
 		}
-		logger.Info("generated public key (base64)", fields.PubKey(pk))
-		logger.Info("generated private key (base64)", fields.PrivKey(sk))
+		logger.Info("generated public key (base64)", zap.String("pk", base64.StdEncoding.EncodeToString(pk)))
+		logger.Info("generated private key (base64)", zap.String("sk", base64.StdEncoding.EncodeToString(sk)))
 	},
 }
 
