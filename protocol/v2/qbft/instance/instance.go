@@ -70,6 +70,9 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				logger.Warn("❗ failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
+				logger.Debug("📢 broadcasting proposal message",
+					zap.Uint64("round", uint64(i.State.Round)),
+					zap.Any("proposal-signers", proposal.Signers))
 				// nolint
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
