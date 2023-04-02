@@ -72,7 +72,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 			} else {
 				logger.Debug("📢 broadcasting proposal message",
 					zap.Uint64("round", uint64(i.State.Round)),
-					zap.Any("proposal-signers", proposal.Signers))
+					zap.Uint64("proposal-signers", proposal.Signers[0]))
 				// nolint
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
