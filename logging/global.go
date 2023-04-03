@@ -1,12 +1,29 @@
 package logging
 
 import (
-	"fmt"
+	"gopkg.in/natefinch/lumberjack.v2"
+	"io"
+	"os"
 	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+var logFileWriter io.Writer
+
+// TODO: Log rotation out of the app
+func getFileWriter(logFileName string) io.Writer {
+	fileLogger := &lumberjack.Logger{
+		Filename:   logFileName,
+		MaxSize:    500, // megabytes
+		MaxBackups: 3,
+		MaxAge:     28, // days
+		Compress:   false,
+	}
+
+	return fileLogger
+}
 
 func parseConfigLevel(levelName string) (zapcore.Level, error) {
 	return zapcore.ParseLevel(levelName)
@@ -25,6 +42,10 @@ func parseConfigLevelEncoder(levelEncoderName string) zapcore.LevelEncoder {
 	}
 }
 
+func SetLogFilename(name string) {
+	logFileWriter = getFileWriter(name)
+}
+
 func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string) error {
 	level, err := parseConfigLevel(levelName)
 	if err != nil {
@@ -32,6 +53,10 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	}
 
 	levelEncoder := parseConfigLevelEncoder(levelEncoderName)
+
+	lv := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return lvl >= level
+	})
 
 	cfg := zap.Config{
 		Encoding:    logFormat,
@@ -53,12 +78,20 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		},
 	}
 
-	globalLogger, err := cfg.Build()
-	if err != nil {
-		return fmt.Errorf("err making logger: %w", err)
+	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
+
+	if logFileWriter == nil {
+		SetLogFilename("debug.log")
 	}
 
-	zap.ReplaceGlobals(globalLogger)
+	lv2 := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+		return true // debug log returns all logs
+	})
+
+	dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
+	fileCore := zapcore.NewCore(dev, zapcore.AddSync(logFileWriter), lv2)
+
+	zap.ReplaceGlobals(zap.New(zapcore.NewTee(consoleCore, fileCore)))
 
 	return nil
 }
