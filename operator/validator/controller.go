@@ -722,7 +722,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BlindedSupport // apply blinded block flag
+			//runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BlindedSupport // apply blinded block flag
+			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = false
 		case spectypes.BNRoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)
