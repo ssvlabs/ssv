@@ -96,7 +96,7 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
 	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
-	GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
+	GetOperatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
@@ -247,8 +247,8 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 	return nil
 }
 
-func (c *controller) GetAllValidatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.sharesStorage.GetAllShares(logger)
+func (c *controller) GetOperatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
+	return c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndActive(c.operatorData.ID))
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {

@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -18,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -253,7 +252,7 @@ func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot p
 	if slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0 {
 		return
 	}
-	shares, err := dc.validatorController.GetAllValidatorShares(logger) // TODO better to fetch only active validators
+	shares, err := dc.validatorController.GetOperatorShares(logger)
 	if err != nil {
 		logger.Warn("failed to get all validators share", zap.Error(err))
 		return
@@ -268,7 +267,7 @@ func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot p
 			// no need for other params
 		})
 	}
-	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)))
+	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(len(shares)))
 }
 
 // handleSyncCommittee preform the following processes -
