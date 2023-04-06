@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -45,6 +46,11 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 }
 
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	// fallback for prysm, just for testing, TODO: remove
+	if !strings.Contains(gc.client.Address(), "-lh-") {
+		return gc.GetBeaconBlock(slot, graffiti, randao)
+	}
+
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
