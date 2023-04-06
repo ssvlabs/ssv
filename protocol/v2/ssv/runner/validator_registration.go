@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -20,10 +21,11 @@ import (
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   specssv.BeaconNode
-	network  specssv.Network
-	signer   spectypes.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	beacon         specssv.BeaconNode
+	network        specssv.Network
+	signer         spectypes.KeyManager
+	valCheck       qbft.ProposedValueCheckF
+	lastRegistered *hashmap.Map[string, phase0.Epoch]
 }
 
 func NewValidatorRegistrationRunner(
@@ -42,9 +44,10 @@ func NewValidatorRegistrationRunner(
 			QBFTController: qbftController,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
+		beacon:         beacon,
+		network:        network,
+		signer:         signer,
+		lastRegistered: hashmap.New[string, phase0.Epoch](),
 	}
 }
 
@@ -57,6 +60,9 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
+// TODO: define a common constant
+const validatorRegistrationEpochInterval = 10
+
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
@@ -68,20 +74,33 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		return nil
 	}
 
-	// only 1 root, verified in basePreConsensusMsgProcessing
-	root := roots[0]
-	// randao is relevant only for block proposals, no need to check type
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not reconstruct randao sig")
-	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], fullSig)
+	currentEpoch := r.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()
+	pubKey := r.GetShare().ValidatorPubKey
+	if prevEpoch, ok := r.lastRegistered.Get(string(pubKey)); ok && currentEpoch-prevEpoch >= validatorRegistrationEpochInterval {
+		// only 1 root, verified in basePreConsensusMsgProcessing
+		root := roots[0]
+		// randao is relevant only for block proposals, no need to check type
+		fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, pubKey)
+		if err != nil {
+			return errors.Wrap(err, "could not reconstruct randao sig")
+		}
+		specSig := phase0.BLSSignature{}
+		copy(specSig[:], fullSig)
 
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-		return errors.Wrap(err, "could not submit validator registration")
+		if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+			return errors.Wrap(err, "could not submit validator registration")
+		}
+
+		// not reusing epoch in case if it was changed
+		r.lastRegistered.Set(string(pubKey), r.beacon.GetBeaconNetwork().EstimatedCurrentEpoch())
+
+		logger.Debug("validator registration submitted successfully")
+	} else {
+		logger.Debug("not registering validator: recently registered",
+			zap.Uint64("current_epoch", uint64(currentEpoch)),
+			zap.Uint64("prev_epoch", uint64(prevEpoch)),
+		)
 	}
-	logger.Debug("validator registration submitted successfully")
 
 	r.GetState().Finished = true
 	return nil
