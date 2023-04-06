@@ -3,8 +3,13 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -21,12 +26,20 @@ import (
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         specssv.BeaconNode
-	network        specssv.Network
-	signer         spectypes.KeyManager
-	valCheck       qbft.ProposedValueCheckF
-	lastRegistered *hashmap.Map[string, phase0.Epoch]
+	beacon                  specssv.BeaconNode
+	network                 specssv.Network
+	signer                  spectypes.KeyManager
+	valCheck                qbft.ProposedValueCheckF
+	lastRegistered          *hashmap.Map[string, phase0.Epoch]
+	registrationSubmissions chan api.VersionedSignedValidatorRegistration
+	submissionErrors        *hashmap.Map[string, chan error] // TODO: implement
 }
+
+const (
+	submissionsLimit   = 500
+	submissionInterval = 500 * time.Millisecond
+	batchSubmission    = true // experimental
+)
 
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
@@ -36,7 +49,7 @@ func NewValidatorRegistrationRunner(
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
-	return &ValidatorRegistrationRunner{
+	r := &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
@@ -44,11 +57,108 @@ func NewValidatorRegistrationRunner(
 			QBFTController: qbftController,
 		},
 
-		beacon:         beacon,
-		network:        network,
-		signer:         signer,
-		lastRegistered: hashmap.New[string, phase0.Epoch](),
+		beacon:                  beacon,
+		network:                 network,
+		signer:                  signer,
+		lastRegistered:          hashmap.New[string, phase0.Epoch](),
+		submissionErrors:        hashmap.New[string, chan error](),
+		registrationSubmissions: make(chan api.VersionedSignedValidatorRegistration, submissionsLimit),
 	}
+
+	if batchSubmission {
+		go r.startRegistrationSubmitter()
+	}
+
+	return r
+}
+
+func (r *ValidatorRegistrationRunner) startRegistrationSubmitter() {
+	t := time.NewTicker(submissionInterval)
+	defer t.Stop()
+
+	registrationList := make([]*api.VersionedSignedValidatorRegistration, 0, submissionsLimit)
+	errorChanList := make([]chan error, 0)
+
+	submit := func() {
+		if err := r.beacon.SubmitValidatorRawRegistrations(registrationList); err != nil {
+			for _, ch := range errorChanList {
+				go func(ch chan<- error, err error) {
+					ch <- err
+					close(ch)
+				}(ch, err)
+			}
+		}
+		registrationList = make([]*api.VersionedSignedValidatorRegistration, 0, submissionsLimit)
+	}
+
+	for {
+		select {
+		case <-t.C:
+			submit()
+		case registration := <-r.registrationSubmissions:
+			registrationList = append(registrationList, &registration)
+			if h, err := r.hashRegistration(registration); err != nil {
+				// TODO: handle error
+			} else if ch, ok := r.submissionErrors.Get(string(h)); ok && ch != nil {
+				errorChanList = append(errorChanList, ch)
+			}
+
+			if len(registrationList) >= submissionsLimit {
+				submit()
+				t.Reset(submissionInterval)
+			}
+		}
+	}
+}
+
+func (r *ValidatorRegistrationRunner) submitRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	registration := api.VersionedSignedValidatorRegistration{
+		Version: spec.BuilderVersionV1,
+		V1: &eth2apiv1.SignedValidatorRegistration{
+			Message: &eth2apiv1.ValidatorRegistration{
+				FeeRecipient: feeRecipient,
+				// TODO: This is a reasonable default, but we should probably make this configurable.
+				//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
+				GasLimit:  30_000_000,
+				Timestamp: r.beacon.GetBeaconNetwork().EpochStartTime(r.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()),
+				Pubkey:    *(*phase0.BLSPubKey)(pubkey),
+			},
+			Signature: sig,
+		},
+	}
+
+	h, err := r.hashRegistration(registration)
+	if err != nil {
+		return fmt.Errorf("hash registration: %w", err)
+	}
+
+	errCh := make(chan error, 1)
+	r.submissionErrors.Set(string(h), errCh)
+
+	go func() {
+		r.registrationSubmissions <- registration
+	}()
+
+	waitDuration := submissionInterval * 2
+	t := time.NewTimer(waitDuration)
+	defer t.Stop()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-t.C:
+		return fmt.Errorf("timeout waiting for registration submission result")
+	}
+}
+
+func (r *ValidatorRegistrationRunner) hashRegistration(registration api.VersionedSignedValidatorRegistration) ([]byte, error) {
+	bytes, err := json.Marshal(registration)
+	if err != nil {
+		return nil, err
+	}
+
+	h := sha256.Sum256(bytes)
+	return h[:], nil
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
@@ -87,8 +197,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], fullSig)
 
-		if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-			return errors.Wrap(err, "could not submit validator registration")
+		if batchSubmission {
+			if err := r.submitRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+				return errors.Wrap(err, "could not submit batched validator registration")
+			}
+		} else {
+			if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+				return errors.Wrap(err, "could not submit validator registration")
+			}
 		}
 
 		// not reusing epoch in case if it was changed

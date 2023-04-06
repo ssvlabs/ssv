@@ -162,6 +162,39 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
 }
 
+type ValidatorRegistration struct {
+	PubKey       []byte
+	FeeRecipient bellatrix.ExecutionAddress
+	Sig          phase0.BLSSignature
+}
+
+func (gc *goClient) SubmitValidatorRegistrationBatched(pubkeys [][]byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
+
+	for _, pk := range pubkeys {
+		registrations = append(registrations, &api.VersionedSignedValidatorRegistration{
+			Version: spec.BuilderVersionV1,
+			V1: &eth2apiv1.SignedValidatorRegistration{
+				Message: &eth2apiv1.ValidatorRegistration{
+					FeeRecipient: feeRecipient,
+					// TODO: This is a reasonable default, but we should probably make this configurable.
+					//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
+					GasLimit:  30_000_000,
+					Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+					Pubkey:    *(*phase0.BLSPubKey)(pk), // TODO: use phase0.BLSPubKey(pk) in Go 1.20
+				},
+				Signature: sig,
+			},
+		})
+	}
+
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+}
+
+func (gc *goClient) SubmitValidatorRawRegistrations(registrations []*api.VersionedSignedValidatorRegistration) error {
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+}
+
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 	var preparations []*eth2apiv1.ProposalPreparation
 	for index, recipient := range feeRecipients {
