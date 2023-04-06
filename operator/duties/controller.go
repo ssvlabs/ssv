@@ -32,6 +32,7 @@ import (
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
+var validatorRegistrationEpochInterval = uint64(10)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -246,9 +247,7 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 }
 
 func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
-	const validatorRegistrationEpochInterval = uint64(25)
-
-	// push if first time or every validatorRegistrationEpochInterval epochs at first slot
+	// push if first time or every 10 epoch at first slot
 	epoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
 	firstSlot := dc.ethNetwork.GetEpochFirstSlot(epoch)
 	if slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0 {
