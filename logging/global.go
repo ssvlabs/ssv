@@ -11,8 +11,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var logFileWriter io.Writer
-
 // TODO: Log rotation out of the app
 func getFileWriter(logFileName string) io.Writer {
 	fileLogger := &lumberjack.Logger{
@@ -43,11 +41,7 @@ func parseConfigLevelEncoder(levelEncoderName string) zapcore.LevelEncoder {
 	}
 }
 
-func SetLogFilename(name string) {
-	logFileWriter = getFileWriter(name)
-}
-
-func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string) error {
+func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string, logFilePath string) error {
 	level, err := parseConfigLevel(levelName)
 	if err != nil {
 		return err
@@ -81,9 +75,12 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 
 	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
 
-	if logFileWriter == nil {
-		SetLogFilename("debug.log")
+	if logFilePath == "" {
+		zap.ReplaceGlobals(zap.New(consoleCore))
+		return nil
 	}
+
+	logFileWriter := getFileWriter(logFilePath)
 
 	lv2 := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return true // debug log returns all logs
