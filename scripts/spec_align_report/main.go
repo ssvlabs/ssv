@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	if err := utils.CloneSpec("V0.2.8", ""); err != nil {
+	if err := utils.CloneSpec("main", ""); err != nil {
 		fmt.Println(err)
 		return
 	}
