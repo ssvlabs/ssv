@@ -11,7 +11,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-const ssvSpecRepo = "git@github.com:bloxapp/ssv-spec.git"
+const ssvSpecRepo = "https://github.com/bloxapp/ssv-spec"
 const ssvSpecPath = "./scripts/spec_align_report/ssv-spec"
 
 func CloneSpec(tag string, commit string) error {
