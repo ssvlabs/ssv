@@ -38,7 +38,7 @@ type ValidatorRegistrationRunner struct {
 const (
 	submissionsLimit   = 500
 	submissionInterval = 500 * time.Millisecond
-	batchSubmission    = false // experimental
+	batchSubmission    = true // experimental
 )
 
 func NewValidatorRegistrationRunner(
