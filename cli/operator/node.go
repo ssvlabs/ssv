@@ -323,6 +323,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+
 	cl, err := goclient.New(logger, cfg.ETH2Options)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),

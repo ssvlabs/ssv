@@ -14,13 +14,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -118,6 +118,10 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
+	if opt.BeaconNodeAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" {
+		opt.BeaconNodeAddr = "http://eth2-testnet-stage-lh-5052.blockchain.bloxinfra.com:80"
+	}
+
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
