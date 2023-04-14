@@ -244,7 +244,7 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 	}
 
 	dc.handleSyncCommittee(logger, slot, syncPeriod)
-	dc.handleValidatorRegistration(logger, slot)
+	//dc.handleValidatorRegistration(logger, slot)
 }
 
 func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
