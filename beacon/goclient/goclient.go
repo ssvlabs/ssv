@@ -118,7 +118,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
-	if opt.BeaconNodeAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" || opt.BeaconNodeAddr == "http://eth2-testnet-prod.blockchain.bloxinfra.com:80" {
+	if opt.BeaconNodeAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" {
 		opt.BeaconNodeAddr = "http://eth2-testnet-stage-lh-5052.blockchain.bloxinfra.com:80"
 	}
 
