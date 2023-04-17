@@ -69,9 +69,10 @@ type dutyController struct {
 	ticker              slot_ticker.Ticker
 
 	// sync committee duties map [period, map[index, duty]]
-	syncCommitteeDutiesMap   *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
-	lastBlockEpoch           phase0.Epoch
-	currentDutyDependentRoot phase0.Root
+	syncCommitteeDutiesMap            *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
+	lastBlockEpoch                    phase0.Epoch
+	currentDutyDependentRoot          phase0.Root
+	validatorsPassedFirstRegistration map[string]struct{}
 }
 
 var secPerSlot int64 = 12
@@ -88,7 +89,8 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
 
-		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
+		syncCommitteeDutiesMap:            hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
+		validatorsPassedFirstRegistration: map[string]struct{}{},
 	}
 	return &dc
 }
@@ -248,28 +250,43 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 }
 
 func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
-	// push if first time or every 10 epoch at first slot
-	epoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
-	firstSlot := dc.ethNetwork.GetEpochFirstSlot(epoch)
-	if slot != firstSlot || uint64(epoch)%validatorRegistrationEpochInterval != 0 {
-		return
-	}
 	shares, err := dc.validatorController.GetOperatorShares(logger)
 	if err != nil {
 		logger.Warn("failed to get all validators share", zap.Error(err))
 		return
 	}
+
+	sent := 0
 	for _, share := range shares {
+		if !share.HasBeaconMetadata() {
+			continue
+		}
+
+		// if not passed first registration, should be registered within one epoch time in a corresponding slot
+		// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
+		registrationSlotInterval := dc.ethNetwork.SlotsPerEpoch()
+		if _, ok := dc.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)]; ok {
+			registrationSlotInterval *= validatorRegistrationEpochInterval
+		}
+
+		if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+			continue
+		}
+
 		pk := phase0.BLSPubKey{}
 		copy(pk[:], share.ValidatorPubKey)
+
 		go dc.onDuty(logger, &spectypes.Duty{
 			Type:   spectypes.BNRoleValidatorRegistration,
 			PubKey: pk,
 			Slot:   slot,
 			// no need for other params
 		})
+
+		sent++
+		dc.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)] = struct{}{}
 	}
-	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(len(shares)))
+	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
 }
 
 // handleSyncCommittee preform the following processes -
