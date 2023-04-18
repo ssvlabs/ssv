@@ -49,7 +49,7 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 	copy(sig[:], randao[:])
 
 	reqStart := time.Now()
-	beaconBlock, err := gc.client.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
+	beaconBlock, err := gc.blindedClient.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -94,7 +94,7 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 		return errors.New("unknown block version")
 	}
 
-	return gc.client.SubmitBlindedBeaconBlock(gc.ctx, signedBlock)
+	return gc.blindedClient.SubmitBlindedBeaconBlock(gc.ctx, signedBlock)
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -159,6 +159,7 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 			Signature: sig,
 		},
 	}
+	// TODO: blindedClient?
 	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
 }
 

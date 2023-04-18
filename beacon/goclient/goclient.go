@@ -14,13 +14,13 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -109,6 +109,7 @@ type goClient struct {
 	ctx            context.Context
 	network        beaconprotocol.Network
 	client         Client
+	blindedClient  Client
 	indicesMapLock sync.Mutex
 	graffiti       []byte
 }
@@ -127,6 +128,23 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 		http.WithLogLevel(zerolog.DebugLevel),
 		http.WithTimeout(time.Second*5),
 	)
+
+	blindedAddr := opt.BeaconNodeAddr
+	if blindedAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" {
+		blindedAddr = "http://eth2-testnet-stage-lh-5052.blockchain.bloxinfra.com:80"
+	}
+	if blindedAddr == "http://eth2-testnet-prod.blockchain.bloxinfra.com:80" {
+		blindedAddr = "http://eth2-testnet-prod-lh-5052.blockchain.bloxinfra.com:80"
+	}
+
+	blindedHTTPClient, err := http.New(opt.Context,
+		// WithAddress supplies the address of the beacon node, in host:port format.
+		http.WithAddress(blindedAddr),
+		// LogLevel supplies the level of logging to carry out.
+		http.WithLogLevel(zerolog.DebugLevel),
+		http.WithTimeout(time.Second*5),
+	)
+
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
@@ -138,6 +156,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 		ctx:            opt.Context,
 		network:        network,
 		client:         httpClient.(*http.Service),
+		blindedClient:  blindedHTTPClient.(*http.Service),
 		indicesMapLock: sync.Mutex{},
 		graffiti:       opt.Graffiti,
 	}
