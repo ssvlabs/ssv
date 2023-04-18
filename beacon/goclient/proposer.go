@@ -171,9 +171,10 @@ func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecip
 	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
 
-	shouldSubmit := currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch &&
-		len(gc.postponedRegistrations) != 0 &&
-		currentSlot%slotsPerEpoch == gc.operatorID%slotsPerEpoch
+	shouldSubmit := len(gc.postponedRegistrations) != 0 &&
+		(currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch &&
+			currentSlot%slotsPerEpoch == gc.operatorID%slotsPerEpoch ||
+			currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch+gc.operatorID%slotsPerEpoch)
 
 	if shouldSubmit {
 		const batchSize = 500
