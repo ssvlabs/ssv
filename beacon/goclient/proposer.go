@@ -168,7 +168,7 @@ func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecip
 	gc.postponedRegistrationsMu.Lock()
 	defer gc.postponedRegistrationsMu.Unlock()
 
-	currentSlot := uint64(gc.network.EstimatedCurrentEpoch())
+	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
 
 	shouldSubmit := currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch &&
