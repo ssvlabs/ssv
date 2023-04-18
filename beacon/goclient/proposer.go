@@ -159,8 +159,7 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 			Signature: sig,
 		},
 	}
-	// TODO: blindedClient?
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
+	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
 }
 
 type ValidatorRegistration struct {
@@ -189,11 +188,11 @@ func (gc *goClient) SubmitValidatorRegistrationBatched(pubkeys [][]byte, feeReci
 		})
 	}
 
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, registrations)
 }
 
 func (gc *goClient) SubmitValidatorRawRegistrations(registrations []*api.VersionedSignedValidatorRegistration) error {
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, registrations)
 }
 
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
