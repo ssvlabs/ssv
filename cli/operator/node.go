@@ -99,7 +99,7 @@ var StartNodeCmd = &cobra.Command{
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger)
+		el, cl := setupNodes(logger, operatorData.ID)
 
 		ctx := cmd.Context()
 		cfg.SSVOptions.ForkVersion = forkVersion
@@ -320,10 +320,10 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
-	cl, err := goclient.New(logger, cfg.ETH2Options)
+	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))

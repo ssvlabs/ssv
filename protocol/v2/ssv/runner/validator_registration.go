@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/cornelk/hashmap"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -18,14 +17,15 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+const batch = true
+
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon           specssv.BeaconNode
-	network          specssv.Network
-	signer           spectypes.KeyManager
-	valCheck         qbft.ProposedValueCheckF
-	submissionErrors *hashmap.Map[string, chan error] // TODO: implement
+	beacon   specssv.BeaconNode
+	network  specssv.Network
+	signer   spectypes.KeyManager
+	valCheck qbft.ProposedValueCheckF
 }
 
 func NewValidatorRegistrationRunner(
@@ -44,10 +44,9 @@ func NewValidatorRegistrationRunner(
 			QBFTController: qbftController,
 		},
 
-		beacon:           beacon,
-		network:          network,
-		signer:           signer,
-		submissionErrors: hashmap.New[string, chan error](),
+		beacon:  beacon,
+		network: network,
+		signer:  signer,
 	}
 
 	return r
@@ -83,8 +82,14 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-		return errors.Wrap(err, "could not submit validator registration")
+	if batch {
+		if err := r.beacon.SubmitValidatorRegistrationPostponed(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+			return errors.Wrap(err, "could not submit validator registration postponed")
+		}
+	} else {
+		if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+			return errors.Wrap(err, "could not submit validator registration")
+		}
 	}
 
 	logger.Debug("validator registration submitted successfully")

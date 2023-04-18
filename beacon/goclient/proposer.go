@@ -16,6 +16,8 @@ import (
 
 	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
@@ -160,6 +162,62 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 		},
 	}
 	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
+}
+
+func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	gc.postponedRegistrationsMu.Lock()
+	defer gc.postponedRegistrationsMu.Unlock()
+
+	currentSlot := uint64(gc.network.EstimatedCurrentEpoch())
+	slotsPerEpoch := gc.network.SlotsPerEpoch()
+
+	shouldSubmit := currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch &&
+		len(gc.postponedRegistrations) != 0 &&
+		currentSlot%slotsPerEpoch == gc.operatorID%slotsPerEpoch
+
+	if shouldSubmit {
+		const batchSize = 500
+
+		for len(gc.postponedRegistrations) > 0 {
+			bs := batchSize
+			if bs > len(gc.postponedRegistrations) {
+				bs = len(gc.postponedRegistrations)
+			}
+
+			if err := gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, gc.postponedRegistrations[0:bs]); err != nil {
+				return err
+			}
+
+			gc.log.Info("submitted postponed validator registrations", fields.Count(bs))
+
+			gc.postponedRegistrations = gc.postponedRegistrations[bs:]
+		}
+
+		gc.lastRegistrationSlot.Store(currentSlot)
+
+		return nil
+	}
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], pubkey)
+	signedReg := &api.VersionedSignedValidatorRegistration{
+		Version: spec.BuilderVersionV1,
+		V1: &eth2apiv1.SignedValidatorRegistration{
+			Message: &eth2apiv1.ValidatorRegistration{
+				FeeRecipient: feeRecipient,
+				// TODO: This is a reasonable default, but we should probably make this configurable.
+				//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
+				GasLimit:  30_000_000,
+				Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+				Pubkey:    pk,
+			},
+			Signature: sig,
+		},
+	}
+
+	gc.postponedRegistrations = append(gc.postponedRegistrations, signedReg)
+
+	return nil
 }
 
 type ValidatorRegistration struct {

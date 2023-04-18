@@ -6,9 +6,11 @@ import (
 	"log"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -106,19 +108,23 @@ type Client interface {
 
 // goClient implementing Beacon struct
 type goClient struct {
-	ctx            context.Context
-	network        beaconprotocol.Network
-	client         Client
-	blindedClient  Client
-	indicesMapLock sync.Mutex
-	graffiti       []byte
+	log                      *zap.Logger
+	ctx                      context.Context
+	network                  beaconprotocol.Network
+	client                   Client
+	blindedClient            Client
+	graffiti                 []byte
+	operatorID               spectypes.OperatorID
+	postponedRegistrations   []*api.VersionedSignedValidatorRegistration
+	postponedRegistrationsMu sync.Mutex
+	lastRegistrationSlot     atomic.Uint64
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID) (beaconprotocol.Beacon, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
@@ -153,12 +159,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
-		ctx:            opt.Context,
-		network:        network,
-		client:         httpClient.(*http.Service),
-		blindedClient:  blindedHTTPClient.(*http.Service),
-		indicesMapLock: sync.Mutex{},
-		graffiti:       opt.Graffiti,
+		log:           logger,
+		ctx:           opt.Context,
+		network:       network,
+		client:        httpClient.(*http.Service),
+		blindedClient: blindedHTTPClient.(*http.Service),
+		graffiti:      opt.Graffiti,
+		operatorID:    operatorID,
 	}
 
 	return _client, nil
