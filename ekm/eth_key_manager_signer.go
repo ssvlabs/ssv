@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -114,7 +115,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 					Capella: v,
 				}
 			default:
-				return nil, nil, errors.New("obj type is unknown")
+				return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 			}
 			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		}
