@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -14,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -93,7 +93,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		}
 	}
 
-	logger.Debug("validator registration submitted successfully", zap.String("fee_recipient", hex.EncodeToString(r.BaseRunner.Share.FeeRecipientAddress[:])))
+	logger.Debug("validator registration submitted successfully", fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]))
 
 	r.GetState().Finished = true
 	return nil

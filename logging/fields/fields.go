@@ -8,23 +8,23 @@ import (
 	"strconv"
 	"time"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -72,6 +72,7 @@ const (
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
+	FieldFeeRecipient        = "fee_recipient"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -268,4 +269,8 @@ func Errors(val []error) zap.Field {
 
 func ToBlock(val *big.Int) zap.Field {
 	return zap.Int64(FieldToBlock, val.Int64())
+}
+
+func FeeRecipient(pubKey []byte) zap.Field {
+	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }

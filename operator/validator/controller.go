@@ -622,7 +622,7 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 
 	}
 
-	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
+	if err := SetShareFeeRecipient(logger, share, c.recipientsStorage.GetRecipientData); err != nil {
 		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 

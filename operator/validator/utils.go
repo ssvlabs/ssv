@@ -15,6 +15,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -105,15 +106,19 @@ func ShareFromValidatorEvent(
 	return &validatorShare, shareSecret, nil
 }
 
-func SetShareFeeRecipient(share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
+func SetShareFeeRecipient(logger *zap.Logger, share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
 	var feeRecipient bellatrix.ExecutionAddress
 	data, found, err := getRecipientData(share.OwnerAddress)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
 	if !found {
+		logger.Debug("setting fee recipient to owner address",
+			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(share.OwnerAddress.Bytes()))
 		copy(feeRecipient[:], share.OwnerAddress.Bytes())
 	} else {
+		logger.Debug("setting fee recipient to storage data",
+			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(data.FeeRecipient[:]))
 		feeRecipient = data.FeeRecipient
 	}
 	share.SetFeeRecipient(feeRecipient)
