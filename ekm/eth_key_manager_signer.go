@@ -143,7 +143,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				Capella: v,
 			}
 		default:
-			return nil, nil, errors.New("obj type is unknown")
+			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
@@ -194,7 +194,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				V1:      v,
 			}
 		default:
-			return nil, nil, errors.New("obj type is unknown")
+			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 		return km.signer.SignRegistration(data, domain, pk)
 	default:
