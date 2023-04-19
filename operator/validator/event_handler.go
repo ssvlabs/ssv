@@ -340,7 +340,6 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	if ongoingSync && r != nil {
 		_ = c.validatorsMap.ForEach(func(v *validator.Validator) error {
 			if bytes.Equal(v.Share.OwnerAddress.Bytes(), r.Owner.Bytes()) {
-				v.Share.FeeRecipient = r.FeeRecipient
 				v.Share.FeeRecipientAddress = r.FeeRecipient
 			}
 			return nil

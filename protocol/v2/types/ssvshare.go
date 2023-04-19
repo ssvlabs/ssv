@@ -53,7 +53,6 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 }
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
-	s.FeeRecipient = feeRecipient
 	s.FeeRecipientAddress = feeRecipient
 }
 
@@ -85,5 +84,4 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
-	FeeRecipient   bellatrix.ExecutionAddress // TODO: remove?
 }

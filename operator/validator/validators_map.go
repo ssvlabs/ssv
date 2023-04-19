@@ -121,7 +121,6 @@ func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 		fields.PubKey(s.ValidatorPubKey),
 		zap.Uint64("node_id", s.OperatorID),
 		zap.Strings("committee", committee),
-		zap.String("FeeRecipientAddress", hex.EncodeToString(s.FeeRecipientAddress[:])),
-		zap.String("FeeRecipient", hex.EncodeToString(s.FeeRecipient[:])),
+		fields.FeeRecipient(s.FeeRecipientAddress[:]),
 	)
 }
