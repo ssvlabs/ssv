@@ -54,6 +54,7 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipient = feeRecipient
+	s.FeeRecipientAddress = feeRecipient
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
@@ -84,5 +85,5 @@ type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata
 	OwnerAddress   common.Address
 	Liquidated     bool
-	FeeRecipient   bellatrix.ExecutionAddress
+	FeeRecipient   bellatrix.ExecutionAddress // TODO: remove?
 }
