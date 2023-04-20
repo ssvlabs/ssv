@@ -11,8 +11,10 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -20,7 +22,9 @@ import (
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	f := genesis.ForkGenesis{}
-	mv := NewSSVMsgValidator(&f)
+	mv := validation.NewMessageValidator(context.Background(), zap.NewNop(), &f, func(validatorPK spectypes.ValidatorPK) (*types.SSVShare, error) {
+		return nil, nil
+	})
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
@@ -33,7 +37,7 @@ func TestMsgValidator(t *testing.T) {
 		require.NoError(t, err)
 		topics := f.ValidatorTopicID(pk)
 		pmsg := newPBMsg(raw, f.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
-		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.ValidateMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, res, pubsub.ValidationAccept)
 	})
 
@@ -54,7 +58,7 @@ func TestMsgValidator(t *testing.T) {
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv(context.Background(), "xxxx", pmsg)
+		res := mv.ValidateMessage(context.Background(), "xxxx", pmsg)
 		require.Equal(t, res, pubsub.ValidationReject)
 	})
 

@@ -81,6 +81,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 	return nil, nil
 }
 
+// TODO rewrite using ValidateDecidedWithoutSignature
 func ValidateDecided(
 	config qbft.IConfig,
 	signedDecided *specqbft.SignedMessage,
@@ -98,8 +99,28 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided msg")
 	}
 
+	r, err := specqbft.HashDataRoot(signedDecided.FullData)
+	if err != nil {
+		return errors.Wrap(err, "could not hash input data")
+	}
+	if !bytes.Equal(r[:], signedDecided.Message.Root[:]) {
+		return errors.New("H(data) != root")
+	}
+
+	return nil
+}
+
+func ValidateDecidedWithoutSignature(signedDecided *specqbft.SignedMessage, share *spectypes.Share) error {
+	if !IsDecidedMsg(share, signedDecided) {
+		return errors.New("not a decided msg")
+	}
+
 	if err := signedDecided.Validate(); err != nil {
-		return errors.Wrap(err, "invalid decided")
+		return errors.Wrap(err, "invalid decided msg")
+	}
+
+	if err := instance.BaseCommitValidationWithoutSignature(signedDecided, signedDecided.Message.Height); err != nil {
+		return errors.Wrap(err, "invalid decided msg")
 	}
 
 	r, err := specqbft.HashDataRoot(signedDecided.FullData)

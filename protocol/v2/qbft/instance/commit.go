@@ -144,6 +144,22 @@ func BaseCommitValidation(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
+	if err := BaseCommitValidationWithoutSignature(signedCommit, height); err != nil {
+		return err
+	}
+
+	// verify signature
+	if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		return errors.Wrap(err, "msg signature invalid")
+	}
+
+	return nil
+}
+
+func BaseCommitValidationWithoutSignature(
+	signedCommit *specqbft.SignedMessage,
+	height specqbft.Height,
+) error {
 	if signedCommit.Message.MsgType != specqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
@@ -153,11 +169,6 @@ func BaseCommitValidation(
 
 	if err := signedCommit.Validate(); err != nil {
 		return errors.Wrap(err, "signed commit invalid")
-	}
-
-	// verify signature
-	if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
 	}
 
 	return nil

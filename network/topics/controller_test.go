@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/bloxapp/ssv/network/discovery"
@@ -232,8 +233,10 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	}
 	//
 	if msgValidator {
-		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(fork)
+		cfg.MsgValidatorFactory = func(s string) validation.MessageValidator {
+			return validation.NewMessageValidator(ctx, logger, fork, func(validatorPK spectypes.ValidatorPK) (*types.SSVShare, error) {
+				return nil, nil
+			})
 		}
 	}
 	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)

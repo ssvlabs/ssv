@@ -32,6 +32,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/operator"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -162,6 +163,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats(logger)
 		}
+		cfg.P2pNetworkConfig.MessageValidator = validation.NewMessageValidator(ctx, logger, forksfactory.NewFork(forkVersion), validatorCtrl.GetShare)
+
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}

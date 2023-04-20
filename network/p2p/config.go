@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
@@ -77,6 +78,7 @@ type Config struct {
 	FullNode bool
 
 	GetValidatorStats network.GetValidatorStats
+	MessageValidator  validation.MessageValidator
 }
 
 // Libp2pOptions creates options list for the libp2p host

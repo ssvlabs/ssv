@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/validation"
 )
 
 var (
@@ -46,7 +47,7 @@ type topicsCtrl struct {
 	ps     *pubsub.PubSub
 	// scoreParamsFactory is a function that helps to set scoring params on topics
 	scoreParamsFactory  func(string) *pubsub.TopicScoreParams
-	msgValidatorFactory func(string) MsgValidatorFunc
+	msgValidatorFactory func(string) validation.MessageValidator
 	msgHandler          PubsubMessageHandler
 	subFilter           SubFilter
 
@@ -57,7 +58,7 @@ type topicsCtrl struct {
 
 // NewTopicsController creates an instance of Controller
 func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
-	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
+	msgValidatorFactory func(string) validation.MessageValidator, subFilter SubFilter, pubSub *pubsub.PubSub,
 	fork forks.Fork, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	ctrl := &topicsCtrl{
 		ctx:                 ctx,

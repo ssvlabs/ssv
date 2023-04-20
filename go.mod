@@ -38,12 +38,14 @@ require (
 	github.com/stretchr/testify v1.8.1
 	github.com/wealdtech/go-eth2-util v1.6.3
 	go.opencensus.io v0.24.0
+	go.uber.org/multierr v1.9.0
 	go.uber.org/zap v1.24.0
 	golang.org/x/mod v0.7.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.7.0
 	google.golang.org/grpc v1.40.0
 	gopkg.in/yaml.v3 v3.0.1
+	oya.to/namedlocker v1.0.0
 )
 
 require (
@@ -160,7 +162,6 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/dig v1.16.0 // indirect
 	go.uber.org/fx v1.19.0 // indirect
-	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
 	golang.org/x/exp v0.0.0-20230206171751-46f607a40771 // indirect
 	golang.org/x/net v0.5.0 // indirect

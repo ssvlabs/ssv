@@ -102,6 +102,7 @@ type Controller interface {
 	GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
+	GetShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 }
 
 // controller implements Controller
@@ -297,9 +298,9 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 	}
 }
 
-// getShare returns the share of the given validator public key
+// GetShare returns the share of the given validator public key
 // TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
+func (c *controller) GetShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
 	share, found, err := c.sharesStorage.GetShare(pk)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
@@ -311,7 +312,7 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 }
 
 func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
-	share, err := c.getShare(msg.GetID().GetPubKey())
+	share, err := c.GetShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
 	}

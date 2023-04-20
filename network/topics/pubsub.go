@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/utils/async"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -47,7 +48,7 @@ type PububConfig struct {
 	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
-	MsgValidatorFactory func(string) MsgValidatorFunc
+	MsgValidatorFactory func(string) validation.MessageValidator
 	ScoreIndex          peers.ScoreIndex
 	Scoring             *ScoringConfig
 	MsgIDHandler        MsgIDHandler

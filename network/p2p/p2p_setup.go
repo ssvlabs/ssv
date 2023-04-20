@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	"github.com/bloxapp/ssv/network/validation"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -258,8 +259,8 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	cfg := &topics.PububConfig{
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
-		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			return topics.NewSSVMsgValidator(n.fork)
+		MsgValidatorFactory: func(s string) validation.MessageValidator {
+			return n.cfg.MessageValidator
 		},
 		MsgHandler: n.handlePubsubMessages(logger),
 		ScoreIndex: n.idx,
