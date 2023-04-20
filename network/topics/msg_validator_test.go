@@ -38,7 +38,7 @@ func TestMsgValidator(t *testing.T) {
 		topics := f.ValidatorTopicID(pk)
 		pmsg := newPBMsg(raw, f.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv.ValidateMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
-		require.Equal(t, res, pubsub.ValidationAccept)
+		require.Equal(t, res.Action, pubsub.ValidationAccept, "got unexpected action: %v", res)
 	})
 
 	// TODO: enable once topic validation is in place

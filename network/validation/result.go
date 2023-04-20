@@ -18,6 +18,7 @@ const (
 	ReasonBetterMessage     Reason = "better-message"
 	ReasonInvalidSig        Reason = "invalid-signature"
 	ReasonTooManyMsgs       Reason = "too-many-msgs"
+	ReasonError             Reason = "error"
 )
 
 // Result is a validation result which describes a problem with the message

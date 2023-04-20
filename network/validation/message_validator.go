@@ -20,7 +20,7 @@ import (
 type ShareLookupFunc func(validatorPK spectypes.ValidatorPK) (*types.SSVShare, error)
 
 type MessageValidator interface {
-	ValidateMessage(ctx context.Context, peerID peer.ID, msg *pubsub.Message) pubsub.ValidationResult
+	ValidateMessage(ctx context.Context, peerID peer.ID, msg *pubsub.Message) Result
 }
 
 type messageValidator struct {
@@ -42,18 +42,21 @@ func NewMessageValidator(ctx context.Context, logger *zap.Logger, fork forks.For
 }
 
 // ValidateMessage validates the given message.
-func (v *messageValidator) ValidateMessage(ctx context.Context, peerID peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func (v *messageValidator) ValidateMessage(ctx context.Context, peerID peer.ID, msg *pubsub.Message) Result {
 	iv := &individualMessageValidator{
 		messageValidator: v,
 		peerID:           peerID,
 		msg:              msg,
 	}
-	err := iv.validate(ctx)
-	if err != nil {
+	if err := iv.validate(ctx); err != nil {
 		v.logger.Debug("validation failed", zap.Error(err))
-		return pubsub.ValidationReject
+
+		if result, ok := err.(Result); ok {
+			return result
+		}
+		return Result{Action: pubsub.ValidationReject, Reason: ReasonError, Err: err}
 	}
-	return pubsub.ValidationAccept
+	return Result{Action: pubsub.ValidationAccept}
 }
 
 type individualMessageValidator struct {
