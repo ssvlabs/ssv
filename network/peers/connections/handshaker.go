@@ -127,7 +127,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			}
 		}()
 
-		self, err := h.nodeInfoIdx.SelfSealed()
+		self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid)
 		if err != nil {
 			logger.Warn("could not seal self node info", zap.Error(err))
 			return
@@ -139,7 +139,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	}
 }
 
-func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, pid peer.ID, ni records.NodeInfo) error {
+func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, pid peer.ID, ni records.NodeInfo) error { //WIP: check handshake signature here
 	h.updateNodeSubnets(logger, pid, &ni)
 	if !h.applyFilters(&ni) {
 		return errPeerWasFiltered
@@ -235,7 +235,7 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
 			conn.RemotePeer().String())
 	}
-	data, err := h.nodeInfoIdx.SelfSealed()
+	data, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), conn.RemotePeer())
 	if err != nil {
 		return nil, err
 	}

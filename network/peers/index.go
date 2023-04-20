@@ -54,7 +54,7 @@ type ScoreIndex interface {
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers
 type NodeInfoIndex interface {
 	// SelfSealed returns a sealed, encoded of self node info
-	SelfSealed() ([]byte, error)
+	SelfSealed(sender, recipient peer.ID) ([]byte, error)
 	// Self returns the current node info
 	Self() *records.NodeInfo
 	// UpdateSelfRecord updating current self with new one
