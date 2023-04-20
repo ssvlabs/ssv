@@ -137,7 +137,7 @@ spec:
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         - name: BLINDED_SUPPORT
-          value: "true"
+          value: "false"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-1
