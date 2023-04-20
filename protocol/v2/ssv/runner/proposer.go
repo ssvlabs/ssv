@@ -94,6 +94,8 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
+			// Prysm currently doesn’t support MEV.
+			// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
