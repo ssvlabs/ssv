@@ -118,12 +118,18 @@ func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
-func (pi *peersIndex) SelfSealed() ([]byte, error) {
+func (pi *peersIndex) SelfSealed(sender, recipient peer.ID) ([]byte, error) { // (me, recipient peer.ID)
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
 	if len(pi.selfSealed) == 0 {
-		sealed, err := pi.self.Seal(pi.netKeyProvider())
+		signature := records.HandshakeSignature{
+			SenderPeerID:    sender,
+			RecipientPeerID: recipient,
+			Timestamp:       time.Now().Round(30 * time.Second),
+		}
+
+		sealed, err := pi.self.Seal(pi.netKeyProvider(), signature)
 		if err != nil {
 			return nil, err
 		}
