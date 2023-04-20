@@ -135,6 +135,10 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		http.WithTimeout(time.Second*5),
 	)
 
+	if err != nil {
+		return nil, errors.WithMessage(err, "failed to create http client")
+	}
+
 	blindedAddr := opt.BeaconNodeAddr
 	if blindedAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" {
 		blindedAddr = "http://eth2-testnet-stage-lh-5052.blockchain.bloxinfra.com:80"
@@ -152,7 +156,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	)
 
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create http client")
+		return nil, errors.WithMessage(err, "failed to create blinded http client")
 	}
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
