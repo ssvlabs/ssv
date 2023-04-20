@@ -112,7 +112,6 @@ type goClient struct {
 	ctx                      context.Context
 	network                  beaconprotocol.Network
 	client                   Client
-	blindedClient            Client
 	graffiti                 []byte
 	operatorID               spectypes.OperatorID
 	postponedRegistrations   []*api.VersionedSignedValidatorRegistration
@@ -134,42 +133,20 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		http.WithLogLevel(zerolog.DebugLevel),
 		http.WithTimeout(time.Second*5),
 	)
-
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create http client")
-	}
-
-	blindedAddr := opt.BeaconNodeAddr
-	if blindedAddr == "http://eth2-testnet-stage.blockchain.bloxinfra.com:80" {
-		blindedAddr = "http://eth2-testnet-stage-lh-5052.blockchain.bloxinfra.com:80"
-	}
-	if blindedAddr == "http://eth2-testnet-prod.blockchain.bloxinfra.com:80" {
-		blindedAddr = "http://eth2-testnet-prod-lh-5052.blockchain.bloxinfra.com:80"
-	}
-
-	blindedHTTPClient, err := http.New(opt.Context,
-		// WithAddress supplies the address of the beacon node, in host:port format.
-		http.WithAddress(blindedAddr),
-		// LogLevel supplies the level of logging to carry out.
-		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(time.Second*5),
-	)
-
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create blinded http client")
 	}
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
-		log:           logger,
-		ctx:           opt.Context,
-		network:       network,
-		client:        httpClient.(*http.Service),
-		blindedClient: blindedHTTPClient.(*http.Service),
-		graffiti:      opt.Graffiti,
-		operatorID:    operatorID,
+		log:        logger,
+		ctx:        opt.Context,
+		network:    network,
+		client:     httpClient.(*http.Service),
+		graffiti:   opt.Graffiti,
+		operatorID: operatorID,
 	}
 
 	return _client, nil

@@ -51,7 +51,7 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 	copy(sig[:], randao[:])
 
 	reqStart := time.Now()
-	beaconBlock, err := gc.blindedClient.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
+	beaconBlock, err := gc.client.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -96,7 +96,7 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 		return errors.New("unknown block version")
 	}
 
-	return gc.blindedClient.SubmitBlindedBeaconBlock(gc.ctx, signedBlock)
+	return gc.client.SubmitBlindedBeaconBlock(gc.ctx, signedBlock)
 }
 
 // SubmitBeaconBlock submit the block to the node
@@ -161,7 +161,7 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 			Signature: sig,
 		},
 	}
-	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
 }
 
 func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
@@ -185,7 +185,7 @@ func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecip
 				bs = len(gc.postponedRegistrations)
 			}
 
-			if err := gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, gc.postponedRegistrations[0:bs]); err != nil {
+			if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.postponedRegistrations[0:bs]); err != nil {
 				return err
 			}
 
@@ -247,11 +247,11 @@ func (gc *goClient) SubmitValidatorRegistrationBatched(pubkeys [][]byte, feeReci
 		})
 	}
 
-	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, registrations)
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
 }
 
 func (gc *goClient) SubmitValidatorRawRegistrations(registrations []*api.VersionedSignedValidatorRegistration) error {
-	return gc.blindedClient.SubmitValidatorRegistrations(gc.ctx, registrations)
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
 }
 
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
