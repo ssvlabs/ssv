@@ -207,7 +207,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		if r.decidedBlindedBlock() {
+		decidedBlindedBlock := r.decidedBlindedBlock()
+		if decidedBlindedBlock {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
@@ -235,7 +236,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Info("✅ successfully proposed block!")
+		logger.Info("✅ successfully proposed block!", zap.Bool("blinded", decidedBlindedBlock))
 	}
 	r.GetState().Finished = true
 	return nil
