@@ -46,7 +46,7 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize        = 200
+	metadataBatchSize        = 100
 	networkRouterConcurrency = 2048
 )
 
