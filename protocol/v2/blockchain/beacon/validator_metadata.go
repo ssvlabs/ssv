@@ -3,7 +3,6 @@ package beacon
 import (
 	"encoding/hex"
 	"math"
-	"strings"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -113,7 +112,7 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 	}
 	ret := make(map[string]*ValidatorMetadata)
 	for _, v := range validatorsIndexMap {
-		pk := strings.ToLower(hex.EncodeToString(v.Validator.PublicKey[:]))
+		pk := hex.EncodeToString(v.Validator.PublicKey[:])
 		meta := &ValidatorMetadata{
 			Balance: v.Balance,
 			Status:  v.Status,
