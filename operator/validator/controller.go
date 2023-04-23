@@ -408,7 +408,15 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
-	go c.updateValidatorsMetadata(logger, fetchMetadata)
+	// Try to fetch metadata once for validators that don't have it.
+	if len(fetchMetadata) > 0 {
+		go func() {
+			logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
+			if err := beaconprotocol.UpdateValidatorsMetadata(logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
+				logger.Warn("could not update all validators", zap.Error(err))
+			}
+		}()
+	}
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -464,18 +472,6 @@ func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// updateValidatorsMetadata updates metadata of the given public keys.
-// as part of the flow in beacon.UpdateValidatorsMetadata,
-// UpdateValidatorMetadata is called to persist metadata and start a specific validator
-func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte) {
-	if len(pubKeys) > 0 {
-		logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
-			logger.Warn("could not update all validators", zap.Error(err))
-		}
-	}
-}
-
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	if metadata == nil {
@@ -527,11 +523,10 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
 	logger = logger.Named(logging.NameController)
 
-	var toFetch [][]byte
-	var indices []phase0.ValidatorIndex
-
+	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+		// Beacon client throws error once trying to fetch duties for existed validator.
+		if v.Share.BeaconMetadata.IsActive() {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil
@@ -539,8 +534,6 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 	if err != nil {
 		logger.Warn("failed to get all validators public keys", zap.Error(err))
 	}
-
-	go c.updateValidatorsMetadata(logger, toFetch)
 
 	return indices
 }
