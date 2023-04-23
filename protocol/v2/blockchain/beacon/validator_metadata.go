@@ -3,6 +3,7 @@ package beacon
 import (
 	"encoding/hex"
 	"math"
+	"strings"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -113,6 +114,13 @@ func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*Validator
 	ret := make(map[string]*ValidatorMetadata)
 	for _, v := range validatorsIndexMap {
 		pk := hex.EncodeToString(v.Validator.PublicKey[:])
+		if strings.Contains(
+			"a311dcc81b1bf3c824bf1c3ceffca41af76b7ffd8c404cd0e46318153cf134519de94e9295bd35532afceffbc4c57e3e,8dad3498ba4b28b951f81e79a60a5c787e72394cb1ec2fae585dad01ae3b9e21e6a969bc77001a1367a26c31810387c5,86c953c3e43ee32fd370b61245fdc99a1bf614217028f724f83bf3c5870e62a459a03cab371ba46c3d338a6d70050cab",
+			pk,
+		) {
+			// Fake non deposited validator!
+			continue
+		}
 		meta := &ValidatorMetadata{
 			Balance: v.Balance,
 			Status:  v.Status,

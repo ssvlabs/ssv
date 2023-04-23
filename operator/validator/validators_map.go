@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 // validatorIterator is the function used to iterate over existing validators
@@ -22,7 +21,6 @@ type validatorIterator func(validator *validator.Validator) error
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
 	ctx context.Context
-	db  basedb.IDb
 
 	optsTemplate *validator.Options
 
@@ -30,10 +28,9 @@ type validatorsMap struct {
 	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
+func newValidatorsMap(ctx context.Context, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
 		ctx:           ctx,
-		db:            db,
 		lock:          sync.RWMutex{},
 		validatorsMap: make(map[string]*validator.Validator),
 		optsTemplate:  optsTemplate,

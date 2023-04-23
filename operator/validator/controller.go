@@ -46,7 +46,7 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize        = 25
+	metadataBatchSize        = 200
 	networkRouterConcurrency = 2048
 )
 
@@ -194,7 +194,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap:    newValidatorsMap(options.Context, options.DB, validatorOptions),
+		validatorsMap:    newValidatorsMap(options.Context, validatorOptions),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -529,22 +529,46 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 	if meta == nil {
 		return
 	}
+	logger = logger.With(zap.String("pk", pk))
+
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
 		if !v.Share.HasBeaconMetadata() {
 			v.Share.BeaconMetadata = meta
-			logger.Debug("metadata was updated", zap.String("pk", pk))
+			logger.Debug("metadata was updated")
 		} else if !v.Share.BeaconMetadata.Equals(meta) {
 			v.Share.BeaconMetadata.Status = meta.Status
 			v.Share.BeaconMetadata.Balance = meta.Balance
-			logger.Debug("metadata was updated", zap.String("pk", pk))
+			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
+		return
+	}
+
+	logger.Warn("could not find validator, starting share")
+
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		logger.Warn("could not decode pk", zap.Error(err))
+		return
+	}
+	share, err := c.getShare(pkBytes)
+	if err != nil {
+		logger.Warn("could not get share", zap.Error(err))
+		return
+	}
+	started, err := c.onShareStart(logger, share)
+	if err != nil {
+		logger.Warn("could not start share", zap.Error(err))
+		return
+	}
+	if started {
+		logger.Warn("started share after metadata update", zap.Bool("started", started))
 	}
 }
 
@@ -611,7 +635,6 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
-
 	}
 
 	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
