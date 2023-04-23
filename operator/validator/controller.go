@@ -548,7 +548,7 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 	// If validator is not found, it means that it wasn't active on startup (setupValidators).
 	// We fetched the share from the storage, which should include the updated metadta already,
 	// and start the validator.
-	logger.Debug("metadata was fetched, starting share")
+	logger.Info("validator has become active, starting it")
 
 	pkBytes, err := hex.DecodeString(pk)
 	if err != nil {
