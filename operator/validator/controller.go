@@ -481,14 +481,37 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
+
+	// Save metadata to share storage.
+	err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
+	if err != nil {
+		return errors.Wrap(err, "could not update validator metadata")
+	}
+
+	// Update metadata in memory, and start validator if needed.
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		if err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
-			return err
-		}
 		_, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator", zap.Error(err))
+		}
+	} else {
+		logger.Info("starting new validator", zap.String("pubKey", pk))
+
+		pkBytes, err := hex.DecodeString(pk)
+		if err != nil {
+			return errors.Wrap(err, "could not decode public key")
+		}
+		share, err := c.getShare(pkBytes)
+		if err != nil {
+			return errors.Wrap(err, "could not get share")
+		}
+		started, err := c.onShareStart(logger, share)
+		if err != nil {
+			return errors.Wrap(err, "could not start validator")
+		}
+		if started {
+			logger.Debug("started share after metadata update", zap.Bool("started", started))
 		}
 	}
 	return nil
@@ -543,30 +566,6 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 		return
-	}
-
-	// If validator is not found, it means that it wasn't active on startup (setupValidators).
-	// We fetched the share from the storage, which should include the updated metadta already,
-	// and start the validator.
-	logger.Info("validator has become active, starting it")
-
-	pkBytes, err := hex.DecodeString(pk)
-	if err != nil {
-		logger.Warn("could not decode pk", zap.Error(err))
-		return
-	}
-	share, err := c.getShare(pkBytes)
-	if err != nil {
-		logger.Warn("could not get share", zap.Error(err))
-		return
-	}
-	started, err := c.onShareStart(logger, share)
-	if err != nil {
-		logger.Warn("could not start share", zap.Error(err))
-		return
-	}
-	if started {
-		logger.Debug("started share after metadata update", zap.Bool("started", started))
 	}
 }
 
