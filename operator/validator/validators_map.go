@@ -64,13 +64,16 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) (*validator.Validator, error) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
+		if !share.HasBeaconMetadata() {
+			return nil, fmt.Errorf("beacon metadata is missing")
+		}
 		opts := *vm.optsTemplate
 		opts.SSVShare = share
 
@@ -86,7 +89,7 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		printShare(v.Share, logger, "get validator")
 	}
 
-	return vm.validatorsMap[pubKey]
+	return vm.validatorsMap[pubKey], nil
 }
 
 // RemoveValidator removes a validator instance from the map
