@@ -400,6 +400,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 			if time.Now().Before(time.Unix(1682253297+(3*32*12), 0)) { // 3 epochs from now
 				// Fake non deposited validator!
 				fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
+				logger.Debug("skipping validator", fields.PubKey(validatorShare.ValidatorPubKey))
 				continue
 			}
 		}
