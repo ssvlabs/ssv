@@ -46,7 +46,7 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize        = 25
+	metadataBatchSize        = 100
 	networkRouterConcurrency = 2048
 )
 
@@ -194,7 +194,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		network:                    options.Network,
 		forkVersion:                options.ForkVersion,
 
-		validatorsMap:    newValidatorsMap(options.Context, options.DB, validatorOptions),
+		validatorsMap:    newValidatorsMap(options.Context, validatorOptions),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
@@ -508,9 +508,7 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 	var indices []phase0.ValidatorIndex
 
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if !v.Share.HasBeaconMetadata() {
-			toFetch = append(toFetch, v.Share.ValidatorPubKey)
-		} else if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+		if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil
@@ -529,22 +527,46 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 	if meta == nil {
 		return
 	}
+	logger = logger.With(zap.String("pk", pk))
+
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
 		// TODO: check if this updates running validators
-		if !v.Share.HasBeaconMetadata() {
-			v.Share.BeaconMetadata = meta
-			logger.Debug("metadata was updated", zap.String("pk", pk))
-		} else if !v.Share.BeaconMetadata.Equals(meta) {
+		if !v.Share.BeaconMetadata.Equals(meta) {
 			v.Share.BeaconMetadata.Status = meta.Status
 			v.Share.BeaconMetadata.Balance = meta.Balance
-			logger.Debug("metadata was updated", zap.String("pk", pk))
+			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
+		return
+	}
+
+	// If validator is not found, it means that it wasn't active on startup (setupValidators).
+	// We fetched the share from the storage, which should include the updated metadta already,
+	// and start the validator.
+	logger.Debug("metadata was fetched, starting share")
+
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		logger.Warn("could not decode pk", zap.Error(err))
+		return
+	}
+	share, err := c.getShare(pkBytes)
+	if err != nil {
+		logger.Warn("could not get share", zap.Error(err))
+		return
+	}
+	started, err := c.onShareStart(logger, share)
+	if err != nil {
+		logger.Warn("could not start share", zap.Error(err))
+		return
+	}
+	if started {
+		logger.Debug("started share after metadata update", zap.Bool("started", started))
 	}
 }
 
@@ -611,7 +633,6 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
-
 	}
 
 	if err := SetShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
@@ -619,16 +640,16 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 	}
 
 	// Start a committee validator.
-	v := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
+	v, err := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
+	if err != nil {
+		return false, errors.Wrap(err, "could not get or create validator")
+	}
 	return c.startValidator(logger, v)
 }
 
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) (bool, error) {
 	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Share.BeaconMetadata, logger)
-	if !v.Share.HasBeaconMetadata() {
-		return false, errors.New("could not start validator: beacon metadata not found")
-	}
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
