@@ -17,17 +17,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// PubsubMessageValidator is a function that complies with pubsub's validator.
-type PubsubMessageValidator func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult
-
-// NewPubsubMessageValidator returns a PubsubMessageValidator for the given MessageValidator.
-func NewPubsubMessageValidator(v MessageValidator) PubsubMessageValidator {
-	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
-		result := v.ValidateMessage(ctx, p, msg)
-		return result.Action
-	}
-}
-
 type ShareLookupFunc func(validatorPK spectypes.ValidatorPK) (*types.SSVShare, error)
 
 type MessageValidator interface {
@@ -261,4 +250,12 @@ func (v *individualMessageValidator) validateDecidedMessage(ctx context.Context,
 	//mark decided message
 	v.schedule.markDecidedMsg(msg, share, logger)
 	return nil
+}
+
+// NewPubsubMessageValidator returns a pubsub-compatible validator for the given MessageValidator.
+func NewPubsubMessageValidator(v MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+	return func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+		result := v.ValidateMessage(ctx, p, msg)
+		return result.Action
+	}
 }
