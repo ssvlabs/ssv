@@ -508,9 +508,7 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 	var indices []phase0.ValidatorIndex
 
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if !v.Share.HasBeaconMetadata() {
-			toFetch = append(toFetch, v.Share.ValidatorPubKey)
-		} else if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+		if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil
@@ -547,7 +545,10 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 		return
 	}
 
-	logger.Warn("could not find validator, starting share")
+	// If validator is not found, it means that it wasn't active on startup (setupValidators).
+	// We fetched the share from the storage, which should include the updated metadta already,
+	// and start the validator.
+	logger.Debug("metadata was fetched, starting share")
 
 	pkBytes, err := hex.DecodeString(pk)
 	if err != nil {
@@ -565,7 +566,7 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 		return
 	}
 	if started {
-		logger.Warn("started share after metadata update", zap.Bool("started", started))
+		logger.Debug("started share after metadata update", zap.Bool("started", started))
 	}
 }
 
