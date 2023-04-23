@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -42,7 +43,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 
 		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				zap.String("role", identifier.GetRoleType().String()))
+				fields.Role(identifier.GetRoleType()))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}

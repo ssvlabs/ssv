@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -51,7 +52,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", zap.String("role", msg.MsgID.GetRoleType().String()))
+		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
 	}
 }
 

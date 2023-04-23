@@ -24,7 +24,7 @@ This section details the steps to run an operator on AWS.
 
 ### 1. Setup
 
-Create a server of your choice and expose it on ports 12000 UDP and 13000 TCP
+Create a server of your choice and expose it on ports 12001 UDP and 13001 TCP
 - In the search bar search for "ec2" and then click on EC2 in the search results
 - In the EC2 Dashboard, select Launch Instance
 - Select "Ubuntu Server 20.04"
@@ -154,7 +154,7 @@ OperatorPrivateKey: LS0tLS...
 Run the docker image in the same folder you created the `config.yaml`:
 
 ```shell
-$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13000:13000 -p 12000:12000/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
+$ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13001:13001 -p 12001:12001/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \
   && docker logs ssv_node --follow
 ```
 

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
@@ -120,7 +121,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, cfg discover.Config) *discover.UDPv5 {
 	ip := net.ParseIP(ipAddr)
 	if ip.To4() == nil {
-		logger.Fatal("IPV4 address not provided", zap.String("ipAddr", ipAddr))
+		logger.Fatal("IPV4 address not provided", fields.Address(ipAddr))
 	}
 	var bindIP net.IP
 	var networkVersion string
@@ -132,7 +133,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, c
 		bindIP = net.IPv4zero
 		networkVersion = "udp4"
 	default:
-		logger.Fatal("Valid ip address not provided", zap.String("ipAddr", ipAddr))
+		logger.Fatal("Valid ip address not provided", fields.Address(ipAddr))
 	}
 	udpAddr := &net.UDPAddr{
 		IP:   bindIP,

@@ -83,7 +83,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 	syncWg.Wait()
 
 	if len(errs) > 0 {
-		logger.Warn("could not handle some of the events during history sync", zap.Any("errs", errs))
+		logger.Warn("could not handle some of the events during history sync", fields.Errors(errs))
 		return errors.New("could not handle some of the events during history sync")
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -145,7 +146,7 @@ func (ch *connHandler) checkSubnets(logger *zap.Logger, conn libp2pnetwork.Conn)
 	}
 	mySubnets := ch.subnetsProvider()
 
-	logger = logger.With(zap.String("pid", pid.String()), zap.String("subnets", subnets.String()),
+	logger = logger.With(fields.PeerID(pid), fields.Subnets(subnets),
 		zap.String("mySubnets", mySubnets.String()))
 
 	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets

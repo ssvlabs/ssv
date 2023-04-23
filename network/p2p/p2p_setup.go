@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -172,7 +173,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
-	logger.Debug("peers index is ready", zap.String("forkVersion", string(n.cfg.ForkVersion)))
+	logger.Debug("peers index is ready", fields.Fork(n.cfg.ForkVersion))
 
 	var ids identify.IDService
 	if bh, ok := n.host.(*basichost.BasicHost); ok {
