@@ -525,7 +525,7 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 
 	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		// Beacon client throws error once trying to fetch duties for existed validator.
+		// Beacon node throws error when trying to fetch duties for non-existing validators.
 		if v.Share.BeaconMetadata.IsActive() {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
