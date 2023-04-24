@@ -10,14 +10,18 @@ import (
 func TestNetworkIDFilter(t *testing.T) {
 	f := NetworkIDFilter("xxx")
 
-	ok, err := f(&records.NodeInfo{
-		NetworkID: "xxx",
+	ok, err := f("", &records.SignedNodeInfo{
+		NodeInfo: &records.NodeInfo{
+			NetworkID: "xxx",
+		},
 	})
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f(&records.NodeInfo{
-		NetworkID: "bbb",
+	ok, err = f("", &records.SignedNodeInfo{
+		NodeInfo: &records.NodeInfo{
+			NetworkID: "bbb",
+		},
 	})
 	require.Error(t, err)
 	require.False(t, ok)
