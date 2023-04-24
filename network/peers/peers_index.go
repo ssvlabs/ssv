@@ -138,7 +138,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *
 
 	signature, err := rsa.SignPKCS1v15(rand.Reader, operatorPrivateKey, crypto.SHA256, hash[:])
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	sealed, err := pi.self.Seal(pi.netKeyProvider(), handshakeData, signature)

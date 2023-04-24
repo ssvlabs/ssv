@@ -2,6 +2,9 @@ package connections
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"strings"
 	"time"
 
@@ -214,11 +217,17 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 		Timestamp:       time.Now().Round(30 * time.Second),
 		SenderPubKey:    publicKey,
 	}
+	hash := handshakeData.Hash()
+
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		panic(err)
+	}
 
 	sni := records.SignedNodeInfo{
 		NodeInfo:      ni,
 		HandshakeData: handshakeData,
-		Signature:     nil,
+		Signature:     signature,
 	}
 
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
