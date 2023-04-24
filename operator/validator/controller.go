@@ -408,7 +408,15 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
-	go c.updateValidatorsMetadata(logger, fetchMetadata)
+	// Try to fetch metadata once for validators that don't have it.
+	if len(fetchMetadata) > 0 {
+		go func() {
+			logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
+			if err := beaconprotocol.UpdateValidatorsMetadata(logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
+				logger.Warn("could not update all validators", zap.Error(err))
+			}
+		}()
+	}
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -464,31 +472,42 @@ func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
-// updateValidatorsMetadata updates metadata of the given public keys.
-// as part of the flow in beacon.UpdateValidatorsMetadata,
-// UpdateValidatorMetadata is called to persist metadata and start a specific validator
-func (c *controller) updateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte) {
-	if len(pubKeys) > 0 {
-		logger.Debug("updating validators", zap.Int("count", len(pubKeys)))
-		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
-			logger.Warn("could not update all validators", zap.Error(err))
-		}
-	}
-}
-
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
+
+	// Save metadata to share storage.
+	err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
+	if err != nil {
+		return errors.Wrap(err, "could not update validator metadata")
+	}
+
+	// Update metadata in memory, and start validator if needed.
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		if err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata); err != nil {
-			return err
-		}
 		_, err := c.startValidator(logger, v)
 		if err != nil {
 			logger.Warn("could not start validator", zap.Error(err))
+		}
+	} else {
+		logger.Info("starting new validator", zap.String("pubKey", pk))
+
+		pkBytes, err := hex.DecodeString(pk)
+		if err != nil {
+			return errors.Wrap(err, "could not decode public key")
+		}
+		share, err := c.getShare(pkBytes)
+		if err != nil {
+			return errors.Wrap(err, "could not get share")
+		}
+		started, err := c.onShareStart(logger, share)
+		if err != nil {
+			return errors.Wrap(err, "could not start validator")
+		}
+		if started {
+			logger.Debug("started share after metadata update", zap.Bool("started", started))
 		}
 	}
 	return nil
@@ -504,11 +523,10 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
 	logger = logger.Named(logging.NameController)
 
-	var toFetch [][]byte
-	var indices []phase0.ValidatorIndex
-
+	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if v.Share.BeaconMetadata.IsActive() { // eth-client throws error once trying to fetch duties for existed validator
+		// Beacon node throws error when trying to fetch duties for non-existing validators.
+		if v.Share.BeaconMetadata.IsActive() {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil
@@ -516,8 +534,6 @@ func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.Validator
 	if err != nil {
 		logger.Warn("failed to get all validators public keys", zap.Error(err))
 	}
-
-	go c.updateValidatorsMetadata(logger, toFetch)
 
 	return indices
 }
@@ -543,30 +559,6 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
 		}
 		return
-	}
-
-	// If validator is not found, it means that it wasn't active on startup (setupValidators).
-	// We fetched the share from the storage, which should include the updated metadta already,
-	// and start the validator.
-	logger.Debug("metadata was fetched, starting share")
-
-	pkBytes, err := hex.DecodeString(pk)
-	if err != nil {
-		logger.Warn("could not decode pk", zap.Error(err))
-		return
-	}
-	share, err := c.getShare(pkBytes)
-	if err != nil {
-		logger.Warn("could not get share", zap.Error(err))
-		return
-	}
-	started, err := c.onShareStart(logger, share)
-	if err != nil {
-		logger.Warn("could not start share", zap.Error(err))
-		return
-	}
-	if started {
-		logger.Debug("started share after metadata update", zap.Bool("started", started))
 	}
 }
 
