@@ -1,12 +1,16 @@
 package peers
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -23,7 +27,7 @@ const (
 type MaxPeersProvider func(topic string) int
 
 // NetworkKeyProvider is a function that provides the network private key
-type NetworkKeyProvider func() crypto.PrivKey
+type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
@@ -37,8 +41,6 @@ type peersIndex struct {
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
-	// selfSealed helps to cache the node info record instead of signing multiple times
-	selfSealed []byte
 
 	maxPeers MaxPeersProvider
 }
@@ -110,7 +112,6 @@ func (pi *peersIndex) UpdateSelfRecord(newSelf *records.NodeInfo) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	pi.selfSealed = nil
 	pi.self = newSelf
 }
 
@@ -118,25 +119,34 @@ func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
-func (pi *peersIndex) SelfSealed(sender, recipient peer.ID) ([]byte, error) { // (me, recipient peer.ID)
+func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	if len(pi.selfSealed) == 0 {
-		signature := records.HandshakeSignature{
-			SenderPeerID:    sender,
-			RecipientPeerID: recipient,
-			Timestamp:       time.Now().Round(30 * time.Second),
-		}
-
-		sealed, err := pi.self.Seal(pi.netKeyProvider(), signature)
-		if err != nil {
-			return nil, err
-		}
-		pi.selfSealed = sealed
+	publicKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+	if err != nil {
+		return nil, err
 	}
 
-	return pi.selfSealed, nil
+	handshakeData := records.HandshakeData{
+		SenderPeerID:    sender,
+		RecipientPeerID: recipient,
+		Timestamp:       time.Now().Round(30 * time.Second),
+		SenderPubKey:    publicKey,
+	}
+	hash := handshakeData.Hash()
+
+	signature, err := rsa.SignPKCS1v15(rand.Reader, operatorPrivateKey, crypto.SHA256, hash[:])
+	if err != nil {
+		panic(err)
+	}
+
+	sealed, err := pi.self.Seal(pi.netKeyProvider(), handshakeData, signature)
+	if err != nil {
+		return nil, err
+	}
+
+	return sealed, nil
 }
 
 // AddNodeInfo adds a new node info

@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"crypto/rsa"
 	"io"
 
 	"github.com/bloxapp/ssv/network/records"
@@ -54,7 +55,7 @@ type ScoreIndex interface {
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers
 type NodeInfoIndex interface {
 	// SelfSealed returns a sealed, encoded of self node info
-	SelfSealed(sender, recipient peer.ID) ([]byte, error)
+	SelfSealed(sender, recipient peer.ID, operatorPrivateKey *rsa.PrivateKey) ([]byte, error)
 	// Self returns the current node info
 	Self() *records.NodeInfo
 	// UpdateSelfRecord updating current self with new one

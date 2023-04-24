@@ -23,8 +23,6 @@ type NodeInfo struct {
 	NetworkID string
 	// Metadata holds node's general information
 	Metadata *NodeMetadata
-	// Signature is the HandshakeSignature signed using Operator Private Key
-	Signature HandshakeSignature
 }
 
 // NewNodeInfo creates a new node info
@@ -36,10 +34,14 @@ func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeI
 }
 
 // Seal seals and encodes the record to be sent to other peers
-func (ni *NodeInfo) Seal(privateKey crypto.PrivKey, signature HandshakeSignature) ([]byte, error) {
-	ni.Signature = signature
+func (ni *NodeInfo) Seal(privateKey crypto.PrivKey, handshakeData HandshakeData, signature []byte) ([]byte, error) {
+	signedNodeInfo := SignedNodeInfo{
+		NodeInfo:      ni,
+		HandshakeData: handshakeData,
+		Signature:     signature,
+	}
 
-	ev, err := record.Seal(ni, privateKey)
+	ev, err := record.Seal(signedNodeInfo, privateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not seal record")
 	}
