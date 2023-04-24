@@ -1,16 +1,16 @@
 package records
 
 import (
-	crand "crypto/rand"
+	"crypto/rand"
 	"testing"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNodeInfo_Seal_Consume(t *testing.T) {
-	netKey, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
+	netKey, _, err := libp2pcrypto.GenerateSecp256k1Key(rand.Reader)
 	require.NoError(t, err)
 	ni := &NodeInfo{
 		ForkVersion: forksprotocol.GenesisForkVersion,
@@ -23,7 +23,7 @@ func TestNodeInfo_Seal_Consume(t *testing.T) {
 		},
 	}
 
-	data, err := ni.Seal(netKey)
+	data, err := ni.Seal(netKey, HandshakeData{}, nil)
 	require.NoError(t, err)
 	parsedRec := &NodeInfo{}
 	require.NoError(t, parsedRec.Consume(data))
