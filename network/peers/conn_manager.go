@@ -2,6 +2,9 @@ package peers
 
 import (
 	"context"
+	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
@@ -26,8 +29,9 @@ type ConnManager interface {
 
 // NewConnManager creates a new conn manager.
 // multiple instances can be created, but concurrency is not supported.
-func NewConnManager(connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
+func NewConnManager(logger *zap.Logger, connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) ConnManager {
 	return &connManager{
+		logger:      logger,
 		connManager: connMgr,
 		subnetsIdx:  subnetsIdx,
 	}
@@ -35,6 +39,7 @@ func NewConnManager(connMgr connmgrcore.ConnManager, subnetsIdx SubnetsIndex) Co
 
 // connManager implements ConnManager
 type connManager struct {
+	logger      *zap.Logger
 	connManager connmgrcore.ConnManager
 	subnetsIdx  SubnetsIndex
 }
@@ -64,8 +69,8 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 	// c.connManager.TrimOpenConns(ctx)
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
-			_ = net.ClosePeer(pid)
-			// err := net.ClosePeer(pid)
+			err := net.ClosePeer(pid)
+			logger.Debug("DUMP: closing peer", zap.String("pid", pid.String()), zap.Error(err))
 			// if err != nil {
 			//	logger.Debug("could not close trimmed peer",
 			//		zap.String("pid", pid.String()), zap.Error(err))
@@ -90,6 +95,13 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	stats := c.subnetsIdx.GetSubnetsStats()
 	minSubnetPeers := 2
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
+	var b strings.Builder
+	type dump struct {
+		peerID peer.ID
+		score  int
+		shared int
+	}
+	var dumps []dump
 	for _, pid := range allPeers {
 		var peerScore int
 		subnets := c.subnetsIdx.GetPeerSubnets(pid)
@@ -105,7 +117,21 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		peerScore += len(shared) / 2
 		// logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
 		peerScores[pid] = peerScore
+		dumps = append(dumps, dump{
+			peerID: pid,
+			score:  peerScore,
+			shared: len(records.SharedSubnets(subnets, mySubnets, len(mySubnets))),
+		})
 	}
+	sort.Slice(dumps, func(i, j int) bool {
+		return dumps[i].score < dumps[j].score
+	})
+	for _, d := range dumps {
+		fmt.Fprintf(&b, "(%s shared=%d score=%d)  ", d.peerID.String(), d.shared, d.score)
+	}
+	c.logger.Debug("DUMP: peer scores",
+		zap.Int("total_subnets", len(mySubnets)),
+		zap.String("scores", b.String()))
 
 	return GetTopScores(peerScores, n)
 }

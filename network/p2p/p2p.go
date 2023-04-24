@@ -172,7 +172,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(n.libConnManager, n.idx)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
 		mySubnets := records.Subnets(n.subnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
