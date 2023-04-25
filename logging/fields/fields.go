@@ -33,6 +33,7 @@ const (
 	FieldAddress             = "address"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
+	FieldBlockHash           = "block_hash"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
@@ -209,6 +210,10 @@ func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
 
 func BlockNumber(val uint64) zap.Field {
 	return zap.Stringer(FieldBlock, stringer.Uint64Stringer{Val: val})
+}
+
+func BlockHash(val phase0.Hash32) zap.Field {
+	return zap.Stringer(FieldBlockHash, val)
 }
 
 func Name(val string) zap.Field {
