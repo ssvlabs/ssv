@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
@@ -34,6 +34,7 @@ const (
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
+	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
@@ -152,7 +153,7 @@ func CurrentSlot(network beacon.Network) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(network.EstimatedCurrentSlot())})
 }
 
-func StartTimeUnixMilli(network beacon.Network, slot spec.Slot) zapcore.Field {
+func StartTimeUnixMilli(network beacon.Network, slot phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
 		Fn: func() string {
 			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixMilli()))
@@ -213,6 +214,10 @@ func BlockNumber(val uint64) zap.Field {
 }
 
 func BlockHash(val phase0.Hash32) zap.Field {
+	return zap.Stringer(FieldBlockHash, val)
+}
+
+func BlockVersion(val spec.DataVersion) zap.Field {
 	return zap.Stringer(FieldBlockHash, val)
 }
 
