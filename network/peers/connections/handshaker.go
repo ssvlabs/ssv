@@ -3,7 +3,6 @@ package connections
 import (
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"strings"
 	"time"
@@ -219,7 +218,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	}
 	hash := handshakeData.Hash()
 
-	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
+	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
 	if err != nil {
 		logger.Debug("could not sign", zap.Error(err))
 		return err
