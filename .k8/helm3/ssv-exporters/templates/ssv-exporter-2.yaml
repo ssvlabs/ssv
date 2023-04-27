@@ -106,11 +106,6 @@ spec:
         env:
           - name: SHARE_CONFIG
             value: "./data/share.yaml"
-          - name: ETH_1_ADDR
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: eth1_addr
           - name: CONFIG_PATH
             valueFrom:
               secretKeyRef:
@@ -147,7 +142,9 @@ spec:
           - name: NETWORK
             value: "prater"
           - name: DB_PATH
-            value: "./data/db"
+            value: "./data/db-v3-shifu"
+          - name: NETWORK_ID
+            value: "0x00003011"
           - name: DB_REPORTING
             value: "false"
           - name: METRICS_API_PORT
@@ -168,10 +165,6 @@ spec:
             value: "true"
           - name: GENESIS_EPOCH
             value: "1"
-          - name: NETWORK_ID
-            value: "shifu-v2-stage"
-          - name: P2P_LOG
-            value: "false"
           - name: DISCOVERY_TRACE
             value: "false"
           - name: PUBSUB_TRACE
