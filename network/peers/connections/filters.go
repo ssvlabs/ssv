@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var TimestampAllowedDifference = 30 * time.Second
+var AllowedDifference = 30 * time.Second
 
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
@@ -42,7 +42,7 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter {
 
 func SignatureCheckFilter() HandshakeFilter {
 	return func(sender peer.ID, sni *records.SignedNodeInfo) (bool, error) {
-		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubKey)
+		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubKeyPem)
 		if err != nil {
 			return false, err
 		}
@@ -52,8 +52,8 @@ func SignatureCheckFilter() HandshakeFilter {
 			return false, err
 		}
 
-		if !sni.HandshakeData.Timestamp.Round(TimestampAllowedDifference).Equal(time.Now().Round(TimestampAllowedDifference)) {
-			return false, fmt.Errorf("signature was made more than %f seconds ago", TimestampAllowedDifference.Seconds())
+		if difference := time.Since(sni.HandshakeData.Timestamp); difference > AllowedDifference {
+			return false, fmt.Errorf("signature made %f seconds ago, should no more than %f seconds ago", difference.Seconds(), AllowedDifference.Seconds())
 		}
 
 		return true, nil
@@ -62,7 +62,7 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
 	return func(sender peer.ID, sni *records.SignedNodeInfo) (bool, error) {
-		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, []byte(sni.HandshakeData.SenderPubKey))
+		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 		if !found {
 			return false, errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}

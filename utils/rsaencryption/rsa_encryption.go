@@ -1,3 +1,8 @@
+// TODO: replace ExtractPublicKeyPemBase64 it with ExtractPublicKeyPem
+// In fact, we never use base64 representation of public key except of case
+// when we use it as a key for database.
+// So PEM should be encrypted to base64 only and inside database layer
+
 package rsaencryption
 
 import (
@@ -73,8 +78,8 @@ func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 }
 
 // ConvertPemToPublicKey return rsa public key from public key pem
-func ConvertPemToPublicKey(pubPem string) (*rsa.PublicKey, error) {
-	block, _ := pem.Decode([]byte(pubPem))
+func ConvertPemToPublicKey(pubPem []byte) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode(pubPem)
 	if block == nil {
 		return nil, errors.New("failed to parse PEM block containing the public key")
 	}
@@ -101,8 +106,8 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	)
 }
 
-// ExtractPublicKey get public key from private key and return base64 encoded public key
-func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
+// ExtractPublicKeyPemBase64 get public key from private key and return base64 encoded public key
+func ExtractPublicKeyPemBase64(sk *rsa.PrivateKey) (string, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to marshal private key")
@@ -115,4 +120,20 @@ func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	)
 
 	return base64.StdEncoding.EncodeToString(pemByte), nil
+}
+
+// ExtractPublicKeyPem get public key from private key and return public key PEM
+func ExtractPublicKeyPem(sk *rsa.PrivateKey) ([]byte, error) {
+	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to marshal private key")
+	}
+	pemByte := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: pkBytes,
+		},
+	)
+
+	return pemByte, nil
 }

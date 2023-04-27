@@ -16,7 +16,6 @@ import (
 
 var (
 	SenderPrivateKey *rsa.PrivateKey
-	SenderPublicKey  string
 
 	HandshakeData       records.HandshakeData
 	HashedHandshakeData []byte
@@ -25,22 +24,23 @@ var (
 	SenderPeerID    = peer.ID("1.1.1.1")
 	RecipientPeerID = peer.ID("2.2.2.2")
 
-	PrivateKeyBytes []byte
+	PrivateKeyPEM      []byte
+	SenderPublicKeyPEM []byte
 )
 
 func init() {
 	var err error
-	_, PrivateKeyBytes, err = rsaencryption.GenerateKeys()
+	_, PrivateKeyPEM, err = rsaencryption.GenerateKeys()
 	if err != nil {
 		panic(err)
 	}
 
-	SenderPrivateKey, err = rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyBytes))
+	SenderPrivateKey, err = rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyPEM))
 	if err != nil {
 		panic(err)
 	}
 
-	SenderPublicKey, err = rsaencryption.ExtractPublicKey(SenderPrivateKey)
+	SenderPublicKeyPEM, err = rsaencryption.ExtractPublicKeyPem(SenderPrivateKey)
 	if err != nil {
 		panic(err)
 	}
@@ -48,18 +48,21 @@ func init() {
 	HandshakeData = records.HandshakeData{
 		SenderPeerID:    SenderPeerID,
 		RecipientPeerID: RecipientPeerID,
-		Timestamp:       time.Now().Round(30 * time.Second),
-		SenderPubKey:    SenderPublicKey,
+		Timestamp:       time.Now(),
+		SenderPubKeyPem: SenderPublicKeyPEM,
 	}
 	hashed := HandshakeData.Hash()
 
 	HashedHandshakeData = hashed[:]
 
 	Signature, err = rsa.SignPKCS1v15(rand.Reader, SenderPrivateKey, crypto.SHA256, HashedHandshakeData)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func TestTest(t *testing.T) {
-	pk, err := rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyBytes))
+	pk, err := rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyPEM))
 	require.NoError(t, err)
 	require.NotNil(t, pk)
 }
@@ -135,6 +138,15 @@ func TestSignatureCheckFFilter(t *testing.T) {
 	ok, err = f("", &records.SignedNodeInfo{
 		HandshakeData: HandshakeData,
 		Signature:     []byte("wrong signature"),
+	})
+	require.Error(t, err)
+	require.False(t, ok)
+
+	wrongTimestamp := HandshakeData
+	wrongTimestamp.Timestamp = wrongTimestamp.Timestamp.Add(-2 * AllowedDifference)
+	ok, err = f("", &records.SignedNodeInfo{
+		HandshakeData: wrongTimestamp,
+		Signature:     Signature,
 	})
 	require.Error(t, err)
 	require.False(t, ok)

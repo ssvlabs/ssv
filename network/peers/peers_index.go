@@ -123,7 +123,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	publicKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+	publicKey, err := rsaencryption.ExtractPublicKeyPem(operatorPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +131,8 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *
 	handshakeData := records.HandshakeData{
 		SenderPeerID:    sender,
 		RecipientPeerID: recipient,
-		Timestamp:       time.Now().Round(30 * time.Second),
-		SenderPubKey:    publicKey,
+		Timestamp:       time.Now(),
+		SenderPubKeyPem: publicKey,
 	}
 	hash := handshakeData.Hash()
 

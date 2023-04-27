@@ -206,7 +206,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 		return err
 	}
 
-	publicKey, err := rsaencryption.ExtractPublicKey(privateKey)
+	publicKey, err := rsaencryption.ExtractPublicKeyPem(privateKey)
 	if err != nil {
 		return err
 	}
@@ -214,8 +214,8 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	handshakeData := records.HandshakeData{
 		SenderPeerID:    h.net.LocalPeer(),
 		RecipientPeerID: pid,
-		Timestamp:       time.Now().Round(30 * time.Second),
-		SenderPubKey:    publicKey,
+		Timestamp:       time.Now(),
+		SenderPubKeyPem: publicKey,
 	}
 	hash := handshakeData.Hash()
 
