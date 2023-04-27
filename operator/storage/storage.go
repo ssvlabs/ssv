@@ -209,7 +209,7 @@ func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, 
 	if !found {
 		return nil, errors.New("failed to find operator private key")
 	}
-	operatorPublicKey, err := rsaencryption.ExtractPublicKeyPemBase64(sk)
+	operatorPublicKey, err := rsaencryption.ExtractPublicKeyPem(sk)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract operator public key")
 	}
