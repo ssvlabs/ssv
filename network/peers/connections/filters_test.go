@@ -61,12 +61,6 @@ func init() {
 	}
 }
 
-func TestTest(t *testing.T) {
-	pk, err := rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyPEM))
-	require.NoError(t, err)
-	require.NotNil(t, pk)
-}
-
 func TestNetworkIDFilter(t *testing.T) {
 	f := NetworkIDFilter("xxx")
 
