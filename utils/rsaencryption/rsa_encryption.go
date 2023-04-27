@@ -106,8 +106,8 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	)
 }
 
-// ExtractPublicKeyPemBase64 get public key from private key and return base64 encoded public key
-func ExtractPublicKeyPemBase64(sk *rsa.PrivateKey) (string, error) {
+// ExtractPublicKey get public key from private key and return base64 encoded public key
+func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to marshal private key")

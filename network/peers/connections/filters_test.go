@@ -2,7 +2,6 @@ package connections
 
 import (
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"testing"
 	"time"
@@ -55,7 +54,7 @@ func prepareTestingData() {
 
 	HashedHandshakeData = hashed[:]
 
-	Signature, err = rsa.SignPKCS1v15(rand.Reader, SenderPrivateKey, crypto.SHA256, HashedHandshakeData)
+	Signature, err = rsa.SignPKCS1v15(nil, SenderPrivateKey, crypto.SHA256, HashedHandshakeData)
 	if err != nil {
 		panic(err)
 	}

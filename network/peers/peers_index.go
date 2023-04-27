@@ -2,7 +2,6 @@ package peers
 
 import (
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"strconv"
 	"sync"
@@ -136,7 +135,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *
 	}
 	hash := handshakeData.Hash()
 
-	signature, err := rsa.SignPKCS1v15(rand.Reader, operatorPrivateKey, crypto.SHA256, hash[:])
+	signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
 	if err != nil {
 		return nil, err
 	}
