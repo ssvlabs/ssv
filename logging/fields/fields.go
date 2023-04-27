@@ -269,3 +269,7 @@ func Errors(val []error) zap.Field {
 func ToBlock(val *big.Int) zap.Field {
 	return zap.Int64(FieldToBlock, val.Int64())
 }
+
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
