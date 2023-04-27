@@ -34,14 +34,14 @@ func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeI
 }
 
 // Seal seals and encodes the record to be sent to other peers
-func (ni *NodeInfo) Seal(privateKey crypto.PrivKey, handshakeData HandshakeData, signature []byte) ([]byte, error) {
+func (ni *NodeInfo) Seal(netPrivateKey crypto.PrivKey, handshakeData HandshakeData, signature []byte) ([]byte, error) {
 	signedNodeInfo := SignedNodeInfo{
 		NodeInfo:      ni,
 		HandshakeData: handshakeData,
 		Signature:     signature,
 	}
 
-	ev, err := record.Seal(signedNodeInfo, privateKey)
+	ev, err := record.Seal(signedNodeInfo, netPrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not seal record")
 	}
