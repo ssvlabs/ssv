@@ -24,15 +24,18 @@ var (
 
 	SenderPeerID    = peer.ID("1.1.1.1")
 	RecipientPeerID = peer.ID("2.2.2.2")
+
+	PrivateKeyBytes []byte
 )
 
 func init() {
-	_, privateKeyBytes, err := rsaencryption.GenerateKeys()
+	var err error
+	_, PrivateKeyBytes, err = rsaencryption.GenerateKeys()
 	if err != nil {
 		panic(err)
 	}
 
-	SenderPrivateKey, err = rsaencryption.ConvertPemToPrivateKey(string(privateKeyBytes))
+	SenderPrivateKey, err = rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyBytes))
 	if err != nil {
 		panic(err)
 	}
@@ -53,6 +56,12 @@ func init() {
 	HashedHandshakeData = hashed[:]
 
 	Signature, err = rsa.SignPKCS1v15(rand.Reader, SenderPrivateKey, crypto.SHA256, HashedHandshakeData)
+}
+
+func TestTest(t *testing.T) {
+	pk, err := rsaencryption.ConvertPemToPrivateKey(string(PrivateKeyBytes))
+	require.NoError(t, err)
+	require.NotNil(t, pk)
 }
 
 func TestNetworkIDFilter(t *testing.T) {
@@ -107,9 +116,7 @@ func TestSenderRecipientIPsCheckFilter(t *testing.T) {
 }
 
 func TestSignatureCheckFFilter(t *testing.T) {
-	f := SignatureCheckFilter(logging.TestLogger(t), MockStorage{
-		PrivateKey: SenderPrivateKey,
-	})
+	f := SignatureCheckFilter()
 
 	ok, err := f("", &records.SignedNodeInfo{
 		HandshakeData: HandshakeData,

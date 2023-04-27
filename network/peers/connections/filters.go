@@ -3,13 +3,18 @@ package connections
 import (
 	"crypto"
 	"crypto/rsa"
+	"fmt"
+	"time"
 
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
+
+var TimestampAllowedDifference = 30 * time.Second
 
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
@@ -35,17 +40,20 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter {
 	}
 }
 
-func SignatureCheckFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter {
-	privateKey, found, err := nodeStorage.GetPrivateKey()
-	if !found {
-		logger.Warn("could not get private key", zap.Error(err))
-		return nil
-	}
-
+func SignatureCheckFilter() HandshakeFilter {
 	return func(sender peer.ID, sni *records.SignedNodeInfo) (bool, error) {
-		hashed := sni.HandshakeData.Hash()
-		if err := rsa.VerifyPKCS1v15(&privateKey.PublicKey, crypto.SHA256, hashed[:], sni.Signature); err != nil {
+		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubKey)
+		if err != nil {
 			return false, err
+		}
+
+		hashed := sni.HandshakeData.Hash()
+		if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], sni.Signature); err != nil {
+			return false, err
+		}
+
+		if !sni.HandshakeData.Timestamp.Round(TimestampAllowedDifference).Equal(time.Now().Round(TimestampAllowedDifference)) {
+			return false, fmt.Errorf("signature was made more than %f seconds ago", TimestampAllowedDifference.Seconds())
 		}
 
 		return true, nil

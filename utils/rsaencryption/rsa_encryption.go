@@ -72,6 +72,25 @@ func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 	return parsedSk, nil
 }
 
+// ConvertPemToPublicKey return rsa public key from public key pem
+func ConvertPemToPublicKey(pubPem string) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(pubPem))
+	if block == nil {
+		return nil, errors.New("failed to parse PEM block containing the public key")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse DER encoded public key")
+	}
+
+	if pub, ok := pub.(*rsa.PublicKey); ok {
+		return pub, nil
+	} else {
+		return nil, errors.New("unknown type of public key")
+	}
+}
+
 // PrivateKeyToByte converts privateKey to []byte
 func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 	return pem.EncodeToMemory(
