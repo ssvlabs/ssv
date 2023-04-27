@@ -221,7 +221,8 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, hash[:])
 	if err != nil {
-		panic(err)
+		logger.Debug("could not sign", zap.Error(err))
+		return err
 	}
 
 	sni := records.SignedNodeInfo{
