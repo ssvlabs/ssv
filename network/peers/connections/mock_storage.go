@@ -1,6 +1,7 @@
 package connections
 
 import (
+	"bytes"
 	"crypto/rsa"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -10,13 +11,14 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
 var _ storage.Storage = MockStorage{}
 
 type MockStorage struct {
-	PrivateKey *rsa.PrivateKey
+	RegisteredOperatorPublicKeyPEMs [][]byte
 }
 
 func (m MockStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
@@ -34,8 +36,14 @@ func (m MockStorage) CleanRegistryData() error {
 	panic("implement me")
 }
 
-func (m MockStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
-	return nil, true, nil
+func (m MockStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPublicKeyPEM []byte) (*registrystorage.OperatorData, bool, error) {
+	for _, current := range m.RegisteredOperatorPublicKeyPEMs {
+		if bytes.Equal(current, operatorPublicKeyPEM) {
+			return &registrystorage.OperatorData{}, true, nil
+		}
+	}
+
+	return nil, false, errors.New("operator not found")
 }
 
 func (m MockStorage) GetOperatorData(id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
@@ -119,7 +127,8 @@ func (m MockStorage) DeleteShare(key []byte) error {
 }
 
 func (m MockStorage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	return m.PrivateKey, true, nil
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m MockStorage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
