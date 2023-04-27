@@ -17,6 +17,8 @@ const (
 	protectedTag = "ssv/subnets"
 )
 
+type PeerScore float64
+
 // ConnManager is a wrapper on top of go-libp2p/core/connmgr.ConnManager.
 // exposing an abstract interface so we can have the flexibility of doing some stuff manually
 // rather than relaying on libp2p's connection manager.
@@ -84,8 +86,8 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 // getBestPeers loop over all the existing peers and returns the best set
 // according to the number of shared subnets,
 // while considering subnets with low peer count to be more important.
-func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]int {
-	peerScores := make(map[peer.ID]int)
+func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int) map[peer.ID]PeerScore {
+	peerScores := make(map[peer.ID]PeerScore)
 	if len(allPeers) < n {
 		for _, p := range allPeers {
 			peerScores[p] = 1
@@ -97,41 +99,57 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
 	var b strings.Builder
 	type dump struct {
-		peerID peer.ID
-		score  int
-		shared int
+		peerID    peer.ID
+		score     PeerScore
+		connected int
+		shared    int
 	}
 	var dumps []dump
 	for _, pid := range allPeers {
-		var peerScore int
-		subnets := c.subnetsIdx.GetPeerSubnets(pid)
-		for subnet, val := range subnets {
-			if val == byte(0) && subnetsScores[subnet] < 0 {
-				peerScore -= subnetsScores[subnet]
+		var score PeerScore
+		var subnetsConnected int
+		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
+		for subnet, connected := range peerSubnets {
+			subnetScore := subnetsScores[subnet]
+			if connected == 0 && subnetScore < 0 {
+				score -= PeerScore(subnetScore)
 			} else {
-				peerScore += subnetsScores[subnet]
+				score += PeerScore(subnetScore)
+			}
+			if connected > 0 {
+				subnetsConnected++
 			}
 		}
-		// adding the number of shared subnets to the score, considering only up to 25% subnets
-		shared := records.SharedSubnets(subnets, mySubnets, len(mySubnets)/4)
-		peerScore += len(shared) / 2
-		// logger.Debug("peer score", zap.String("id", pid.String()), zap.Int("score", peerScore))
-		peerScores[pid] = peerScore
+		peerScores[pid] = score
 		dumps = append(dumps, dump{
-			peerID: pid,
-			score:  peerScore,
-			shared: len(records.SharedSubnets(subnets, mySubnets, len(mySubnets))),
+			peerID:    pid,
+			score:     score,
+			connected: subnetsConnected,
+			shared:    len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
 		})
 	}
 	sort.Slice(dumps, func(i, j int) bool {
 		return dumps[i].score < dumps[j].score
 	})
 	for _, d := range dumps {
-		fmt.Fprintf(&b, "(%s shared=%d score=%d)  ", d.peerID.String(), d.shared, d.score)
+		fmt.Fprintf(&b, "(%s connected=%d shared=%d score=%.2f)\n", d.peerID.String(), d.connected, d.shared, d.score)
 	}
 	c.logger.Debug("DUMP: peer scores",
 		zap.Int("total_subnets", len(mySubnets)),
 		zap.String("scores", b.String()))
 
 	return GetTopScores(peerScores, n)
+}
+
+func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) float64 {
+	var score float64
+	for subnet, subnetScore := range subnetsScores {
+		connected := peerSubnets[subnet] > 0
+		if connected {
+			score += subnetScore
+		} else {
+			score -= subnetScore
+		}
+	}
+	return score / float64(len(subnetsScores))
 }

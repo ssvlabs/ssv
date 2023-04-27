@@ -2,6 +2,7 @@ package peers
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -105,4 +106,37 @@ func (m mockConnManager) IsProtected(id peer.ID, tag string) (protected bool) {
 
 func (m mockConnManager) Close() error {
 	return nil
+}
+
+func TestScorePeer(t *testing.T) {
+	subnetScores := []float64{
+		scoreSubnet(0, 5, 10),  // 0: Disconnected
+		scoreSubnet(2, 5, 10),  // 1: Underconnected
+		scoreSubnet(5, 5, 20),  // 2: Barely connected
+		scoreSubnet(15, 5, 20), // 3: Well connected
+		scoreSubnet(30, 5, 20), // 4: Overconnected
+	}
+	peers := []records.Subnets{
+		{1, 1, 1, 1, 1},
+		{0, 1, 1, 1, 1},
+		{0, 0, 1, 1, 1},
+		{0, 0, 0, 1, 1},
+		{0, 0, 0, 0, 1},
+		{1, 1, 1, 1, 0},
+		{1, 1, 1, 0, 0},
+		{1, 1, 0, 0, 0},
+		{1, 0, 0, 0, 0},
+		{0, 0, 0, 0, 0},
+	}
+	for peerIndex, p := range peers {
+		score := scorePeer(p, subnetScores)
+		var peerSubnets string
+		for i, s := range p {
+			if i > 0 {
+				peerSubnets += ":"
+			}
+			peerSubnets += fmt.Sprint(s)
+		}
+		fmt.Printf("Peer #%d: Subnets(%s) -> Score(%f)\n", 1000+peerIndex, peerSubnets, score)
+	}
 }
