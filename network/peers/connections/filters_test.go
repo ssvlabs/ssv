@@ -28,7 +28,7 @@ var (
 	SenderPublicKeyPEM []byte
 )
 
-func init() {
+func prepareTestingData() {
 	var err error
 	_, PrivateKeyPEM, err = rsaencryption.GenerateKeys()
 	if err != nil {
@@ -62,6 +62,8 @@ func init() {
 }
 
 func TestNetworkIDFilter(t *testing.T) {
+	prepareTestingData()
+
 	f := NetworkIDFilter("xxx")
 
 	ok, err := f("", &records.SignedNodeInfo{
@@ -82,6 +84,8 @@ func TestNetworkIDFilter(t *testing.T) {
 }
 
 func TestSenderRecipientIPsCheckFilter(t *testing.T) {
+	prepareTestingData()
+
 	f := SenderRecipientIPsCheckFilter(RecipientPeerID)
 
 	ok, err := f(SenderPeerID, &records.SignedNodeInfo{
@@ -113,6 +117,8 @@ func TestSenderRecipientIPsCheckFilter(t *testing.T) {
 }
 
 func TestSignatureCheckFFilter(t *testing.T) {
+	prepareTestingData()
+
 	f := SignatureCheckFilter()
 
 	ok, err := f("", &records.SignedNodeInfo{
@@ -147,6 +153,8 @@ func TestSignatureCheckFFilter(t *testing.T) {
 }
 
 func TestRegisteredOperatorsFilter(t *testing.T) {
+	prepareTestingData()
+
 	f := RegisteredOperatorsFilter(logging.TestLogger(t), MockStorage{
 		RegisteredOperatorPublicKeyPEMs: [][]byte{
 			SenderPublicKeyPEM,
