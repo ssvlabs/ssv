@@ -166,13 +166,15 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 
 func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 	var score float64
+	var connectedSubnets int
 	for subnet, subnetScore := range subnetsScores {
 		connected := peerSubnets[subnet] > 0
 		if connected {
 			score += subnetScore
+			connectedSubnets++
 		} else {
-			score -= subnetScore
+			// score -= subnetScore
 		}
 	}
-	return PeerScore(score / float64(len(subnetsScores)))
+	return PeerScore(score / float64(connectedSubnets))
 }
