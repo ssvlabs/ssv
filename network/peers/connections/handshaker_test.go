@@ -14,7 +14,7 @@ import (
 // TestHandshake tests whole handshake flow
 // TestHandshake DO NOT CHECK SEAL/CONSUME FLOW AND FILERS (these checks are in another files)
 func TestHandshake(t *testing.T) {
-	prepareTestingData()
+	testingData := getTestingData(t)
 
 	nii := mock.NodeInfoIndex{
 		MockNodeInfo:   &records.NodeInfo{},
@@ -35,7 +35,7 @@ func TestHandshake(t *testing.T) {
 		MockPeerstore: ps,
 	}
 	nst := mock.NodeStorage{
-		MockGetPrivateKey: SenderPrivateKey,
+		MockGetPrivateKey: testingData.SenderPrivateKey,
 	}
 	sc := mock.StreamController{
 		MockRequest: []byte{},
@@ -52,7 +52,7 @@ func TestHandshake(t *testing.T) {
 		filters:     []HandshakeFilter{},
 	}
 	c := mock.Conn{
-		MockPeerID: RecipientPeerID,
+		MockPeerID: testingData.RecipientPeerID,
 	}
 
 	require.NoError(t, h.Handshake(logging.TestLogger(t), c))
