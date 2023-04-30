@@ -106,9 +106,9 @@ func TestSubnetScore(t *testing.T) {
 		{connected: 10, min: 5, max: 20, expected: 0.666667},
 		{connected: 15, min: 5, max: 20, expected: 0.333333},
 		{connected: 20, min: 5, max: 20, expected: 0.0},
-		{connected: 25, min: 5, max: 20, expected: -1.166667},
-		{connected: 50, min: 5, max: 20, expected: -2.0},
-		{connected: 100, min: 5, max: 20, expected: -3.666667},
+		{connected: 25, min: 5, max: 20, expected: -0.166667},
+		{connected: 50, min: 5, max: 20, expected: -1.0},
+		{connected: 100, min: 5, max: 20, expected: -2.666667},
 	}
 
 	for _, tc := range testCases {

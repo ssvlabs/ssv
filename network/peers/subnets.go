@@ -141,7 +141,7 @@ func scoreSubnet(connected, min, max int) float64 {
 
 	if connected > max {
 		// Linear scaling when connected is above the desired maximum.
-		return -1.0 * (1 + float64(connected-max)/float64(2*(max-min)))
+		return -1.0 * (float64(connected-max) / float64(2*(max-min)))
 	}
 
 	if connected < min {
