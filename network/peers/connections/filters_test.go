@@ -10,8 +10,6 @@ import (
 )
 
 func TestNetworkIDFilter(t *testing.T) {
-	prepareTestingData()
-
 	f := NetworkIDFilter("xxx")
 
 	ok, err := f("", &records.SignedNodeInfo{
@@ -32,31 +30,31 @@ func TestNetworkIDFilter(t *testing.T) {
 }
 
 func TestSenderRecipientIPsCheckFilter(t *testing.T) {
-	prepareTestingData()
+	testingData := getTestingData(t)
 
-	f := SenderRecipientIPsCheckFilter(RecipientPeerID)
+	f := SenderRecipientIPsCheckFilter(testingData.RecipientPeerID)
 
-	ok, err := f(SenderPeerID, &records.SignedNodeInfo{
+	ok, err := f(testingData.SenderPeerID, &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{
-			SenderPeerID:    SenderPeerID,
-			RecipientPeerID: RecipientPeerID,
+			SenderPeerID:    testingData.SenderPeerID,
+			RecipientPeerID: testingData.RecipientPeerID,
 		},
 	})
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f(SenderPeerID, &records.SignedNodeInfo{
+	ok, err = f(testingData.SenderPeerID, &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{
 			SenderPeerID:    "wrong sender",
-			RecipientPeerID: RecipientPeerID,
+			RecipientPeerID: testingData.RecipientPeerID,
 		},
 	})
 	require.Error(t, err)
 	require.False(t, ok)
 
-	ok, err = f(SenderPeerID, &records.SignedNodeInfo{
+	ok, err = f(testingData.SenderPeerID, &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{
-			SenderPeerID:    SenderPeerID,
+			SenderPeerID:    testingData.SenderPeerID,
 			RecipientPeerID: "wrong recipient",
 		},
 	})
@@ -65,57 +63,57 @@ func TestSenderRecipientIPsCheckFilter(t *testing.T) {
 }
 
 func TestSignatureCheckFFilter(t *testing.T) {
-	prepareTestingData()
+	testingData := getTestingData(t)
 
 	f := SignatureCheckFilter()
 
 	ok, err := f("", &records.SignedNodeInfo{
-		HandshakeData: HandshakeData,
-		Signature:     Signature,
+		HandshakeData: testingData.HandshakeData,
+		Signature:     testingData.Signature,
 	})
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	ok, err = f("", &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{}, //wrong handshake data
-		Signature:     Signature,
+		Signature:     testingData.Signature,
 	})
 	require.Error(t, err)
 	require.False(t, ok)
 
 	ok, err = f("", &records.SignedNodeInfo{
-		HandshakeData: HandshakeData,
+		HandshakeData: testingData.HandshakeData,
 		Signature:     []byte("wrong signature"),
 	})
 	require.Error(t, err)
 	require.False(t, ok)
 
-	wrongTimestamp := HandshakeData
+	wrongTimestamp := testingData.HandshakeData
 	wrongTimestamp.Timestamp = wrongTimestamp.Timestamp.Add(-2 * AllowedDifference)
 	ok, err = f("", &records.SignedNodeInfo{
 		HandshakeData: wrongTimestamp,
-		Signature:     Signature,
+		Signature:     testingData.Signature,
 	})
 	require.Error(t, err)
 	require.False(t, ok)
 }
 
 func TestRegisteredOperatorsFilter(t *testing.T) {
-	prepareTestingData()
+	testingData := getTestingData(t)
 
 	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{
 		RegisteredOperatorPublicKeyPEMs: [][]byte{
-			SenderPublicKeyPEM,
+			testingData.SenderPublicKeyPEM,
 		},
 	})
 
 	ok, err := f("", &records.SignedNodeInfo{
-		HandshakeData: HandshakeData,
+		HandshakeData: testingData.HandshakeData,
 	})
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	wrongSenderPubKeyPem := HandshakeData
+	wrongSenderPubKeyPem := testingData.HandshakeData
 	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
 	ok, err = f("", &records.SignedNodeInfo{
 		HandshakeData: wrongSenderPubKeyPem,
