@@ -2,18 +2,14 @@ package connections
 
 import (
 	"context"
-	"crypto"
-	"crypto/rsa"
 	"strings"
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -188,7 +184,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
-	ni, err = h.nodeInfoFromStream(logger, conn)
+	sni, err := h.nodeInfoFromStream(logger, conn)
 	if err != nil {
 		// fallbacks to user agent
 		ni, err = h.nodeInfoFromUserAgent(logger, conn)
@@ -200,38 +196,8 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 		return errors.New("empty node info")
 	}
 
-	privateKey, found, err := h.nodeStorage.GetPrivateKey()
-	if !found {
-		return err
-	}
-
-	publicKey, err := rsaencryption.ExtractPublicKeyPem(privateKey)
-	if err != nil {
-		return err
-	}
-
-	handshakeData := records.HandshakeData{
-		SenderPeerID:    h.net.LocalPeer(),
-		RecipientPeerID: pid,
-		Timestamp:       time.Now(),
-		SenderPubKeyPem: publicKey,
-	}
-	hash := handshakeData.Hash()
-
-	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		logger.Debug("could not sign", zap.Error(err))
-		return err
-	}
-
-	sni := records.SignedNodeInfo{
-		NodeInfo:      ni,
-		HandshakeData: handshakeData,
-		Signature:     signature,
-	}
-
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
-	err = h.processIncomingNodeInfo(logger, pid, sni)
+	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
 		logger.Debug("could not process node info", zap.Error(err))
 		return err
@@ -273,7 +239,7 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 	}
 }
 
-func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
+func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.SignedNodeInfo, error) {
 	res, err := h.net.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
@@ -294,7 +260,7 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	if err != nil {
 		return nil, err
 	}
-	var ni records.NodeInfo
+	var ni records.SignedNodeInfo
 	err = ni.Consume(resBytes)
 	if err != nil {
 		return nil, err
