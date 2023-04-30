@@ -35,7 +35,7 @@ func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeI
 
 // Seal seals and encodes the record to be sent to other peers
 func (ni *NodeInfo) Seal(netPrivateKey crypto.PrivKey, handshakeData HandshakeData, signature []byte) ([]byte, error) {
-	signedNodeInfo := SignedNodeInfo{
+	signedNodeInfo := &SignedNodeInfo{
 		NodeInfo:      ni,
 		HandshakeData: handshakeData,
 		Signature:     signature,
@@ -51,24 +51,6 @@ func (ni *NodeInfo) Seal(netPrivateKey crypto.PrivKey, handshakeData HandshakeDa
 		return nil, errors.Wrap(err, "could not marshal envelope")
 	}
 	return data, nil
-}
-
-// Consume takes a raw envelope and extracts the parsed record
-func (ni *NodeInfo) Consume(data []byte) error {
-	evParsed, err := record.ConsumeTypedEnvelope(data, &NodeInfo{})
-	if err != nil {
-		return errors.Wrap(err, "could not consume envelope")
-	}
-	parsed, err := evParsed.Record()
-	if err != nil {
-		return errors.Wrap(err, "could not get record")
-	}
-	rec, ok := parsed.(*NodeInfo)
-	if !ok {
-		return errors.New("could not convert to NodeRecord")
-	}
-	*ni = *rec
-	return nil
 }
 
 // Domain is the "signature domain" used when signing and verifying an record.Record
@@ -130,18 +112,4 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	}
 
 	return nil
-}
-
-// serializable is a struct that can be encoded w/o worries of different encoding implementations,
-// e.g. JSON where an unordered map can be different across environments.
-// it uses a slice of entries to keep ordered values
-// TODO: use SSZ
-type serializable struct {
-	Entries []string
-}
-
-func newSerializable(entries ...string) *serializable {
-	return &serializable{
-		Entries: entries,
-	}
 }

@@ -8,11 +8,13 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/pkg/errors"
 )
 
 var _ peerstore.Peerstore = Peerstore{}
 
 type Peerstore struct {
+	ExistingPIDs               []peer.ID
 	MockFirstSupportedProtocol string
 }
 
@@ -92,8 +94,12 @@ func (p Peerstore) PeersWithKeys() peer.IDSlice {
 }
 
 func (p Peerstore) Get(pid peer.ID, key string) (interface{}, error) {
-	//TODO implement me
-	panic("implement me")
+	for _, epid := range p.ExistingPIDs {
+		if epid == pid {
+			return epid, nil
+		}
+	}
+	return nil, errors.New("error")
 }
 
 func (p Peerstore) Put(pid peer.ID, key string, val interface{}) error {
@@ -137,7 +143,11 @@ func (p Peerstore) SupportsProtocols(id peer.ID, s ...string) ([]string, error) 
 }
 
 func (p Peerstore) FirstSupportedProtocol(id peer.ID, s ...string) (string, error) {
-	return p.MockFirstSupportedProtocol, nil
+	if len(p.MockFirstSupportedProtocol) != 0 {
+		return p.MockFirstSupportedProtocol, nil
+	} else {
+		return "", errors.New("error")
+	}
 }
 
 func (p Peerstore) RemovePeer(id peer.ID) {
