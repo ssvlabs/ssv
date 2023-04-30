@@ -8,7 +8,7 @@
 
 Shows metrics for general information and health of the SSV node.
 
-See [JSON file](./grafana/dashboard_ssv_node.json) to import.
+See [JSON file](./dashboard_ssv_node.json) to import.
 
 The dashboard consists of the following sections:
 

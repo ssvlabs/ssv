@@ -8,7 +8,7 @@
 
 Shows metrics for validators stats, consensus committees status and health of the SSV node.
 
-See [JSON file](./grafana/dashboard_ssv_performance.json) to import.
+See [JSON file](./dashboard_ssv_operator_performance.json) to import.
 
 The dashboard consists of the following sections:
 
