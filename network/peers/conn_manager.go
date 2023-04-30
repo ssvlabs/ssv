@@ -107,7 +107,13 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 
 	for _, pid := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
-		score := scorePeer(peerSubnets, subnetsScores)
+		var score PeerScore
+		if len(peerSubnets) == 0 {
+			c.logger.Debug("DUMP: peer has no subnets", zap.String("peer", pid.String()))
+			score = -2
+		} else {
+			score = scorePeer(peerSubnets, subnetsScores)
+		}
 		peerScores[pid] = score
 		peerDumps = append(peerDumps, peerDump{
 			Peer:          pid,
