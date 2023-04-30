@@ -169,7 +169,7 @@ func TestSimulation(t *testing.T) {
 
 	var newPeers []struct {
 		Peer  peer.ID
-		Score float64
+		Score PeerScore
 	}
 	for _, p := range peers {
 		peerSubnets, err := records.Subnets{}.FromString(p.Subnets)
@@ -177,7 +177,7 @@ func TestSimulation(t *testing.T) {
 		peerScore := scorePeer(peerSubnets, subnetScores)
 		newPeers = append(newPeers, struct {
 			Peer  peer.ID
-			Score float64
+			Score PeerScore
 		}{Peer: p.Peer, Score: peerScore})
 	}
 
@@ -187,7 +187,7 @@ func TestSimulation(t *testing.T) {
 
 	for oldRank, peer := range peers {
 		newRank := -1
-		newScore := float64(0)
+		newScore := PeerScore(0)
 		for i, p := range newPeers {
 			if p.Peer == peer.Peer {
 				newRank = i

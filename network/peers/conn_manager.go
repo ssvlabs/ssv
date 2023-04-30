@@ -106,20 +106,8 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	var peerDumps []peerDump
 
 	for _, pid := range allPeers {
-		var score PeerScore
-		var subnetsConnected int
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
-		for subnet, connected := range peerSubnets {
-			subnetScore := subnetsScores[subnet]
-			if connected == 0 && subnetScore < 0 {
-				score -= PeerScore(subnetScore)
-			} else {
-				score += PeerScore(subnetScore)
-			}
-			if connected > 0 {
-				subnetsConnected++
-			}
-		}
+		score := scorePeer(peerSubnets, subnetsScores)
 		peerScores[pid] = score
 		peerDumps = append(peerDumps, peerDump{
 			Peer:          pid,
@@ -170,7 +158,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	return GetTopScores(peerScores, n)
 }
 
-func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) float64 {
+func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
 	var score float64
 	for subnet, subnetScore := range subnetsScores {
 		connected := peerSubnets[subnet] > 0
@@ -180,5 +168,5 @@ func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) float64 {
 			score -= subnetScore
 		}
 	}
-	return score / float64(len(subnetsScores))
+	return PeerScore(score / float64(len(subnetsScores)))
 }
