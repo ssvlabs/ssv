@@ -157,7 +157,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - p2p-refactors
+    - p2p-scoring-refactors
 
 Deploy v3 ssv-nodes to blox-infra-prod cluster:
   stage: deploy
@@ -175,7 +175,7 @@ Deploy v3 ssv-nodes to blox-infra-prod cluster:
     - mv ./kubectl /usr/bin/kubectl
     - .k8/scripts/deploy-ssv-node-v3-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
   only:
-    - p2p-refactors
+    - p2p-scoring-refactors
 
 
 Deploy ssv exporter to blox-infra-prod cluster:

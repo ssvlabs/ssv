@@ -2,9 +2,8 @@ package peers
 
 import (
 	"context"
-	"fmt"
+	"math"
 	"sort"
-	"strings"
 
 	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
@@ -97,14 +96,15 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	stats := c.subnetsIdx.GetSubnetsStats()
 	minSubnetPeers := 2
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
-	var b strings.Builder
-	type dump struct {
-		peerID    peer.ID
-		score     PeerScore
-		connected int
-		shared    int
+
+	type peerDump struct {
+		Peer          peer.ID
+		Score         PeerScore
+		SharedSubnets int
+		Subnets       string
 	}
-	var dumps []dump
+	var peerDumps []peerDump
+
 	for _, pid := range allPeers {
 		var score PeerScore
 		var subnetsConnected int
@@ -121,22 +121,51 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 			}
 		}
 		peerScores[pid] = score
-		dumps = append(dumps, dump{
-			peerID:    pid,
-			score:     score,
-			connected: subnetsConnected,
-			shared:    len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
+		peerDumps = append(peerDumps, peerDump{
+			Peer:          pid,
+			Score:         score,
+			SharedSubnets: len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
+			Subnets:       peerSubnets.String(),
 		})
 	}
-	sort.Slice(dumps, func(i, j int) bool {
-		return dumps[i].score < dumps[j].score
+
+	sort.Slice(peerDumps, func(i, j int) bool {
+		return peerDumps[i].Score < peerDumps[j].Score
 	})
-	for _, d := range dumps {
-		fmt.Fprintf(&b, "(%s connected=%d shared=%d score=%.2f)\n", d.peerID.String(), d.connected, d.shared, d.score)
+
+	var min, max = math.MaxInt32, math.MinInt32
+	var sum, zeros, belowTwo int
+	for _, n := range stats.Connected {
+		if n > max {
+			max = n
+		}
+		if n < min {
+			min = n
+		}
+		if n == 0 {
+			zeros++
+		}
+		if n < 2 {
+			belowTwo++
+		}
+		sum += n
 	}
+
 	c.logger.Debug("DUMP: peer scores",
 		zap.Int("total_subnets", len(mySubnets)),
-		zap.String("scores", b.String()))
+		zap.Any("dump", map[string]interface{}{
+			"my_subnets":          mySubnets.String(),
+			"subnets_connections": stats.Connected,
+			"peers":               peerDumps,
+		}),
+		zap.Any("subnet_stats", map[string]interface{}{
+			"min":       min,
+			"max":       max,
+			"avg":       float64(sum) / float64(len(stats.Connected)),
+			"zeros":     zeros,
+			"below_two": belowTwo,
+		}),
+	)
 
 	return GetTopScores(peerScores, n)
 }
