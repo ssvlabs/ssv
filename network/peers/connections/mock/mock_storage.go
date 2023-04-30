@@ -128,7 +128,11 @@ func (m NodeStorage) DeleteShare(key []byte) error {
 }
 
 func (m NodeStorage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	return m.MockGetPrivateKey, true, nil
+	if m.MockGetPrivateKey != nil {
+		return m.MockGetPrivateKey, true, nil
+	} else {
+		return nil, false, errors.New("error")
+	}
 }
 
 func (m NodeStorage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {

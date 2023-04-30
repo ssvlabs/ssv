@@ -6,55 +6,52 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNetworkIDFilter(t *testing.T) {
+	td := getTestingData(t)
+
 	f := NetworkIDFilter("xxx")
 
-	ok, err := f("", &records.SignedNodeInfo{
-		NodeInfo: &records.NodeInfo{
-			NetworkID: "xxx",
-		},
-	})
+	ok, err := f("", SealAndUnseal(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
+		NetworkID: "xxx",
+	}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f("", &records.SignedNodeInfo{
-		NodeInfo: &records.NodeInfo{
-			NetworkID: "bbb",
-		},
-	})
+	ok, err = f("", SealAndUnseal(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
+		NetworkID: "bbb",
+	}))
 	require.Error(t, err)
 	require.False(t, ok)
 }
 
 func TestSenderRecipientIPsCheckFilter(t *testing.T) {
-	testingData := getTestingData(t)
+	td := getTestingData(t)
 
-	f := SenderRecipientIPsCheckFilter(testingData.RecipientPeerID)
+	f := SenderRecipientIPsCheckFilter(td.RecipientPeerID)
 
-	ok, err := f(testingData.SenderPeerID, &records.SignedNodeInfo{
-		HandshakeData: records.HandshakeData{
-			SenderPeerID:    testingData.SenderPeerID,
-			RecipientPeerID: testingData.RecipientPeerID,
-		},
-	})
+	ok, err := f(td.SenderPeerID, SealAndUnseal(t, td.NetworkPrivateKey, records.HandshakeData{
+		SenderPeerID:    td.SenderPeerID,
+		RecipientPeerID: td.RecipientPeerID,
+	}, td.Signature, &records.NodeInfo{}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f(testingData.SenderPeerID, &records.SignedNodeInfo{
+	ok, err = f(td.SenderPeerID, &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{
 			SenderPeerID:    "wrong sender",
-			RecipientPeerID: testingData.RecipientPeerID,
+			RecipientPeerID: td.RecipientPeerID,
 		},
 	})
 	require.Error(t, err)
 	require.False(t, ok)
 
-	ok, err = f(testingData.SenderPeerID, &records.SignedNodeInfo{
+	ok, err = f(td.SenderPeerID, &records.SignedNodeInfo{
 		HandshakeData: records.HandshakeData{
-			SenderPeerID:    testingData.SenderPeerID,
+			SenderPeerID:    td.SenderPeerID,
 			RecipientPeerID: "wrong recipient",
 		},
 	})
@@ -120,4 +117,15 @@ func TestRegisteredOperatorsFilter(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.False(t, ok)
+}
+
+func SealAndUnseal(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, handshakeData records.HandshakeData, signature []byte, ni *records.NodeInfo) *records.SignedNodeInfo {
+	sealed, err := ni.Seal(networkPrivateKey, handshakeData, signature)
+	require.NoError(t, err)
+
+	sni := &records.SignedNodeInfo{}
+	err = sni.Consume(sealed)
+	require.NoError(t, err)
+
+	return sni
 }

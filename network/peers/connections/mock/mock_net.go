@@ -20,8 +20,7 @@ func (m Net) Peerstore() peerstore.Peerstore {
 }
 
 func (m Net) LocalPeer() peer.ID {
-	//TODO implement me
-	panic("implement me")
+	return "some peer"
 }
 
 func (m Net) DialPeer(ctx context.Context, id peer.ID) (libp2pnetwork.Conn, error) {

@@ -187,12 +187,13 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	sni, err := h.nodeInfoFromStream(logger, conn)
 	if err != nil {
 		// fallbacks to user agent
-		ni, err = h.nodeInfoFromUserAgent(logger, conn)
+		sni := records.SignedNodeInfo{}
+		sni.NodeInfo, err = h.nodeInfoFromUserAgent(logger, conn)
 		if err != nil {
 			return err
 		}
 	}
-	if ni == nil {
+	if sni.NodeInfo == nil {
 		return errors.New("empty node info")
 	}
 
@@ -260,12 +261,12 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	if err != nil {
 		return nil, err
 	}
-	var ni records.SignedNodeInfo
-	err = ni.Consume(resBytes)
+	sni := &records.SignedNodeInfo{}
+	err = sni.Consume(resBytes)
 	if err != nil {
 		return nil, err
 	}
-	return &ni, nil
+	return sni, nil
 }
 
 func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {

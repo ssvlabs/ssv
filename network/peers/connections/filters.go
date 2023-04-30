@@ -19,8 +19,8 @@ var AllowedDifference = 30 * time.Second
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
 	return func(sender peer.ID, sni *records.SignedNodeInfo) (bool, error) {
-		if networkID != sni.NetworkID {
-			return false, errors.Errorf("networkID '%s' instead of '%s'", sni.NetworkID, networkID)
+		if networkID != sni.NodeInfo.NetworkID {
+			return false, errors.Errorf("networkID '%s' instead of '%s'", sni.NodeInfo.NetworkID, networkID)
 		}
 		return true, nil
 	}

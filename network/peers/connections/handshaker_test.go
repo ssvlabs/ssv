@@ -5,55 +5,69 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/stretchr/testify/require"
 )
 
-// TestHandshake tests whole handshake flow
-// TestHandshake DO NOT CHECK SEAL/CONSUME FLOW AND FILERS (these checks are in another files)
+// TestHandshake whole handshake flow
+// TestHandshake DO NOT CHECK FILERS (filers checks are at another file)
 func TestHandshake(t *testing.T) {
-	testingData := getTestingData(t)
+	t.Run("regular", func(t *testing.T) {
+		td := getTestingData(t)
 
-	nii := mock.NodeInfoIndex{
-		MockNodeInfo:   &records.NodeInfo{},
-		MockSelfSealed: nil,
-	}
-	ns := mock.NodeStates{
-		MockNodeState: peers.StateReady,
-	}
-	ch := make(chan struct{})
-	close(ch)
-	ids := mock.IDService{
-		MockIdentifyWait: ch,
-	}
-	ps := mock.Peerstore{
-		MockFirstSupportedProtocol: "I support handshake protocol",
-	}
-	net := mock.Net{
-		MockPeerstore: ps,
-	}
-	nst := mock.NodeStorage{
-		MockGetPrivateKey: testingData.SenderPrivateKey,
-	}
-	sc := mock.StreamController{
-		MockRequest: []byte{},
-	}
+		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
 
-	h := handshaker{
-		ctx:         context.Background(),
-		nodeInfoIdx: nii,
-		states:      ns,
-		ids:         ids,
-		net:         net,
-		nodeStorage: nst,
-		streams:     sc,
-		filters:     []HandshakeFilter{},
-	}
-	c := mock.Conn{
-		MockPeerID: testingData.RecipientPeerID,
-	}
+	t.Run("wrong NodeInfoIndex", func(t *testing.T) {
+		td := getTestingData(t)
 
-	require.NoError(t, h.Handshake(logging.TestLogger(t), c))
+		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong NodeStates", func(t *testing.T) {
+		td := getTestingData(t)
+
+		td.Handshaker.states = mock.NodeStates{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong IDService", func(t *testing.T) {
+		td := getTestingData(t)
+
+		ch := make(chan struct{})
+		td.Handshaker.ids = mock.IDService{
+			MockIdentifyWait: ch,
+		}
+
+		var cancel func()
+		td.Handshaker.ctx, cancel = context.WithCancel(context.Background())
+		cancel()
+
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong Net", func(t *testing.T) {
+		td := getTestingData(t)
+		td.Handshaker.net = mock.Net{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong NodeStorage", func(t *testing.T) {
+		td := getTestingData(t)
+		td.Handshaker.nodeStorage = mock.NodeStorage{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong StreamController", func(t *testing.T) {
+		td := getTestingData(t)
+		td.Handshaker.streams = mock.StreamController{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("wrong Conn", func(t *testing.T) {
+		td := getTestingData(t)
+		td.Conn = mock.Conn{}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
 }

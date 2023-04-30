@@ -6,6 +6,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +18,11 @@ type NodeInfoIndex struct {
 }
 
 func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
-	return m.MockSelfSealed, nil
+	if len(m.MockSelfSealed) != 0 {
+		return m.MockSelfSealed, nil
+	} else {
+		return nil, errors.New("error")
+	}
 }
 
 func (m NodeInfoIndex) Self() *records.NodeInfo {
@@ -31,8 +36,7 @@ func (m NodeInfoIndex) UpdateSelfRecord(newInfo *records.NodeInfo) {
 }
 
 func (m NodeInfoIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, node *records.NodeInfo) (bool, error) {
-	//TODO implement me
-	panic("implement me")
+	return true, nil
 }
 
 func (m NodeInfoIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
