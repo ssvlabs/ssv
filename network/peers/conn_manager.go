@@ -99,13 +99,7 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 	minSubnetPeers := 4
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
 
-	type peerLog struct {
-		Peer          peer.ID
-		Score         PeerScore
-		SharedSubnets int
-	}
 	var peerLogs []peerLog
-
 	for _, pid := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
 		var score PeerScore
@@ -123,13 +117,26 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		})
 	}
 
+	c.logPeerScores(peerLogs, mySubnets, stats.Connected)
+
+	return GetTopScores(peerScores, n)
+}
+
+type peerLog struct {
+	Peer          peer.ID
+	Score         PeerScore
+	SharedSubnets int
+}
+
+func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets, subnetConnections []int) {
 	sort.Slice(peerLogs, func(i, j int) bool {
 		return peerLogs[i].Score < peerLogs[j].Score
 	})
 
+	// Calculate min & max of the active subnet connections.
 	activeSubnetConnections := make([]int, 0, mySubnets.Active())
 	var min, max = math.MaxInt32, math.MinInt32
-	for subnet, n := range stats.Connected {
+	for subnet, n := range subnetConnections {
 		if mySubnets[subnet] <= 0 {
 			continue
 		}
@@ -153,10 +160,12 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		}
 	}
 
-	subnetConnections := make([]byte, len(stats.Connected))
-	for subnet, n := range stats.Connected {
-		subnetConnections[subnet] = byte(n)
+	// Encode the subnet connections as a base64 string.
+	b := make([]byte, len(subnetConnections))
+	for subnet, n := range subnetConnections {
+		b[subnet] = byte(n)
 	}
+	subnetConnectionsBase64 := base64.StdEncoding.EncodeToString(b)
 
 	c.logger.Debug("scored peers",
 		zap.Int("total_subnets", len(mySubnets)),
@@ -166,10 +175,8 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 			"max":    fmt.Sprintf("%d", max),
 			"median": fmt.Sprintf("%.1f", median),
 		}),
-		zap.String("subnet_connections", base64.StdEncoding.EncodeToString(subnetConnections)),
+		zap.String("subnet_connections", subnetConnectionsBase64),
 	)
-
-	return GetTopScores(peerScores, n)
 }
 
 func scorePeer(peerSubnets records.Subnets, subnetsScores []float64) PeerScore {
