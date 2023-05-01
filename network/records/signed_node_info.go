@@ -8,7 +8,6 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/record"
-	"github.com/mr-tron/base58"
 	"github.com/pkg/errors"
 )
 
@@ -28,8 +27,8 @@ func (sni *SignedNodeInfo) Codec() []byte {
 
 func (sni *SignedNodeInfo) MarshalRecord() ([]byte, error) {
 	parts := []string{
-		base58.Encode([]byte(sni.HandshakeData.SenderPeerID)),
-		base58.Encode([]byte(sni.HandshakeData.RecipientPeerID)),
+		base64.StdEncoding.EncodeToString([]byte(sni.HandshakeData.SenderPeerID)),
+		base64.StdEncoding.EncodeToString([]byte(sni.HandshakeData.RecipientPeerID)),
 		strconv.FormatInt(sni.HandshakeData.Timestamp.Unix(), 10),
 		base64.StdEncoding.EncodeToString(sni.HandshakeData.SenderPubKeyPem),
 		base64.StdEncoding.EncodeToString(sni.Signature),
@@ -51,25 +50,19 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	if len(ser.Entries[0]) != 0 {
-		senderPeerID, err := base58.Decode(ser.Entries[0])
-		if err != nil {
-			return err
-		}
-		sni.HandshakeData.SenderPeerID = peer.ID(senderPeerID)
-	} else {
-		sni.HandshakeData.SenderPeerID = ""
+	senderPeerID, err := base64.StdEncoding.DecodeString(ser.Entries[0])
+	if err != nil {
+		return err
 	}
 
-	if len(ser.Entries[1]) != 0 {
-		recipientPeerID, err := base58.Decode(ser.Entries[1])
-		if err != nil {
-			return err
-		}
-		sni.HandshakeData.RecipientPeerID = peer.ID(recipientPeerID)
-	} else {
-		sni.HandshakeData.RecipientPeerID = ""
+	sni.HandshakeData.SenderPeerID = peer.ID(senderPeerID)
+
+	recipientPeerID, err := base64.StdEncoding.DecodeString(ser.Entries[1])
+	if err != nil {
+		return err
 	}
+
+	sni.HandshakeData.RecipientPeerID = peer.ID(recipientPeerID)
 
 	timeUnix, err := strconv.ParseInt(ser.Entries[2], 10, 64)
 	if err != nil {
