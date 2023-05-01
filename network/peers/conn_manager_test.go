@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"sort"
@@ -145,14 +146,24 @@ func TestScorePeer(t *testing.T) {
 }
 
 func TestSimulation(t *testing.T) {
+	var err error
+
+	// s, err := records.Subnets{}.FromString("00004000400000000040004010000000")
+	// require.NoError(t, err)
+	// for subnet, ss := range s {
+	// 	if ss == 1 {
+	// 		fmt.Printf("Subnet %d\n", subnet)
+	// 	}
+	// }
+
 	var dmp dump
-	err := json.Unmarshal([]byte(ssv_2_18_30), &dmp)
+	err = json.Unmarshal([]byte(ssv_2_18_30), &dmp)
 	require.NoError(t, err)
 	mySubnets, err := records.Subnets{}.FromString(dmp.MySubnets)
 	require.NoError(t, err)
 	_ = mySubnets
 
-	mySubnets, err = records.Subnets{}.FromString("0008284002a280008903041527094885")
+	mySubnets, err = records.Subnets{}.FromString("00000041000000008040000000400000")
 	require.NoError(t, err)
 
 	// for i, p := range dmp.Peers {
@@ -167,10 +178,23 @@ func TestSimulation(t *testing.T) {
 	// 	dmp.Peers[i].Subnets = peerSubnets.String()
 	// }
 
-	var subnetScores []float64
-	for _, conns := range dmp.SubnetsConnections {
-		subnetScores = append(subnetScores, scoreSubnet(conns, 8, 12))
+	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
+	subnetScores := make([]float64, len(allSubs))
+	for subnet, conns := range dmp.SubnetsConnections {
+		active := false
+		for _, s := range activeSubnets {
+			if s == subnet {
+				active = true
+				break
+			}
+		}
+		if active {
+			subnetScores[subnet] = 0.2 + scoreSubnet(conns, 4, 10)
+		}
 	}
+	// sort.Float64Slice(subnetScores).Sort()
+	log.Printf("subnetScores: %#v", subnetScores)
 
 	peers := dmp.Peers
 	sort.Slice(peers, func(i, j int) bool {
@@ -216,8 +240,11 @@ func TestSimulation(t *testing.T) {
 		if name, ok := peerNames[peerName]; ok {
 			peerName = name
 		}
-		fmt.Printf("Peer %53s: SharedSubnets=%d Old(%.2f #%d) New(%.2f #%d) Subnets(%s)\n",
-			peerName, peer.SharedSubnets, oldScore, oldRank, newScore, newRank, peer.Subnets)
+		peerSubnets, err := records.Subnets{}.FromString(peer.Subnets)
+		require.NoError(t, err)
+		newSharedSubnets := records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))
+		fmt.Printf("Peer %53s: SharedSubnets=%d NewSharedSubnets=%d Old(%.2f #%d) New(%.2f #%d) Subnets(%s)\n",
+			peerName, peer.SharedSubnets, len(newSharedSubnets), oldScore, oldRank, newScore, newRank, peer.Subnets)
 	}
 
 	// If we were to keep only the top 50% of peers, how would the subnet connections look like
@@ -297,7 +324,9 @@ var peerNames = map[string]string{
 	"16Uiu2HAm4uu7WFUDdLwTkYYsZc3rqE2cvQBVZsfgkdPkFr5Bct9o": "ssv-node-2",
 	"16Uiu2HAm4RuLkxdxXkRHBNm52aEo2FMAjSv947NhZkfR2xuwLWFM": "ssv-node-3",
 	"16Uiu2HAmUHiQMemRv1AjyLid17Z3Rvbe9LekqjoWaVJyL3drmKh8": "ssv-node-4",
-	"16Uiu2HAkwt9SuuNXKHjDCLvcX5LNVEvsBeLGUCtAKccDFuCrCqTC": "special-1",
+	"16Uiu2HAkwt9SuuNXKHjDCLvcX5LNVEvsBeLGUCtAKccDFuCrCqTC": "special-29",
+	"16Uiu2HAkxLGN74DMAyCQXqtoZAXFfYnMJJjudwF9kcU6GaHdRE4i": "special-5",
+	"16Uiu2HAmKD3qvyAb4moxhMiFkNmKHHni6aNdKbH8G7WT5mdaHM9Y": "1-shared",
 }
 
 type peerDump struct {
