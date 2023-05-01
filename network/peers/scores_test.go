@@ -38,9 +38,9 @@ func TestScoresIndex(t *testing.T) {
 func TestPeersTopScores(t *testing.T) {
 	pids, err := createPeerIDs(50)
 	require.NoError(t, err)
-	peerScores := make(map[peer.ID]int)
+	peerScores := make(map[peer.ID]PeerScore)
 	for i, pid := range pids {
-		peerScores[pid] = i + 1
+		peerScores[pid] = PeerScore(i) + 1
 	}
 	top := GetTopScores(peerScores, 25)
 	require.Len(t, top, 25)
