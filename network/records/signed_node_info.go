@@ -51,18 +51,25 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	senderPeerID, err := base58.Decode(ser.Entries[0])
-	if err != nil {
-		return err
+	if len(ser.Entries[0]) != 0 {
+		senderPeerID, err := base58.Decode(ser.Entries[0])
+		if err != nil {
+			return err
+		}
+		sni.HandshakeData.SenderPeerID = peer.ID(senderPeerID)
+	} else {
+		sni.HandshakeData.SenderPeerID = ""
 	}
 
-	recipientPeerID, err := base58.Decode(ser.Entries[1])
-	if err != nil {
-		return err
+	if len(ser.Entries[1]) != 0 {
+		recipientPeerID, err := base58.Decode(ser.Entries[1])
+		if err != nil {
+			return err
+		}
+		sni.HandshakeData.RecipientPeerID = peer.ID(recipientPeerID)
+	} else {
+		sni.HandshakeData.RecipientPeerID = ""
 	}
-
-	sni.HandshakeData.SenderPeerID = peer.ID(senderPeerID)
-	sni.HandshakeData.RecipientPeerID = peer.ID(recipientPeerID)
 
 	timeUnix, err := strconv.ParseInt(ser.Entries[2], 10, 64)
 	if err != nil {
