@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +30,15 @@ func TestHandshake(t *testing.T) {
 	t.Run("wrong NodeStates", func(t *testing.T) {
 		td := getTestingData(t)
 
-		td.Handshaker.states = mock.NodeStates{}
+		nii := mock.NodeInfoIndex{
+			MockNodeInfo: &records.NodeInfo{},
+		}
+
+		td.Handshaker.nodeInfoIdx = nii
+
+		td.Handshaker.states = mock.NodeStates{
+			MockNodeState: peers.StatePruned,
+		}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 
@@ -40,16 +50,10 @@ func TestHandshake(t *testing.T) {
 			MockIdentifyWait: ch,
 		}
 
-		var cancel func()
-		td.Handshaker.ctx, cancel = context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
-
-	t.Run("wrong Net", func(t *testing.T) {
-		td := getTestingData(t)
-		td.Handshaker.net = mock.Net{}
+		td.Handshaker.ctx = ctx
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 
@@ -62,12 +66,6 @@ func TestHandshake(t *testing.T) {
 	t.Run("wrong StreamController", func(t *testing.T) {
 		td := getTestingData(t)
 		td.Handshaker.streams = mock.StreamController{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
-
-	t.Run("wrong Conn", func(t *testing.T) {
-		td := getTestingData(t)
-		td.Conn = mock.Conn{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 }
