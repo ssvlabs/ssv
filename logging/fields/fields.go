@@ -218,7 +218,7 @@ func BlockHash(val phase0.Hash32) zap.Field {
 }
 
 func BlockVersion(val spec.DataVersion) zap.Field {
-	return zap.Stringer(FieldBlockHash, val)
+	return zap.Stringer(FieldBlockVersion, val)
 }
 
 func Name(val string) zap.Field {
