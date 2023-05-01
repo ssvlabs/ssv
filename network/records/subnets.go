@@ -67,7 +67,7 @@ func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
 		}
 		return nil, err
 	}
-	var res []byte
+	res := make([]byte, 0, subnetsVec.Len())
 	for i := uint64(0); i < subnetsVec.Len(); i++ {
 		val := byte(0)
 		if subnetsVec.BitAt(i) {
@@ -113,6 +113,16 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 		data = append(data, maskData1...)
 	}
 	return data, nil
+}
+
+func (s Subnets) Active() int {
+	var active int
+	for _, val := range s {
+		if val > 0 {
+			active++
+		}
+	}
+	return active
 }
 
 // SharedSubnets returns the shared subnets

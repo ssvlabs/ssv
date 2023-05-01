@@ -65,7 +65,7 @@ wantedScoresLoop:
 }
 
 // GetTopScores accepts a map of scores and returns the best n peers
-func GetTopScores(peerScores map[peer.ID]int, n int) map[peer.ID]int {
+func GetTopScores(peerScores map[peer.ID]PeerScore, n int) map[peer.ID]PeerScore {
 	pl := make(peerScoresList, len(peerScores))
 	i := 0
 	for k, v := range peerScores {
@@ -73,9 +73,9 @@ func GetTopScores(peerScores map[peer.ID]int, n int) map[peer.ID]int {
 		i++
 	}
 	sort.Sort(sort.Reverse(pl))
-	res := make(map[peer.ID]int)
+	res := make(map[peer.ID]PeerScore)
 	for _, item := range pl {
-		res[item.Key] = item.Value
+		res[item.Key] = item.Score
 		if len(res) >= n {
 			break
 		}
@@ -85,11 +85,11 @@ func GetTopScores(peerScores map[peer.ID]int, n int) map[peer.ID]int {
 
 type peerScorePair struct {
 	Key   peer.ID
-	Value int
+	Score PeerScore
 }
 
 type peerScoresList []peerScorePair
 
 func (p peerScoresList) Len() int           { return len(p) }
-func (p peerScoresList) Less(i, j int) bool { return p[i].Value < p[j].Value }
+func (p peerScoresList) Less(i, j int) bool { return p[i].Score < p[j].Score }
 func (p peerScoresList) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
