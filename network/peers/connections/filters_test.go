@@ -81,25 +81,21 @@ func TestSignatureCheckFFilter(t *testing.T) {
 }
 
 func TestRegisteredOperatorsFilter(t *testing.T) {
-	testingData := getTestingData(t)
+	td := getTestingData(t)
 
 	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{
 		RegisteredOperatorPublicKeyPEMs: [][]byte{
-			testingData.SenderPublicKeyPEM,
+			td.SenderPublicKeyPEM,
 		},
 	})
 
-	ok, err := f("", &records.SignedNodeInfo{
-		HandshakeData: testingData.HandshakeData,
-	})
+	ok, err := f("", SealAndConsume(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	wrongSenderPubKeyPem := testingData.HandshakeData
+	wrongSenderPubKeyPem := td.HandshakeData
 	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
-	ok, err = f("", &records.SignedNodeInfo{
-		HandshakeData: wrongSenderPubKeyPem,
-	})
+	ok, err = f("", SealAndConsume(t, td.NetworkPrivateKey, wrongSenderPubKeyPem, td.Signature, &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 }
