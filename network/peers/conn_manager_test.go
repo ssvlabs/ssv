@@ -152,6 +152,9 @@ func TestSimulation(t *testing.T) {
 	require.NoError(t, err)
 	_ = mySubnets
 
+	mySubnets, err = records.Subnets{}.FromString("0008284002a280008903041527094885")
+	require.NoError(t, err)
+
 	// for i, p := range dmp.Peers {
 	// 	peerSubnets, err := records.Subnets{}.FromString(p.Subnets)
 	// 	require.NoError(t, err)
@@ -166,7 +169,7 @@ func TestSimulation(t *testing.T) {
 
 	var subnetScores []float64
 	for _, conns := range dmp.SubnetsConnections {
-		subnetScores = append(subnetScores, scoreSubnet(conns, 2, 3))
+		subnetScores = append(subnetScores, scoreSubnet(conns, 8, 12))
 	}
 
 	peers := dmp.Peers
@@ -193,25 +196,28 @@ func TestSimulation(t *testing.T) {
 		return newPeers[i].Score > newPeers[j].Score
 	})
 
-	for oldRank, peer := range peers {
-		newRank := -1
-		newScore := PeerScore(0)
-		for i, p := range newPeers {
-			if p.Peer == peer.Peer {
-				newRank = i
-				newScore = p.Score
+	for newRank, newPeer := range newPeers {
+		newScore := newPeer.Score
+		oldRank := -1
+		oldScore := PeerScore(0)
+		var peer peerDump
+		for rank, p := range peers {
+			if p.Peer == newPeer.Peer {
+				oldRank = rank
+				oldScore = p.Score
+				peer = p
 				break
 			}
 		}
-		if newRank == -1 {
+		if oldRank == -1 {
 			panic("peer not found")
 		}
 		peerName := peer.Peer.String()
 		if name, ok := peerNames[peerName]; ok {
 			peerName = name
 		}
-		fmt.Printf("Peer %53s: SharedSubnets=%d OldScore(%.2f #%d) NewScore(%.2f #%d)\n",
-			peerName, peer.SharedSubnets, peer.Score, oldRank, newScore, newRank)
+		fmt.Printf("Peer %53s: SharedSubnets=%d Old(%.2f #%d) New(%.2f #%d) Subnets(%s)\n",
+			peerName, peer.SharedSubnets, oldScore, oldRank, newScore, newRank, peer.Subnets)
 	}
 
 	// If we were to keep only the top 50% of peers, how would the subnet connections look like
@@ -291,6 +297,7 @@ var peerNames = map[string]string{
 	"16Uiu2HAm4uu7WFUDdLwTkYYsZc3rqE2cvQBVZsfgkdPkFr5Bct9o": "ssv-node-2",
 	"16Uiu2HAm4RuLkxdxXkRHBNm52aEo2FMAjSv947NhZkfR2xuwLWFM": "ssv-node-3",
 	"16Uiu2HAmUHiQMemRv1AjyLid17Z3Rvbe9LekqjoWaVJyL3drmKh8": "ssv-node-4",
+	"16Uiu2HAkwt9SuuNXKHjDCLvcX5LNVEvsBeLGUCtAKccDFuCrCqTC": "special-1",
 }
 
 type peerDump struct {
