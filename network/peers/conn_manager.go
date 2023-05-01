@@ -2,6 +2,8 @@ package peers
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"math"
 	"sort"
 
@@ -94,16 +96,15 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		return peerScores
 	}
 	stats := c.subnetsIdx.GetSubnetsStats()
-	minSubnetPeers := 2
+	minSubnetPeers := 4
 	subnetsScores := GetSubnetsDistributionScores(stats, minSubnetPeers, mySubnets, topicMaxPeers)
 
-	type peerDump struct {
+	type peerLog struct {
 		Peer          peer.ID
 		Score         PeerScore
 		SharedSubnets int
-		Subnets       string
 	}
-	var peerDumps []peerDump
+	var peerLogs []peerLog
 
 	for _, pid := range allPeers {
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
@@ -115,50 +116,57 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 			score = scorePeer(peerSubnets, subnetsScores)
 		}
 		peerScores[pid] = score
-		peerDumps = append(peerDumps, peerDump{
+		peerLogs = append(peerLogs, peerLog{
 			Peer:          pid,
 			Score:         score,
 			SharedSubnets: len(records.SharedSubnets(peerSubnets, mySubnets, len(mySubnets))),
-			Subnets:       peerSubnets.String(),
 		})
 	}
 
-	sort.Slice(peerDumps, func(i, j int) bool {
-		return peerDumps[i].Score < peerDumps[j].Score
+	sort.Slice(peerLogs, func(i, j int) bool {
+		return peerLogs[i].Score < peerLogs[j].Score
 	})
 
+	activeSubnetConnections := make([]int, 0, mySubnets.Active())
 	var min, max = math.MaxInt32, math.MinInt32
-	var sum, zeros, belowTwo int
-	for _, n := range stats.Connected {
+	for subnet, n := range stats.Connected {
+		if mySubnets[subnet] <= 0 {
+			continue
+		}
+		activeSubnetConnections = append(activeSubnetConnections, n)
 		if n > max {
 			max = n
 		}
 		if n < min {
 			min = n
 		}
-		if n == 0 {
-			zeros++
-		}
-		if n < 2 {
-			belowTwo++
-		}
-		sum += n
 	}
 
-	c.logger.Debug("DUMP: peer scores",
+	// Calculate the median of the active subnet connections.
+	median := 0.0
+	if len(activeSubnetConnections) > 0 {
+		sort.Ints(activeSubnetConnections)
+		if len(activeSubnetConnections)%2 == 0 {
+			median = float64(activeSubnetConnections[len(activeSubnetConnections)/2-1]+activeSubnetConnections[len(activeSubnetConnections)/2]) / 2.0
+		} else {
+			median = float64(activeSubnetConnections[len(activeSubnetConnections)/2])
+		}
+	}
+
+	subnetConnections := make([]byte, len(stats.Connected))
+	for subnet, n := range stats.Connected {
+		subnetConnections[subnet] = byte(n)
+	}
+
+	c.logger.Debug("scored peers",
 		zap.Int("total_subnets", len(mySubnets)),
-		zap.Any("dump", map[string]interface{}{
-			"my_subnets":          mySubnets.String(),
-			"subnets_connections": stats.Connected,
-			"peers":               peerDumps,
+		zap.Any("peers", peerLogs),
+		zap.Any("subnet_stats", map[string]string{
+			"min":    fmt.Sprintf("%d", min),
+			"max":    fmt.Sprintf("%d", max),
+			"median": fmt.Sprintf("%.1f", median),
 		}),
-		zap.Any("subnet_stats", map[string]interface{}{
-			"min":       min,
-			"max":       max,
-			"avg":       float64(sum) / float64(len(stats.Connected)),
-			"zeros":     zeros,
-			"below_two": belowTwo,
-		}),
+		zap.String("subnet_connections", base64.StdEncoding.EncodeToString(subnetConnections)),
 	)
 
 	return GetTopScores(peerScores, n)

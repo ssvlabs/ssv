@@ -115,6 +115,16 @@ func (s Subnets) FromString(subnetsStr string) (Subnets, error) {
 	return data, nil
 }
 
+func (s Subnets) Active() int {
+	var active int
+	for _, val := range s {
+		if val > 0 {
+			active++
+		}
+	}
+	return active
+}
+
 // SharedSubnets returns the shared subnets
 func SharedSubnets(a, b []byte, maxLen int) []int {
 	var shared []int
