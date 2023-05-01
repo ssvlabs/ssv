@@ -80,7 +80,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 			//}
 		}
 	}
-	logger.Debug("after trimming of peers", zap.Int("beforeTrim", before),
+	logger.Debug("trimmed peers", zap.Int("beforeTrim", before),
 		zap.Int("afterTrim", len(net.Peers())))
 }
 
@@ -104,8 +104,9 @@ func (c connManager) getBestPeers(n int, mySubnets records.Subnets, allPeers []p
 		peerSubnets := c.subnetsIdx.GetPeerSubnets(pid)
 		var score PeerScore
 		if len(peerSubnets) == 0 {
-			c.logger.Debug("DUMP: peer has no subnets", zap.String("peer", pid.String()))
-			score = -2
+			// TODO: shouldn't we not connect to peers with no subnets?
+			c.logger.Debug("peer has no subnets", zap.String("peer", pid.String()))
+			score = -1000
 		} else {
 			score = scorePeer(peerSubnets, subnetsScores)
 		}
@@ -168,14 +169,13 @@ func (c connManager) logPeerScores(peerLogs []peerLog, mySubnets records.Subnets
 	subnetConnectionsBase64 := base64.StdEncoding.EncodeToString(b)
 
 	c.logger.Debug("scored peers",
-		zap.Int("total_subnets", len(mySubnets)),
-		zap.Any("peers", peerLogs),
 		zap.Any("subnet_stats", map[string]string{
 			"min":    fmt.Sprintf("%d", min),
 			"max":    fmt.Sprintf("%d", max),
 			"median": fmt.Sprintf("%.1f", median),
 		}),
 		zap.String("subnet_connections", subnetConnectionsBase64),
+		zap.Any("peers", peerLogs),
 	)
 }
 

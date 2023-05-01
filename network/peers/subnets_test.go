@@ -86,10 +86,10 @@ func TestSubnetsDistributionScores(t *testing.T) {
 	distScores := GetSubnetsDistributionScores(stats, 3, mysubnets, 5)
 
 	require.Len(t, distScores, len(mysubnets))
-	require.Equal(t, 0, distScores[0])
-	require.Equal(t, 2, distScores[1])
-	require.Equal(t, 1, distScores[3])
-	require.Equal(t, -1, distScores[5])
+	require.Equal(t, float64(0), distScores[0])
+	require.Equal(t, float64(4.2), distScores[1])
+	require.Equal(t, float64(2.533333333333333), distScores[3])
+	require.Equal(t, float64(-6.05), distScores[5])
 }
 
 func TestSubnetScore(t *testing.T) {
