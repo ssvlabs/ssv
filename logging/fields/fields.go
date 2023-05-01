@@ -284,3 +284,7 @@ func ToBlock(val *big.Int) zap.Field {
 func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
+
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
+	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
