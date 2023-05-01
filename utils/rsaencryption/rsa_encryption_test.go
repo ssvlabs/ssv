@@ -32,7 +32,7 @@ func TestExtractPublicKey(t *testing.T) {
 	require.NoError(t, err)
 	sk, err := ConvertPemToPrivateKey(string(skByte))
 	require.NoError(t, err)
-	pk, err := ExtractPublicKeyPemBase64(sk)
+	pk, err := ExtractPublicKey(sk)
 	require.NoError(t, err)
 	require.NotNil(t, pk)
 }

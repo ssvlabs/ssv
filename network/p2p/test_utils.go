@@ -120,7 +120,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
 func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, forkVersion forksprotocol.ForkVersion, maxPeers int) (network.P2PNetwork, error) {
-	operatorPubkey, err := rsaencryption.ExtractPublicKeyPemBase64(keys.OperatorKey)
+	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
 	}

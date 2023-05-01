@@ -40,7 +40,7 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 	sk, found, err := operatorStorage.GetPrivateKey()
 	require.True(t, true, found)
 	require.NoError(t, err)
-	operatorPublicKey, err := rsaencryption.ExtractPublicKeyPemBase64(sk)
+	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	require.NoError(t, err)
 	require.Equal(t, pkPem, operatorPublicKey)
 }
