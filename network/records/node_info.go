@@ -89,10 +89,6 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	ni.ForkVersion = ""
-	ni.NetworkID = ""
-	ni.Metadata = new(NodeMetadata)
-
 	if len(ser.Entries) < 1 {
 		return errors.New("not enough entries in node info, fork version is required")
 	}
@@ -106,6 +102,7 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	if len(ser.Entries) < 3 {
 		return nil
 	}
+	ni.Metadata = new(NodeMetadata)
 	err := ni.Metadata.Decode([]byte(ser.Entries[2]))
 	if err != nil {
 		return errors.Wrap(err, "could not decode metadata")

@@ -15,13 +15,13 @@ func TestNetworkIDFilter(t *testing.T) {
 
 	f := NetworkIDFilter("xxx")
 
-	ok, err := f("", SealAndUnseal(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
+	ok, err := f("", SealAndConsume(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
 		NetworkID: "xxx",
 	}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f("", SealAndUnseal(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
+	ok, err = f("", SealAndConsume(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{
 		NetworkID: "bbb",
 	}))
 	require.Error(t, err)
@@ -33,64 +33,49 @@ func TestSenderRecipientIPsCheckFilter(t *testing.T) {
 
 	f := SenderRecipientIPsCheckFilter(td.RecipientPeerID)
 
-	ok, err := f(td.SenderPeerID, SealAndUnseal(t, td.NetworkPrivateKey, records.HandshakeData{
+	ok, err := f(td.SenderPeerID, SealAndConsume(t, td.NetworkPrivateKey, records.HandshakeData{
 		SenderPeerID:    td.SenderPeerID,
 		RecipientPeerID: td.RecipientPeerID,
 	}, td.Signature, &records.NodeInfo{}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f(td.SenderPeerID, &records.SignedNodeInfo{
-		HandshakeData: records.HandshakeData{
-			SenderPeerID:    "wrong sender",
-			RecipientPeerID: td.RecipientPeerID,
-		},
-	})
+	ok, err = f(td.SenderPeerID, SealAndConsume(t, td.NetworkPrivateKey, records.HandshakeData{
+		SenderPeerID:    "wrong sender",
+		RecipientPeerID: td.RecipientPeerID,
+	}, td.Signature, &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 
-	ok, err = f(td.SenderPeerID, &records.SignedNodeInfo{
-		HandshakeData: records.HandshakeData{
-			SenderPeerID:    td.SenderPeerID,
-			RecipientPeerID: "wrong recipient",
-		},
-	})
+	ok, err = f(td.SenderPeerID, SealAndConsume(t, td.NetworkPrivateKey, records.HandshakeData{
+		SenderPeerID:    td.SenderPeerID,
+		RecipientPeerID: "wrong recipient",
+	}, td.Signature, &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 }
 
 func TestSignatureCheckFFilter(t *testing.T) {
-	testingData := getTestingData(t)
+	td := getTestingData(t)
 
 	f := SignatureCheckFilter()
 
-	ok, err := f("", &records.SignedNodeInfo{
-		HandshakeData: testingData.HandshakeData,
-		Signature:     testingData.Signature,
-	})
+	ok, err := f("", SealAndConsume(t, td.NetworkPrivateKey, td.HandshakeData, td.Signature, &records.NodeInfo{}))
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	ok, err = f("", &records.SignedNodeInfo{
-		HandshakeData: records.HandshakeData{}, //wrong handshake data
-		Signature:     testingData.Signature,
-	})
+	//wrong handshake data
+	ok, err = f("", SealAndConsume(t, td.NetworkPrivateKey, records.HandshakeData{}, td.Signature, &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 
-	ok, err = f("", &records.SignedNodeInfo{
-		HandshakeData: testingData.HandshakeData,
-		Signature:     []byte("wrong signature"),
-	})
+	ok, err = f("", SealAndConsume(t, td.NetworkPrivateKey, td.HandshakeData, []byte("wrong signature"), &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 
-	wrongTimestamp := testingData.HandshakeData
+	wrongTimestamp := td.HandshakeData
 	wrongTimestamp.Timestamp = wrongTimestamp.Timestamp.Add(-2 * AllowedDifference)
-	ok, err = f("", &records.SignedNodeInfo{
-		HandshakeData: wrongTimestamp,
-		Signature:     testingData.Signature,
-	})
+	ok, err = f("", SealAndConsume(t, td.NetworkPrivateKey, wrongTimestamp, td.Signature, &records.NodeInfo{}))
 	require.Error(t, err)
 	require.False(t, ok)
 }
@@ -119,7 +104,7 @@ func TestRegisteredOperatorsFilter(t *testing.T) {
 	require.False(t, ok)
 }
 
-func SealAndUnseal(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, handshakeData records.HandshakeData, signature []byte, ni *records.NodeInfo) *records.SignedNodeInfo {
+func SealAndConsume(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, handshakeData records.HandshakeData, signature []byte, ni *records.NodeInfo) *records.SignedNodeInfo {
 	sealed, err := ni.Seal(networkPrivateKey, handshakeData, signature)
 	require.NoError(t, err)
 

@@ -1,12 +1,14 @@
 package records
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/record"
+	"github.com/mr-tron/base58"
 	"github.com/pkg/errors"
 )
 
@@ -26,11 +28,11 @@ func (sni *SignedNodeInfo) Codec() []byte {
 
 func (sni *SignedNodeInfo) MarshalRecord() ([]byte, error) {
 	parts := []string{
-		sni.HandshakeData.SenderPeerID.String(),
-		sni.HandshakeData.RecipientPeerID.String(),
+		base58.Encode([]byte(sni.HandshakeData.SenderPeerID)),
+		base58.Encode([]byte(sni.HandshakeData.RecipientPeerID)),
 		strconv.FormatInt(sni.HandshakeData.Timestamp.Unix(), 10),
-		string(sni.HandshakeData.SenderPubKeyPem),
-		string(sni.Signature),
+		base64.StdEncoding.EncodeToString(sni.HandshakeData.SenderPubKeyPem),
+		base64.StdEncoding.EncodeToString(sni.Signature),
 	}
 
 	rawNi, err := sni.NodeInfo.MarshalRecord()
@@ -49,8 +51,18 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	sni.HandshakeData.SenderPeerID = peer.ID(ser.Entries[0])
-	sni.HandshakeData.RecipientPeerID = peer.ID(ser.Entries[1])
+	senderPeerID, err := base58.Decode(ser.Entries[0])
+	if err != nil {
+		return err
+	}
+
+	recipientPeerID, err := base58.Decode(ser.Entries[1])
+	if err != nil {
+		return err
+	}
+
+	sni.HandshakeData.SenderPeerID = peer.ID(senderPeerID)
+	sni.HandshakeData.RecipientPeerID = peer.ID(recipientPeerID)
 
 	timeUnix, err := strconv.ParseInt(ser.Entries[2], 10, 64)
 	if err != nil {
@@ -58,8 +70,20 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 	}
 
 	sni.HandshakeData.Timestamp = time.Unix(timeUnix, 0)
-	sni.HandshakeData.SenderPubKeyPem = []byte(ser.Entries[3])
-	sni.Signature = []byte(ser.Entries[4])
+
+	senderPubKeyPem, err := base64.StdEncoding.DecodeString(ser.Entries[3])
+	if err != nil {
+		return err
+	}
+
+	sni.HandshakeData.SenderPubKeyPem = senderPubKeyPem
+
+	signature, err := base64.StdEncoding.DecodeString(ser.Entries[4])
+	if err != nil {
+		return err
+	}
+
+	sni.Signature = signature
 
 	ni := &NodeInfo{}
 	if err := ni.UnmarshalRecord([]byte(ser.Entries[5])); err != nil {
