@@ -187,7 +187,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	sni, err := h.nodeInfoFromStream(logger, conn)
 	if err != nil {
 		// fallbacks to user agent
-		sni := records.SignedNodeInfo{}
+		sni = &records.SignedNodeInfo{}
 		sni.NodeInfo, err = h.nodeInfoFromUserAgent(logger, conn)
 		if err != nil {
 			return err
