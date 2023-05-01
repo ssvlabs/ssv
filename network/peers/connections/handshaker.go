@@ -193,7 +193,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 			return err
 		}
 	}
-	if sni.NodeInfo == nil {
+	if sni == nil || sni.NodeInfo == nil {
 		return errors.New("empty node info")
 	}
 
