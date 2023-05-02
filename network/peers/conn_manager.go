@@ -73,7 +73,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 	for _, pid := range allPeers {
 		if !c.connManager.IsProtected(pid, protectedTag) {
 			err := net.ClosePeer(pid)
-			logger.Debug("DUMP: closing peer", zap.String("pid", pid.String()), zap.Error(err))
+			logger.Debug("closing peer", zap.String("pid", pid.String()), zap.Error(err))
 			// if err != nil {
 			//	logger.Debug("could not close trimmed peer",
 			//		zap.String("pid", pid.String()), zap.Error(err))
