@@ -116,6 +116,8 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			return
 		}
 
+		zap.L().Info("peer was filtered", zap.String("DATA FROM STREAM", base64.StdEncoding.EncodeToString(req)))
+
 		logger := logger.With(zap.String("otherPeer", pidStr))
 
 		sni := &records.SignedNodeInfo{}
