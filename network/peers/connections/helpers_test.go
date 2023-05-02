@@ -32,6 +32,8 @@ type TestData struct {
 
 	Handshaker handshaker
 	Conn       mock.Conn
+
+	NodeInfo *records.NodeInfo
 }
 
 func getTestingData(t *testing.T) TestData {
@@ -86,8 +88,22 @@ func getTestingData(t *testing.T) TestData {
 	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
 	require.NoError(t, err)
 
-	ni := &records.NodeInfo{}
-	data, err := ni.Seal(networkPrivateKey, handshakeData, signature)
+	nodeInfo := &records.NodeInfo{
+		ForkVersion: "some-fork",
+		NetworkID:   "some-network-id",
+		Metadata: &records.NodeMetadata{
+			NodeVersion:   "some-node-version",
+			OperatorID:    "some-operator-id",
+			ExecutionNode: "some-execution-node",
+			ConsensusNode: "some-consensus-node",
+			Subnets:       "some-subnets",
+		},
+	}
+
+	sni := &records.SignedNodeInfo{
+		NodeInfo: nodeInfo,
+	}
+	data, err := sni.Seal(networkPrivateKey)
 	require.NoError(t, err)
 
 	sc := mock.StreamController{
@@ -121,5 +137,6 @@ func getTestingData(t *testing.T) TestData {
 		Handshaker:          mockHandshaker,
 		Conn:                mockConn,
 		NetworkPrivateKey:   networkPrivateKey,
+		NodeInfo:            nodeInfo,
 	}
 }
