@@ -623,7 +623,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 
 func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-		logger.Warn("could not start validator as metadata not found", fields.PubKey(share.ValidatorPubKey))
+		logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
 

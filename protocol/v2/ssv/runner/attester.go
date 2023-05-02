@@ -167,9 +167,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-
-			logger.Error("❌ failed to submit attestation to Beacon node", fields.Slot(duty.Slot), zap.Error(err))
-
+			logger.Error("❌ failed to submit attestation", fields.Slot(duty.Slot), zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
@@ -177,10 +175,11 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successfully submitted attestation",
+		logger.Info("✅ successfully submitted attestation",
 			fields.Slot(duty.Slot),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			fields.ConsensusTime(time.Since(r.started)),
+			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round))
 	}
 	r.GetState().Finished = true
