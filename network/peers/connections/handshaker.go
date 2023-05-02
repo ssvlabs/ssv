@@ -34,7 +34,7 @@ var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 var errUnknownUserAgent = errors.New("user agent is unknown")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
-type HandshakeFilter func(senderID peer.ID, info *records.SignedNodeInfo) (bool, error)
+type HandshakeFilter func(senderID peer.ID, info *records.SignedNodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
 type SubnetsProvider func() records.Subnets
@@ -150,8 +150,8 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, sni records.SignedNodeInfo) error {
 	h.updateNodeSubnets(logger, sender, sni.NodeInfo)
-	if !h.applyFilters(sender, &sni) {
-		return errPeerWasFiltered
+	if err := h.applyFilters(sender, &sni); err != nil {
+		return err
 	}
 	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, sender, sni.NodeInfo); err != nil {
 		return err
@@ -309,16 +309,11 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 	return ni, nil
 }
 
-func (h *handshaker) applyFilters(sender peer.ID, sni *records.SignedNodeInfo) bool {
+func (h *handshaker) applyFilters(sender peer.ID, sni *records.SignedNodeInfo) error {
 	for _, filter := range h.filters {
-		ok, err := filter(sender, sni)
-		if err != nil {
-			// logger.Warn("could not filter peer", zap.Error(err), zap.Any("nodeInfo", nodeInfo))
-			return false
-		}
-		if !ok {
-			return false
+		if err := filter(sender, sni); err != nil {
+			return errors.Wrap(errPeerWasFiltered, err.Error())
 		}
 	}
-	return true
+	return nil
 }
