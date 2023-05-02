@@ -114,15 +114,15 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 		logger := logger.With(zap.String("otherPeer", pidStr))
 
-		var ni records.SignedNodeInfo
-		err = ni.Consume(req)
+		sni := &records.SignedNodeInfo{}
+		err = sni.Consume(req)
 		if err != nil {
 			logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			err := h.processIncomingNodeInfo(logger, pid, ni)
+			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
 				if err == errPeerWasFiltered {
 					logger.Debug("peer was filtered")
@@ -143,6 +143,9 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			logger.Warn("could not seal self node info", zap.Error(err))
 			return
 		}
+
+		zap.L().Info("peer was filtered", zap.String("SELF SEALED", base64.StdEncoding.EncodeToString(self)))
+
 		if err := res(self); err != nil {
 			logger.Warn("could not send self node info", zap.Error(err))
 			return
