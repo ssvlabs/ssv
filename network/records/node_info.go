@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/pkg/errors"
 )
 
@@ -31,26 +29,6 @@ func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeI
 		ForkVersion: forkVersion,
 		NetworkID:   networkID,
 	}
-}
-
-// Seal seals and encodes the record to be sent to other peers
-func (ni *NodeInfo) Seal(netPrivateKey crypto.PrivKey, handshakeData HandshakeData, signature []byte) ([]byte, error) {
-	signedNodeInfo := &SignedNodeInfo{
-		NodeInfo:      ni,
-		HandshakeData: handshakeData,
-		Signature:     signature,
-	}
-
-	ev, err := record.Seal(signedNodeInfo, netPrivateKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not seal record")
-	}
-
-	data, err := ev.Marshal()
-	if err != nil {
-		return nil, errors.Wrap(err, "could not marshal envelope")
-	}
-	return data, nil
 }
 
 // Domain is the "signature domain" used when signing and verifying an record.Record
