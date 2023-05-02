@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/pkg/errors"
@@ -93,6 +94,20 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 	sni.NodeInfo = ni
 
 	return nil
+}
+
+// Seal seals and encodes the record to be sent to other peers
+func (sni *SignedNodeInfo) Seal(netPrivateKey crypto.PrivKey) ([]byte, error) {
+	ev, err := record.Seal(sni, netPrivateKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not seal record")
+	}
+
+	data, err := ev.Marshal()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal envelope")
+	}
+	return data, nil
 }
 
 // Consume takes a raw envelope and extracts the parsed record

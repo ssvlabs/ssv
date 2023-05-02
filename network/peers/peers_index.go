@@ -140,7 +140,13 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, operatorPrivateKey *
 		return nil, err
 	}
 
-	sealed, err := pi.self.Seal(pi.netKeyProvider(), handshakeData, signature)
+	signedNodeInfo := &records.SignedNodeInfo{
+		NodeInfo:      pi.self,
+		HandshakeData: handshakeData,
+		Signature:     signature,
+	}
+
+	sealed, err := signedNodeInfo.Seal(pi.netKeyProvider())
 	if err != nil {
 		return nil, err
 	}
