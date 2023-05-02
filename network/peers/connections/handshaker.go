@@ -2,6 +2,8 @@ package connections
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -254,6 +256,9 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	if err != nil {
 		return nil, err
 	}
+
+	zap.L().Info("peer was filtered", zap.String("DATA", base64.StdEncoding.EncodeToString(data)))
+
 	if len(res) == 0 {
 		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
@@ -261,8 +266,19 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	if err != nil {
 		return nil, err
 	}
+
+	zap.L().Info("peer was filtered", zap.String("REQUEST RESULT", base64.StdEncoding.EncodeToString(resBytes)))
+
 	sni := &records.SignedNodeInfo{}
 	err = sni.Consume(resBytes)
+
+	marshaled, err := json.Marshal(sni)
+	if err != nil {
+		return nil, err
+	}
+
+	zap.L().Info("peer was filtered", zap.String("SignedNodeInfo AFTER CONSUME", base64.StdEncoding.EncodeToString(marshaled)))
+
 	if err != nil {
 		return nil, err
 	}
