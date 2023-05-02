@@ -2,8 +2,6 @@ package connections
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -102,13 +100,9 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 // Handler returns the handshake handler
 func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		zap.L().Info("peer was filtered !!! START")
-
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
 		pidStr := pid.String()
-
-		zap.L().Info("peer was filtered !!! AFTER GETTING PID")
 
 		req, res, done, err := h.streams.HandleStream(logger, stream)
 		defer done()
@@ -116,14 +110,12 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			return
 		}
 
-		zap.L().Info("peer was filtered", zap.String("DATA FROM STREAM", base64.StdEncoding.EncodeToString(req)))
-
 		logger := logger.With(zap.String("otherPeer", pidStr))
 
 		sni := &records.SignedNodeInfo{}
 		err = sni.Consume(req)
 		if err != nil {
-			logger.Warn("peer was filtered !!! could not consume node info request", zap.Error(err))
+			logger.Warn("could not consume node info request", zap.Error(err))
 			return
 		}
 		// process the node info in a new goroutine so we won't block the stream
@@ -140,17 +132,15 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 		privateKey, found, err := h.nodeStorage.GetPrivateKey()
 		if !found {
-			logger.Warn("peer was filtered !!! could not get private key", zap.Error(err))
+			logger.Warn("could not get private key", zap.Error(err))
 			return
 		}
 
 		self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid, privateKey)
 		if err != nil {
-			logger.Warn("peer was filtered !!! could not seal self node info", zap.Error(err))
+			logger.Warn("could not seal self node info", zap.Error(err))
 			return
 		}
-
-		zap.L().Info("peer was filtered", zap.String("SELF SEALED", base64.StdEncoding.EncodeToString(self)))
 
 		if err := res(self); err != nil {
 			logger.Warn("could not send self node info", zap.Error(err))
@@ -266,8 +256,6 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 		return nil, err
 	}
 
-	zap.L().Info("peer was filtered", zap.String("DATA", base64.StdEncoding.EncodeToString(data)))
-
 	if len(res) == 0 {
 		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
@@ -276,17 +264,8 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 		return nil, err
 	}
 
-	zap.L().Info("peer was filtered", zap.String("REQUEST RESULT", base64.StdEncoding.EncodeToString(resBytes)))
-
 	sni := &records.SignedNodeInfo{}
 	err = sni.Consume(resBytes)
-
-	marshaled, err := json.Marshal(sni)
-	if err != nil {
-		return nil, err
-	}
-
-	zap.L().Info("peer was filtered", zap.String("SignedNodeInfo AFTER CONSUME", base64.StdEncoding.EncodeToString(marshaled)))
 
 	if err != nil {
 		return nil, err
