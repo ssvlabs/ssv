@@ -103,6 +103,14 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) er
 	return i.config.GetNetwork().Broadcast(msgToBroadcast)
 }
 
+func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
+	signers := make([]spectypes.OperatorID, len(all))
+	for _, m := range all {
+		signers = append(signers, m.Signers...)
+	}
+	return signers
+}
+
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
 	if err := i.BaseMsgValidation(msg); err != nil {
