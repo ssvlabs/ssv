@@ -122,7 +122,11 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		go func() {
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
-				if err == errPeerWasFiltered {
+				zap.L().Info("!!! HANDLED ERROR", zap.Error(err))
+
+				if errors.Is(err, errHandshakeInProcess) {
+					zap.L().Info("!!! ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
+
 					logger.Debug("peer was filtered", zap.Error(err))
 					return
 				}
@@ -152,6 +156,8 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, sni records.SignedNodeInfo) error {
 	h.updateNodeSubnets(logger, sender, sni.NodeInfo)
 	if err := h.applyFilters(sender, &sni); err != nil {
+		zap.L().Info("!!! RETURNING ERROR FROM APPLY FILTERS", zap.Error(err))
+
 		return err
 	}
 	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, sender, sni.NodeInfo); err != nil {
