@@ -39,6 +39,10 @@ func (s *SSVShare) Decode(data []byte) error {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
 
+	f := (len(s.Committee) - 1) / 3
+	s.Quorum = uint64(f*2 + 1)
+	s.PartialQuorum = uint64(f + 1)
+
 	return nil
 }
 
