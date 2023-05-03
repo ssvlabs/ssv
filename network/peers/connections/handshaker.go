@@ -100,7 +100,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 // Handler returns the handshake handler
 func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		zap.L().Info("!!! HANDLER TRIGGERED")
+		logger.Info("!!! HANDLER TRIGGERED")
 
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
@@ -122,14 +122,14 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			zap.L().Info("!!! CALLING processIncomingNodeInfo")
+			logger.Info("!!! CALLING processIncomingNodeInfo")
 
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
-				zap.L().Info("!!! HANDLED ERROR", zap.Error(err))
+				logger.Info("!!! HANDLED ERROR", zap.Error(err))
 
 				if errors.Is(err, errHandshakeInProcess) {
-					zap.L().Info("!!! ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
+					logger.Info("!!! ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
 
 					logger.Debug("peer was filtered", zap.Error(err))
 					return
@@ -160,7 +160,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, sni records.SignedNodeInfo) error {
 	h.updateNodeSubnets(logger, sender, sni.NodeInfo)
 	if err := h.applyFilters(sender, &sni); err != nil {
-		zap.L().Info("!!! RETURNING ERROR FROM APPLY FILTERS", zap.Error(err))
+		logger.Info("!!! RETURNING ERROR FROM APPLY FILTERS", zap.Error(err))
 
 		return err
 	}
@@ -186,7 +186,7 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
-	zap.L().Info("!!! HANDSHAKE CALLED")
+	logger.Info("!!! HANDSHAKE CALLED")
 
 	pid := conn.RemotePeer()
 	// check if the peer is known before we continue
@@ -212,7 +212,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 
-	zap.L().Info("!!! FROM HANDSHAKE CALLING processIncomingNodeInfo")
+	logger.Info("!!! FROM HANDSHAKE CALLING processIncomingNodeInfo")
 
 	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
