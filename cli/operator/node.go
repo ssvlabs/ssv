@@ -78,6 +78,8 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+		zap.L().Info("!!! I'm deployed")
+
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)

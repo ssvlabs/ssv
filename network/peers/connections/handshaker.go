@@ -186,6 +186,8 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
+	zap.L().Info("!!! HANDSHAKE CALLED")
+
 	pid := conn.RemotePeer()
 	// check if the peer is known before we continue
 	ni, err := h.getNodeInfo(pid)
@@ -209,6 +211,9 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	}
 
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
+
+	zap.L().Info("!!! FROM HANDSHAKE CALLING processIncomingNodeInfo")
+
 	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
 		logger.Debug("could not process node info", zap.Error(err))
