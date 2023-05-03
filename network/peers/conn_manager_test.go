@@ -11,6 +11,7 @@ import (
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestTagBestPeers(t *testing.T) {
@@ -20,7 +21,7 @@ func TestTagBestPeers(t *testing.T) {
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	si := newSubnetsIndex(len(allSubs))
 
-	cm := NewConnManager(connMgrMock, si).(*connManager)
+	cm := NewConnManager(zap.NewNop(), connMgrMock, si).(*connManager)
 
 	pids, err := createPeerIDs(50)
 	require.NoError(t, err)

@@ -2,8 +2,8 @@ package duties
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -106,14 +106,17 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 	if len(duties) == 0 {
 		return nil
 	}
-	// print the newly fetched duties
-	var toPrint []serializedDuty
-	for _, d := range duties {
-		toPrint = append(toPrint, toSerialized(d))
+
+	var b strings.Builder
+	for i, duty := range duties {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(fields.FormatDutyID(df.ethNetwork.EstimatedEpochAtSlot(slot), duty))
 	}
 	logger.Debug("got duties",
 		zap.Int("count", len(duties)),
-		zap.Any("duties", toPrint),
+		zap.Any("duties", b.String()),
 		fields.Duration(start))
 
 	if err := df.processFetchedDuties(logger, duties); err != nil {
@@ -231,19 +234,5 @@ func toSubscription(duty *spectypes.Duty) *eth2apiv1.BeaconCommitteeSubscription
 		CommitteeIndex:   duty.CommitteeIndex,
 		CommitteesAtSlot: duty.CommitteesAtSlot,
 		IsAggregator:     duty.Type == spectypes.BNRoleAggregator, // TODO call subscribe after pre-consensus (aggregate & sync committee contribution)
-	}
-}
-
-type serializedDuty struct {
-	PubKey string
-	Type   string
-	Slot   uint64
-}
-
-func toSerialized(d *spectypes.Duty) serializedDuty {
-	return serializedDuty{
-		PubKey: hex.EncodeToString(d.PubKey[:]),
-		Type:   d.Type.String(),
-		Slot:   uint64(d.Slot),
 	}
 }

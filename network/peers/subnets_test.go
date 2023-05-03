@@ -1,6 +1,8 @@
 package peers
 
 import (
+	"fmt"
+	"math"
 	"math/rand"
 	"testing"
 
@@ -84,8 +86,37 @@ func TestSubnetsDistributionScores(t *testing.T) {
 	distScores := GetSubnetsDistributionScores(stats, 3, mysubnets, 5)
 
 	require.Len(t, distScores, len(mysubnets))
-	require.Equal(t, 0, distScores[0])
-	require.Equal(t, 2, distScores[1])
-	require.Equal(t, 1, distScores[3])
-	require.Equal(t, -1, distScores[5])
+	require.Equal(t, float64(0), distScores[0])
+	require.Equal(t, float64(4.2), distScores[1])
+	require.Equal(t, float64(2.533333333333333), distScores[3])
+	require.Equal(t, float64(-6.05), distScores[5])
+}
+
+func TestSubnetScore(t *testing.T) {
+	testCases := []struct {
+		connected int
+		min       int
+		max       int
+		expected  float64
+	}{
+		{connected: 0, min: 5, max: 20, expected: 4.0},
+		{connected: 2, min: 5, max: 20, expected: 2.2},
+		{connected: 4, min: 5, max: 20, expected: 1.4},
+		{connected: 5, min: 5, max: 20, expected: 1.0},
+		{connected: 10, min: 5, max: 20, expected: 0.666667},
+		{connected: 15, min: 5, max: 20, expected: 0.333333},
+		{connected: 20, min: 5, max: 20, expected: 0.0},
+		{connected: 25, min: 5, max: 20, expected: -0.166667},
+		{connected: 50, min: 5, max: 20, expected: -1.0},
+		{connected: 100, min: 5, max: 20, expected: -2.666667},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Connected-%d Min-%d Max-%d", tc.connected, tc.min, tc.max), func(t *testing.T) {
+			score := scoreSubnet(tc.connected, tc.min, tc.max)
+			if math.Abs(score-tc.expected) > 1e-6 {
+				t.Errorf("Expected score to be %f, got %f", tc.expected, score)
+			}
+		})
+	}
 }
