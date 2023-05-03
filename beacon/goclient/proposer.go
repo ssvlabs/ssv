@@ -37,28 +37,32 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
 			gc.log.Info("got beacon block",
 				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Phase0, beaconBlock.Version, nil
 	case spec.DataVersionAltair:
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
 			gc.log.Info("got beacon block",
 				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Altair, beaconBlock.Version, nil
 	case spec.DataVersionBellatrix:
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
 			gc.log.Info("got beacon block",
 				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if b := beaconBlock.Capella.Body; b != nil && b.ExecutionPayload != nil {
 			gc.log.Info("got beacon block",
 				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
@@ -86,14 +90,16 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayloadHeader != nil {
 			gc.log.Info("got blinded beacon block",
 				fields.BlockHash(b.ExecutionPayloadHeader.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if b := beaconBlock.Capella.Body; b != nil && b.ExecutionPayloadHeader != nil {
 			gc.log.Info("got blinded beacon block",
 				fields.BlockHash(b.ExecutionPayloadHeader.BlockHash),
-				fields.BlockVersion(beaconBlock.Version))
+				fields.BlockVersion(beaconBlock.Version),
+				fields.Slot(slot))
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
