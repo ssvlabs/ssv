@@ -95,6 +95,7 @@ func ShareFromValidatorEvent(
 		}
 	}
 
+	validatorShare.Quorum, validatorShare.PartialQuorum = types.ComputeQuorumAndPartialQuorum(len(committee))
 	validatorShare.DomainType = types.GetDefaultDomain()
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
