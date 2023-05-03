@@ -27,7 +27,7 @@ func TestNetworkIDFilter(t *testing.T) {
 			NetworkID: "bbb",
 		},
 	}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 }
 
 func TestSenderRecipientIPsCheckFilter(t *testing.T) {
@@ -47,13 +47,13 @@ func TestSenderRecipientIPsCheckFilter(t *testing.T) {
 		SenderPeerID:    "wrong sender",
 		RecipientPeerID: td.RecipientPeerID,
 	}}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 
 	err = f(td.SenderPeerID, SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{HandshakeData: records.HandshakeData{
 		SenderPeerID:    td.SenderPeerID,
 		RecipientPeerID: "wrong recipient",
 	}}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 }
 
 func TestSignatureCheckFFilter(t *testing.T) {
@@ -66,15 +66,15 @@ func TestSignatureCheckFFilter(t *testing.T) {
 
 	//wrong handshake data
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: records.HandshakeData{}, Signature: td.Signature}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: records.HandshakeData{}, Signature: []byte("wrong signature")}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 
 	wrongTimestamp := td.HandshakeData
 	wrongTimestamp.Timestamp = wrongTimestamp.Timestamp.Add(-2 * AllowedDifference)
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongTimestamp, Signature: td.Signature}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 }
 
 func TestRegisteredOperatorsFilter(t *testing.T) {
@@ -92,7 +92,7 @@ func TestRegisteredOperatorsFilter(t *testing.T) {
 	wrongSenderPubKeyPem := td.HandshakeData
 	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature}))
-	require.Error(t, errPeerWasFiltered)
+	require.Error(t, err)
 }
 
 func SealAndConsume(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, sni *records.SignedNodeInfo) *records.SignedNodeInfo {
