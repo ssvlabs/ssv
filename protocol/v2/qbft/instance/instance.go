@@ -104,7 +104,7 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) er
 }
 
 func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
-	signers := make([]spectypes.OperatorID, len(all))
+	signers := make([]spectypes.OperatorID, 0, len(all))
 	for _, m := range all {
 		signers = append(signers, m.Signers...)
 	}
