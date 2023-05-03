@@ -82,7 +82,7 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		logger.Info("!!! I'm deployed")
+		logger.Info("URU I'm deployed")
 
 		eth2Network, forkVersion := setupSSVNetwork(logger)
 
