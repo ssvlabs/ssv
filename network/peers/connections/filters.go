@@ -63,11 +63,12 @@ func SignatureCheckFilter() HandshakeFilter {
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
 	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
+
+		logger.Info("peer was filtered", zap.String("DATA", fmt.Sprintf("%+v", data)), zap.Bool("found", found), zap.Error(err))
+
 		if !found {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
-
-		logger.Info("peer was filtered", zap.String("DATA", fmt.Sprintf("%+v", data)), zap.Bool("found", found), zap.Error(err))
 
 		return nil
 	}
