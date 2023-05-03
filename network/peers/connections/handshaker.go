@@ -123,7 +123,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
 				if err == errPeerWasFiltered {
-					logger.Debug("peer was filtered")
+					logger.Debug("peer was filtered", zap.Error(err))
 					return
 				}
 				logger.Warn("could not process node info", zap.Error(err))
@@ -314,9 +314,6 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 }
 
 func (h *handshaker) applyFilters(sender peer.ID, sni *records.SignedNodeInfo) error {
-
-	zap.L().Info("SPECIAL SUPER LOG 2")
-
 	for _, filter := range h.filters {
 		if err := filter(sender, sni); err != nil {
 			return errors.Wrap(errPeerWasFiltered, err.Error())
