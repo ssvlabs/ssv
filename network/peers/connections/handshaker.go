@@ -128,7 +128,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			if err != nil {
 				logger.Info("URU HANDLED ERROR", zap.Error(err))
 
-				if errors.Is(err, errHandshakeInProcess) {
+				if errors.Is(err, errPeerWasFiltered) {
 					logger.Info("URU ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
 
 					logger.Debug("peer was filtered", zap.Error(err))
