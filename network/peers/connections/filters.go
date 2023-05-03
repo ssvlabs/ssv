@@ -66,9 +66,9 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) 
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 
-		logger.Info("peer was filtered", zap.String("DATA", fmt.Sprintf("%+v", data)), zap.Bool("found", found), zap.Error(err))
-
 		if !found {
+			logger.Info("ERROR peer was filtered", zap.String("DATA", fmt.Sprintf("%+v", data)), zap.Bool("found", found), zap.Error(err))
+
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
