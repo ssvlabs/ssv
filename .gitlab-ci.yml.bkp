@@ -1,0 +1,318 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  #GLOBAL
+  IMAGE_NAME: ssv-node
+  DOCKER_BUILDKIT: 1
+
+  #STAGE
+  ACCOUNT_ID_INFRA_STAGE: 121827225315
+  AWS_REGION_INFRA_STAGE: "us-west-2"
+  DOCKER_REPO_INFRA_STAGE: $ACCOUNT_ID_INFRA_STAGE.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  APP_REPLICAS_INFRA_STAGE: "1"
+  ECRLOGIN_INFRA_STAGE: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_STAGE --region $AWS_REGION_INFRA_STAGE --no-include-email"
+  STAGE_HEALTH_CHECK_IMAGE: 121827225315.dkr.ecr.us-west-2.amazonaws.com/infra-stage-repo:ubuntu20
+
+  #PRODUCTION
+  ACCOUNT_ID_INFRA_PROD: 764289642555
+  AWS_REGION_INFRA_PROD: "us-west-2"
+  DOCKER_REPO_INFRA_PROD: $ACCOUNT_ID_INFRA_PROD.dkr.ecr.$AWS_REGION_INFRA_STAGE.amazonaws.com/$IMAGE_NAME
+  APP_REPLICAS_INFRA_PROD: "1"
+  ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
+  PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
+
+# ---------
+# | STAGE |
+# ---------
+Build stage Docker image:
+  image: docker:20.10.23
+  stage: build
+  tags:
+    - blox-infra-stage
+  script:
+    - apk add --no-cache py-pip
+    - pip install pyyaml==5.3.1
+    - pip install awscli
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
+    - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
+    - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
+  only:
+    - stage
+
+
+Helm deploy on stage:
+  stage: deploy
+  tags:
+    - blox-infra-stage
+  image: devth/helm:v3.3.4
+  script:
+    - mkdir ~/.kube/
+    - echo $STAGE_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
+    - IMAGE_TAG=$CI_BUILD_REF
+
+# SSV cluster A node 1
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml 
+      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/node-a-1/node-values.yaml
+      --wait
+      node-a-1
+      .k8/helm3/ssv-node-cluster-a/node-a-1/
+     
+# SSV cluster A node 2
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/node-a-2/node-values.yaml
+      --wait
+      node-a-2
+      .k8/helm3/ssv-node-cluster-a/node-a-2/
+
+# SSV cluster A node 3
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/node-a-3/node-values.yaml
+      --wait
+      node-a-3
+      .k8/helm3/ssv-node-cluster-a/node-a-3/
+
+# SSV cluster A node 4
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a/node-a-4/node-values.yaml
+      --wait
+      node-a-4
+      .k8/helm3/ssv-node-cluster-a/node-a-4/
+
+
+# SSV cluster B node 1
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/node-b-1/node-values.yaml
+      --wait
+      node-b-1
+      .k8/helm3/ssv-node-cluster-b/node-b-1/
+
+# SSV cluster B node 2
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/node-b-2/node-values.yaml
+      --wait
+      node-b-2
+      .k8/helm3/ssv-node-cluster-b/node-b-2/
+
+# SSV cluster B node 3
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/node-b-3/node-values.yaml
+      --wait
+      node-b-3
+      .k8/helm3/ssv-node-cluster-b/node-b-3/
+
+# SSV cluster B node 4
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-b/node-b-4/node-values.yaml
+      --wait
+      node-b-4
+      .k8/helm3/ssv-node-cluster-b/node-b-4/
+
+# SSV cluster C node 1
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/node-c-1/node-values.yaml
+      --wait
+      node-c-1
+      .k8/helm3/ssv-node-cluster-c/node-c-1/
+
+# SSV cluster C node 2
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/node-c-2/node-values.yaml
+      --wait
+      node-c-2
+      .k8/helm3/ssv-node-cluster-c/node-c-2/
+
+# SSV cluster C node 3
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/node-c-3/node-values.yaml
+      --wait
+      node-c-3
+      .k8/helm3/ssv-node-cluster-c/node-c-3/
+
+# SSV cluster C node 4
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-c/node-c-4/node-values.yaml
+      --wait
+      node-c-4
+      .k8/helm3/ssv-node-cluster-c/node-c-4/	
+
+# SSV cluster D node 1
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/node-d-1/node-values.yaml
+      --wait
+      node-d-1
+      .k8/helm3/ssv-node-cluster-d/node-d-1/
+
+# SSV cluster D node 2
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/node-d-2/node-values.yaml
+      --wait
+      node-d-2
+      .k8/helm3/ssv-node-cluster-d/node-d-2/
+
+# SSV cluster D node 3
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/node-d-3/node-values.yaml
+      --wait
+      node-d-3
+      .k8/helm3/ssv-node-cluster-d/node-d-3/
+
+# SSV cluster D node 4
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-d/node-d-4/node-values.yaml
+      --wait
+      node-d-4
+      .k8/helm3/ssv-node-cluster-d/node-d-4/
+
+# SSV Exporters
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/ssv-exporters/stage-values.yaml
+      --wait
+      ssv-exporters
+      .k8/helm3/ssv-exporters/
+
+  only:
+    - stage
+
+
+# ---------
+# | Prod  |
+# ---------
+Build prod Docker image:
+  stage: build
+  tags:
+    - blox-infra-prod
+  script:
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
+    - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
+    - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
+  only:
+    - main
+
+Deploy ssv exporter to blox-infra-prod cluster:
+  stage: deploy
+  tags:
+    - blox-infra-prod
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
+    - export SSV_EXPORTER_CPU_LIMIT=$PROD_SSV_EXPORTER_CPU_LIMIT
+    - export SSV_EXPORTER_MEM_LIMIT=$PROD_SSV_EXPORTER_MEM_LIMIT
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
+    - chmod +x ./kubectl
+    - mv ./kubectl /usr/bin/kubectl
+    - .k8/scripts/deploy-prod-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+  only:
+    - main
+
+Deploy ssv-nodes to blox-infra-prod cluster:
+  stage: deploy
+  tags:
+    - blox-infra-prod
+  script:
+    - apk add bash
+    - export K8S_API_VERSION=$INFRA_PROD_K8_API_VERSION
+    - export SSV_NODES_CPU_LIMIT=$PROD_SSV_NODES_CPU_LIMIT
+    - export SSV_NODES_MEM_LIMIT=$PROD_SSV_NODES_MEM_LIMIT
+    - export SSV_NODES_CPU_LIMIT_V1=$PROD_SSV_NODES_CPU_LIMIT_V1
+    - export SSV_NODES_MEM_LIMIT_V1=$PROD_SSV_NODES_MEM_LIMIT_V1
+    - export SSV_NODES_CPU_LIMIT_V3=$PROD_SSV_NODES_CPU_LIMIT_V3
+    - export SSV_NODES_MEM_LIMIT_V3=$PROD_SSV_NODES_MEM_LIMIT_V3
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
+    - chmod +x ./kubectl
+    - mv ./kubectl /usr/bin/kubectl
+    - .k8/scripts/deploy-ssv-nodes-yamls-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+  #    - .k8/scripts/deploy-paul-lh-yml-on-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+  #    - .k8/scripts/deploy-ssv-node-v1-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
+  #    - .k8/scripts/deploy-ssv-node-v3-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+  only:
+    - main

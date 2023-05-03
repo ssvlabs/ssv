@@ -35,12 +35,13 @@ Build stage Docker image:
     - apk add --no-cache py-pip
     - pip install pyyaml==5.3.1
     - pip install awscli
+    - printenv
     - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - stage
+    - helm-charts
 
 
 Helm deploy on stage:
@@ -56,211 +57,261 @@ Helm deploy on stage:
     - kubectl config get-contexts
     - IMAGE_TAG=$CI_BUILD_REF
 
-# SSV cluster A node 1
+# SSV cluster A node 1 TEST
     - helm upgrade
       --install
       --namespace ssv
       --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml 
-      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/node-a-1/node-values.yaml
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/node-a-1/node-values.yaml
       --wait
-      node-a-1
-      .k8/helm3/ssv-node-cluster-a/node-a-1/
+      node-a-1-test
+      .k8/helm3/ssv-node-cluster-a-test/node-a-1/
+
+# SSV cluster A node 2 TEST
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/node-a-2/node-values.yaml
+      --wait
+      node-a-2-test
+      .k8/helm3/ssv-node-cluster-a-test/node-a-2/
+
+# SSV cluster A node 3 TEST
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/node-a-3/node-values.yaml
+      --wait
+      node-a-3-test
+      .k8/helm3/ssv-node-cluster-a-test/node-a-3/
+
+# SSV cluster A node 4 TEST
+    - helm upgrade
+      --install
+      --namespace ssv
+      --set image.tag=$IMAGE_TAG
+      --values .k8/helm3/base-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/cluster-values.yaml
+      --values .k8/helm3/ssv-node-cluster-a-test/node-a-4/node-values.yaml
+      --wait
+      node-a-4-test
+      .k8/helm3/ssv-node-cluster-a-test/node-a-4/
+
+
+
+# SSV cluster A node 1
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml 
+#      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/node-a-1/node-values.yaml
+#      --wait
+#      node-a-1
+#      .k8/helm3/ssv-node-cluster-a/node-a-1/
      
 # SSV cluster A node 2
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/node-a-2/node-values.yaml
-      --wait
-      node-a-2
-      .k8/helm3/ssv-node-cluster-a/node-a-2/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/node-a-2/node-values.yaml
+#      --wait
+#      node-a-2
+#      .k8/helm3/ssv-node-cluster-a/node-a-2/
 
 # SSV cluster A node 3
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/node-a-3/node-values.yaml
-      --wait
-      node-a-3
-      .k8/helm3/ssv-node-cluster-a/node-a-3/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/node-a-3/node-values.yaml
+#      --wait
+#      node-a-3
+#      .k8/helm3/ssv-node-cluster-a/node-a-3/
 
 # SSV cluster A node 4
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-a/node-a-4/node-values.yaml
-      --wait
-      node-a-4
-      .k8/helm3/ssv-node-cluster-a/node-a-4/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-a/node-a-4/node-values.yaml
+#      --wait
+#      node-a-4
+#      .k8/helm3/ssv-node-cluster-a/node-a-4/
 
 
 # SSV cluster B node 1
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/node-b-1/node-values.yaml
-      --wait
-      node-b-1
-      .k8/helm3/ssv-node-cluster-b/node-b-1/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/node-b-1/node-values.yaml
+#      --wait
+#      node-b-1
+#      .k8/helm3/ssv-node-cluster-b/node-b-1/
 
 # SSV cluster B node 2
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/node-b-2/node-values.yaml
-      --wait
-      node-b-2
-      .k8/helm3/ssv-node-cluster-b/node-b-2/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/node-b-2/node-values.yaml
+#      --wait
+#      node-b-2
+#      .k8/helm3/ssv-node-cluster-b/node-b-2/
 
 # SSV cluster B node 3
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/node-b-3/node-values.yaml
-      --wait
-      node-b-3
-      .k8/helm3/ssv-node-cluster-b/node-b-3/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/node-b-3/node-values.yaml
+#      --wait
+#      node-b-3
+#      .k8/helm3/ssv-node-cluster-b/node-b-3/
 
 # SSV cluster B node 4
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-b/node-b-4/node-values.yaml
-      --wait
-      node-b-4
-      .k8/helm3/ssv-node-cluster-b/node-b-4/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-b/node-b-4/node-values.yaml
+#      --wait
+#      node-b-4
+#      .k8/helm3/ssv-node-cluster-b/node-b-4/
 
 # SSV cluster C node 1
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/node-c-1/node-values.yaml
-      --wait
-      node-c-1
-      .k8/helm3/ssv-node-cluster-c/node-c-1/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/node-c-1/node-values.yaml
+#      --wait
+#      node-c-1
+#      .k8/helm3/ssv-node-cluster-c/node-c-1/
 
 # SSV cluster C node 2
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/node-c-2/node-values.yaml
-      --wait
-      node-c-2
-      .k8/helm3/ssv-node-cluster-c/node-c-2/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/node-c-2/node-values.yaml
+#      --wait
+#      node-c-2
+#      .k8/helm3/ssv-node-cluster-c/node-c-2/
 
 # SSV cluster C node 3
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/node-c-3/node-values.yaml
-      --wait
-      node-c-3
-      .k8/helm3/ssv-node-cluster-c/node-c-3/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/node-c-3/node-values.yaml
+#      --wait
+#      node-c-3
+#      .k8/helm3/ssv-node-cluster-c/node-c-3/
 
 # SSV cluster C node 4
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-c/node-c-4/node-values.yaml
-      --wait
-      node-c-4
-      .k8/helm3/ssv-node-cluster-c/node-c-4/	
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-c/node-c-4/node-values.yaml
+#      --wait
+#      node-c-4
+#      .k8/helm3/ssv-node-cluster-c/node-c-4/	
 
 # SSV cluster D node 1
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/node-d-1/node-values.yaml
-      --wait
-      node-d-1
-      .k8/helm3/ssv-node-cluster-d/node-d-1/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/node-d-1/node-values.yaml
+#      --wait
+#      node-d-1
+#      .k8/helm3/ssv-node-cluster-d/node-d-1/
 
 # SSV cluster D node 2
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/node-d-2/node-values.yaml
-      --wait
-      node-d-2
-      .k8/helm3/ssv-node-cluster-d/node-d-2/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/node-d-2/node-values.yaml
+#      --wait
+#      node-d-2
+#      .k8/helm3/ssv-node-cluster-d/node-d-2/
 
 # SSV cluster D node 3
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/node-d-3/node-values.yaml
-      --wait
-      node-d-3
-      .k8/helm3/ssv-node-cluster-d/node-d-3/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/node-d-3/node-values.yaml
+#      --wait
+#      node-d-3
+#      .k8/helm3/ssv-node-cluster-d/node-d-3/
 
 # SSV cluster D node 4
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/base-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
-      --values .k8/helm3/ssv-node-cluster-d/node-d-4/node-values.yaml
-      --wait
-      node-d-4
-      .k8/helm3/ssv-node-cluster-d/node-d-4/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/base-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/cluster-values.yaml
+#      --values .k8/helm3/ssv-node-cluster-d/node-d-4/node-values.yaml
+#      --wait
+#      node-d-4
+#      .k8/helm3/ssv-node-cluster-d/node-d-4/
 
 # SSV Exporters
-    - helm upgrade
-      --install
-      --namespace ssv
-      --set image.tag=$IMAGE_TAG
-      --values .k8/helm3/ssv-exporters/stage-values.yaml
-      --wait
-      ssv-exporters
-      .k8/helm3/ssv-exporters/
+#    - helm upgrade
+#      --install
+#      --namespace ssv
+#      --set image.tag=$IMAGE_TAG
+#      --values .k8/helm3/ssv-exporters/stage-values.yaml
+#      --wait
+#      ssv-exporters
+#      .k8/helm3/ssv-exporters/
 
   only:
-    - stage
+    - helm-charts
 
 
 # ---------
