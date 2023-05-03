@@ -100,6 +100,8 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 // Handler returns the handshake handler
 func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
+		zap.L().Info("!!! HANDLER TRIGGERED")
+
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
 		pidStr := pid.String()
@@ -120,6 +122,8 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
+			zap.L().Info("!!! CALLING processIncomingNodeInfo")
+
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
 				zap.L().Info("!!! HANDLED ERROR", zap.Error(err))
