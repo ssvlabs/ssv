@@ -62,6 +62,8 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
 	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
+		logger.Info("SPECIAL SUPER LOG")
+
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 
 		logger.Info("peer was filtered", zap.String("DATA", fmt.Sprintf("%+v", data)), zap.Bool("found", found), zap.Error(err))
