@@ -117,6 +117,7 @@ type goClient struct {
 	postponedRegistrations   []*api.VersionedSignedValidatorRegistration
 	postponedRegistrationsMu sync.Mutex
 	lastRegistrationSlot     atomic.Uint64
+	batchRegistration        bool
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -141,12 +142,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
-		log:        logger,
-		ctx:        opt.Context,
-		network:    network,
-		client:     httpClient.(*http.Service),
-		graffiti:   opt.Graffiti,
-		operatorID: operatorID,
+		log:               logger,
+		ctx:               opt.Context,
+		network:           network,
+		client:            httpClient.(*http.Service),
+		graffiti:          opt.Graffiti,
+		operatorID:        operatorID,
+		batchRegistration: true,
 	}
 
 	return _client, nil

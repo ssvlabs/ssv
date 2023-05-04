@@ -6,6 +6,8 @@ package beacon
 
 import (
 	context "context"
+	reflect "reflect"
+
 	client "github.com/attestantio/go-eth2-client"
 	api "github.com/attestantio/go-eth2-client/api"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -17,7 +19,6 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	gomock "github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
-	reflect "reflect"
 )
 
 // MockbeaconDuties is a mock of beaconDuties interface
@@ -330,20 +331,6 @@ func (m *MockBeacon) SubmitValidatorRegistration(pubkey []byte, feeRecipient bel
 func (mr *MockBeaconMockRecorder) SubmitValidatorRegistration(pubkey, feeRecipient, sig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeacon)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
-}
-
-// SubmitValidatorRegistrationPostponed mocks base method
-func (m *MockBeacon) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitValidatorRegistrationPostponed", pubkey, feeRecipient, sig)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubmitValidatorRegistrationPostponed indicates an expected call of SubmitValidatorRegistrationPostponed
-func (mr *MockBeaconMockRecorder) SubmitValidatorRegistrationPostponed(pubkey, feeRecipient, sig interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistrationPostponed", reflect.TypeOf((*MockBeacon)(nil).SubmitValidatorRegistrationPostponed), pubkey, feeRecipient, sig)
 }
 
 // GetBeaconBlock mocks base method

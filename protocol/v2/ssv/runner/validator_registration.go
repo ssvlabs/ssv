@@ -83,14 +83,8 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	if batch {
-		if err := r.beacon.SubmitValidatorRegistrationPostponed(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-			return errors.Wrap(err, "could not submit validator registration postponed")
-		}
-	} else {
-		if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-			return errors.Wrap(err, "could not submit validator registration")
-		}
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		return errors.Wrap(err, "could not submit validator registration")
 	}
 
 	logger.Debug("validator registration submitted successfully", fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]))

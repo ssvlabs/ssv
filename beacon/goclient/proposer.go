@@ -181,6 +181,14 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 }
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	if gc.batchRegistration {
+		return gc.submitBatchValidatorRegistration(pubkey, feeRecipient, sig)
+	}
+
+	return gc.submitRegularValidatorRegistration(pubkey, feeRecipient, sig)
+}
+
+func (gc *goClient) submitRegularValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], pubkey)
 	signedReg := &api.VersionedSignedValidatorRegistration{
@@ -200,7 +208,7 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
 }
 
-func (gc *goClient) SubmitValidatorRegistrationPostponed(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+func (gc *goClient) submitBatchValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
 	gc.postponedRegistrationsMu.Lock()
 	defer gc.postponedRegistrationsMu.Unlock()
 
