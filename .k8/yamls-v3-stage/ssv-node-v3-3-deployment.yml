@@ -139,7 +139,7 @@ spec:
         - name: FULLNODE
           value: "true"
         - name: BLINDED_SUPPORT
-          value: "false"
+          value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v3-3
