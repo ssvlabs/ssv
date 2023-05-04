@@ -32,6 +32,7 @@ const (
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldBindIP              = "bind_ip"
+	FieldBlinded             = "blinded"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockVersion        = "block_version"
@@ -47,6 +48,7 @@ const (
 	FieldErrors              = "errors"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
+	FieldFeeRecipient        = "fee_recipient"
 	FieldFork                = "fork"
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
@@ -74,7 +76,6 @@ const (
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
-	FieldFeeRecipient        = "fee_recipient"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -283,6 +284,10 @@ func ToBlock(val *big.Int) zap.Field {
 
 func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
+}
+
+func Blinded(blinded bool) zap.Field {
+	return zap.Bool(FieldBlinded, blinded)
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
