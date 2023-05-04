@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -71,6 +73,8 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
+				logger.Debug("📢 leader broadcasting propose message",
+					fields.Root(proposal.Message.Root))
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
