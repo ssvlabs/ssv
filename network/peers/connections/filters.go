@@ -26,7 +26,7 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	}
 }
 
-func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter {
+func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some reason we're loosing 'me' value
 	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
 		if sni.HandshakeData.RecipientPeerID != me {
 			return errors.Errorf("recepient peer ID '%s' instead of '%s'", sni.HandshakeData.RecipientPeerID, me)
