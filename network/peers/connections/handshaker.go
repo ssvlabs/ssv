@@ -122,7 +122,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			logger.Info("URU CALLING processIncomingNodeInfo")
+			logger.Info("URU CALLING processIncomingNodeInfo from Handler")
 
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
@@ -136,6 +136,8 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 				}
 				logger.Warn("URU could not process node info FROM HANDLER", zap.Error(err))
 			}
+
+			logger.Info("URU processIncomingNodeInfo result from Handler is", zap.Error(err))
 		}()
 
 		privateKey, found, err := h.nodeStorage.GetPrivateKey()
@@ -160,10 +162,13 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, sni records.SignedNodeInfo) error {
 	h.updateNodeSubnets(logger, sender, sni.NodeInfo)
 	if err := h.applyFilters(sender, &sni); err != nil {
-		logger.Info("URU RETURNING ERROR FROM APPLY FILTERS", zap.Error(err))
 
+		logger.Info("URU RETURNING ERROR FROM processIncomingNodeInfo", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.Error(err))
 		return err
 	}
+
+	logger.Info("URU ALL RIGHT AT processIncomingNodeInfo", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+
 	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, sender, sni.NodeInfo); err != nil {
 		return err
 	}
@@ -219,6 +224,8 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 		logger.Debug("URU could not process node info FROM HANDSHAKE", zap.Error(err))
 		return err
 	}
+
+	logger.Info("URU processIncomingNodeInfo result from Handshake is", zap.Error(err))
 
 	return nil
 }
@@ -331,8 +338,12 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 func (h *handshaker) applyFilters(sender peer.ID, sni *records.SignedNodeInfo) error {
 	for i := range h.filters {
 		if err := h.filters[i](sender, sni); err != nil {
+
+			zap.L().Info("URU RETURNING ERROR FROM applyFilters", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 			return errors.Wrap(errPeerWasFiltered, err.Error())
 		}
 	}
+
+	zap.L().Info("URU RETURNING nil FROM applyFilters", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 	return nil
 }
