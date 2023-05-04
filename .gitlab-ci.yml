@@ -36,10 +36,10 @@ Build stage Docker image:
     - pip install pyyaml==5.3.1
     - pip install awscli
     - printenv
-    - docker build -t $IMAGE_NAME:$CI_BUILD_REF -f Dockerfile .
+    - docker build -t $IMAGE_NAME:$CI_BUILD_REF-$CI_COMMIT_REF_NAME -f Dockerfile .
     - DOCKER_LOGIN_TO_INFRA_STAGE_REPO=`$ECRLOGIN_INFRA_STAGE`
-    - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
-    - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
+    - docker tag $IMAGE_NAME:$CI_BUILD_REF-$CI_COMMIT_REF_NAME $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF-$CI_COMMIT_REF_NAME
+    - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF-$CI_COMMIT_REF_NAME
   only:
     - helm-charts
 
@@ -55,7 +55,7 @@ Helm deploy on stage:
     - mv kubeconfig ~/.kube/
     - export KUBECONFIG=~/.kube/kubeconfig
     - kubectl config get-contexts
-    - IMAGE_TAG=$CI_BUILD_REF
+    - IMAGE_TAG=$CI_BUILD_REF-$CI_COMMIT_REF_NAME
 
 # SSV cluster A node 1 TEST
     - helm upgrade

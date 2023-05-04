@@ -107,26 +107,24 @@ spec:
           value: {{ .Values.envs.HOST_DNS }}
         - name: HOST_ADDRESS
           value: {{ .Values.envs.HOST_ADDRESS }}
-        - name: LOGGER_LEVEL
-          value: {{ .Values.envs.LOGGER_LEVEL }}
         - name: DB_PATH
-          value: {{ .Values.envs.DB_PATH }}
+          value: "{{ .Values.envs.DB_PATH }}"
         - name: DB_REPORTING
-          value: {{ .Values.envs.DB_REPORTING }}
+          value: "{{ .Values.envs.DB_REPORTING }}"
         - name: ENABLE_PROFILE
-          value: {{ .Values.envs.ENABLE_PROFILE }}
+          value: "{{ .Values.envs.ENABLE_PROFILE }}"
         - name: DISCOVERY_TRACE
-          value: {{ .Values.envs.DISCOVERY_TRACE }}
+          value: "{{ .Values.envs.DISCOVERY_TRACE }}"
         - name: PUBSUB_TRACE
-          value: {{ .Values.envs.PUBSUB_TRACE }}
+          value: "{{ .Values.envs.PUBSUB_TRACE }}"
         - name: P2P_LOG
-          value: {{ .Values.envs.P2P_LOG }}
+          value: "{{ .Values.envs.P2P_LOG }}"
         - name: NETWORK_ID
-          value: {{ .Values.envs.NETWORK_ID }}
+          value: "{{ .Values.envs.NETWORK_ID }}"
         - name: GENESIS_EPOCH
-          value: {{ .Values.envs.GENESIS_EPOCH }}
+          value: "{{ .Values.envs.GENESIS_EPOCH }}"
         - name: CLEAN_REGISTRY_DATA
-          value: {{ .Values.envs.CLEAN_REGISTRY_DATA }}
+          value: "{{ .Values.envs.CLEAN_REGISTRY_DATA }}"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-3-test

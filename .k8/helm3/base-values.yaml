@@ -40,15 +40,13 @@ envs:
   DISCOVERY_TYPE_KEY: discv5
   NETWORK: prater
   CONSENSUS_TYPE: validation
-  HOST_DNS: ""
-  HOST_ADDRESS: ""
-  LOGGER_LEVEL: debug
-  DB_PATH: ./data/db-v3
-  DB_REPORTING: false
-  ENABLE_PROFILE: true
-  DISCOVERY_TRACE: false
-  PUBSUB_TRACE: false
-  P2P_LOG: false
-  NETWORK_ID: shifu-v2-stage
-  GENESIS_EPOCH: 152834
-  CLEAN_REGISTRY_DATA: false
+  LOGGER_LEVEL: "debug"
+  DB_PATH: "./data/db-v3-shifu"
+  DB_REPORTING: "false"
+  ENABLE_PROFILE: "true"
+  DISCOVERY_TRACE: "false"
+  PUBSUB_TRACE: "false"
+  P2P_LOG: "false"
+  NETWORK_ID: "0x00003011"
+  GENESIS_EPOCH: "152834"
+  CLEAN_REGISTRY_DATA: "false"
