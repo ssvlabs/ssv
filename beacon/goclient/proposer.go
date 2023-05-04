@@ -39,18 +39,12 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 		return beaconBlock.Altair, beaconBlock.Version, nil
 	case spec.DataVersionBellatrix:
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
-			gc.log.Info("got beacon block",
-				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
+			gc.logBlock(slot, b.ExecutionPayload.BlockHash, beaconBlock.Version, false)
 		}
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if b := beaconBlock.Capella.Body; b != nil && b.ExecutionPayload != nil {
-			gc.log.Info("got beacon block",
-				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
+			gc.logBlock(slot, b.ExecutionPayload.BlockHash, beaconBlock.Version, false)
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
@@ -76,18 +70,12 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 	switch beaconBlock.Version {
 	case spec.DataVersionBellatrix:
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayloadHeader != nil {
-			gc.log.Info("got blinded beacon block",
-				fields.BlockHash(b.ExecutionPayloadHeader.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
+			gc.logBlock(slot, b.ExecutionPayloadHeader.BlockHash, beaconBlock.Version, true)
 		}
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if b := beaconBlock.Capella.Body; b != nil && b.ExecutionPayloadHeader != nil {
-			gc.log.Info("got blinded beacon block",
-				fields.BlockHash(b.ExecutionPayloadHeader.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
+			gc.logBlock(slot, b.ExecutionPayloadHeader.BlockHash, beaconBlock.Version, true)
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
@@ -295,4 +283,15 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 		})
 	}
 	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+}
+
+func (gc *goClient) logBlock(slot phase0.Slot, hash phase0.Hash32, version spec.DataVersion, blinded bool) {
+	msg := "got beacon block"
+	if blinded {
+		msg = "got blinded beacon block"
+	}
+	gc.log.Info(msg,
+		fields.BlockHash(hash),
+		fields.BlockVersion(version),
+		fields.Slot(slot))
 }
