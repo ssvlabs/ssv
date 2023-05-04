@@ -18,7 +18,7 @@ var AllowedDifference = 30 * time.Second
 
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
-	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
+	return func(sender peer.ID, sni records.SignedNodeInfo) error {
 		if networkID != sni.NodeInfo.NetworkID {
 			return errors.Errorf("networkID '%s' instead of '%s'", sni.NodeInfo.NetworkID, networkID)
 		}
@@ -27,7 +27,7 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 }
 
 func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some reason we're loosing 'me' value
-	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
+	return func(sender peer.ID, sni records.SignedNodeInfo) error {
 		if sni.HandshakeData.RecipientPeerID != me {
 			return errors.Errorf("recepient peer ID '%s' instead of '%s'", sni.HandshakeData.RecipientPeerID, me)
 		}
@@ -41,7 +41,7 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some rea
 }
 
 func SignatureCheckFilter() HandshakeFilter {
-	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
+	return func(sender peer.ID, sni records.SignedNodeInfo) error {
 		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubKeyPem)
 		if err != nil {
 			return err
@@ -61,15 +61,15 @@ func SignatureCheckFilter() HandshakeFilter {
 }
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
-	return func(sender peer.ID, sni *records.SignedNodeInfo) error {
+	return func(sender peer.ID, sni records.SignedNodeInfo) error {
 		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 		if !found {
 
-			logger.Info("URU RETURNING ERROR FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+			logger.Info("URU RETURNING ERROR FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
-		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 		return nil
 	}
 }
