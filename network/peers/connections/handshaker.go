@@ -131,10 +131,10 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 				if errors.Is(err, errPeerWasFiltered) {
 					logger.Info("URU ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
 
-					logger.Debug("peer was filtered", zap.Error(err))
+					logger.Debug("URU peer was filtered", zap.Error(err))
 					return
 				}
-				logger.Warn("could not process node info", zap.Error(err))
+				logger.Warn("URU could not process node info FROM HANDLER", zap.Error(err))
 			}
 		}()
 
@@ -216,7 +216,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
-		logger.Debug("could not process node info", zap.Error(err))
+		logger.Debug("URU could not process node info FROM HANDSHAKE", zap.Error(err))
 		return err
 	}
 
