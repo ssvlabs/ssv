@@ -18,7 +18,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-const batch = true
+// TODO: This is a reasonable default, but we should probably make this configurable.
+//
+//	Discussion here: https://github.com/ethereum/builder-specs/issues/17
+const (
+	gasLimit = 30_000_000
+)
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
@@ -37,7 +42,7 @@ func NewValidatorRegistrationRunner(
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
-	r := &ValidatorRegistrationRunner{
+	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
 			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
@@ -49,8 +54,6 @@ func NewValidatorRegistrationRunner(
 		network: network,
 		signer:  signer,
 	}
-
-	return r
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
@@ -166,7 +169,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2api
 
 	return &eth2apiv1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     30_000_000,
+		GasLimit:     gasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil

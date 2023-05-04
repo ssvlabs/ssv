@@ -32,7 +32,6 @@ import (
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
 
-// TODO: define a common constant
 const validatorRegistrationEpochInterval = uint64(10)
 
 // DutyExecutor represents the component that executes duties
