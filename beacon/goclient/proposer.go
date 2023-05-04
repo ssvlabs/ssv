@@ -34,20 +34,8 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 
 	switch beaconBlock.Version {
 	case spec.DataVersionPhase0:
-		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
-			gc.log.Info("got beacon block",
-				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
-		}
 		return beaconBlock.Phase0, beaconBlock.Version, nil
 	case spec.DataVersionAltair:
-		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
-			gc.log.Info("got beacon block",
-				fields.BlockHash(b.ExecutionPayload.BlockHash),
-				fields.BlockVersion(beaconBlock.Version),
-				fields.Slot(slot))
-		}
 		return beaconBlock.Altair, beaconBlock.Version, nil
 	case spec.DataVersionBellatrix:
 		if b := beaconBlock.Bellatrix.Body; b != nil && b.ExecutionPayload != nil {
