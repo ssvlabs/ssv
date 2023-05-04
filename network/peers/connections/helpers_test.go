@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
@@ -33,12 +34,13 @@ type TestData struct {
 	Handshaker handshaker
 	Conn       mock.Conn
 
-	NodeInfo *records.NodeInfo
+	NodeInfo       *records.NodeInfo
+	SignedNodeInfo *records.SignedNodeInfo
 }
 
 func getTestingData(t *testing.T) TestData {
-	senderPeerID := peer.ID("senderPeerID")
-	recipientPeerID := peer.ID("recipientPeerID")
+	peerID1 := peer.ID("1.1.1.1")
+	peerID2 := peer.ID("2.2.2.2")
 
 	_, privateKeyPem, err := rsaencryption.GenerateKeys()
 	require.NoError(t, err)
@@ -47,45 +49,6 @@ func getTestingData(t *testing.T) TestData {
 	require.NoError(t, err)
 
 	senderPublicKeyPem, err := rsaencryption.ExtractPublicKeyPem(senderPrivateKey)
-	require.NoError(t, err)
-
-	handshakeData := records.HandshakeData{
-		SenderPeerID:    senderPeerID,
-		RecipientPeerID: recipientPeerID,
-		Timestamp:       time.Now(),
-		SenderPubKeyPem: senderPublicKeyPem,
-	}
-	hashed := handshakeData.Hash()
-
-	hashedHandshakeData := hashed[:]
-
-	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
-	require.NoError(t, err)
-
-	nii := mock.NodeInfoIndex{
-		MockNodeInfo:   nil,
-		MockSelfSealed: []byte("something"),
-	}
-	ns := mock.NodeStates{
-		MockNodeState: peers.StateReady,
-	}
-	ch := make(chan struct{})
-	close(ch)
-	ids := mock.IDService{
-		MockIdentifyWait: ch,
-	}
-	ps := mock.Peerstore{
-		ExistingPIDs:               []peer.ID{recipientPeerID},
-		MockFirstSupportedProtocol: "I support handshake protocol",
-	}
-	net := mock.Net{
-		MockPeerstore: ps,
-	}
-	nst := mock.NodeStorage{
-		MockGetPrivateKey: senderPrivateKey,
-	}
-
-	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
 	require.NoError(t, err)
 
 	nodeInfo := &records.NodeInfo{
@@ -100,9 +63,54 @@ func getTestingData(t *testing.T) TestData {
 		},
 	}
 
-	sni := &records.SignedNodeInfo{
-		NodeInfo: nodeInfo,
+	handshakeData := records.HandshakeData{
+		SenderPeerID:    peerID2,
+		RecipientPeerID: peerID1,
+		Timestamp:       time.Now(),
+		SenderPubKeyPem: senderPublicKeyPem,
 	}
+	hashed := handshakeData.Hash()
+
+	hashedHandshakeData := hashed[:]
+
+	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
+	require.NoError(t, err)
+
+	sni := &records.SignedNodeInfo{
+		NodeInfo:      nodeInfo,
+		HandshakeData: handshakeData,
+		Signature:     signature,
+	}
+
+	nii := mock.NodeInfoIndex{
+		MockNodeInfo:   nil,
+		MockSelfSealed: []byte("something"),
+	}
+	ns := mock.NodeStates{
+		MockNodeState: peers.StateReady,
+	}
+	ch := make(chan struct{})
+	close(ch)
+	ids := mock.IDService{
+		MockIdentifyWait: ch,
+	}
+	ps := mock.Peerstore{
+		ExistingPIDs:               []peer.ID{peerID2},
+		MockFirstSupportedProtocol: "I support handshake protocol",
+	}
+	net := mock.Net{
+		MockPeerstore: ps,
+	}
+	nst := mock.NodeStorage{
+		MockGetPrivateKey: senderPrivateKey,
+		RegisteredOperatorPublicKeyPEMs: [][]byte{
+			senderPublicKeyPem,
+		},
+	}
+
+	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
+	require.NoError(t, err)
+
 	data, err := sni.Seal(networkPrivateKey)
 	require.NoError(t, err)
 
@@ -118,11 +126,16 @@ func getTestingData(t *testing.T) TestData {
 		net:         net,
 		nodeStorage: nst,
 		streams:     sc,
-		filters:     []HandshakeFilter{},
+		filters: []HandshakeFilter{
+			NetworkIDFilter("some-network-id"),
+			SenderRecipientIPsCheckFilter(peerID1),
+			SignatureCheckFilter(),
+			RegisteredOperatorsFilter(logging.TestLogger(t), nst),
+		},
 	}
 
 	mockConn := mock.Conn{
-		MockPeerID: recipientPeerID,
+		MockPeerID: peerID2,
 	}
 
 	return TestData{
@@ -130,13 +143,14 @@ func getTestingData(t *testing.T) TestData {
 		HandshakeData:       handshakeData,
 		HashedHandshakeData: hashedHandshakeData,
 		Signature:           signature,
-		SenderPeerID:        senderPeerID,
-		RecipientPeerID:     recipientPeerID,
+		SenderPeerID:        peerID1,
+		RecipientPeerID:     peerID2,
 		PrivateKeyPEM:       privateKeyPem,
 		SenderPublicKeyPEM:  senderPublicKeyPem,
 		Handshaker:          mockHandshaker,
 		Conn:                mockConn,
 		NetworkPrivateKey:   networkPrivateKey,
 		NodeInfo:            nodeInfo,
+		SignedNodeInfo:      sni,
 	}
 }

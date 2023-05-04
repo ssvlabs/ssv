@@ -329,8 +329,8 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 }
 
 func (h *handshaker) applyFilters(sender peer.ID, sni *records.SignedNodeInfo) error {
-	for _, filter := range h.filters {
-		if err := filter(sender, sni); err != nil {
+	for i := range h.filters {
+		if err := h.filters[i](sender, sni); err != nil {
 			return errors.Wrap(errPeerWasFiltered, err.Error())
 		}
 	}
