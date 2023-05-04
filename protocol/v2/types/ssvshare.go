@@ -38,7 +38,7 @@ func (s *SSVShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
-
+	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
 	return nil
 }
 
@@ -77,6 +77,11 @@ func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, er
 	}
 
 	return hash.Sum(nil), nil
+}
+
+func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
+	f := (committeeSize - 1) / 3
+	return uint64(f*2 + 1), uint64(f + 1)
 }
 
 // Metadata represents metadata of SSVShare.

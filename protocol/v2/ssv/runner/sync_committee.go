@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -161,7 +162,11 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successfully submitted sync committee!", fields.Slot(msg.Slot), fields.Height(r.BaseRunner.QBFTController.Height))
+		logger.Info("✅ successfully submitted sync committee",
+			fields.Slot(msg.Slot),
+			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round))
 	}
 	r.GetState().Finished = true
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -236,7 +237,11 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Info("✅ successfully proposed block!", zap.Bool("blinded", decidedBlindedBlock))
+		logger.Info("✅ successfully submitted block proposal",
+			fields.Slot(signedMsg.Message.Slot),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.Bool("blinded", decidedBlindedBlock))
 	}
 	r.GetState().Finished = true
 	return nil
