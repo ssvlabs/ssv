@@ -20,6 +20,13 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 )
 
+const (
+	batchSize = 500
+	// TODO: This is a reasonable default, but we should probably make this configurable.
+	//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
+	gasLimit = 30_000_000
+)
+
 // GetBeaconBlock returns beacon block by the given slot and committee index
 func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
@@ -158,120 +165,82 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
 	if gc.batchRegistration {
-		return gc.submitBatchValidatorRegistration(pubkey, feeRecipient, sig)
+		return gc.handleBatchValidatorRegistration(pubkey, feeRecipient, sig)
 	}
 
-	return gc.submitRegularValidatorRegistration(pubkey, feeRecipient, sig)
+	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{
+		gc.createValidatorRegistration(pubkey, feeRecipient, sig),
+	})
 }
 
-func (gc *goClient) submitRegularValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], pubkey)
-	signedReg := &api.VersionedSignedValidatorRegistration{
-		Version: spec.BuilderVersionV1,
-		V1: &eth2apiv1.SignedValidatorRegistration{
-			Message: &eth2apiv1.ValidatorRegistration{
-				FeeRecipient: feeRecipient,
-				// TODO: This is a reasonable default, but we should probably make this configurable.
-				//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
-				GasLimit:  30_000_000,
-				Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
-				Pubkey:    pk,
-			},
-			Signature: sig,
-		},
-	}
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{signedReg})
-}
-
-func (gc *goClient) submitBatchValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	gc.postponedRegistrationsMu.Lock()
-	defer gc.postponedRegistrationsMu.Unlock()
+func (gc *goClient) handleBatchValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	gc.batchMu.Lock()
+	defer gc.batchMu.Unlock()
 
 	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
+	slotsSinceLastRegistration := currentSlot - gc.lastRegistrationSlot.Load()
+	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
 
-	shouldSubmit := len(gc.postponedRegistrations) != 0 &&
-		(currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch &&
-			currentSlot%slotsPerEpoch == gc.operatorID%slotsPerEpoch ||
-			currentSlot-gc.lastRegistrationSlot.Load() >= slotsPerEpoch*2+gc.operatorID%slotsPerEpoch)
+	hasRegistrations := len(gc.batchRegistrations) != 0
+	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
+	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
+	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
+
+	shouldSubmit := hasRegistrations &&
+		(oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed)
 
 	if shouldSubmit {
-		const batchSize = 500
-
-		for len(gc.postponedRegistrations) > 0 {
-			bs := batchSize
-			if bs > len(gc.postponedRegistrations) {
-				bs = len(gc.postponedRegistrations)
-			}
-
-			if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.postponedRegistrations[0:bs]); err != nil {
-				return err
-			}
-
-			gc.log.Info("submitted postponed validator registrations", fields.Count(bs))
-
-			gc.postponedRegistrations = gc.postponedRegistrations[bs:]
-		}
-
-		gc.lastRegistrationSlot.Store(currentSlot)
-
-		return nil
+		return gc.submitBatchedRegistrations(currentSlot)
 	}
 
-	pk := phase0.BLSPubKey{}
-	copy(pk[:], pubkey)
-	signedReg := &api.VersionedSignedValidatorRegistration{
-		Version: spec.BuilderVersionV1,
-		V1: &eth2apiv1.SignedValidatorRegistration{
-			Message: &eth2apiv1.ValidatorRegistration{
-				FeeRecipient: feeRecipient,
-				// TODO: This is a reasonable default, but we should probably make this configurable.
-				//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
-				GasLimit:  30_000_000,
-				Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
-				Pubkey:    pk,
-			},
-			Signature: sig,
-		},
-	}
-
-	gc.postponedRegistrations = append(gc.postponedRegistrations, signedReg)
+	gc.enqueueBatchRegistration(pubkey, feeRecipient, sig)
 
 	return nil
 }
 
-type ValidatorRegistration struct {
-	PubKey       []byte
-	FeeRecipient bellatrix.ExecutionAddress
-	Sig          phase0.BLSSignature
+func (gc *goClient) enqueueBatchRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) {
+	gc.batchRegistrations = append(gc.batchRegistrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
-func (gc *goClient) SubmitValidatorRegistrationBatched(pubkeys [][]byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	registrations := make([]*api.VersionedSignedValidatorRegistration, 0)
+func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
+	for len(gc.batchRegistrations) > 0 {
+		bs := batchSize
+		if bs > len(gc.batchRegistrations) {
+			bs = len(gc.batchRegistrations)
+		}
 
-	for _, pk := range pubkeys {
-		registrations = append(registrations, &api.VersionedSignedValidatorRegistration{
-			Version: spec.BuilderVersionV1,
-			V1: &eth2apiv1.SignedValidatorRegistration{
-				Message: &eth2apiv1.ValidatorRegistration{
-					FeeRecipient: feeRecipient,
-					// TODO: This is a reasonable default, but we should probably make this configurable.
-					//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
-					GasLimit:  30_000_000,
-					Timestamp: gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
-					Pubkey:    *(*phase0.BLSPubKey)(pk), // TODO: use phase0.BLSPubKey(pk) in Go 1.20
-				},
-				Signature: sig,
-			},
-		})
+		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.batchRegistrations[0:bs]); err != nil {
+			return err
+		}
+
+		gc.log.Info("submitted batch validator registrations", fields.Count(bs))
+
+		gc.batchRegistrations = gc.batchRegistrations[bs:]
 	}
 
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+	gc.lastRegistrationSlot.Store(currentSlot)
+
+	return nil
 }
 
-func (gc *goClient) SubmitValidatorRawRegistrations(registrations []*api.VersionedSignedValidatorRegistration) error {
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, registrations)
+func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], pubkey)
+
+	signedReg := &api.VersionedSignedValidatorRegistration{
+		Version: spec.BuilderVersionV1,
+		V1: &eth2apiv1.SignedValidatorRegistration{
+			Message: &eth2apiv1.ValidatorRegistration{
+				FeeRecipient: feeRecipient,
+				GasLimit:     gasLimit,
+				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+				Pubkey:       pk,
+			},
+			Signature: sig,
+		},
+	}
+	return signedReg
 }
 
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {

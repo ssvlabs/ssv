@@ -108,16 +108,16 @@ type Client interface {
 
 // goClient implementing Beacon struct
 type goClient struct {
-	log                      *zap.Logger
-	ctx                      context.Context
-	network                  beaconprotocol.Network
-	client                   Client
-	graffiti                 []byte
-	operatorID               spectypes.OperatorID
-	postponedRegistrations   []*api.VersionedSignedValidatorRegistration
-	postponedRegistrationsMu sync.Mutex
-	lastRegistrationSlot     atomic.Uint64
-	batchRegistration        bool
+	log                  *zap.Logger
+	ctx                  context.Context
+	network              beaconprotocol.Network
+	client               Client
+	graffiti             []byte
+	operatorID           spectypes.OperatorID
+	batchRegistration    bool
+	batchMu              sync.Mutex
+	batchRegistrations   []*api.VersionedSignedValidatorRegistration
+	lastRegistrationSlot atomic.Uint64
 }
 
 // verifies that the client implements HealthCheckAgent
