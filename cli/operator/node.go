@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
@@ -54,6 +55,7 @@ type config struct {
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	OperatorPrivateKeyPath     string `yaml:"OperatorPrivateKeyPath" env:"OPERATOR_KEY_PATH" env-description:"Path to operator private key, this private key is used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
 	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
@@ -254,9 +256,42 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage := operatorstorage.NewNodeStorage(db)
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
-	if err != nil {
-		logger.Fatal("could not setup operator private key", zap.Error(err))
+	var operatorPubKey []byte
+	var err error
+
+	switch {
+	// If OperatorPrivateKey is provided use it
+	case cfg.OperatorPrivateKey != "":
+		operatorPubKey, err = nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+		if err != nil {
+			logger.Fatal("could not setup operator private key", zap.Error(err))
+		}
+
+	// If OperatorPrivateKeyPath is provided, read key from the file
+	case cfg.OperatorPrivateKeyPath != "":
+		skByte, err := os.ReadFile(cfg.OperatorPrivateKeyPath)
+		if err != nil {
+			logger.Fatal("could not read operator private key from file", zap.Error(err))
+		}
+
+		operatorPubKey, err = nodeStorage.SetupPrivateKey(logger, string(skByte), cfg.GenerateOperatorPrivateKey)
+		if err != nil {
+			logger.Fatal("could not setup operator private key", zap.Error(err))
+		}
+
+	// If GenerateOperatorPrivateKey is true, generate key
+	case cfg.GenerateOperatorPrivateKey:
+		operatorPubKey, err = nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+		if err != nil {
+			logger.Fatal("could not setup operator private key", zap.Error(err))
+		}
+
+	// Must failed
+	default:
+		operatorPubKey, err = nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+		if err != nil {
+			logger.Fatal("could not setup operator private key", zap.Error(err))
+		}
 	}
 
 	_, found, err := nodeStorage.GetPrivateKey()
