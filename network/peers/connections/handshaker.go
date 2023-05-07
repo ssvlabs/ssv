@@ -342,7 +342,11 @@ func (h *handshaker) applyFilters(sender peer.ID, sni records.SignedNodeInfo) er
 	zap.L().Info("URU start of applyFilters", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 
 	for i := range h.filters {
-		if err := h.filters[i](sender, sni); err != nil {
+		err := h.filters[i](sender, sni)
+
+		zap.L().Info("URU filter result is", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)), zap.Bool("is error nil?", err == nil), zap.Error(err))
+
+		if err != nil {
 
 			zap.L().Info("URU RETURNING ERROR FROM applyFilters", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			return errors.Wrap(errPeerWasFiltered, err.Error())
