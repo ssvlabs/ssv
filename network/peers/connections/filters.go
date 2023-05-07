@@ -62,11 +62,15 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
+		operator, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 		if !found {
 
 			logger.Info("URU RETURNING ERROR FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
+		}
+
+		if operator == nil {
+			logger.Info("URU founded operator is nil!!!", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 		}
 
 		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
