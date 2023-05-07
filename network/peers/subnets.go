@@ -115,23 +115,43 @@ func (si *subnetsIndex) GetPeerSubnets(id peer.ID) records.Subnets {
 
 // GetSubnetsDistributionScores returns current subnets scores based on peers distribution.
 // subnets with low peer count would get higher score, and overloaded subnets gets a lower score.
-func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []int {
+func GetSubnetsDistributionScores(stats *SubnetsStats, minPerSubnet int, mySubnets records.Subnets, topicMaxPeers int) []float64 {
+	const activeSubnetBoost = 0.2
+
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	activeSubnets := records.SharedSubnets(allSubs, mySubnets, 0)
 
-	scores := make([]int, len(allSubs))
+	scores := make([]float64, len(allSubs))
 	for _, s := range activeSubnets {
 		var connected int
 		if s < len(stats.Connected) {
 			connected = stats.Connected[s]
 		}
-		if connected == 0 {
-			scores[s] = 2
-		} else if connected <= minPerSubnet {
-			scores[s] = 1
-		} else if connected >= topicMaxPeers {
-			scores[s] = -1
-		}
+		scores[s] = activeSubnetBoost + scoreSubnet(connected, minPerSubnet, topicMaxPeers)
 	}
 	return scores
+}
+
+func scoreSubnet(connected, min, max int) float64 {
+	// scarcityFactor is the factor by which the score is increased for
+	// subnets with fewer than the desired minimum number of peers.
+	const scarcityFactor = 2.0
+
+	if connected <= 0 {
+		return 2.0 * scarcityFactor
+	}
+
+	if connected > max {
+		// Linear scaling when connected is above the desired maximum.
+		return -1.0 * (float64(connected-max) / float64(2*(max-min)))
+	}
+
+	if connected < min {
+		// Proportional scaling when connected is less than the desired minimum.
+		return 1.0 + (float64(min-connected)/float64(min))*scarcityFactor
+	}
+
+	// Linear scaling when connected is between min and max.
+	proportion := float64(connected-min) / float64(max-min)
+	return 1 - proportion
 }

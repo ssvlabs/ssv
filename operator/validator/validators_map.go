@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 // validatorIterator is the function used to iterate over existing validators
@@ -22,7 +21,6 @@ type validatorIterator func(validator *validator.Validator) error
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
 	ctx context.Context
-	db  basedb.IDb
 
 	optsTemplate *validator.Options
 
@@ -30,10 +28,9 @@ type validatorsMap struct {
 	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context, db basedb.IDb, optsTemplate *validator.Options) *validatorsMap {
+func newValidatorsMap(ctx context.Context, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
 		ctx:           ctx,
-		db:            db,
 		lock:          sync.RWMutex{},
 		validatorsMap: make(map[string]*validator.Validator),
 		optsTemplate:  optsTemplate,
@@ -67,13 +64,16 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
+func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) (*validator.Validator, error) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
+		if !share.HasBeaconMetadata() {
+			return nil, fmt.Errorf("beacon metadata is missing")
+		}
 		opts := *vm.optsTemplate
 		opts.SSVShare = share
 
@@ -89,7 +89,7 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		printShare(v.Share, logger, "get validator")
 	}
 
-	return vm.validatorsMap[pubKey]
+	return vm.validatorsMap[pubKey], nil
 }
 
 // RemoveValidator removes a validator instance from the map

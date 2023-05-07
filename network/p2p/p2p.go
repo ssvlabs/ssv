@@ -9,6 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/cornelk/hashmap"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -69,8 +70,7 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeValidatorsLock *sync.Mutex
-	activeValidators     map[string]int32
+	activeValidators *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
@@ -87,18 +87,17 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	return &p2pNetwork{
-		parentCtx:            cfg.Ctx,
-		ctx:                  ctx,
-		cancel:               cancel,
-		interfaceLogger:      logger,
-		fork:                 forksfactory.NewFork(cfg.ForkVersion),
-		cfg:                  cfg,
-		msgRouter:            cfg.Router,
-		state:                stateClosed,
-		activeValidators:     make(map[string]int32),
-		activeValidatorsLock: &sync.Mutex{},
-		nodeStorage:          cfg.NodeStorage,
-		operatorPKCache:      sync.Map{},
+		parentCtx:        cfg.Ctx,
+		ctx:              ctx,
+		cancel:           cancel,
+		interfaceLogger:  logger,
+		fork:             forksfactory.NewFork(cfg.ForkVersion),
+		cfg:              cfg,
+		msgRouter:        cfg.Router,
+		state:            stateClosed,
+		activeValidators: hashmap.New[string, validatorStatus](),
+		nodeStorage:      cfg.NodeStorage,
+		operatorPKCache:  sync.Map{},
 	}
 }
 
@@ -173,7 +172,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		ctx, cancel := context.WithTimeout(n.ctx, connManagerGCTimeout)
 		defer cancel()
 
-		connMgr := peers.NewConnManager(n.libConnManager, n.idx)
+		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
 		mySubnets := records.Subnets(n.subnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
 		connMgr.TrimPeers(ctx, logger, n.host.Network())
@@ -217,22 +216,22 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	visited := make(map[int]bool)
-	n.activeValidatorsLock.Lock()
 	last := make([]byte, len(n.subnets))
 	if len(n.subnets) > 0 {
 		copy(last, n.subnets)
 	}
 	newSubnets := make([]byte, n.fork.Subnets())
-	for pkHex, state := range n.activeValidators {
-		if state == validatorStateInactive {
-			continue
+	n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
+		if status == validatorStatusInactive {
+			return true
 		}
 		subnet := n.fork.ValidatorSubnet(pkHex)
 		if _, ok := visited[subnet]; ok {
-			continue
+			return true
 		}
 		newSubnets[subnet] = byte(1)
-	}
+		return true
+	})
 	subnetsToAdd := make([]int, 0)
 	if !bytes.Equal(newSubnets, last) { // have changes
 		n.subnets = newSubnets
@@ -242,7 +241,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 		}
 	}
-	n.activeValidatorsLock.Unlock()
 
 	if len(subnetsToAdd) == 0 {
 		return

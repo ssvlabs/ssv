@@ -16,10 +16,12 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
+type validatorStatus int
+
 const (
-	validatorStateInactive    int32 = 0
-	validatorStateSubscribing int32 = 1
-	validatorStateSubscribed  int32 = 2
+	validatorStatusInactive    validatorStatus = 0
+	validatorStatusSubscribing validatorStatus = 1
+	validatorStatusSubscribed  validatorStatus = 2
 )
 
 // UseMessageRouter registers a message router to handle incoming messages
@@ -70,14 +72,15 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	pkHex := hex.EncodeToString(pk)
-	if !n.setValidatorStateSubscribing(pkHex) {
+	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
+	if found && status != validatorStatusInactive {
 		return nil
 	}
 	err := n.subscribe(n.interfaceLogger, pk)
 	if err != nil {
 		return err
 	}
-	n.setValidatorStateSubscribed(pkHex)
+	n.activeValidators.Set(pkHex, validatorStatusSubscribed)
 	return nil
 }
 
@@ -87,7 +90,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	pkHex := hex.EncodeToString(pk)
-	if !n.canUnsubscribe(pkHex) {
+	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 		return nil
 	}
 	topics := n.fork.ValidatorTopicID(pk)
@@ -96,7 +99,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 			return err
 		}
 	}
-	n.clearValidatorState(pkHex)
+	n.activeValidators.Del(pkHex)
 	return nil
 }
 
@@ -110,59 +113,6 @@ func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) err
 		}
 	}
 	return nil
-}
-
-// setValidatorStateSubscribing swaps the validator state to validatorStateSubscribing
-// if the current state is not subscribed or subscribing
-func (n *p2pNetwork) setValidatorStateSubscribing(pkHex string) bool {
-	n.activeValidatorsLock.Lock()
-	defer n.activeValidatorsLock.Unlock()
-	currentState := n.activeValidators[pkHex]
-	switch currentState {
-	case validatorStateSubscribed, validatorStateSubscribing:
-		return false
-	default:
-		n.activeValidators[pkHex] = validatorStateSubscribing
-	}
-	return true
-}
-
-// setValidatorStateSubscribed swaps the validator state to validatorStateSubscribed
-// if currentState is subscribing
-func (n *p2pNetwork) setValidatorStateSubscribed(pkHex string) bool {
-	n.activeValidatorsLock.Lock()
-	defer n.activeValidatorsLock.Unlock()
-	currentState, ok := n.activeValidators[pkHex]
-	if !ok {
-		return false
-	}
-	switch currentState {
-	case validatorStateInactive, validatorStateSubscribed:
-		return false
-	default:
-		n.activeValidators[pkHex] = validatorStateSubscribed
-	}
-	return true
-}
-
-// canUnsubscribe checks we should unsubscribe from the given validator
-func (n *p2pNetwork) canUnsubscribe(pkHex string) bool {
-	n.activeValidatorsLock.Lock()
-	defer n.activeValidatorsLock.Unlock()
-
-	currentState, ok := n.activeValidators[pkHex]
-	if !ok {
-		return false
-	}
-	return currentState != validatorStateInactive
-}
-
-// clearValidatorState clears validator state
-func (n *p2pNetwork) clearValidatorState(pkHex string) {
-	n.activeValidatorsLock.Lock()
-	defer n.activeValidatorsLock.Unlock()
-
-	delete(n.activeValidators, pkHex)
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
