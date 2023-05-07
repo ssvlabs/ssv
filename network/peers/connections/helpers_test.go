@@ -64,7 +64,7 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	handshakeData := records.HandshakeData{
-		SenderPeerID:    "peerID2",
+		SenderPeerID:    peerID2,
 		RecipientPeerID: peerID1,
 		Timestamp:       time.Now(),
 		SenderPubKeyPem: senderPublicKeyPem,
