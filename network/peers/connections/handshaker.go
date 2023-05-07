@@ -102,11 +102,11 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 // Handler returns the handshake handler
 func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		logger.Info("URU HANDLER TRIGGERED")
-
 		// start by marking the peer as pending
 		pid := stream.Conn().RemotePeer()
 		pidStr := pid.String()
+
+		logger.Info("URU HANDLER TRIGGERED", zap.String("otherPeer", pidStr))
 
 		req, res, done, err := h.streams.HandleStream(logger, stream)
 		defer done()
@@ -193,9 +193,10 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
-	logger.Info("URU HANDSHAKE CALLED")
-
 	pid := conn.RemotePeer()
+
+	logger.Info("URU HANDSHAKE CALLED", zap.String("otherPeer", pid.String()))
+
 	// check if the peer is known before we continue
 	ni, err := h.getNodeInfo(pid)
 	if err != nil || ni != nil {
