@@ -62,15 +62,17 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) HandshakeFilter { //operator is not registered means operator not whitelisted
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
+		if len(sni.HandshakeData.SenderPubKeyPem) == 0 {
+			logger.Info("URU RETURNING EMPTY FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
+
+			return errors.New("empty SenderPubKeyPem")
+		}
+
 		operator, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
 		if !found {
 
 			logger.Info("URU RETURNING ERROR FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
-		}
-
-		if operator == nil {
-			logger.Info("URU founded operator is nil!!!", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)), zap.String("operator", fmt.Sprintf("%+v", operator)))
 		}
 
 		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)), zap.String("operator", fmt.Sprintf("%+v", operator)))
