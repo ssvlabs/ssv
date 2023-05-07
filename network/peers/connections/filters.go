@@ -70,10 +70,10 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage) 
 		}
 
 		if operator == nil {
-			logger.Info("URU founded operator is nil!!!", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
+			logger.Info("URU founded operator is nil!!!", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)), zap.String("operator", fmt.Sprintf("%+v", operator)))
 		}
 
-		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
+		logger.Info("URU RETURNING nil FROM RegisteredOperatorsFilter", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)), zap.String("operator", fmt.Sprintf("%+v", operator)))
 		return nil
 	}
 }

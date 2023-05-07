@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -123,22 +124,22 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			logger.Info("URU CALLING processIncomingNodeInfo from Handler")
+			logger.Info("URU CALLING processIncomingNodeInfo from Handler", zap.String("sni", fmt.Sprintf("%+v", sni)), zap.String("sniRaw", base64.StdEncoding.EncodeToString(req)))
 
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
-				logger.Info("URU HANDLED ERROR", zap.Error(err))
+				logger.Info("URU HANDLED ERROR", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 
 				if errors.Is(err, errPeerWasFiltered) {
-					logger.Info("URU ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err))
+					logger.Info("URU ERROR WAS COUNTED AS errHandshakeInProcess", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 
-					logger.Debug("URU peer was filtered", zap.Error(err))
+					logger.Debug("URU peer was filtered", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 					return
 				}
-				logger.Warn("URU could not process node info FROM HANDLER", zap.Error(err))
+				logger.Warn("URU could not process node info FROM HANDLER", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			}
 
-			logger.Info("URU processIncomingNodeInfo result from Handler is", zap.Error(err))
+			logger.Info("URU processIncomingNodeInfo result from Handler is", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 		}()
 
 		privateKey, found, err := h.nodeStorage.GetPrivateKey()
@@ -218,15 +219,15 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
 
-	logger.Info("URU FROM HANDSHAKE CALLING processIncomingNodeInfo")
+	logger.Info("URU FROM HANDSHAKE CALLING processIncomingNodeInfo", zap.String("sni", fmt.Sprintf("%+v", sni)))
 
 	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
-		logger.Debug("URU could not process node info FROM HANDSHAKE", zap.Error(err))
+		logger.Debug("URU could not process node info FROM HANDSHAKE", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 		return err
 	}
 
-	logger.Info("URU processIncomingNodeInfo result from Handshake is", zap.Error(err))
+	logger.Info("URU processIncomingNodeInfo result from Handshake is", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 
 	return nil
 }
