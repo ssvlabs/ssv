@@ -338,6 +338,8 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 }
 
 func (h *handshaker) applyFilters(sender peer.ID, sni records.SignedNodeInfo) error {
+	zap.L().Info("URU start of applyFilters", zap.String("otherPeer", sni.HandshakeData.SenderPeerID.String()), zap.String("sni", fmt.Sprintf("%+v", sni)))
+
 	for i := range h.filters {
 		if err := h.filters[i](sender, sni); err != nil {
 

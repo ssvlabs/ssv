@@ -95,7 +95,7 @@ func TestRegisteredOperatorsFilter(t *testing.T) {
 	require.Error(t, err)
 }
 
-func SealAndConsume(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, sni *records.SignedNodeInfo) *records.SignedNodeInfo {
+func SealAndConsume(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, sni *records.SignedNodeInfo) records.SignedNodeInfo {
 	td := getTestingData(t)
 
 	if sni.NodeInfo == nil {
@@ -109,5 +109,5 @@ func SealAndConsume(t *testing.T, networkPrivateKey libp2pcrypto.PrivKey, sni *r
 	err = sni.Consume(sealed)
 	require.NoError(t, err)
 
-	return sni
+	return *sni
 }
