@@ -130,7 +130,7 @@ func getTestingData(t *testing.T) TestData {
 			NetworkIDFilter("some-network-id"),
 			SenderRecipientIPsCheckFilter(peerID1),
 			SignatureCheckFilter(),
-			RegisteredOperatorsFilter(logging.TestLogger(t), nst),
+			RegisteredOperatorsFilter(logging.TestLogger(t), nst, nil),
 		},
 	}
 
@@ -143,8 +143,8 @@ func getTestingData(t *testing.T) TestData {
 		HandshakeData:       handshakeData,
 		HashedHandshakeData: hashedHandshakeData,
 		Signature:           signature,
-		SenderPeerID:        peerID1,
-		RecipientPeerID:     peerID2,
+		SenderPeerID:        peerID2,
+		RecipientPeerID:     peerID1,
 		PrivateKeyPEM:       privateKeyPem,
 		SenderPublicKeyPEM:  senderPublicKeyPem,
 		Handshaker:          mockHandshaker,
