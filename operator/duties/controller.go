@@ -54,6 +54,7 @@ type ControllerOptions struct {
 	DutyLimit           uint64
 	ForkVersion         forksprotocol.ForkVersion
 	Ticker              slot_ticker.Ticker
+	BuilderProposals    bool
 }
 
 // dutyController internal implementation of DutyController
@@ -66,6 +67,7 @@ type dutyController struct {
 	validatorController validator.Controller
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
+	builderProposals    bool
 
 	// sync committee duties map [period, map[index, duty]]
 	syncCommitteeDutiesMap            *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
@@ -87,6 +89,7 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
+		builderProposals:    opts.BuilderProposals,
 
 		syncCommitteeDutiesMap:            hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
 		validatorsPassedFirstRegistration: map[string]struct{}{},
@@ -245,7 +248,9 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 	}
 
 	dc.handleSyncCommittee(logger, slot, syncPeriod)
-	dc.handleValidatorRegistration(logger, slot)
+	if dc.builderProposals {
+		dc.handleValidatorRegistration(logger, slot)
+	}
 }
 
 func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {

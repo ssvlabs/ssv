@@ -113,6 +113,7 @@ func New(logger *zap.Logger, opts Options) Node {
 			Executor:            opts.DutyExec,
 			ForkVersion:         opts.ForkVersion,
 			Ticker:              ticker,
+			BuilderProposals:    opts.ValidatorOptions.BlindedSupport,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:              opts.Context,
