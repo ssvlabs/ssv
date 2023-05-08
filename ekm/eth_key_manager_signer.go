@@ -40,11 +40,11 @@ type ethKeyManagerSigner struct {
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
-	isBlinded         bool
+	builderProposals  bool
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, blinded bool) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, builderProposals bool) (spectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network, logger)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -75,7 +75,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconpro
 		storage:           signerStore,
 		domain:            domain,
 		slashingProtector: slashingProtector,
-		isBlinded:         blinded,
+		builderProposals:  builderProposals,
 	}, nil
 }
 
@@ -101,7 +101,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pk)
 	case spectypes.DomainProposer:
-		if km.isBlinded {
+		if km.builderProposals {
 			var vBlindedBlock *api.VersionedBlindedBeaconBlock
 			switch v := obj.(type) {
 			case *apiv1bellatrix.BlindedBeaconBlock:

@@ -32,11 +32,11 @@ const (
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
 	FieldBindIP              = "bind_ip"
-	FieldBlinded             = "blinded"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldBuilderProposals    = "builder_proposals"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
@@ -286,8 +286,8 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func Blinded(blinded bool) zap.Field {
-	return zap.Bool(FieldBlinded, blinded)
+func BuilderProposals(v bool) zap.Field {
+	return zap.Bool(FieldBuilderProposals, v)
 }
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {

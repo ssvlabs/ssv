@@ -8,9 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -26,6 +23,8 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -90,7 +89,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, types.GetDefaultDomain(), cfg.SSVOptions.ValidatorOptions.BlindedSupport)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, types.GetDefaultDomain(), cfg.SSVOptions.ValidatorOptions.BuilderProposals)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}

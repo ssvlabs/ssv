@@ -138,7 +138,7 @@ spec:
           value: "16303"
         - name: FULLNODE
           value: "true"
-        - name: BLINDED_SUPPORT
+        - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:
         - mountPath: /data

@@ -73,7 +73,7 @@ type ControllerOptions struct {
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
-	BlindedSupport             bool `yaml:"BlindedSupport" env:"BLINDED_SUPPORT" env-default:"false" env-description:"produce blinded block rather than regular blocks"`
+	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager                 spectypes.KeyManager
 	OperatorData               *registrystorage.OperatorData
 	RegistryStorage            nodestorage.Storage
@@ -142,7 +142,7 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
-	logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode), zap.Bool("blinded_supported", options.BlindedSupport))
+	logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode), fields.BuilderProposals(options.BuilderProposals))
 	storageMap := storage.NewStores()
 	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, spectypes.BNRoleAttester.String(), options.ForkVersion))
 	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, spectypes.BNRoleProposer.String(), options.ForkVersion))
@@ -173,7 +173,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
-		BlindedSupport:    options.BlindedSupport,
+		BuilderProposals:  options.BuilderProposals,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -732,10 +732,10 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
 			runners[role] = runner.NewAttesterRunnner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck)
 		case spectypes.BNRoleProposer:
-			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BlindedSupport)
+			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BuilderProposals)
 			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BlindedSupport // apply blinded block flag
+			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
 		case spectypes.BNRoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, spectypes.PraterNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)

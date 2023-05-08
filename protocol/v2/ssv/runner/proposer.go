@@ -241,7 +241,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
-			fields.Blinded(decidedBlindedBlock))
+			fields.BuilderProposals(decidedBlindedBlock))
 	}
 	r.GetState().Finished = true
 	return nil

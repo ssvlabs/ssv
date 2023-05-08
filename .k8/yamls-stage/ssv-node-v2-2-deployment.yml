@@ -138,7 +138,7 @@ spec:
           value: 'false'
         - name: GENESIS_EPOCH
           value: "152834"
-        - name: BLINDED_SUPPORT
+        - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:
         - mountPath: /data

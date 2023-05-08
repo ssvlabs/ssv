@@ -132,7 +132,7 @@ spec:
           value: "152834"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
-        - name: BLINDED_SUPPORT
+        - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:
         - mountPath: /data
