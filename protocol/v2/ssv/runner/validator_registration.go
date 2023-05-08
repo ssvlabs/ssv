@@ -13,16 +13,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-)
-
-// TODO: This is a reasonable default, but we should probably make this configurable.
-//
-//	Discussion here: https://github.com/ethereum/builder-specs/issues/17
-const (
-	gasLimit = 30_000_000
 )
 
 type ValidatorRegistrationRunner struct {
@@ -169,7 +163,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2api
 
 	return &eth2apiv1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     gasLimit,
+		GasLimit:     goclient.ValidatorRegistrationGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil

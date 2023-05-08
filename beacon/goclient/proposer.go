@@ -21,9 +21,10 @@ import (
 
 const (
 	batchSize = 500
+	// ValidatorRegistrationGasLimit sets validator registration gas limit.
 	// TODO: This is a reasonable default, but we should probably make this configurable.
 	//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
-	gasLimit = 30_000_000
+	ValidatorRegistrationGasLimit = 30_000_000
 )
 
 // GetBeaconBlock returns beacon block by the given slot and committee index
@@ -267,7 +268,7 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 		V1: &eth2apiv1.SignedValidatorRegistration{
 			Message: &eth2apiv1.ValidatorRegistration{
 				FeeRecipient: feeRecipient,
-				GasLimit:     gasLimit,
+				GasLimit:     ValidatorRegistrationGasLimit,
 				Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
 				Pubkey:       pk,
 			},
