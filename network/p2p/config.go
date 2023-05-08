@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
@@ -77,6 +78,9 @@ type Config struct {
 	FullNode bool
 
 	GetValidatorStats network.GetValidatorStats
+
+	// PeerWhitelist is an array of peer.ID-s not registered in the contract with which the node will accept connections
+	PeerWhitelist []peer.ID `yaml:"PeerWhitelist" env:"PEER_WHITELIST" env-description:"Peers not registered in the contract with which the node will accept connections"`
 }
 
 // Libp2pOptions creates options list for the libp2p host

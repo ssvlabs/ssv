@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 )
 
@@ -77,14 +78,14 @@ func TestSignatureCheckFFilter(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestRegisteredOperatorsFilter(t *testing.T) {
+func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 	td := getTestingData(t)
 
 	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{
 		RegisteredOperatorPublicKeyPEMs: [][]byte{
 			td.SenderPublicKeyPEM,
 		},
-	})
+	}, nil)
 
 	err := f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: td.HandshakeData, Signature: td.Signature}))
 	require.NoError(t, err)
@@ -92,6 +93,20 @@ func TestRegisteredOperatorsFilter(t *testing.T) {
 	wrongSenderPubKeyPem := td.HandshakeData
 	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature}))
+	require.Error(t, err)
+}
+
+func TestRegisteredOperatorsFilter_ConfigWhitelist(t *testing.T) {
+	td := getTestingData(t)
+
+	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{}, []peer.ID{td.SenderPeerID})
+
+	err := f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: td.HandshakeData, Signature: td.Signature}))
+	require.NoError(t, err)
+
+	wrongSenderPeerID := td.HandshakeData
+	wrongSenderPeerID.SenderPeerID = td.RecipientPeerID
+	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPeerID, Signature: td.Signature}))
 	require.Error(t, err)
 }
 
