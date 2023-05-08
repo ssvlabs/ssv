@@ -199,20 +199,16 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 }
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	gc.registrationsMu.Lock()
-	defer gc.registrationsMu.Unlock()
-
 	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot.Load()
 	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
 
-	hasRegistrations := len(gc.registrations) != 0
 	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
 	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
 	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
 
-	shouldSubmit := hasRegistrations &&
+	shouldSubmit := gc.hasRegistrations() &&
 		(oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed)
 
 	if shouldSubmit {
@@ -224,20 +220,28 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 	return nil
 }
 
-func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
-	for len(gc.registrations) > 0 {
-		bs := batchSize
-		if bs > len(gc.registrations) {
-			bs = len(gc.registrations)
-		}
+func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
+	var preparations []*eth2apiv1.ProposalPreparation
+	for index, recipient := range feeRecipients {
+		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
+			ValidatorIndex: index,
+			FeeRecipient:   recipient,
+		})
+	}
+	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+}
 
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.registrations[0:bs]); err != nil {
+func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
+	for gc.hasRegistrations() {
+		nextChunk := gc.getNextRegistrationsChunk()
+
+		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, nextChunk); err != nil {
 			return err
 		}
 
-		gc.log.Info("submitted batch validator registrations", fields.Count(bs))
+		gc.log.Info("submitted batch validator registrations", fields.Count(len(nextChunk)))
 
-		gc.registrations = gc.registrations[bs:]
+		gc.removeSubmittedRegistrations(len(nextChunk))
 	}
 
 	gc.registrationLastSlot.Store(currentSlot)
@@ -246,7 +250,12 @@ func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 }
 
 func (gc *goClient) enqueueBatchRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) {
-	gc.registrations = append(gc.registrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
+	registration := gc.createValidatorRegistration(pubkey, feeRecipient, sig)
+
+	gc.registrationsMu.Lock()
+	defer gc.registrationsMu.Unlock()
+
+	gc.registrations = append(gc.registrations, registration)
 }
 
 func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
@@ -268,15 +277,30 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
-	var preparations []*eth2apiv1.ProposalPreparation
-	for index, recipient := range feeRecipients {
-		preparations = append(preparations, &eth2apiv1.ProposalPreparation{
-			ValidatorIndex: index,
-			FeeRecipient:   recipient,
-		})
+func (gc *goClient) hasRegistrations() bool {
+	gc.registrationsMu.Lock()
+	defer gc.registrationsMu.Unlock()
+
+	return len(gc.registrations) != 0
+}
+
+func (gc *goClient) getNextRegistrationsChunk() []*api.VersionedSignedValidatorRegistration {
+	gc.registrationsMu.Lock()
+	defer gc.registrationsMu.Unlock()
+
+	bs := batchSize
+	if bs > len(gc.registrations) {
+		bs = len(gc.registrations)
 	}
-	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
+
+	return gc.registrations[0:bs]
+}
+
+func (gc *goClient) removeSubmittedRegistrations(count int) {
+	gc.registrationsMu.Lock()
+	defer gc.registrationsMu.Unlock()
+
+	gc.registrations = gc.registrations[count:]
 }
 
 func (gc *goClient) logBlock(slot phase0.Slot, hash phase0.Hash32, version spec.DataVersion, blinded bool) {
