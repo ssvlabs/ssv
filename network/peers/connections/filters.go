@@ -60,22 +60,20 @@ func SignatureCheckFilter() HandshakeFilter {
 	}
 }
 
-func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, peerConfigWhitelist []peer.ID) HandshakeFilter { //operator is not registered means operator not whitelisted
+func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		if len(peerConfigWhitelist) != 0 {
-			if len(sni.HandshakeData.SenderPeerID) == 0 {
-				return errors.New("empty SenderPeerID")
-			}
+		if len(keysConfigWhitelist) != 0 {
 
-			for _, peer := range peerConfigWhitelist {
-				if peer == sni.HandshakeData.SenderPeerID {
-					return nil
-				}
-			}
 		}
 
 		if len(sni.HandshakeData.SenderPubKeyPem) == 0 {
 			return errors.New("empty SenderPubKeyPem")
+		}
+
+		for _, key := range keysConfigWhitelist {
+			if key == string(sni.HandshakeData.SenderPubKeyPem) {
+				return nil
+			}
 		}
 
 		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
