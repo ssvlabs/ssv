@@ -192,7 +192,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		connections.NetworkIDFilter(n.cfg.NetworkID),
 		connections.SenderRecipientIPsCheckFilter(n.host.ID()),
 		connections.SignatureCheckFilter(),
-		connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.PeerWhitelist),
+		connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.WhitelistedOperatorKeys),
 	}
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
