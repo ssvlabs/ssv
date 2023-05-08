@@ -2,17 +2,17 @@ package goclient
 
 import (
 	"crypto/sha256"
-	"github.com/bloxapp/ssv-spec/types"
 	"hash"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == types.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
 		var appDomain phase0.Domain
 		forkData := phase0.ForkData{
 			CurrentVersion:        GenesisForkVersion,
