@@ -208,8 +208,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		decidedBlindedBlock := r.decidedBlindedBlock()
-		if decidedBlindedBlock {
+		decidedBlockIsBlinded := r.decidedBlindedBlock()
+		if decidedBlockIsBlinded {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
@@ -241,7 +241,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
-			fields.BuilderProposals(decidedBlindedBlock))
+			fields.BuilderProposals(decidedBlockIsBlinded))
 	}
 	r.GetState().Finished = true
 	return nil
