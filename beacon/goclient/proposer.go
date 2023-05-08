@@ -189,10 +189,6 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 	return nil
 }
 
-func (gc *goClient) enqueueBatchRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) {
-	gc.registrations = append(gc.registrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
-}
-
 func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 	for len(gc.registrations) > 0 {
 		bs := batchSize
@@ -212,6 +208,10 @@ func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 	gc.registrationLastSlot.Store(currentSlot)
 
 	return nil
+}
+
+func (gc *goClient) enqueueBatchRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) {
+	gc.registrations = append(gc.registrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
 func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
