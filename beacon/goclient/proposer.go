@@ -164,25 +164,15 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 }
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	if gc.batchRegistration {
-		return gc.handleBatchValidatorRegistration(pubkey, feeRecipient, sig)
-	}
-
-	return gc.client.SubmitValidatorRegistrations(gc.ctx, []*api.VersionedSignedValidatorRegistration{
-		gc.createValidatorRegistration(pubkey, feeRecipient, sig),
-	})
-}
-
-func (gc *goClient) handleBatchValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
-	gc.batchMu.Lock()
-	defer gc.batchMu.Unlock()
+	gc.registrationsMu.Lock()
+	defer gc.registrationsMu.Unlock()
 
 	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
-	slotsSinceLastRegistration := currentSlot - gc.lastRegistrationSlot.Load()
+	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot.Load()
 	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
 
-	hasRegistrations := len(gc.batchRegistrations) != 0
+	hasRegistrations := len(gc.registrations) != 0
 	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
 	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
 	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
@@ -200,26 +190,26 @@ func (gc *goClient) handleBatchValidatorRegistration(pubkey []byte, feeRecipient
 }
 
 func (gc *goClient) enqueueBatchRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) {
-	gc.batchRegistrations = append(gc.batchRegistrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
+	gc.registrations = append(gc.registrations, gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
 func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
-	for len(gc.batchRegistrations) > 0 {
+	for len(gc.registrations) > 0 {
 		bs := batchSize
-		if bs > len(gc.batchRegistrations) {
-			bs = len(gc.batchRegistrations)
+		if bs > len(gc.registrations) {
+			bs = len(gc.registrations)
 		}
 
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.batchRegistrations[0:bs]); err != nil {
+		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, gc.registrations[0:bs]); err != nil {
 			return err
 		}
 
 		gc.log.Info("submitted batch validator registrations", fields.Count(bs))
 
-		gc.batchRegistrations = gc.batchRegistrations[bs:]
+		gc.registrations = gc.registrations[bs:]
 	}
 
-	gc.lastRegistrationSlot.Store(currentSlot)
+	gc.registrationLastSlot.Store(currentSlot)
 
 	return nil
 }
