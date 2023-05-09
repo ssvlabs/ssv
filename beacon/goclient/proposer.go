@@ -228,7 +228,7 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 		return gc.submitBatchedRegistrations(currentSlot)
 	}
 
-	gc.pushBackBatchRegistrations(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
+	gc.enqueueBatchRegistrations(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 
 	return nil
 }
@@ -249,7 +249,7 @@ func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 		nextChunk := gc.getNextRegistrationsChunk()
 
 		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, nextChunk); err != nil {
-			gc.pushFrontBatchRegistrations(nextChunk...)
+			gc.enqueueBatchRegistrations(nextChunk...)
 			return err
 		}
 
@@ -261,14 +261,7 @@ func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 	return nil
 }
 
-func (gc *goClient) pushFrontBatchRegistrations(registrations ...*api.VersionedSignedValidatorRegistration) {
-	gc.registrationsMu.Lock()
-	defer gc.registrationsMu.Unlock()
-
-	gc.registrations = append(registrations, gc.registrations...)
-}
-
-func (gc *goClient) pushBackBatchRegistrations(registrations ...*api.VersionedSignedValidatorRegistration) {
+func (gc *goClient) enqueueBatchRegistrations(registrations ...*api.VersionedSignedValidatorRegistration) {
 	gc.registrationsMu.Lock()
 	defer gc.registrationsMu.Unlock()
 
