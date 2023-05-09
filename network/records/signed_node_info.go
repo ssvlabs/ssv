@@ -26,6 +26,8 @@ func (sni *SignedNodeInfo) Codec() []byte {
 	return sni.NodeInfo.Codec()
 }
 
+// MarshalRecord serializes SignedNodeInfo
+// IMPORTANT: MarshalRecord rounds SignedNodeInfo.HandshakeData.Timestamp to seconds
 func (sni *SignedNodeInfo) MarshalRecord() ([]byte, error) {
 	parts := []string{
 		base64.StdEncoding.EncodeToString([]byte(sni.HandshakeData.SenderPeerID)),
@@ -97,6 +99,7 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 }
 
 // Seal seals and encodes the record to be sent to other peers
+// IMPORTANT: Seal rounds sni.HandshakeData.Timestamp to seconds
 func (sni *SignedNodeInfo) Seal(netPrivateKey crypto.PrivKey) ([]byte, error) {
 	ev, err := record.Seal(sni, netPrivateKey)
 	if err != nil {
