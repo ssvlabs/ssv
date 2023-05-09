@@ -49,30 +49,28 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 	case spec.DataVersionAltair:
 		return beaconBlock.Altair, beaconBlock.Version, nil
 	case spec.DataVersionBellatrix:
-		b := beaconBlock.Bellatrix.Body
-		if b == nil {
+		if beaconBlock.Bellatrix.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block body is nil")
 		}
-
-		if b.ExecutionPayload == nil {
+		if beaconBlock.Bellatrix.Body.ExecutionPayload == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload is nil")
 		}
-
-		gc.logBlock(slot, b.ExecutionPayload.BlockHash, beaconBlock.Version, false)
-
+		gc.log.Info("got beacon block",
+			fields.BlockHash(beaconBlock.Bellatrix.Body.ExecutionPayload.BlockHash),
+			fields.BlockVersion(beaconBlock.Version),
+			fields.Slot(beaconBlock.Bellatrix.Slot))
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
-		b := beaconBlock.Capella.Body
-		if b == nil {
+		if beaconBlock.Capella.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
 		}
-
-		if b.ExecutionPayload == nil {
+		if beaconBlock.Capella.Body.ExecutionPayload == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
 		}
-
-		gc.logBlock(slot, b.ExecutionPayload.BlockHash, beaconBlock.Version, false)
-
+		gc.log.Info("got beacon block",
+			fields.BlockHash(beaconBlock.Capella.Body.ExecutionPayload.BlockHash),
+			fields.BlockVersion(beaconBlock.Version),
+			fields.Slot(beaconBlock.Capella.Slot))
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
@@ -96,30 +94,28 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 
 	switch beaconBlock.Version {
 	case spec.DataVersionBellatrix:
-		b := beaconBlock.Bellatrix.Body
-		if b == nil {
+		if beaconBlock.Bellatrix.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block body is nil")
 		}
-
-		if b.ExecutionPayloadHeader == nil {
+		if beaconBlock.Bellatrix.Body.ExecutionPayloadHeader == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload header is nil")
 		}
-
-		gc.logBlock(slot, b.ExecutionPayloadHeader.BlockHash, beaconBlock.Version, true)
-
+		gc.log.Info("got blinded beacon block",
+			fields.BlockHash(beaconBlock.Bellatrix.Body.ExecutionPayloadHeader.BlockHash),
+			fields.BlockVersion(beaconBlock.Version),
+			fields.Slot(beaconBlock.Bellatrix.Slot))
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
-		b := beaconBlock.Capella.Body
-		if b == nil {
+		if beaconBlock.Capella.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
 		}
-
-		if b.ExecutionPayloadHeader == nil {
+		if beaconBlock.Capella.Body.ExecutionPayloadHeader == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload header is nil")
 		}
-
-		gc.logBlock(slot, b.ExecutionPayloadHeader.BlockHash, beaconBlock.Version, true)
-
+		gc.log.Info("got blinded beacon block",
+			fields.BlockHash(beaconBlock.Capella.Body.ExecutionPayloadHeader.BlockHash),
+			fields.BlockVersion(beaconBlock.Version),
+			fields.Slot(beaconBlock.Capella.Slot))
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
@@ -139,6 +135,10 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 			Message: block.Bellatrix,
 		}
 		copy(signedBlock.Bellatrix.Signature[:], sig[:])
+		gc.log.Info("submitting blinded beacon block",
+			fields.BlockHash(block.Bellatrix.Body.ExecutionPayloadHeader.BlockHash),
+			fields.BlockVersion(block.Version),
+			fields.Slot(block.Bellatrix.Slot))
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
 			return errors.New("capella blinded block is nil")
@@ -147,6 +147,10 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
+		gc.log.Info("submitting blinded beacon block",
+			fields.BlockHash(block.Capella.Body.ExecutionPayloadHeader.BlockHash),
+			fields.BlockVersion(block.Version),
+			fields.Slot(block.Capella.Slot))
 	default:
 		return errors.New("unknown block version")
 	}
@@ -184,6 +188,10 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 			Message: block.Bellatrix,
 		}
 		copy(signedBlock.Bellatrix.Signature[:], sig[:])
+		gc.log.Info("submitting block",
+			fields.BlockHash(block.Bellatrix.Body.ExecutionPayload.BlockHash),
+			fields.BlockVersion(block.Version),
+			fields.Slot(block.Bellatrix.Slot))
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
 			return errors.New("capella block is nil")
@@ -192,6 +200,10 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
+		gc.log.Info("submitting block",
+			fields.BlockHash(block.Capella.Body.ExecutionPayload.BlockHash),
+			fields.BlockVersion(block.Version),
+			fields.Slot(block.Capella.Slot))
 	default:
 		return errors.New("unknown block version")
 	}
@@ -278,15 +290,4 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 		})
 	}
 	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
-}
-
-func (gc *goClient) logBlock(slot phase0.Slot, hash phase0.Hash32, version spec.DataVersion, blinded bool) {
-	msg := "got beacon block"
-	if blinded {
-		msg = "got blinded beacon block"
-	}
-	gc.log.Info(msg,
-		fields.BlockHash(hash),
-		fields.BlockVersion(version),
-		fields.Slot(slot))
 }
