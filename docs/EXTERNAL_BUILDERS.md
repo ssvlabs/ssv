@@ -1,4 +1,29 @@
-# MEV edge cases
+# Builder proposals
+
+## How to use
+
+1. Configure your beacon node to use an external builder
+   - Lighthouse: https://lighthouse-book.sigmaprime.io/builders.html
+   - Prysm: https://docs.prylabs.network/docs/prysm-usage/parameters
+2. Enable builder proposals for SSV node by setting an according variable to `true`:
+   - YAML config: `BuilderProposals` 
+   - environment variable: `BUILDER_PROPOSALS`
+
+## How it works
+
+If builder proposals are enabled, 
+the SSV node attempts to get/submit blinded beacon block proposals (`/eth/v1/beacon/blinded_blocks`) to beacon node
+instead of regular ones (`/eth/v1/beacon/blocks`). 
+
+Also, it regularly submits validator registrations.
+
+## Known issues
+
+1. Builder proposals don't work with Prysm as it returns `400 Unsupported block type` when requesting a blinded block.
+2. [mev-boost-relay](https://github.com/flashbots/mev-boost-relay) allows to submit a blinded block only once, therefore only the first blinded block submitter can submit it successfully, others' submissions fail. This may increase chances of a missing proposal if the first submitter's beacon node has bad connectivity 
+   - Issue link: https://github.com/flashbots/mev-boost-relay/issues/397
+
+## Edge cases outcomes
 
 ### Scenario 1. 4 operators, 4 BNs, 4 MEVs, MEV1&2 use relay-1, MEV3&4 use relay-2
 
