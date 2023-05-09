@@ -28,7 +28,7 @@ If builder proposals are enabled, the SSV node regularly submits validator regis
 ## Known issues
 
 1. Builder proposals don't work with Prysm as it returns `400 Unsupported block type` when requesting a blinded block.
-2. [mev-boost-relay](https://github.com/flashbots/mev-boost-relay) allows to submit a blinded block only once, therefore only the first blinded block submitter can submit it successfully, others' submissions fail. This may increase chances of a missing proposal if the first submitter's beacon node has bad connectivity 
+2. [The mev-boost-relay external builder](https://github.com/flashbots/mev-boost-relay) allows to get a blinded block payload (beacon node requests a blinded block payload from an external builder to un-blind block and submit it to the network) only once, therefore only the first blinded block submitter can submit it successfully, others' submissions fail. This may increase chances of a missing proposal if the first submitter's beacon node has bad connectivity 
    - Issue link: https://github.com/flashbots/mev-boost-relay/issues/397
 
 ## Edge cases outcomes
