@@ -176,18 +176,29 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 
 // GetPrivateKey return rsa private key
 func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte("private-key"))
+	//obj, found, err := s.db.Get(storagePrefix, []byte("private-key"))
+	//if err != nil {
+	//	return nil, false, err
+	//}
+	//if !found {
+	//	return nil, found, nil
+	//}
+	//sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+	//if err != nil {
+	//	return nil, false, err
+	//}
+	//return sk, found, nil
+
+	_, privateKeyPem, err := rsaencryption.GenerateKeys()
 	if err != nil {
 		return nil, false, err
 	}
-	if !found {
-		return nil, found, nil
-	}
-	sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+	privateKey, err := rsaencryption.ConvertPemToPrivateKey(string(privateKeyPem))
 	if err != nil {
 		return nil, false, err
 	}
-	return sk, found, nil
+
+	return privateKey, true, nil
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
