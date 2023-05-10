@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -101,52 +100,52 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 // Handler returns the handshake handler
 func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	return func(stream libp2pnetwork.Stream) {
-		// start by marking the peer as pending
-		pid := stream.Conn().RemotePeer()
-		pidStr := pid.String()
-
-		req, res, done, err := h.streams.HandleStream(logger, stream)
-		defer done()
-		if err != nil {
-			return
-		}
-
-		logger := logger.With(zap.String("otherPeer", pidStr))
-
-		sni := &records.SignedNodeInfo{}
-		err = sni.Consume(req)
-		if err != nil {
-			logger.Warn("could not consume node info request", zap.Error(err))
-			return
-		}
-		// process the node info in a new goroutine so we won't block the stream
-		go func() {
-			err := h.processIncomingNodeInfo(logger, pid, *sni)
-			if err != nil {
-				if errors.Is(err, errPeerWasFiltered) {
-					logger.Debug("peer was filtered", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
-					return
-				}
-				logger.Warn("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
-			}
-		}()
-
-		privateKey, found, err := h.nodeStorage.GetPrivateKey()
-		if !found {
-			logger.Warn("could not get private key", zap.Error(err))
-			return
-		}
-
-		self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid, privateKey)
-		if err != nil {
-			logger.Warn("could not seal self node info", zap.Error(err))
-			return
-		}
-
-		if err := res(self); err != nil {
-			logger.Warn("could not send self node info", zap.Error(err))
-			return
-		}
+		//// start by marking the peer as pending
+		//pid := stream.Conn().RemotePeer()
+		//pidStr := pid.String()
+		//
+		//req, res, done, err := h.streams.HandleStream(logger, stream)
+		//defer done()
+		//if err != nil {
+		//	return
+		//}
+		//
+		//logger := logger.With(zap.String("otherPeer", pidStr))
+		//
+		//sni := &records.SignedNodeInfo{}
+		//err = sni.Consume(req)
+		//if err != nil {
+		//	logger.Warn("could not consume node info request", zap.Error(err))
+		//	return
+		//}
+		//// process the node info in a new goroutine so we won't block the stream
+		//go func() {
+		//	err := h.processIncomingNodeInfo(logger, pid, *sni)
+		//	if err != nil {
+		//		if errors.Is(err, errPeerWasFiltered) {
+		//			logger.Debug("peer was filtered", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+		//			return
+		//		}
+		//		logger.Warn("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+		//	}
+		//}()
+		//
+		//privateKey, found, err := h.nodeStorage.GetPrivateKey()
+		//if !found {
+		//	logger.Warn("could not get private key", zap.Error(err))
+		//	return
+		//}
+		//
+		//self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid, privateKey)
+		//if err != nil {
+		//	logger.Warn("could not seal self node info", zap.Error(err))
+		//	return
+		//}
+		//
+		//if err := res(self); err != nil {
+		//	logger.Warn("could not send self node info", zap.Error(err))
+		//	return
+		//}
 	}
 }
 
@@ -178,36 +177,36 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
-	pid := conn.RemotePeer()
-
-	// check if the peer is known before we continue
-	ni, err := h.getNodeInfo(pid)
-	if err != nil || ni != nil {
-		return err
-	}
-	if err := h.preHandshake(conn); err != nil {
-		return errors.Wrap(err, "could not perform pre-handshake")
-	}
-	sni, err := h.nodeInfoFromStream(logger, conn)
-	if err != nil {
-		// fallbacks to user agent
-		sni = &records.SignedNodeInfo{}
-		sni.NodeInfo, err = h.nodeInfoFromUserAgent(logger, conn)
-		if err != nil {
-			return err
-		}
-	}
-	if sni == nil || sni.NodeInfo == nil {
-		return errors.New("empty node info")
-	}
-
-	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
-
-	err = h.processIncomingNodeInfo(logger, pid, *sni)
-	if err != nil {
-		logger.Debug("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
-		return err
-	}
+	//pid := conn.RemotePeer()
+	//
+	//// check if the peer is known before we continue
+	//ni, err := h.getNodeInfo(pid)
+	//if err != nil || ni != nil {
+	//	return err
+	//}
+	//if err := h.preHandshake(conn); err != nil {
+	//	return errors.Wrap(err, "could not perform pre-handshake")
+	//}
+	//sni, err := h.nodeInfoFromStream(logger, conn)
+	//if err != nil {
+	//	// fallbacks to user agent
+	//	sni = &records.SignedNodeInfo{}
+	//	sni.NodeInfo, err = h.nodeInfoFromUserAgent(logger, conn)
+	//	if err != nil {
+	//		return err
+	//	}
+	//}
+	//if sni == nil || sni.NodeInfo == nil {
+	//	return errors.New("empty node info")
+	//}
+	//
+	//logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
+	//
+	//err = h.processIncomingNodeInfo(logger, pid, *sni)
+	//if err != nil {
+	//	logger.Debug("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+	//	return err
+	//}
 
 	return nil
 }
