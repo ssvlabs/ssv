@@ -60,7 +60,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			metricsFilteredConnections.Inc()
 		}
 
-		logger.Debug("peer was disconnected", zap.String("selfPeer", string(conn.LocalPeer())), zap.String("otherPeer", string(id)))
+		logger.Debug("peer was disconnected", zap.String("selfPeer", conn.LocalPeer().String()), zap.String("otherPeer", id.String()))
 	}
 
 	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
