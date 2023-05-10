@@ -320,6 +320,8 @@ func ssvMessageFactory(role types.BeaconRole) func(*qbft.SignedMessage, *spectyp
 		return testingutils.SSVMsgSyncCommittee
 	case types.BNRoleSyncCommitteeContribution:
 		return testingutils.SSVMsgSyncCommitteeContribution
+	case types.BNRoleValidatorRegistration:
+		return testingutils.SSVMsgValidatorRegistration
 	default:
 		panic("invalid role")
 	}
