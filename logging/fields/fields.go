@@ -1,6 +1,7 @@
 package fields
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net"
@@ -272,4 +273,8 @@ func ToBlock(val *big.Int) zap.Field {
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func Root(r [32]byte) zap.Field {
+	return zap.String("root", hex.EncodeToString(r[:]))
 }
