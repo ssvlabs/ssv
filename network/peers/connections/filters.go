@@ -3,6 +3,7 @@ package connections
 import (
 	"crypto"
 	"crypto/rsa"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -42,7 +43,12 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some rea
 
 func SignatureCheckFilter() HandshakeFilter {
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubicKey)
+		decodedPublicKey, err := base64.StdEncoding.DecodeString(string(sni.HandshakeData.SenderPubicKey))
+		if err != nil {
+			return errors.Wrap(err, "failed to decode sender public key from signed node info")
+		}
+
+		publicKey, err := rsaencryption.ConvertPemToPublicKey(decodedPublicKey)
 		if err != nil {
 			return err
 		}
