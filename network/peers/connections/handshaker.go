@@ -127,7 +127,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 					logger.Debug("peer was filtered", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 					return
 				}
-				logger.Warn("could not process node info FROM HANDLER", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+				logger.Warn("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
 			}
 		}()
 

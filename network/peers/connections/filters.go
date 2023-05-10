@@ -78,7 +78,7 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 			}
 		}
 
-		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey) //проверить что мы отправляем зашифрованный в base64
+		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
