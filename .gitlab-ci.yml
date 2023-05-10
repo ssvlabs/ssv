@@ -58,15 +58,7 @@ Helm deploy on stage:
     - export KUBECONFIG=~/.kube/kubeconfig
     - kubectl config get-contexts
     - IMAGE_TAG=$CI_BUILD_REF-$CI_COMMIT_REF_NAME
-
-    - |
-      for CHART in "${CHARTS[@]}"
-      do
-      for CLUSTER in "${CLUSTER[@]}"
-      do 
-      helm upgrade --install $CHART-$CLUSTER --namespace test --set image.tag=$IMAGE_TAG --values .k8/helm3/base-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/cluster-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/node-values.yaml .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/ --dry-run --debug
-      done
-      done
+    - sleep 100000
   only:
     - helm-charts
 
