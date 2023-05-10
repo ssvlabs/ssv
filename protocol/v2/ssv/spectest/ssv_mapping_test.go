@@ -15,9 +15,10 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -236,6 +237,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	// specific for blinded block
 	if blindedBlocks, ok := runnerMap["ProducesBlindedBlocks"]; ok {
 		ret.(*runner.ProposerRunner).ProducesBlindedBlocks = blindedBlocks.(bool)
+	}
+
+	if gasLimit, ok := runnerMap["GasLimit"]; ok {
+		ret.(*runner.ValidatorRegistrationRunner).GasLimit = uint64(gasLimit.(float64))
 	}
 
 	if ret.GetBaseRunner().QBFTController != nil {
