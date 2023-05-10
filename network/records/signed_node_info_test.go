@@ -34,14 +34,14 @@ func TestSignedNodeInfo_Seal_Consume(t *testing.T) {
 	senderPrivateKey, err := rsaencryption.ConvertPemToPrivateKey(string(senderPrivateKeyPem))
 	require.NoError(t, err)
 
-	senderPublicKeyPem, err := rsaencryption.ExtractPublicKeyPem(senderPrivateKey)
+	senderBase64PublicKeyPem, err := rsaencryption.ExtractPublicKey(senderPrivateKey)
 	require.NoError(t, err)
 
 	handshakeData := HandshakeData{
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Now().Round(time.Second),
-		SenderPubKeyPem: senderPublicKeyPem,
+		SenderPubicKey:  []byte(senderBase64PublicKeyPem),
 	}
 	hashed := handshakeData.Hash()
 

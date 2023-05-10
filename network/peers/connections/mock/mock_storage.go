@@ -19,7 +19,7 @@ var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
 	MockGetPrivateKey               *rsa.PrivateKey
-	RegisteredOperatorPublicKeyPEMs [][]byte
+	RegisteredOperatorPublicKeyPEMs []string
 }
 
 func (m NodeStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
@@ -39,7 +39,7 @@ func (m NodeStorage) CleanRegistryData() error {
 
 func (m NodeStorage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPublicKeyPEM []byte) (*registrystorage.OperatorData, bool, error) {
 	for _, current := range m.RegisteredOperatorPublicKeyPEMs {
-		if bytes.Equal(current, operatorPublicKeyPEM) {
+		if bytes.Equal([]byte(current), operatorPublicKeyPEM) {
 			return &registrystorage.OperatorData{}, true, nil
 		}
 	}
