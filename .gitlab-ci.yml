@@ -2,6 +2,8 @@ stages:
   - build
   - deploy
 
+# REDEPLOY
+
 variables:
   #GLOBAL
   IMAGE_NAME: ssv-node
