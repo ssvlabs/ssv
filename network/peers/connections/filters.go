@@ -62,10 +62,6 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		if len(keysConfigWhitelist) != 0 {
-
-		}
-
 		if len(sni.HandshakeData.SenderPubKeyPem) == 0 {
 			return errors.New("empty SenderPubKeyPem")
 		}
