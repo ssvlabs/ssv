@@ -56,7 +56,6 @@ Helm deploy on stage:
     - kubectl config get-contexts
     - IMAGE_TAG=$CI_BUILD_REF-$CI_COMMIT_REF_NAME
     - | 
-      set -x
       CHARTS=( node-1 node-2 node-3 node-4 )
       CLUSTER=( a b c d )
       for CHART in "${CHARTS[@]}";
