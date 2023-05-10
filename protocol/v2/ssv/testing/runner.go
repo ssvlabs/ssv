@@ -47,7 +47,9 @@ var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectesti
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
+	ret := baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
+	ret.(*runner.ValidatorRegistrationRunner).GasLimit = 1
+	return ret
 }
 
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {

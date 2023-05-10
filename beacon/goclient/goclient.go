@@ -113,6 +113,7 @@ type goClient struct {
 	network              beaconprotocol.Network
 	client               Client
 	graffiti             []byte
+	gasLimit             uint64
 	operatorID           spectypes.OperatorID
 	registrationLastSlot atomic.Uint64
 	registrationsMu      sync.Mutex
@@ -146,6 +147,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		network:    network,
 		client:     httpClient.(*http.Service),
 		graffiti:   opt.Graffiti,
+		gasLimit:   opt.GasLimit,
 		operatorID: operatorID,
 	}
 

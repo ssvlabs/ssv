@@ -84,6 +84,7 @@ type ControllerOptions struct {
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
 	QueueBufferSize int `yaml:"MsgWorkerBufferSize" env:"MSG_WORKER_BUFFER_SIZE" env-default:"1024" env-description:"Buffer size for message workers"`
+	GasLimit        uint64
 }
 
 // Controller represent the validators controller,
@@ -174,6 +175,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
 		BuilderProposals:  options.BuilderProposals,
+		GasLimit:          options.GasLimit,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -751,6 +753,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
 			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+			runners[role].(*runner.ValidatorRegistrationRunner).GasLimit = options.GasLimit // apply gas limit
 		}
 	}
 	return runners

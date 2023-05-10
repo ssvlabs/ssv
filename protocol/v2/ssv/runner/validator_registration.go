@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"log"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -13,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -21,6 +21,7 @@ import (
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
+	GasLimit   uint64
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
@@ -163,7 +164,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2api
 
 	return &eth2apiv1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     goclient.ValidatorRegistrationGasLimit,
+		GasLimit:     r.GasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
@@ -213,6 +214,7 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
+	log.Printf("runner root: %v", string(marshaledRoot))
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }
