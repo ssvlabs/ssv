@@ -63,7 +63,7 @@ Helm deploy on stage:
       do
         for CLUSTER in "${CLUSTER[@]}";
         do
-          helm upgrade --install $CHART-$CLUSTER --namespace ssv --set image.tag=$IMAGE_TAG --values .k8/helm3/base-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/cluster-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/node-values.yaml .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/ --dry-run --debug;
+          helm upgrade --install $CHART-$CLUSTER --namespace test --set image.tag=$IMAGE_TAG --values .k8/helm3/base-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/cluster-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/node-values.yaml .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/ --debug;
         done
       done
   only:
