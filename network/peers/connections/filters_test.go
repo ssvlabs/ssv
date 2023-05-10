@@ -81,8 +81,8 @@ func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 	td := getTestingData(t)
 
 	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{
-		RegisteredOperatorPublicKeyPEMs: [][]byte{
-			td.SenderPublicKeyPEM,
+		RegisteredOperatorPublicKeyPEMs: []string{
+			td.SenderBase64PublicKeyPEM,
 		},
 	}, nil)
 
@@ -90,7 +90,7 @@ func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	wrongSenderPubKeyPem := td.HandshakeData
-	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
+	wrongSenderPubKeyPem.SenderPubicKey = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature}))
 	require.Error(t, err)
 }
@@ -98,13 +98,13 @@ func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 func TestRegisteredOperatorsFilter_ConfigWhitelist(t *testing.T) {
 	td := getTestingData(t)
 
-	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{}, []string{string(td.SenderPublicKeyPEM)})
+	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{}, []string{td.SenderBase64PublicKeyPEM})
 
 	err := f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: td.HandshakeData, Signature: td.Signature}))
 	require.NoError(t, err)
 
 	wrongSenderPubKeyPem := td.HandshakeData
-	wrongSenderPubKeyPem.SenderPubKeyPem = []byte{'w', 'r', 'o', 'n', 'g'}
+	wrongSenderPubKeyPem.SenderPubicKey = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", SealAndConsume(t, td.NetworkPrivateKey, &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature}))
 	require.Error(t, err)
 }

@@ -121,19 +121,3 @@ func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 
 	return base64.StdEncoding.EncodeToString(pemByte), nil
 }
-
-// ExtractPublicKeyPem get public key from private key and return public key PEM
-func ExtractPublicKeyPem(sk *rsa.PrivateKey) ([]byte, error) {
-	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "Failed to marshal private key")
-	}
-	pemByte := pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "RSA PUBLIC KEY",
-			Bytes: pkBytes,
-		},
-	)
-
-	return pemByte, nil
-}

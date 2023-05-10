@@ -28,8 +28,8 @@ type TestData struct {
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID
 
-	PrivateKeyPEM      []byte
-	SenderPublicKeyPEM []byte
+	PrivateKeyPEM            []byte
+	SenderBase64PublicKeyPEM string
 
 	Handshaker handshaker
 	Conn       mock.Conn
@@ -48,7 +48,7 @@ func getTestingData(t *testing.T) TestData {
 	senderPrivateKey, err := rsaencryption.ConvertPemToPrivateKey(string(privateKeyPem))
 	require.NoError(t, err)
 
-	senderPublicKeyPem, err := rsaencryption.ExtractPublicKeyPem(senderPrivateKey)
+	senderPublicKey, err := rsaencryption.ExtractPublicKey(senderPrivateKey)
 	require.NoError(t, err)
 
 	nodeInfo := &records.NodeInfo{
@@ -67,7 +67,7 @@ func getTestingData(t *testing.T) TestData {
 		SenderPeerID:    peerID2,
 		RecipientPeerID: peerID1,
 		Timestamp:       time.Now(),
-		SenderPubKeyPem: senderPublicKeyPem,
+		SenderPubicKey:  []byte(senderPublicKey),
 	}
 	hashed := handshakeData.Hash()
 
@@ -103,8 +103,8 @@ func getTestingData(t *testing.T) TestData {
 	}
 	nst := mock.NodeStorage{
 		MockGetPrivateKey: senderPrivateKey,
-		RegisteredOperatorPublicKeyPEMs: [][]byte{
-			senderPublicKeyPem,
+		RegisteredOperatorPublicKeyPEMs: []string{
+			senderPublicKey,
 		},
 	}
 
@@ -139,18 +139,18 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	return TestData{
-		SenderPrivateKey:    senderPrivateKey,
-		HandshakeData:       handshakeData,
-		HashedHandshakeData: hashedHandshakeData,
-		Signature:           signature,
-		SenderPeerID:        peerID2,
-		RecipientPeerID:     peerID1,
-		PrivateKeyPEM:       privateKeyPem,
-		SenderPublicKeyPEM:  senderPublicKeyPem,
-		Handshaker:          mockHandshaker,
-		Conn:                mockConn,
-		NetworkPrivateKey:   networkPrivateKey,
-		NodeInfo:            nodeInfo,
-		SignedNodeInfo:      sni,
+		SenderPrivateKey:         senderPrivateKey,
+		HandshakeData:            handshakeData,
+		HashedHandshakeData:      hashedHandshakeData,
+		Signature:                signature,
+		SenderPeerID:             peerID2,
+		RecipientPeerID:          peerID1,
+		PrivateKeyPEM:            privateKeyPem,
+		SenderBase64PublicKeyPEM: senderPublicKey,
+		Handshaker:               mockHandshaker,
+		Conn:                     mockConn,
+		NetworkPrivateKey:        networkPrivateKey,
+		NodeInfo:                 nodeInfo,
+		SignedNodeInfo:           sni,
 	}
 }

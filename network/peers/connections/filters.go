@@ -42,7 +42,7 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some rea
 
 func SignatureCheckFilter() HandshakeFilter {
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubKeyPem)
+		publicKey, err := rsaencryption.ConvertPemToPublicKey(sni.HandshakeData.SenderPubicKey)
 		if err != nil {
 			return err
 		}
@@ -62,18 +62,18 @@ func SignatureCheckFilter() HandshakeFilter {
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
 	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		if len(sni.HandshakeData.SenderPubKeyPem) == 0 {
-			return errors.New("empty SenderPubKeyPem")
+		if len(sni.HandshakeData.SenderPubicKey) == 0 {
+			return errors.New("empty SenderPubicKey")
 		}
 
 		for _, key := range keysConfigWhitelist {
-			if key == string(sni.HandshakeData.SenderPubKeyPem) {
+			if key == string(sni.HandshakeData.SenderPubicKey) {
 				return nil
 			}
 		}
 
-		_, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubKeyPem)
-		if !found {
+		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey) //проверить что мы отправляем зашифрованный в base64
+		if !found || data != nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
