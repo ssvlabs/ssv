@@ -3,7 +3,7 @@
 
 replicaCount: 1
 
-namespace: ssv
+namespace: test
 
 domain: ssv.network
 
