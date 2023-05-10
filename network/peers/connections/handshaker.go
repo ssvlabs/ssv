@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -124,10 +123,10 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			err := h.processIncomingNodeInfo(logger, pid, *sni)
 			if err != nil {
 				if errors.Is(err, errPeerWasFiltered) {
-					logger.Debug("peer was filtered", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+					logger.Debug("peer was filtered", zap.Error(err))
 					return
 				}
-				logger.Warn("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+				logger.Warn("could not process node info", zap.Error(err))
 			}
 		}()
 
@@ -205,7 +204,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 	err = h.processIncomingNodeInfo(logger, pid, *sni)
 	if err != nil {
-		logger.Debug("could not process node info", zap.Error(err), zap.String("sni", fmt.Sprintf("%+v", sni)))
+		logger.Debug("could not process node info", zap.Error(err))
 		return err
 	}
 
