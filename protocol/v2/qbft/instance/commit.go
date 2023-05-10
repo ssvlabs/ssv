@@ -53,12 +53,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 
 		return true, fullData, agg, nil
 	}
-	signers := allSigners(commitMsgs)
 
-	logger.Debug(" no commit quorom yet", fields.Round(i.State.Round),
-		fields.Root(signedCommit.Message.Root),
-		zap.Any("commit-signers-for-root", signers),
-		zap.Any("commit-signers-all", allSigners(commitMsgContainer.MessagesForRound(i.State.Round))))
 	return false, nil, nil, nil
 }
 

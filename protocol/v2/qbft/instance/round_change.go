@@ -30,9 +30,11 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
-	logger.Debug("🔄 got change round",
-		fields.Round(i.State.Round),
-		fields.Height(i.State.Height),
+	logger = logger.With(fields.Round(i.State.Round),
+		fields.Height(i.State.Height))
+
+	logger.Debug("🔄 got round change",
+		fields.Root(signedRoundChange.Message.Root),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
 
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
@@ -59,9 +61,16 @@ func (i *Instance) uponRoundChange(
 			return errors.Wrap(err, "failed to create proposal")
 		}
 
-		logger.Debug("📢 got justified change round, broadcasting proposal message",
+		roundchangeSigners := allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))
+
+		logger.Debug("🔄 got justified round change",
 			fields.Round(i.State.Round),
-			zap.Any("round-change-signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
+			zap.Any("round-change-signers", roundchangeSigners),
+			fields.Root(proposal.Message.Root))
+
+		logger.Debug("📢 leader broadcasting proposal message",
+			fields.Round(i.State.Round),
+			zap.Any("round-change-signers", roundchangeSigners),
 			fields.Root(proposal.Message.Root))
 
 		if err := i.Broadcast(logger, proposal); err != nil {
@@ -88,6 +97,13 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound spe
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
 	}
+
+	logger.Debug("📢broadcasting round change message",
+		fields.Round(i.State.Round),
+		fields.Root(roundChange.Message.Root),
+		zap.Any("round-change-signers", roundChange.Signers),
+		fields.Height(i.State.Height),
+		zap.String("reason", "partial-quorum"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")

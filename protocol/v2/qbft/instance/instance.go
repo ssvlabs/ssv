@@ -62,6 +62,10 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
+		logger = logger.With(
+			fields.Round(i.State.Round),
+			fields.Height(i.State.Height))
+
 		logger.Debug("ℹ️ starting QBFT instance")
 
 		// propose if this node is the proposer
@@ -73,8 +77,8 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
-				logger.Debug("📢 leader broadcasting propose message",
-					fields.Root(proposal.Message.Root))
+				logger = logger.With(fields.Root(proposal.Message.Root))
+				logger.Debug("📢 leader broadcasting propose message")
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
