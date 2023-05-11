@@ -85,7 +85,7 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 
 		listKeys := []string{}
 		for i := range operatorsList {
-			listKeys = append(listKeys, base64.StdEncoding.EncodeToString(operatorsList[i].PublicKey))
+			listKeys = append(listKeys, string(operatorsList[i].PublicKey))
 		}
 
 		logger.Debug("existing keys from db", zap.Strings("keys", listKeys))
