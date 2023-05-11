@@ -56,13 +56,13 @@ Helm deploy on stage:
     - kubectl config get-contexts
     - IMAGE_TAG=$CI_BUILD_REF-$CI_COMMIT_REF_NAME
     - | 
-      CHARTS=( node-1 node-2 node-3 node-4 )
-      CLUSTER=( a b c d )
-      for CHART in "${CHARTS[@]}";
+      CHARTS=(node-1 node-2 node-3 node-4)
+      CLUSTER=(a b c d)
+      for CHART in "${CHARTS[@]}"
       do
-        for CLUSTER in "${CLUSTER[@]}";
+        for CLUSTER_NAME in "${CLUSTER[@]}"
         do
-          helm upgrade --install $CHART-$CLUSTER --namespace test --set image.tag=$IMAGE_TAG --values .k8/helm3/base-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/cluster-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/node-values.yaml .k8/helm3/ssv-node-cluster-$CLUSTER/$CHART-$CLUSTER/ --debug;
+          helm3.5.4 upgrade --install $CHART-$CLUSTER_NAME --namespace test --set image.tag=$IMAGE_TAG --values .k8/helm3/base-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER_NAME/cluster-values.yaml --values .k8/helm3/ssv-node-cluster-$CLUSTER_NAME/$CHART-$CLUSTER_NAME/node-values.yaml .k8/helm3/ssv-node-cluster-$CLUSTER_NAME/$CHART-$CLUSTER_NAME/ --dry-run --debug
         done
       done
   only:
