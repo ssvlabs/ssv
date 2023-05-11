@@ -8,12 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -173,22 +171,6 @@ var StartNodeCmd = &cobra.Command{
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
-
-		pivateKey, found, err := nodeStorage.GetPrivateKey()
-		if err != nil {
-			logger.Info("my public key error get private key", zap.Error(err))
-		}
-
-		if !found {
-			logger.Info("my public key not found", zap.Bool("found", found))
-		}
-
-		publicKeyPem, err := rsaencryption.ExtractPublicKey(pivateKey)
-		if err != nil {
-			logger.Info("my public key error extract public key", zap.Error(err))
-		}
-
-		logger.Info("my public key", zap.String("publicKeyPem", publicKeyPem))
 	},
 }
 
