@@ -78,6 +78,18 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 			}
 		}
 
+		operatorsList, err := nodeStorage.ListOperators(logger, 0, 0)
+		if err != nil {
+			return err
+		}
+
+		listKeys := []string{}
+		for i := range operatorsList {
+			listKeys = append(listKeys, base64.StdEncoding.EncodeToString(operatorsList[i].PublicKey))
+		}
+
+		logger.Debug("existing keys from db", zap.Strings("keys", listKeys))
+
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
