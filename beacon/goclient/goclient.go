@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -115,8 +114,8 @@ type goClient struct {
 	graffiti             []byte
 	gasLimit             uint64
 	operatorID           spectypes.OperatorID
-	registrationLastSlot atomic.Uint64
 	registrationMu       sync.Mutex
+	registrationLastSlot uint64
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
