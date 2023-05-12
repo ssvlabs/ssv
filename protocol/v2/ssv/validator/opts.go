@@ -4,6 +4,8 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/ibft/storage"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -18,6 +20,7 @@ const (
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
+	Eth1Client        eth1.Client
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            spectypes.KeyManager

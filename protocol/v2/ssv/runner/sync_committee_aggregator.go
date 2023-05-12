@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -22,6 +23,7 @@ type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
+	eth1     eth1.Client
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
@@ -34,6 +36,7 @@ func NewSyncCommitteeAggregatorRunner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
+	eth1 eth1.Client,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
@@ -47,6 +50,7 @@ func NewSyncCommitteeAggregatorRunner(
 		},
 
 		beacon:   beacon,
+		eth1:     eth1,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
@@ -329,6 +333,11 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	if r.eth1.IsSyncing() {
+		// TODO: can we just skip the duty instead?
+		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+	}
+
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 

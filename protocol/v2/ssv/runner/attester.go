@@ -15,6 +15,7 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -24,6 +25,7 @@ type AttesterRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
+	eth1     eth1.Client
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
@@ -37,6 +39,7 @@ func NewAttesterRunnner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
+	eth1 eth1.Client,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
@@ -50,6 +53,7 @@ func NewAttesterRunnner(
 		},
 
 		beacon:   beacon,
+		eth1:     eth1,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
@@ -207,6 +211,11 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	if r.eth1.IsSyncing() {
+		// TODO: can we just skip the duty instead?
+		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+	}
+
 	// TODO - waitOneThirdOrValidBlock
 
 	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)

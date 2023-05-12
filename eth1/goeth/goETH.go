@@ -103,6 +103,15 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 	return err
 }
 
+// IsSyncing returns if eth1 is currently in a syncing state
+func (ec *eth1Client) IsSyncing() bool {
+	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
+	defer cancel()
+
+	sp, err := ec.conn.SyncProgress(ctx)
+	return err != nil || sp != nil
+}
+
 // HealthCheck provides health status of eth1 node
 func (ec *eth1Client) HealthCheck() []string {
 	if ec.conn == nil {

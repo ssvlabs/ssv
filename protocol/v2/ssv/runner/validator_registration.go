@@ -9,16 +9,19 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
+	eth1     eth1.Client
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
@@ -90,6 +93,11 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	if r.eth1.IsSyncing() {
+		// TODO: can we just skip the duty instead?
+		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+	}
+
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")

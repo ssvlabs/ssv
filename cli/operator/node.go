@@ -106,6 +106,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = el
+		cfg.SSVOptions.Eth1Client = cl
 		cfg.SSVOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
@@ -114,14 +115,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = el
+		cfg.SSVOptions.ValidatorOptions.Eth1Client = cl
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
-
-		cfg.SSVOptions.Eth1Client = cl
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)

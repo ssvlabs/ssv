@@ -34,4 +34,5 @@ type Client interface {
 	EventsFeed() *event.Feed
 	Start(logger *zap.Logger) error
 	Sync(logger *zap.Logger, fromBlock *big.Int) error
+	IsSyncing() bool
 }

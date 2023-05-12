@@ -37,9 +37,9 @@ type Node interface {
 type Options struct {
 	ETHNetwork          beaconprotocol.Network
 	Beacon              beaconprotocol.Beacon
+	Eth1Client          eth1.Client
 	Network             network.P2PNetwork
 	Context             context.Context
-	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
