@@ -238,6 +238,8 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
 	registrationList := gc.registrationList()
 
+	gc.log.Info("going to submit batch validator registrations", fields.Count(len(registrationList)))
+
 	for len(registrationList) != 0 {
 		bs := batchSize
 		if bs > len(registrationList) {
