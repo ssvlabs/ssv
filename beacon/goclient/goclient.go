@@ -23,6 +23,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -115,7 +116,7 @@ type goClient struct {
 	gasLimit             uint64
 	operatorID           spectypes.OperatorID
 	registrationMu       sync.Mutex
-	registrationLastSlot uint64
+	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
@@ -123,7 +124,7 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID) (beaconprotocol.Beacon, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
@@ -140,7 +141,11 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
-	_client := &goClient{
+
+	tickerChan := make(chan phase0.Slot, 32)
+	slotTicker.Subscribe(tickerChan)
+
+	client := &goClient{
 		log:               logger,
 		ctx:               opt.Context,
 		network:           network,
@@ -151,7 +156,9 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 
-	return _client, nil
+	go client.registrationSubmitter(tickerChan)
+
+	return client, nil
 }
 
 // HealthCheck provides health status of beacon node
