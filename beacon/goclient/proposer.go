@@ -15,7 +15,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 )
@@ -209,6 +208,33 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 }
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
+	currentSlot := uint64(gc.network.EstimatedCurrentSlot())
+	slotsPerEpoch := gc.network.SlotsPerEpoch()
+
+	// Lock:
+	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)
+	// - getting and updating registration cache
+	gc.registrationMu.Lock()
+
+	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
+	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
+
+	operatorSubmissionSlot := currentSlot%slotsPerEpoch == operatorSubmissionSlotModulo
+	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
+	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
+
+	if oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed {
+		gc.registrationLastSlot = currentSlot
+		registrations := gc.registrationList()
+
+		// Release lock after building a registrations list for submission.
+		gc.registrationMu.Unlock()
+
+		return gc.submitBatchedRegistrations(registrations)
+	}
+
+	// Release lock after updating registrations
+	defer gc.registrationMu.Unlock()
 	return gc.updateBatchRegistrationCache(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
@@ -223,14 +249,33 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 	return gc.client.SubmitProposalPreparations(gc.ctx, preparations)
 }
 
+func (gc *goClient) submitBatchedRegistrations(registrations []*api.VersionedSignedValidatorRegistration) error {
+	gc.log.Info("going to submit batch validator registrations", fields.Count(len(registrations)))
+
+	for len(registrations) != 0 {
+		bs := batchSize
+		if bs > len(registrations) {
+			bs = len(registrations)
+		}
+
+		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
+			return err
+		}
+
+		registrations = registrations[bs:]
+
+		gc.log.Info("submitted batch validator registrations", fields.Count(bs))
+	}
+
+	return nil
+}
+
+// updateBatchRegistrationCache is not thread-safe
 func (gc *goClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
 	pk, err := registration.PubKey()
 	if err != nil {
 		return err
 	}
-
-	gc.registrationMu.Lock()
-	defer gc.registrationMu.Unlock()
 
 	gc.registrationCache[pk] = registration
 	return nil
@@ -255,47 +300,6 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) registrationSubmitter(slots <-chan phase0.Slot) {
-	for currentSlot := range slots {
-		gc.submitRegistrationsFromCache(currentSlot)
-	}
-}
-
-func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
-	slotsPerEpoch := gc.network.SlotsPerEpoch()
-
-	// Lock:
-	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)
-	// - getting and updating registration cache
-	gc.registrationMu.Lock()
-
-	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
-
-	hasRegistrations := len(gc.registrationCache) != 0
-	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo
-	oneEpochPassed := slotsSinceLastRegistration >= phase0.Slot(slotsPerEpoch)
-	twoEpochsAndOperatorDelayPassed := uint64(slotsSinceLastRegistration) >= slotsPerEpoch*2+operatorSubmissionSlotModulo
-
-	if hasRegistrations && (oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed) {
-		gc.registrationLastSlot = currentSlot
-		registrations := gc.registrationList()
-
-		// Release lock after building a registrations list for submission.
-		gc.registrationMu.Unlock()
-
-		if err := gc.submitBatchedRegistrations(currentSlot, registrations); err != nil {
-			gc.log.Error("Failed to submit validator registrations",
-				zap.Error(err),
-				fields.Slot(currentSlot))
-		}
-
-		return
-	}
-
-	gc.registrationMu.Unlock()
-}
-
 // registrationList is not thread-safe
 func (gc *goClient) registrationList() []*api.VersionedSignedValidatorRegistration {
 	result := make([]*api.VersionedSignedValidatorRegistration, 0)
@@ -305,29 +309,4 @@ func (gc *goClient) registrationList() []*api.VersionedSignedValidatorRegistrati
 	}
 
 	return result
-}
-
-func (gc *goClient) submitBatchedRegistrations(slot phase0.Slot, registrations []*api.VersionedSignedValidatorRegistration) error {
-	gc.log.Info("going to submit batch validator registrations",
-		fields.Slot(slot),
-		fields.Count(len(registrations)))
-
-	for len(registrations) != 0 {
-		bs := batchSize
-		if bs > len(registrations) {
-			bs = len(registrations)
-		}
-
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrations[0:bs]); err != nil {
-			return err
-		}
-
-		registrations = registrations[bs:]
-
-		gc.log.Info("submitted batch validator registrations",
-			fields.Count(bs),
-			fields.Slot(slot))
-	}
-
-	return nil
 }

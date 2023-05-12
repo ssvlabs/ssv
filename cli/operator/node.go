@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -33,7 +32,6 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -100,10 +98,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
-		slotTicker := slot_ticker.NewTicker(cfg.SSVOptions.Context, cfg.SSVOptions.ETHNetwork, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
-
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
+		el, cl := setupNodes(logger, operatorData.ID)
 
 		ctx := cmd.Context()
 		cfg.SSVOptions.ForkVersion = forkVersion
@@ -139,7 +135,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
+		operatorNode = operator.New(logger, cfg.SSVOptions)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -325,11 +321,11 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = validatorprotocol.DefaultGasLimit
-	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
+	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))

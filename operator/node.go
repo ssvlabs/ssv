@@ -77,7 +77,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
+func New(logger *zap.Logger, opts Options) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
@@ -92,9 +92,11 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String(), opts.ForkVersion))
 	}
 
+	ticker := slot_ticker.NewTicker(opts.Context, opts.ETHNetwork, phase0.Epoch(opts.GenesisEpoch))
+
 	node := &operatorNode{
 		context:        opts.Context,
-		ticker:         slotTicker,
+		ticker:         ticker,
 		validatorsCtrl: opts.ValidatorController,
 		ethNetwork:     opts.ETHNetwork,
 		beacon:         opts.Beacon,
@@ -110,7 +112,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			DutyLimit:           opts.DutyLimit,
 			Executor:            opts.DutyExec,
 			ForkVersion:         opts.ForkVersion,
-			Ticker:              slotTicker,
+			Ticker:              ticker,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
@@ -119,7 +121,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			EthNetwork:       opts.ETHNetwork,
 			ShareStorage:     opts.ValidatorOptions.RegistryStorage,
 			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
-			Ticker:           slotTicker,
+			Ticker:           ticker,
 			OperatorData:     opts.ValidatorOptions.OperatorData,
 		}),
 		forkVersion: opts.ForkVersion,
