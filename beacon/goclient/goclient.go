@@ -116,8 +116,8 @@ type goClient struct {
 	gasLimit             uint64
 	operatorID           spectypes.OperatorID
 	registrationLastSlot atomic.Uint64
-	registrationsMu      sync.Mutex
-	registrations        []*api.VersionedSignedValidatorRegistration
+	registrationMu       sync.Mutex
+	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -142,13 +142,14 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 	_client := &goClient{
-		log:        logger,
-		ctx:        opt.Context,
-		network:    network,
-		client:     httpClient.(*http.Service),
-		graffiti:   opt.Graffiti,
-		gasLimit:   opt.GasLimit,
-		operatorID: operatorID,
+		log:               logger,
+		ctx:               opt.Context,
+		network:           network,
+		client:            httpClient.(*http.Service),
+		graffiti:          opt.Graffiti,
+		gasLimit:          opt.GasLimit,
+		operatorID:        operatorID,
+		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 
 	return _client, nil

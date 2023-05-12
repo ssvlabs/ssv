@@ -217,16 +217,11 @@ func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bell
 	oneEpochPassed := slotsSinceLastRegistration >= slotsPerEpoch
 	twoEpochsAndOperatorDelayPassed := slotsSinceLastRegistration >= slotsPerEpoch*2+operatorSubmissionSlotModulo
 
-	shouldSubmit := gc.hasRegistrations() &&
-		(oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed)
-
-	if shouldSubmit {
+	if oneEpochPassed && operatorSubmissionSlot || twoEpochsAndOperatorDelayPassed {
 		return gc.submitBatchedRegistrations(currentSlot)
 	}
 
-	gc.enqueueBatchRegistrations(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
-
-	return nil
+	return gc.updateBatchRegistrationCache(gc.createValidatorRegistration(pubkey, feeRecipient, sig))
 }
 
 func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
@@ -241,27 +236,38 @@ func (gc *goClient) SubmitProposalPreparation(feeRecipients map[phase0.Validator
 }
 
 func (gc *goClient) submitBatchedRegistrations(currentSlot uint64) error {
-	for gc.hasRegistrations() {
-		nextChunk := gc.getNextRegistrationsChunk()
+	registrationList := gc.registrationList()
 
-		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, nextChunk); err != nil {
-			gc.enqueueBatchRegistrations(nextChunk...)
+	for len(registrationList) != 0 {
+		bs := batchSize
+		if bs > len(registrationList) {
+			bs = len(registrationList)
+		}
+
+		if err := gc.client.SubmitValidatorRegistrations(gc.ctx, registrationList[0:bs]); err != nil {
 			return err
 		}
 
-		gc.log.Info("submitted batch validator registrations", fields.Count(len(nextChunk)))
+		registrationList = registrationList[bs:]
+
+		gc.log.Info("submitted batch validator registrations", fields.Count(bs))
 	}
 
 	gc.registrationLastSlot.Store(currentSlot)
-
 	return nil
 }
 
-func (gc *goClient) enqueueBatchRegistrations(registrations ...*api.VersionedSignedValidatorRegistration) {
-	gc.registrationsMu.Lock()
-	defer gc.registrationsMu.Unlock()
+func (gc *goClient) updateBatchRegistrationCache(registration *api.VersionedSignedValidatorRegistration) error {
+	pk, err := registration.PubKey()
+	if err != nil {
+		return err
+	}
 
-	gc.registrations = append(gc.registrations, registrations...)
+	gc.registrationMu.Lock()
+	defer gc.registrationMu.Unlock()
+
+	gc.registrationCache[pk] = registration
+	return nil
 }
 
 func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) *api.VersionedSignedValidatorRegistration {
@@ -283,24 +289,15 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) hasRegistrations() bool {
-	gc.registrationsMu.Lock()
-	defer gc.registrationsMu.Unlock()
+func (gc *goClient) registrationList() []*api.VersionedSignedValidatorRegistration {
+	result := make([]*api.VersionedSignedValidatorRegistration, 0)
 
-	return len(gc.registrations) != 0
-}
+	gc.registrationMu.Lock()
+	defer gc.registrationMu.Unlock()
 
-func (gc *goClient) getNextRegistrationsChunk() []*api.VersionedSignedValidatorRegistration {
-	gc.registrationsMu.Lock()
-	defer gc.registrationsMu.Unlock()
-
-	bs := batchSize
-	if bs > len(gc.registrations) {
-		bs = len(gc.registrations)
+	for _, registration := range gc.registrationCache {
+		result = append(result, registration)
 	}
 
-	next := gc.registrations[0:bs]
-	gc.registrations = gc.registrations[bs:]
-
-	return next
+	return result
 }
