@@ -100,12 +100,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
-		slotTicker := slot_ticker.NewTicker(cfg.SSVOptions.Context, cfg.SSVOptions.ETHNetwork, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
+		ctx := cmd.Context()
+		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
 
 		cfg.ETH2Options.Context = cmd.Context()
 		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
 
-		ctx := cmd.Context()
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
