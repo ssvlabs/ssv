@@ -93,9 +93,9 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if r.eth1.IsSyncing() {
+	if !r.eth1.IsReady() {
 		// TODO: can we just skip the duty instead?
-		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+		panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	vr, err := r.calculateValidatorRegistration()

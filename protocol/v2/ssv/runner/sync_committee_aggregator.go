@@ -333,9 +333,9 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if r.eth1.IsSyncing() {
+	if !r.eth1.IsReady() {
 		// TODO: can we just skip the duty instead?
-		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+		panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	r.metrics.StartDutyFullFlow()

@@ -211,9 +211,9 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if r.eth1.IsSyncing() {
+	if !r.eth1.IsReady() {
 		// TODO: can we just skip the duty instead?
-		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+		panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	// TODO - waitOneThirdOrValidBlock

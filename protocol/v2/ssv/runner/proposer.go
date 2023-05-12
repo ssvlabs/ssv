@@ -283,9 +283,9 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if r.eth1.IsSyncing() {
+	if !r.eth1.IsReady() {
 		// TODO: can we just skip the duty instead?
-		panic("eth1 node is currently in the syncing state, there's a risk of getting slashed")
+		panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	r.metrics.StartDutyFullFlow()
