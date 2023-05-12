@@ -13,7 +13,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -21,7 +20,7 @@ type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
-	eth1     eth1.Client
+	eth1     NodeStatusChecker
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
@@ -31,6 +30,7 @@ func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	beacon specssv.BeaconNode,
+	eth1 NodeStatusChecker,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
@@ -42,6 +42,7 @@ func NewValidatorRegistrationRunner(
 		},
 
 		beacon:  beacon,
+		eth1:    eth1,
 		network: network,
 		signer:  signer,
 	}

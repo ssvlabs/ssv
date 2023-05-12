@@ -50,6 +50,20 @@ func (mr *MockClientMockRecorder) EventsFeed() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventsFeed", reflect.TypeOf((*MockClient)(nil).EventsFeed))
 }
 
+// IsReady mocks base method.
+func (m *MockClient) IsReady() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReady")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsReady indicates an expected call of IsReady.
+func (mr *MockClientMockRecorder) IsReady() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReady", reflect.TypeOf((*MockClient)(nil).IsReady))
+}
+
 // Start mocks base method.
 func (m *MockClient) Start(logger *zap.Logger) error {
 	m.ctrl.T.Helper()

@@ -5,9 +5,10 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"go.uber.org/zap"
 )
 
 var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -81,6 +82,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
@@ -91,6 +93,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
@@ -101,6 +104,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
@@ -111,6 +115,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
@@ -121,6 +126,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
@@ -130,6 +136,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectypes.PraterNetwork,
 			share,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 		)
@@ -139,6 +146,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			share,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
+			testingStatusChecker{},
 			net,
 			km,
 			valCheck,
