@@ -324,7 +324,7 @@ func (gc *goClient) submitBatchedRegistrations(slot phase0.Slot, registrations [
 
 		registrations = registrations[bs:]
 
-		gc.log.Info("submitted batch validator registrations",
+		gc.log.Info("submitted batched validator registrations",
 			fields.Slot(slot),
 			fields.Count(bs))
 	}
