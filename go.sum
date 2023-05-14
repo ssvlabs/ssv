@@ -111,8 +111,8 @@ github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a/go.mod h1:DAHtR1m6lCRdSC2Tm3DSWRPvIPr6xNKyeHdqDQSQT+A=
-github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155 h1:MGoOMumyZiwVVnMgc4FmQyaOMgA7TzP4zM5RlRSO++o=
-github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155/go.mod h1:PLRKnILnr63V3yl2VagBqnhVRFBWc0V+JhQSsXQaSwQ=
+github.com/attestantio/go-eth2-client v0.15.8 h1:ndeqKacjT3vDD8yJVGe7CGmyrhVbQleBCYIPsULzGMM=
+github.com/attestantio/go-eth2-client v0.15.8/go.mod h1:PLRKnILnr63V3yl2VagBqnhVRFBWc0V+JhQSsXQaSwQ=
 github.com/aws/aws-lambda-go v1.13.3/go.mod h1:4UKl9IzQMoD+QF79YdCuzCwp8VbmG4VAQwij/eHl5CU=
 github.com/aws/aws-sdk-go v1.27.0/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/aws/aws-sdk-go-v2 v0.18.0/go.mod h1:JWVYvqSMppoMJC0x5wdwiImzgXTI9FuZwxzkQq9wy+g=
@@ -1052,6 +1052,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826/go.mod h1:TaXosZuwdSHYgviHp1DAtfrULt5eUgsSMsZf+YrPgl8=
+github.com/moshe-blox/ssv-spec v0.0.0-20230514170212-a85edcdbfdf8 h1:RvV2xDdGezGGi38a19yeH07z7P0jfrCelZBbD6XYikE=
+github.com/moshe-blox/ssv-spec v0.0.0-20230514170212-a85edcdbfdf8/go.mod h1:8OAYKYxifYZ0ahWb4X+KZ6Rb49L2R3bm8lpqXt8u/2k=
 github.com/mr-tron/base58 v1.1.0/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.1/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.2/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
@@ -1136,8 +1138,6 @@ github.com/nats-io/nkeys v0.1.3/go.mod h1:xpnFELMwJABBLVhffcfd1MZx6VsNRFpEugbxzi
 github.com/nats-io/nuid v1.0.1/go.mod h1:19wcPz3Ph3q0Jbyiqsd0kePYG7A95tJPxeL+1OSON2c=
 github.com/neelance/astrewrite v0.0.0-20160511093645-99348263ae86/go.mod h1:kHJEU3ofeGjhHklVoIGuVj85JJwZ6kWPaJwCIxgnFmo=
 github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a/Q4r9LP1IltGz7tA7iOK1WonHEYhu1HRBA7ZiM=
-github.com/nkryuchkov/ssv-spec v0.0.0-20230510164359-d0730a175f45 h1:hjFZ9T1B6dSCSTsCXRYgHVunnaEpQHoovKZZdHnV05A=
-github.com/nkryuchkov/ssv-spec v0.0.0-20230510164359-d0730a175f45/go.mod h1:VDG27SnHcC2coL/eCXFvROuzvlOrdlSTzgCWcoUvh7s=
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/oklog/oklog v0.3.2/go.mod h1:FCV+B7mhrz4o+ueLpx+KqkyXRGMWOYEvfiXtdGtbWGs=
