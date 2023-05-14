@@ -34,7 +34,7 @@ var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 var errUnknownUserAgent = errors.New("user agent is unknown")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
-type HandshakeFilter func(senderID peer.ID, sni records.SignedNodeInfo) error
+type HandshakeFilter func(senderID peer.ID, sni records.AnyNodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
 type SubnetsProvider func() records.Subnets
@@ -52,7 +52,8 @@ type Handshaker interface {
 type handshaker struct {
 	ctx context.Context
 
-	filters []HandshakeFilter
+	Permissioned bool
+	filters      []HandshakeFilter
 
 	streams     streams.StreamController
 	nodeInfoIdx peers.NodeInfoIndex
@@ -77,6 +78,7 @@ type HandshakerCfg struct {
 	IDService       identify.IDService
 	NodeStorage     storage.Storage
 	SubnetsProvider SubnetsProvider
+	Permissioned    bool
 }
 
 // NewHandshaker creates a new instance of handshaker
@@ -93,6 +95,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters ...Handshake
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
 		nodeStorage:     cfg.NodeStorage,
+		Permissioned:    cfg.Permissioned,
 	}
 	return h
 }
@@ -112,15 +115,32 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 		logger := logger.With(zap.String("otherPeer", pidStr))
 
-		sni := &records.SignedNodeInfo{}
-		err = sni.Consume(req)
-		if err != nil {
-			logger.Warn("could not consume node info request", zap.Error(err))
-			return
+		var ani records.AnyNodeInfo
+
+		if h.Permissioned {
+
+			sni := &records.SignedNodeInfo{}
+			err = sni.Consume(req)
+			if err != nil {
+				logger.Warn("could not consume node info request", zap.Error(err))
+				return
+			}
+
+			ani = sni
+		} else {
+
+			ni := &records.NodeInfo{}
+			err = ni.Consume(req)
+			if err != nil {
+				logger.Warn("could not consume node info request", zap.Error(err))
+				return
+			}
+
+			ani = ni
 		}
 		// process the node info in a new goroutine so we won't block the stream
 		go func() {
-			err := h.processIncomingNodeInfo(logger, pid, *sni)
+			err := h.processIncomingNodeInfo(logger, pid, ani)
 			if err != nil {
 				if errors.Is(err, errPeerWasFiltered) {
 					logger.Debug("peer was filtered", zap.Error(err))
@@ -136,7 +156,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			return
 		}
 
-		self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid, privateKey)
+		self, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), pid, h.Permissioned, privateKey)
 		if err != nil {
 			logger.Warn("could not seal self node info", zap.Error(err))
 			return
@@ -149,13 +169,13 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	}
 }
 
-func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, sni records.SignedNodeInfo) error {
-	h.updateNodeSubnets(logger, sender, sni.NodeInfo)
-	if err := h.applyFilters(sender, sni); err != nil {
+func (h *handshaker) processIncomingNodeInfo(logger *zap.Logger, sender peer.ID, ani records.AnyNodeInfo) error {
+	h.updateNodeSubnets(logger, sender, ani.GetNodeInfo())
+	if err := h.applyFilters(sender, ani); err != nil {
 		return err
 	}
 
-	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, sender, sni.NodeInfo); err != nil {
+	if _, err := h.nodeInfoIdx.AddNodeInfo(logger, sender, ani.GetNodeInfo()); err != nil {
 		return err
 	}
 	return nil
@@ -178,7 +198,6 @@ func (h *handshaker) preHandshake(conn libp2pnetwork.Conn) error {
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
 	pid := conn.RemotePeer()
-
 	// check if the peer is known before we continue
 	ni, err := h.getNodeInfo(pid)
 	if err != nil || ni != nil {
@@ -187,22 +206,27 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 	if err := h.preHandshake(conn); err != nil {
 		return errors.Wrap(err, "could not perform pre-handshake")
 	}
-	sni, err := h.nodeInfoFromStream(logger, conn)
+
+	var ani records.AnyNodeInfo
+
+	ani, err = h.nodeInfoFromStream(logger, conn)
 	if err != nil {
 		// fallbacks to user agent
-		sni = &records.SignedNodeInfo{}
-		sni.NodeInfo, err = h.nodeInfoFromUserAgent(logger, conn)
+		ni = &records.NodeInfo{}
+		ni, err = h.nodeInfoFromUserAgent(logger, conn)
 		if err != nil {
 			return err
 		}
+		ani = ni
 	}
-	if sni == nil || sni.NodeInfo == nil {
+
+	if ani == nil || ani.GetNodeInfo() == nil {
 		return errors.New("empty node info")
 	}
 
-	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ni))
+	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ani))
 
-	err = h.processIncomingNodeInfo(logger, pid, *sni)
+	err = h.processIncomingNodeInfo(logger, pid, ani)
 	if err != nil {
 		logger.Debug("could not process node info", zap.Error(err))
 		return err
@@ -244,7 +268,7 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 	}
 }
 
-func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.SignedNodeInfo, error) {
+func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.Conn) (records.AnyNodeInfo, error) {
 	res, err := h.net.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
@@ -254,7 +278,7 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	if !found {
 		return nil, err
 	}
-	data, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), privateKey)
+	data, err := h.nodeInfoIdx.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), h.Permissioned, privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -267,13 +291,21 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 		return nil, err
 	}
 
-	sni := &records.SignedNodeInfo{}
-	err = sni.Consume(resBytes)
+	var ani records.AnyNodeInfo
+	if h.Permissioned {
+		sni := &records.SignedNodeInfo{}
+		err = sni.Consume(resBytes)
+		ani = sni
+	} else {
+		ni := &records.NodeInfo{}
+		err = ni.Consume(resBytes)
+		ani = ni
+	}
 
 	if err != nil {
 		return nil, err
 	}
-	return sni, nil
+	return ani, nil
 }
 
 func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
@@ -316,9 +348,9 @@ func (h *handshaker) nodeInfoFromUserAgent(logger *zap.Logger, conn libp2pnetwor
 	return ni, nil
 }
 
-func (h *handshaker) applyFilters(sender peer.ID, sni records.SignedNodeInfo) error {
+func (h *handshaker) applyFilters(sender peer.ID, ani records.AnyNodeInfo) error {
 	for i := range h.filters {
-		err := h.filters[i](sender, sni)
+		err := h.filters[i](sender, ani)
 		if err != nil {
 			return errors.Wrap(errPeerWasFiltered, err.Error())
 		}

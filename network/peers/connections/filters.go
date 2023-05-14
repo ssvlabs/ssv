@@ -19,16 +19,21 @@ var AllowedDifference = 30 * time.Second
 
 // NetworkIDFilter determines whether we will connect to the given node by the network ID
 func NetworkIDFilter(networkID string) HandshakeFilter {
-	return func(sender peer.ID, sni records.SignedNodeInfo) error {
-		if networkID != sni.NodeInfo.NetworkID {
-			return errors.Errorf("networkID '%s' instead of '%s'", sni.NodeInfo.NetworkID, networkID)
+	return func(sender peer.ID, ani records.AnyNodeInfo) error {
+		nid := ani.GetNodeInfo().NetworkID
+		if networkID != nid {
+			return errors.Errorf("networkID '%s' instead of '%s'", nid, networkID)
 		}
 		return nil
 	}
 }
 
 func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some reason we're loosing 'me' value
-	return func(sender peer.ID, sni records.SignedNodeInfo) error {
+	return func(sender peer.ID, ani records.AnyNodeInfo) error {
+		sni, ok := ani.(*records.SignedNodeInfo)
+		if !ok {
+			return fmt.Errorf("wrong format nodeinfo sent")
+		}
 		if sni.HandshakeData.RecipientPeerID != me {
 			return errors.Errorf("recepient peer ID '%s' instead of '%s'", sni.HandshakeData.RecipientPeerID, me)
 		}
@@ -42,7 +47,11 @@ func SenderRecipientIPsCheckFilter(me peer.ID) HandshakeFilter { // for some rea
 }
 
 func SignatureCheckFilter() HandshakeFilter {
-	return func(sender peer.ID, sni records.SignedNodeInfo) error {
+	return func(sender peer.ID, ani records.AnyNodeInfo) error {
+		sni, ok := ani.(*records.SignedNodeInfo)
+		if !ok {
+			return fmt.Errorf("wrong format nodeinfo sent")
+		}
 		decodedPublicKey, err := base64.StdEncoding.DecodeString(string(sni.HandshakeData.SenderPubicKey))
 		if err != nil {
 			return errors.Wrap(err, "failed to decode sender public key from signed node info")
@@ -67,24 +76,26 @@ func SignatureCheckFilter() HandshakeFilter {
 }
 
 func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
-	return func(sender peer.ID, sni records.SignedNodeInfo) error {
+	return func(sender peer.ID, ani records.AnyNodeInfo) error {
+		sni, ok := ani.(*records.SignedNodeInfo)
+		if !ok {
+			return fmt.Errorf("wrong format nodeinfo sent")
+		}
 		if len(sni.HandshakeData.SenderPubicKey) == 0 {
 			return errors.New("empty SenderPubicKey")
 		}
 
-		//for _, key := range keysConfigWhitelist {
-		//	if key == string(sni.HandshakeData.SenderPubicKey) {
-		//		return nil
-		//	}
-		//}
+		for _, key := range keysConfigWhitelist {
+			if key == string(sni.HandshakeData.SenderPubicKey) {
+				return nil
+			}
+		}
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
-			logger.Info("NOT passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
-		logger.Info("passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 		return nil
 	}
 }

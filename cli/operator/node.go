@@ -99,6 +99,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+		currentSlot := uint64(eth2Network.EstimatedCurrentSlot())
+		if currentSlot > cfg.P2pNetworkConfig.PermissionedActivateSlot && currentSlot < cfg.P2pNetworkConfig.PermissionedDeactivateSlot {
+			cfg.P2pNetworkConfig.Permissioned = true
+		}
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()

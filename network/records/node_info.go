@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/pkg/errors"
 )
 
@@ -29,6 +31,43 @@ func NewNodeInfo(forkVersion forksprotocol.ForkVersion, networkID string) *NodeI
 		ForkVersion: forkVersion,
 		NetworkID:   networkID,
 	}
+}
+
+// Seal seals and encodes the record to be sent to other peers
+func (ni *NodeInfo) Seal(privateKey crypto.PrivKey) ([]byte, error) {
+	ev, err := record.Seal(ni, privateKey)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not seal record")
+	}
+
+	data, err := ev.Marshal()
+	if err != nil {
+		return nil, errors.Wrap(err, "could not marshal envelope")
+	}
+	return data, nil
+}
+
+// Consume takes a raw envelope and extracts the parsed record
+func (ni *NodeInfo) Consume(data []byte) error {
+	evParsed, err := record.ConsumeTypedEnvelope(data, &NodeInfo{})
+	if err != nil {
+		return errors.Wrap(err, "could not consume envelope")
+	}
+	parsed, err := evParsed.Record()
+	if err != nil {
+		return errors.Wrap(err, "could not get record")
+	}
+	rec, ok := parsed.(*NodeInfo)
+	if !ok {
+		return errors.New("could not convert to NodeRecord")
+	}
+	*ni = *rec
+	return nil
+}
+
+// GetNodeInfo returns a value representation of the info
+func (ni *NodeInfo) GetNodeInfo() *NodeInfo {
+	return ni
 }
 
 // Domain is the "signature domain" used when signing and verifying an record.Record

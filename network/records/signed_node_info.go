@@ -12,10 +12,25 @@ import (
 	"github.com/pkg/errors"
 )
 
+type AnyNodeInfo interface {
+	Codec() []byte
+	Domain() string
+	MarshalRecord() ([]byte, error)
+	UnmarshalRecord(data []byte) error
+	Seal(netPrivateKey crypto.PrivKey) ([]byte, error)
+	Consume(data []byte) error
+	GetNodeInfo() *NodeInfo
+}
+
 type SignedNodeInfo struct {
 	NodeInfo      *NodeInfo
 	HandshakeData HandshakeData
 	Signature     []byte
+}
+
+// GetNodeInfo returns inner representation of the info
+func (sni *SignedNodeInfo) GetNodeInfo() *NodeInfo {
+	return sni.NodeInfo
 }
 
 func (sni *SignedNodeInfo) Domain() string {
