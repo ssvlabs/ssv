@@ -72,29 +72,19 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 			return errors.New("empty SenderPubicKey")
 		}
 
-		for _, key := range keysConfigWhitelist {
-			if key == string(sni.HandshakeData.SenderPubicKey) {
-				return nil
-			}
-		}
-
-		operatorsList, err := nodeStorage.ListOperators(logger, 0, 0)
-		if err != nil {
-			return err
-		}
-
-		listKeys := []string{}
-		for i := range operatorsList {
-			listKeys = append(listKeys, string(operatorsList[i].PublicKey))
-		}
-
-		logger.Debug("existing keys from db", zap.Strings("keys", listKeys))
+		//for _, key := range keysConfigWhitelist {
+		//	if key == string(sni.HandshakeData.SenderPubicKey) {
+		//		return nil
+		//	}
+		//}
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
+			logger.Info("NOT passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
+		logger.Info("passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)))
 		return nil
 	}
 }
