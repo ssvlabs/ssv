@@ -55,5 +55,5 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 
 	postRoot, err := test.Pre.State.GetRoot()
 	require.NoError(t, err)
-	require.EqualValuesf(t, test.PostRoot, hex.EncodeToString(postRoot), "post root not valid")
+	require.EqualValuesf(t, test.PostRoot, hex.EncodeToString(postRoot[:]), "post root not valid")
 }
