@@ -209,7 +209,7 @@ func (i *Instance) GetHeight() specqbft.Height {
 }
 
 // GetRoot returns the state's deterministic root
-func (i *Instance) GetRoot() ([]byte, error) {
+func (i *Instance) GetRoot() ([32]byte, error) {
 	return i.State.GetRoot()
 }
 
