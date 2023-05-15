@@ -3,30 +3,39 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"log"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
+	GasLimit   uint64
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
+
+	metrics metrics.ConsensusMetrics
 }
 
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
+	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.KeyManager,
@@ -36,11 +45,13 @@ func NewValidatorRegistrationRunner(
 			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
+			QBFTController: qbftController,
 		},
 
 		beacon:  beacon,
 		network: network,
 		signer:  signer,
+		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
 	}
 }
 
@@ -54,7 +65,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 }
 
 func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	quorum, _, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
@@ -63,6 +74,22 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	if !quorum {
 		return nil
 	}
+
+	// only 1 root, verified in basePreConsensusMsgProcessing
+	root := roots[0]
+	// randao is relevant only for block proposals, no need to check type
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not reconstruct randao sig")
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], fullSig)
+
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		return errors.Wrap(err, "could not submit validator registration")
+	}
+
+	logger.Debug("validator registration submitted successfully", fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]))
 
 	r.GetState().Finished = true
 	return nil
@@ -141,7 +168,7 @@ func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2api
 
 	return &eth2apiv1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     1,
+		GasLimit:     r.GasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
@@ -191,6 +218,7 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
+	log.Printf("runner root: %v", string(marshaledRoot))
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }

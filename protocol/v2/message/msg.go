@@ -44,6 +44,8 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleSyncCommittee, nil
 	case "SYNC_COMMITTEE_CONTRIBUTION":
 		return spectypes.BNRoleSyncCommitteeContribution, nil
+	case "VALIDATOR_REGISTRATION":
+		return spectypes.BNRoleValidatorRegistration, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
