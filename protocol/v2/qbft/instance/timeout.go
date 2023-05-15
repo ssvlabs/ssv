@@ -18,6 +18,13 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
 
+	logger.Debug("📢 broadcasting round change message",
+		fields.Round(i.State.Round),
+		fields.Root(roundChange.Message.Root),
+		zap.Any("round-change-signers", roundChange.Signers),
+		fields.Height(i.State.Height),
+		zap.String("reason", "timeout"))
+
 	if err := i.Broadcast(logger, roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
