@@ -72,11 +72,11 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 			return errors.New("empty SenderPubicKey")
 		}
 
-		//for _, key := range keysConfigWhitelist {
-		//	if key == string(sni.HandshakeData.SenderPubicKey) {
-		//		return nil
-		//	}
-		//}
+		for _, key := range keysConfigWhitelist {
+			if key == string(sni.HandshakeData.SenderPubicKey) {
+				return nil
+			}
+		}
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
