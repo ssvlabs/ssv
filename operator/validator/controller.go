@@ -754,7 +754,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Eth1Client, options.Network, options.Signer, syncCommitteeContributionValueCheckF)
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Eth1Client, options.Network, options.Signer)
 			runners[role].(*runner.ValidatorRegistrationRunner).GasLimit = options.GasLimit // apply gas limit
 		}
 	}
