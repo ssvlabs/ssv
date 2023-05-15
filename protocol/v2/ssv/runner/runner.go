@@ -4,8 +4,10 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
@@ -54,6 +56,19 @@ type BaseRunner struct {
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
+
+	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
+	highestDecidedSlot spec.Slot
+}
+
+// SetHighestDecidedSlot set highestDecidedSlot for base runner
+func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
+	b.highestDecidedSlot = slot
+}
+
+// setupForNewDuty is sets the runner for a new duty
+func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
+	b.State = NewRunnerState(b.Share.Quorum, duty)
 }
 
 func NewBaseRunner() *BaseRunner {
@@ -102,6 +117,10 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
+	if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
+		return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
+	}
+
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
 	if err != nil {
@@ -109,8 +128,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
+	// do not return error if no running duty
 	if !b.hasRunningDuty() {
-		return false, nil, errors.New("no running duty")
+		return false, nil, nil
 	}
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
@@ -135,6 +155,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
+
+	// update the highest decided slot
+	b.highestDecidedSlot = decidedValue.Duty.Slot
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
