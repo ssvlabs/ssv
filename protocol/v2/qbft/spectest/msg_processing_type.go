@@ -76,5 +76,5 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		}
 	}
 
-	require.EqualValues(t, test.PostRoot, hex.EncodeToString(postRoot), "post root not valid")
+	require.EqualValues(t, test.PostRoot, hex.EncodeToString(postRoot[:]), "post root not valid")
 }
