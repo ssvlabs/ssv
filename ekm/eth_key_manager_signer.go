@@ -2,6 +2,7 @@ package ekm
 
 import (
 	"encoding/hex"
+	"fmt"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -39,11 +40,11 @@ type ethKeyManagerSigner struct {
 	storage           Storage
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
-	isBlinded         bool
+	builderProposals  bool
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, logger *zap.Logger) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, builderProposals bool) (spectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network, logger)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
@@ -74,6 +75,7 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		storage:           signerStore,
 		domain:            domain,
 		slashingProtector: slashingProtector,
+		builderProposals:  builderProposals,
 	}, nil
 }
 
@@ -99,7 +101,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pk)
 	case spectypes.DomainProposer:
-		if km.isBlinded {
+		if km.builderProposals {
 			var vBlindedBlock *api.VersionedBlindedBeaconBlock
 			switch v := obj.(type) {
 			case *apiv1bellatrix.BlindedBeaconBlock:
@@ -107,15 +109,14 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 					Version:   spec.DataVersionBellatrix,
 					Bellatrix: v,
 				}
+				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 			case *apiv1capella.BlindedBeaconBlock:
 				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
 					Version: spec.DataVersionCapella,
 					Capella: v,
 				}
-			default:
-				return nil, nil, errors.New("obj type is unknown")
+				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 			}
-			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		}
 
 		var vBlock *spec.VersionedBeaconBlock
@@ -141,7 +142,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				Capella: v,
 			}
 		default:
-			return nil, nil, errors.New("obj type is unknown")
+			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
@@ -192,7 +193,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 				V1:      v,
 			}
 		default:
-			return nil, nil, errors.New("obj type is unknown")
+			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
 		}
 		return km.signer.SignRegistration(data, domain, pk)
 	default:

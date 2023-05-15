@@ -9,19 +9,21 @@ import (
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -99,22 +101,30 @@ type Client interface {
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
+	eth2client.BlindedBeaconBlockProposalProvider
+	eth2client.BlindedBeaconBlockSubmitter
+	eth2client.ValidatorRegistrationsSubmitter
 }
 
 // goClient implementing Beacon struct
 type goClient struct {
-	ctx            context.Context
-	network        beaconprotocol.Network
-	client         Client
-	indicesMapLock sync.Mutex
-	graffiti       []byte
+	log                  *zap.Logger
+	ctx                  context.Context
+	network              beaconprotocol.Network
+	client               Client
+	graffiti             []byte
+	gasLimit             uint64
+	operatorID           spectypes.OperatorID
+	registrationMu       sync.Mutex
+	registrationLastSlot phase0.Slot
+	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
 // verifies that the client implements HealthCheckAgent
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
@@ -131,15 +141,24 @@ func New(logger *zap.Logger, opt beaconprotocol.Options) (beaconprotocol.Beacon,
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
-	_client := &goClient{
-		ctx:            opt.Context,
-		network:        network,
-		client:         httpClient.(*http.Service),
-		indicesMapLock: sync.Mutex{},
-		graffiti:       opt.Graffiti,
+
+	tickerChan := make(chan phase0.Slot, 32)
+	slotTicker.Subscribe(tickerChan)
+
+	client := &goClient{
+		log:               logger,
+		ctx:               opt.Context,
+		network:           network,
+		client:            httpClient.(*http.Service),
+		graffiti:          opt.Graffiti,
+		gasLimit:          opt.GasLimit,
+		operatorID:        operatorID,
+		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 
-	return _client, nil
+	go client.registrationSubmitter(tickerChan)
+
+	return client, nil
 }
 
 // HealthCheck provides health status of beacon node

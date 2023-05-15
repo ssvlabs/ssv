@@ -1,6 +1,7 @@
 package fields
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"net"
@@ -8,23 +9,23 @@ import (
 	"strconv"
 	"time"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -33,7 +34,10 @@ const (
 	FieldAddress             = "address"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
+	FieldBlockHash           = "block_hash"
+	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldBuilderProposals    = "builder_proposals"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
@@ -45,6 +49,7 @@ const (
 	FieldErrors              = "errors"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
+	FieldFeeRecipient        = "fee_recipient"
 	FieldFork                = "fork"
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
@@ -150,7 +155,7 @@ func CurrentSlot(network beacon.Network) zapcore.Field {
 	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(network.EstimatedCurrentSlot())})
 }
 
-func StartTimeUnixMilli(network beacon.Network, slot spec.Slot) zapcore.Field {
+func StartTimeUnixMilli(network beacon.Network, slot phase0.Slot) zapcore.Field {
 	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
 		Fn: func() string {
 			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixMilli()))
@@ -208,6 +213,14 @@ func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
 
 func BlockNumber(val uint64) zap.Field {
 	return zap.Stringer(FieldBlock, stringer.Uint64Stringer{Val: val})
+}
+
+func BlockHash(val phase0.Hash32) zap.Field {
+	return zap.Stringer(FieldBlockHash, val)
+}
+
+func BlockVersion(val spec.DataVersion) zap.Field {
+	return zap.Stringer(FieldBlockVersion, val)
 }
 
 func Name(val string) zap.Field {
@@ -270,6 +283,18 @@ func ToBlock(val *big.Int) zap.Field {
 	return zap.Int64(FieldToBlock, val.Int64())
 }
 
+func FeeRecipient(pubKey []byte) zap.Field {
+	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
+}
+
+func BuilderProposals(v bool) zap.Field {
+	return zap.Bool(FieldBuilderProposals, v)
+}
+
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func Root(r [32]byte) zap.Field {
+	return zap.String("root", hex.EncodeToString(r[:]))
 }

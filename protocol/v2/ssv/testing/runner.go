@@ -20,14 +20,14 @@ var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 //}
 
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil, true), keySet)
 }
 
 var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	ret := baseRunner(
 		logger,
 		spectypes.BNRoleProposer,
-		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
+		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil, true),
 		keySet,
 	)
 	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
@@ -47,7 +47,9 @@ var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectesti
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
+	ret := baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
+	ret.(*runner.ValidatorRegistrationRunner).GasLimit = 1
+	return ret
 }
 
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -135,6 +137,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 		return runner.NewValidatorRegistrationRunner(
 			spectypes.PraterNetwork,
 			share,
+			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			testingStatusChecker{},
 			net,
