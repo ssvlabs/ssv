@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"log"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -218,7 +217,6 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
-	log.Printf("runner root: %v", string(marshaledRoot))
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }
