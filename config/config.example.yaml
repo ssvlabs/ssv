@@ -1,5 +1,6 @@
 global:
   LogLevel: info
+  LogFilePath: ./data/debug.log
 
 db:
   Path: ./data/db
