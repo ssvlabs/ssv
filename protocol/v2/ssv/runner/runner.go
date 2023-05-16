@@ -117,9 +117,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
-	if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
-		return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
-	}
+	// if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
+	// 	return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
+	// }
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
