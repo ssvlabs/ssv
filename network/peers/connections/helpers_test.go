@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
@@ -111,7 +110,7 @@ func getTestingData(t *testing.T) TestData {
 	networkPrivateKey, _, err := libp2pcrypto.GenerateKeyPair(libp2pcrypto.ECDSA, 0)
 	require.NoError(t, err)
 
-	data, err := sni.Seal(networkPrivateKey)
+	data, err := nodeInfo.Seal(networkPrivateKey)
 	require.NoError(t, err)
 
 	sc := mock.StreamController{
@@ -119,20 +118,15 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:         context.Background(),
-		nodeInfoIdx: nii,
-		states:      ns,
-		ids:         ids,
-		net:         net,
-		nodeStorage: nst,
-		streams:     sc,
-		filters: []HandshakeFilter{
-			NetworkIDFilter("some-network-id"),
-			SenderRecipientIPsCheckFilter(peerID1),
-			SignatureCheckFilter(),
-			RegisteredOperatorsFilter(logging.TestLogger(t), nst, nil),
-		},
-		Permissioned: true,
+		ctx:          context.Background(),
+		nodeInfoIdx:  nii,
+		states:       ns,
+		ids:          ids,
+		net:          net,
+		nodeStorage:  nst,
+		streams:      sc,
+		filters:      []HandshakeFilter{},
+		Permissioned: false,
 	}
 
 	mockConn := mock.Conn{

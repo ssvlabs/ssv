@@ -12,8 +12,8 @@ import (
 )
 
 // TestHandshake whole handshake flow
-// TestHandshake DO NOT CHECK FILERS (filers checks are at another file)
-func TestHandshake(t *testing.T) {
+// TestHandshake DO NOT CHECK FILERS (filers checks are at filters_test.go)
+func TestHandshakeBaseFlow(t *testing.T) {
 	t.Run("regular", func(t *testing.T) {
 		td := getTestingData(t)
 
@@ -67,5 +67,24 @@ func TestHandshake(t *testing.T) {
 		td := getTestingData(t)
 		td.Handshaker.streams = mock.StreamController{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+}
+
+func TestHandshakePermissionedFlow(t *testing.T) {
+	t.Run("Permissioned", func(t *testing.T) {
+		td := getTestingData(t)
+
+		td.Handshaker.Permissioned = true
+
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+
+		data, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
+		require.NoError(t, err)
+
+		td.Handshaker.streams = mock.StreamController{
+			MockRequest: data,
+		}
+
+		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 }
