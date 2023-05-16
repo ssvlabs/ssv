@@ -132,6 +132,7 @@ func getTestingData(t *testing.T) TestData {
 			SignatureCheckFilter(),
 			RegisteredOperatorsFilter(logging.TestLogger(t), nst, nil),
 		},
+		Permissioned: true,
 	}
 
 	mockConn := mock.Conn{
