@@ -21,7 +21,7 @@ import (
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
-	GasLimit   uint64
+	GasLimit   uint64 // TODO: spec will use a constant gas limit, so this line needs to be removed, gas limit should be taken from spec
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
