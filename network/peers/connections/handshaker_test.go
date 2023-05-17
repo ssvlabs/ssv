@@ -96,13 +96,13 @@ func TestHandshakePermissionedFlow(t *testing.T) {
 		{
 			name:            "permissioned node receives non-permissioned message",
 			permissioned:    true,
-			expectedErr:     errWrongPermissionedMode,
+			expectedErr:     errConsumingMessage,
 			incomingMessage: td.NodeInfo,
 		},
 		{
 			name:            "non-permissioned node receives permissioned message",
 			permissioned:    false,
-			expectedErr:     errWrongPermissionedMode,
+			expectedErr:     errConsumingMessage,
 			incomingMessage: td.SignedNodeInfo,
 		},
 	}

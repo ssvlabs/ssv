@@ -30,9 +30,9 @@ var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 // errUnknownUserAgent is thrown when a peer has an unknown user agent
 var errUnknownUserAgent = errors.New("user agent is unknown")
 
-// errWrongPermissionedMode is thrown when we receive message from different permissioned mode
+// errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode
 // example: the Node in NON-Permissoned mode receives SignedNodeInfo; the Node in Permissoned mode receives NodeInfo
-var errWrongPermissionedMode = errors.New("wrong permissioned mode")
+var errConsumingMessage = errors.New("error consuming message")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
 type HandshakeFilter func(senderID peer.ID, sni records.AnyNodeInfo) error
@@ -298,7 +298,7 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	}
 
 	if err != nil {
-		return nil, errors.Wrap(errWrongPermissionedMode, err.Error())
+		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}
 	return ani, nil
 }
