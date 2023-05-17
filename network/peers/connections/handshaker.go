@@ -16,11 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	// userAgentKey is the key used by libp2p to save user agent
-	userAgentKey = "AgentVersion"
-)
-
 // errHandshakeInProcess is thrown when and handshake process for that peer is already running
 var errHandshakeInProcess = errors.New("handshake already in process")
 
