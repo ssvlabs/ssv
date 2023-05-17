@@ -215,10 +215,6 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 		return err
 	}
 
-	if ani == nil || ani.GetNodeInfo() == nil {
-		return errors.New("empty node info")
-	}
-
 	logger = logger.With(zap.String("otherPeer", pid.String()), zap.Any("info", ani))
 
 	err = h.processIncomingNodeInfo(logger, pid, ani)
