@@ -11,10 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestHandshake whole handshake flow
-// TestHandshake DO NOT CHECK FILERS (filers checks are at filters_test.go)
-func TestHandshakeBaseFlow(t *testing.T) {
-	t.Run("regular", func(t *testing.T) {
+// TestHandshakeTestData is a test for testing data and mocks
+func TestHandshakeTestData(t *testing.T) {
+	t.Run("happy flow", func(t *testing.T) {
 		td := getTestingData(t)
 
 		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
@@ -70,21 +69,57 @@ func TestHandshakeBaseFlow(t *testing.T) {
 	})
 }
 
+// TestHandshakePermissionedFlow tests Handshake() permissioned flow
 func TestHandshakePermissionedFlow(t *testing.T) {
-	t.Run("Permissioned", func(t *testing.T) {
-		td := getTestingData(t)
+	td := getTestingData(t)
 
-		td.Handshaker.Permissioned = true
+	type test struct {
+		name            string
+		permissioned    bool
+		expectedErr     error
+		incomingMessage records.AnyNodeInfo
+	}
 
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	testCases := []test{
+		{
+			name:            "non-permissioned happy flow",
+			permissioned:    false,
+			expectedErr:     nil,
+			incomingMessage: td.NodeInfo,
+		},
+		{
+			name:            "permissioned happy flow",
+			permissioned:    true,
+			expectedErr:     nil,
+			incomingMessage: td.SignedNodeInfo,
+		},
+		{
+			name:            "permissioned node receives non-permissioned message",
+			permissioned:    true,
+			expectedErr:     errWrongPermissionedMode,
+			incomingMessage: td.NodeInfo,
+		},
+		{
+			name:            "non-permissioned node receives permissioned message",
+			permissioned:    false,
+			expectedErr:     errWrongPermissionedMode,
+			incomingMessage: td.SignedNodeInfo,
+		},
+	}
 
-		data, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
-		require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			td := getTestingData(t)
+			td.Handshaker.Permissioned = tc.permissioned
 
-		td.Handshaker.streams = mock.StreamController{
-			MockRequest: data,
-		}
+			sealedIncomingMessage, err := tc.incomingMessage.Seal(td.NetworkPrivateKey)
+			require.NoError(t, err)
 
-		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
+			td.Handshaker.streams = mock.StreamController{
+				MockRequest: sealedIncomingMessage,
+			}
+
+			require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), tc.expectedErr)
+		})
+	}
 }
