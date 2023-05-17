@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -34,7 +33,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0), types.GetDefaultDomain(), true)
+	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(spectypes.GetNetwork(), 0), types.GetDefaultDomain(), true)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

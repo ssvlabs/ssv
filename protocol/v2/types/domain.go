@@ -4,6 +4,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
+// TODO: extract to network settings
 var (
 	domain = spectypes.V3Testnet
 )

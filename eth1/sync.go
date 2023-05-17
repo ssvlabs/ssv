@@ -31,7 +31,7 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return StringToSyncOffset(networkconfig.PraterNetwork.DefaultSyncOffset)
+	return StringToSyncOffset(networkconfig.PraterV3TestnetNetwork.DefaultSyncOffset)
 }
 
 // StringToSyncOffset converts string to SyncOffset

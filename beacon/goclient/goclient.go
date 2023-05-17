@@ -22,6 +22,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -139,10 +140,11 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
-	beaconNetwork, ok := spectypes.NetworkFromString(opt.Network)
-	if !ok {
-		return nil, fmt.Errorf("network not supported: %v", opt.Network)
+	beaconNetwork, err := networkconfig.GetNetworkByName(opt.Network)
+	if err != nil {
+		return nil, err
 	}
+
 	network := beaconprotocol.NewNetwork(beaconNetwork, opt.MinGenesisTime)
 
 	tickerChan := make(chan phase0.Slot, 32)
@@ -193,7 +195,7 @@ func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
 func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDuration().Seconds()))
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDuration.Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

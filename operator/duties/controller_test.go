@@ -8,7 +8,6 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -42,7 +41,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 	dutyCtrl := &dutyController{
 		ctx:                    context.Background(),
-		ethNetwork:             beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0),
+		ethNetwork:             beacon.NewNetwork(spectypes.GetNetwork(), 0),
 		executor:               mockExecutor,
 		fetcher:                mockFetcher,
 		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
@@ -70,7 +69,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 func TestDutyController_ShouldExecute(t *testing.T) {
 	logger := logging.TestLogger(t)
-	ctrl := dutyController{ethNetwork: beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0)}
+	ctrl := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetNetwork(), 0)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
 	require.True(t, ctrl.shouldExecute(logger, &spectypes.Duty{Slot: phase0.Slot(currentSlot), PubKey: phase0.BLSPubKey{}}))
@@ -79,21 +78,21 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0)}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetNetwork(), 0)}
 
 	ts := d.ethNetwork.GetSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestDutyController_GetCurrentSlot(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0)}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetNetwork(), 0)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
 	require.Greater(t, slot, phase0.Slot(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0)}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetNetwork(), 0)}
 
 	slot := d.ethNetwork.GetEpochFirstSlot(20203)
 	require.EqualValues(t, 646496, slot)

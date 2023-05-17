@@ -6,10 +6,11 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-var MainNetwork = spectypes.BeaconNetworkDescriptor{
+var MainNetwork = spectypes.BeaconNetwork{
 	Name:              "mainnet",
 	DefaultSyncOffset: "8661727",
 	ForkVersion:       [4]byte{0, 0, 0, 0},
 	MinGenesisTime:    1606824023,
 	SlotDuration:      12 * time.Second,
+	CapellaForkEpoch:  194048,
 }

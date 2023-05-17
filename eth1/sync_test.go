@@ -98,7 +98,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, nil)
 		require.NotNil(t, so)
-		require.Equal(t, networkconfig.PraterNetwork.DefaultSyncOffset, so.Text(10))
+		require.Equal(t, networkconfig.PraterV3TestnetNetwork.DefaultSyncOffset, so.Text(10))
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {

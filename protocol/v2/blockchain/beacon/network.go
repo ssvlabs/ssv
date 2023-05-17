@@ -14,14 +14,13 @@ type Network struct {
 }
 
 // NewNetwork creates a new beacon chain network.
-// TODO: consider removing minGenesisTime
 func NewNetwork(network spectypes.BeaconNetwork, minGenesisTime uint64) Network {
 	return Network{network, minGenesisTime}
 }
 
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
-	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDuration().Seconds())
+	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDuration.Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
@@ -30,7 +29,7 @@ func (n Network) MinGenesisTime() uint64 {
 	if n.minGenesisTime > 0 {
 		return n.minGenesisTime
 	} else {
-		return n.BeaconNetwork.MinGenesisTime()
+		return n.BeaconNetwork.MinGenesisTime
 	}
 }
 
@@ -45,7 +44,7 @@ func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDuration().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDuration.Seconds()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch
@@ -56,12 +55,12 @@ func (n Network) EstimatedCurrentEpoch() phase0.Epoch {
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
 func (n Network) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(slot / phase0.Slot(n.SlotsPerEpoch()))
+	return phase0.Epoch(slot / phase0.Slot(n.SlotsPerEpoch))
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
 func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%n.SlotsPerEpoch() == 0
+	return uint64(slot)%n.SlotsPerEpoch == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch

@@ -83,11 +83,6 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		beaconNetworks := []spectypes.BeaconNetworkDescriptor{networkconfig.PraterNetwork, networkconfig.MainNetwork}
-		for _, bn := range beaconNetworks {
-			spectypes.RegisterBeaconNetwork(bn)
-		}
-
 		eth2Network, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
 			log.Fatal("could not setup network", err)
@@ -301,10 +296,11 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 		}
 		types.SetDefaultDomain(spectypes.DomainType(domainType))
 	}
-	beaconNetwork, ok := spectypes.NetworkFromString(cfg.ETH2Options.Network)
-	if !ok {
-		return beaconprotocol.Network{}, "", fmt.Errorf("network not supported: %v", cfg.ETH2Options.Network)
+	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.ETH2Options.Network)
+	if err != nil {
+		return beaconprotocol.Network{}, "", err
 	}
+
 	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime)
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()

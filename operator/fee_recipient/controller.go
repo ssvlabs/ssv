@@ -71,7 +71,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 	firstTimeSubmitted := false
 	for currentSlot := range slots {
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(currentSlot)%rc.ethNetwork.SlotsPerEpoch() != 0 {
+		if firstTimeSubmitted && uint64(currentSlot)%rc.ethNetwork.SlotsPerEpoch != 0 {
 			continue
 		}
 		firstTimeSubmitted = true

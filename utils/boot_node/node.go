@@ -13,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -50,9 +51,9 @@ type bootNode struct {
 
 // New is the constructor of ssvNode
 func New(opts Options) (Node, error) {
-	beaconNetwork, ok := spectypes.NetworkFromString(opts.Network)
-	if !ok {
-		return nil, fmt.Errorf("network not supported: %v", opts.Network)
+	beaconNetwork, err := networkconfig.GetNetworkByName(opts.Network)
+	if err != nil {
+		return nil, err
 	}
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
@@ -173,7 +174,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.ForkVersion()
+	fVersion := n.network.ForkVersion
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
