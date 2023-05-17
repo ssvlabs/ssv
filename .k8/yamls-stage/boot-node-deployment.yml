@@ -95,12 +95,12 @@ spec:
           name: port-5000          
           hostPort: 5000
         env:
-          - name: BOOT_NODE_PRIVATE_KEY
+          - name: BOOTNODE_NETWORK_KEY
             valueFrom:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node_private_key
-          - name: BOOT_NODE_EXTERNAL_IP
+          - name: BOOTNODE_EXTERNAL_IP
             valueFrom:
               secretKeyRef:
                 name: config-secrets
