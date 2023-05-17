@@ -69,7 +69,54 @@ func TestHandshakeTestData(t *testing.T) {
 	})
 }
 
-// TestHandshakePermissionedFlow tests Handshake() permissioned flow
+// TestHandshakePeerIsKnownFlow tests Handshake() PeerIsKnown flow
+func TestHandshakePeerIsKnownFlow(t *testing.T) {
+	type test struct {
+		name        string
+		state       peers.NodeState
+		expectedErr error
+	}
+
+	testCases := []test{
+		{
+			name:        "peer is known and indexing",
+			state:       peers.StateIndexing,
+			expectedErr: errHandshakeInProcess,
+		},
+		{
+			name:        "peer is known and pruned",
+			state:       peers.StatePruned,
+			expectedErr: errPeerPruned,
+		},
+		{
+			name:        "peer is known and ready",
+			state:       peers.StateReady,
+			expectedErr: nil,
+		},
+	}
+
+	for _, tc := range testCases {
+		td := getTestingData(t)
+
+		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{
+			MockNodeInfo: td.NodeInfo,
+		}
+
+		td.Handshaker.states = mock.NodeStates{
+			MockNodeState: tc.state,
+		}
+
+		td.Handshaker.net = mock.Net{ // it needs to fail on a next row after isPeerKnow check
+			MockPeerstore: mock.Peerstore{
+				MockFirstSupportedProtocol: "",
+			},
+		}
+
+		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), tc.expectedErr)
+	}
+}
+
+// TestHandshakePermissionedFlow tests Handshake() Permissioned flow
 func TestHandshakePermissionedFlow(t *testing.T) {
 	td := getTestingData(t)
 
@@ -122,4 +169,29 @@ func TestHandshakePermissionedFlow(t *testing.T) {
 			require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), tc.expectedErr)
 		})
 	}
+}
+
+// TestHandshakeProcessIncomingNodeInfoFlow tests Handshake() incoming node info flow
+func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
+	t.Run("not pass through filters", func(t *testing.T) {
+		td := getTestingData(t)
+
+		td.Handshaker.filters = []HandshakeFilter{
+			SenderRecipientIPsCheckFilter("some-id"),
+		}
+
+		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
+	})
+
+	t.Run("error add node info", func(t *testing.T) {
+		td := getTestingData(t)
+
+		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{
+			MockNodeInfo:          nil,
+			MockSelfSealed:        []byte("something"),
+			MockAddNodeInfoResult: false,
+		}
+
+		require.Equal(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn).Error(), "AddNodeInfo error")
+	})
 }

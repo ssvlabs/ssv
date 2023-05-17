@@ -13,8 +13,9 @@ import (
 var _ peers.NodeInfoIndex = NodeInfoIndex{}
 
 type NodeInfoIndex struct {
-	MockNodeInfo   *records.NodeInfo
-	MockSelfSealed []byte
+	MockNodeInfo          *records.NodeInfo
+	MockSelfSealed        []byte
+	MockAddNodeInfoResult bool
 }
 
 func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
@@ -36,7 +37,10 @@ func (m NodeInfoIndex) UpdateSelfRecord(newInfo *records.NodeInfo) {
 }
 
 func (m NodeInfoIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, node *records.NodeInfo) (bool, error) {
-	return true, nil
+	if m.MockAddNodeInfoResult {
+		return true, nil
+	}
+	return false, errors.New("AddNodeInfo error")
 }
 
 func (m NodeInfoIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {

@@ -34,6 +34,9 @@ var errUnknownUserAgent = errors.New("user agent is unknown")
 // example: the Node in NON-Permissoned mode receives SignedNodeInfo; the Node in Permissoned mode receives NodeInfo
 var errConsumingMessage = errors.New("error consuming message")
 
+// errConsumingMessage is thrown when remote peer is pruned
+var errPeerPruned = errors.New("peer is pruned")
+
 // HandshakeFilter can be used to filter nodes once we handshaked with them
 type HandshakeFilter func(senderID peer.ID, sni records.AnyNodeInfo) error
 
@@ -236,7 +239,7 @@ func (h *handshaker) getNodeInfo(pid peer.ID) (*records.NodeInfo, error) {
 		case peers.StateIndexing:
 			return nil, errHandshakeInProcess
 		case peers.StatePruned:
-			return nil, errors.Errorf("pruned peer [%s]", pid.String())
+			return nil, errors.Wrap(errPeerPruned, pid.String())
 		case peers.StateReady:
 			return ni, nil
 		default: // unknown > continue the flow
