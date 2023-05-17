@@ -6,11 +6,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/eth2-key-manager/core"
 
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -25,7 +26,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
@@ -40,7 +41,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0))
 
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
@@ -60,7 +61,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -82,7 +83,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(core.PraterNetwork, 0))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
@@ -92,7 +93,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
 		logger:     logging.TestLogger(t),
-		ethNetwork: beacon.NewNetwork(core.PraterNetwork, 0),
+		ethNetwork: beacon.NewNetwork(networkconfig.PraterNetwork.Name, 0),
 	}
 	tests := []struct {
 		name string

@@ -9,10 +9,11 @@ import (
 	"net"
 	"net/http"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -44,18 +45,22 @@ type bootNode struct {
 	discv5port  int
 	forkVersion []byte
 	externalIP  string
-	network     core.Network
+	network     spectypes.BeaconNetwork
 }
 
 // New is the constructor of ssvNode
-func New(opts Options) Node {
+func New(opts Options) (Node, error) {
+	beaconNetwork, ok := spectypes.NetworkFromString(opts.Network)
+	if !ok {
+		return nil, fmt.Errorf("network not supported: %v", opts.Network)
+	}
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
 		discv5port:  4000,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
 		externalIP:  opts.ExternalIP,
-		network:     core.NetworkFromString(opts.Network),
-	}
+		network:     beaconNetwork,
+	}, nil
 }
 
 type handler struct {
@@ -168,7 +173,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.GenesisForkVersion()
+	fVersion := n.network.ForkVersion()
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)

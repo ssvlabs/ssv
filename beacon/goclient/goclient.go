@@ -13,7 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -140,7 +139,11 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
-	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
+	beaconNetwork, ok := spectypes.NetworkFromString(opt.Network)
+	if !ok {
+		return nil, fmt.Errorf("network not supported: %v", opt.Network)
+	}
+	network := beaconprotocol.NewNetwork(beaconNetwork, opt.MinGenesisTime)
 
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
@@ -184,13 +187,13 @@ func (gc *goClient) HealthCheck() []string {
 
 // GetBeaconNetwork returns the beacon network the node is on
 func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return spectypes.BeaconNetwork(gc.network.Network)
+	return gc.network.BeaconNetwork
 }
 
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
 func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDuration().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

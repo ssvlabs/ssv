@@ -4,23 +4,24 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Network is a beacon chain network.
 type Network struct {
-	core.Network
+	spectypes.BeaconNetwork
 	minGenesisTime uint64
 }
 
 // NewNetwork creates a new beacon chain network.
-func NewNetwork(network core.Network, minGenesisTime uint64) Network {
+// TODO: consider removing minGenesisTime
+func NewNetwork(network spectypes.BeaconNetwork, minGenesisTime uint64) Network {
 	return Network{network, minGenesisTime}
 }
 
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
-	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
+	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDuration().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
@@ -29,7 +30,7 @@ func (n Network) MinGenesisTime() uint64 {
 	if n.minGenesisTime > 0 {
 		return n.minGenesisTime
 	} else {
-		return n.Network.MinGenesisTime()
+		return n.BeaconNetwork.MinGenesisTime()
 	}
 }
 
@@ -44,7 +45,7 @@ func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDuration().Seconds()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch

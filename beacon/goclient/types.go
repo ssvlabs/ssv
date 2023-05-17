@@ -1,6 +1,10 @@
 package goclient
 
-import "github.com/attestantio/go-eth2-client/spec/phase0"
+import (
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/bloxapp/ssv/networkconfig"
+)
 
 var (
 	SyncCommitteeSize                    uint64       = 512
@@ -9,5 +13,5 @@ var (
 	EpochsPerSyncCommitteePeriod         uint64       = 256
 	TargetAggregatorsPerCommittee        uint64       = 16
 	FarFutureEpoch                       phase0.Epoch = 1<<64 - 1
-	GenesisForkVersion                                = phase0.Version{0x0, 0x0, 0x10, 0x20} // prater
+	GenesisForkVersion                                = networkconfig.PraterNetwork.ForkVersion // TODO: pass from caller
 )

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -32,6 +31,7 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -83,7 +83,15 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		eth2Network, forkVersion := setupSSVNetwork(logger)
+		beaconNetworks := []spectypes.BeaconNetworkDescriptor{networkconfig.PraterNetwork, networkconfig.MainNetwork}
+		for _, bn := range beaconNetworks {
+			spectypes.RegisterBeaconNetwork(bn)
+		}
+
+		eth2Network, forkVersion, err := setupSSVNetwork(logger)
+		if err != nil {
+			log.Fatal("could not setup network", err)
+		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDb(logger, eth2Network)
@@ -282,7 +290,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion) {
+func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
 	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
 		cfg.P2pNetworkConfig.NetworkID = format.DomainType(types.GetDefaultDomain()).String()
 	} else {
@@ -293,7 +301,11 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 		}
 		types.SetDefaultDomain(spectypes.DomainType(domainType))
 	}
-	eth2Network := beaconprotocol.NewNetwork(core.NetworkFromString(cfg.ETH2Options.Network), cfg.ETH2Options.MinGenesisTime)
+	beaconNetwork, ok := spectypes.NetworkFromString(cfg.ETH2Options.Network)
+	if !ok {
+		return beaconprotocol.Network{}, "", fmt.Errorf("network not supported: %v", cfg.ETH2Options.Network)
+	}
+	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime)
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
@@ -301,7 +313,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	logger.Info("setting ssv network", fields.Domain(types.GetDefaultDomain()),
 		fields.NetworkID(cfg.P2pNetworkConfig.NetworkID),
 		fields.Fork(forkVersion))
-	return eth2Network, forkVersion
+	return eth2Network, forkVersion, nil
 }
 
 func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystorage.OperatorData, db basedb.IDb, logger *zap.Logger) network.P2PNetwork {

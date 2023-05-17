@@ -10,14 +10,10 @@ import (
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
-
-const (
-	// prod contract genesis block
-	defaultPraterSyncOffset string = "8661727"
-)
 
 // SyncOffset is the type of variable used for passing around the offset
 type SyncOffset = big.Int
@@ -35,7 +31,7 @@ type SyncOffsetStorage interface {
 
 // DefaultSyncOffset returns the default value (block number of the first event from the contract)
 func DefaultSyncOffset() *SyncOffset {
-	return StringToSyncOffset(defaultPraterSyncOffset)
+	return StringToSyncOffset(networkconfig.PraterNetwork.DefaultSyncOffset)
 }
 
 // StringToSyncOffset converts string to SyncOffset

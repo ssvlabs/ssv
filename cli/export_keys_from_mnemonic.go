@@ -6,7 +6,10 @@ import (
 	"log"
 
 	"github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+
 	"github.com/spf13/cobra"
 	util "github.com/wealdtech/go-eth2-util"
 	"go.uber.org/zap"
@@ -42,7 +45,8 @@ var exportKeysCmd = &cobra.Command{
 
 		fmt.Println("Seed:", hex.EncodeToString(seed))
 		fmt.Println("Generating keys for index:", index)
-		path := core.PraterNetwork.FullPath(fmt.Sprintf("/%d/0/0", index))
+		// TODO: pass network from a configuration
+		path := core.Network(networkconfig.PraterNetwork.Name).FullPath(fmt.Sprintf("/%d/0/0", index))
 		key, err := util.PrivateKeyFromSeedAndPath(seed, path)
 		if err != nil {
 			logger.Fatal("failed to get private key from seed", zap.Error(err))

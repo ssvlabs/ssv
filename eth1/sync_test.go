@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -96,7 +98,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, nil)
 		require.NotNil(t, so)
-		require.Equal(t, defaultPraterSyncOffset, so.Text(10))
+		require.Equal(t, networkconfig.PraterNetwork.DefaultSyncOffset, so.Text(10))
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {
