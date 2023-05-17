@@ -32,7 +32,7 @@ type Options struct {
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
 	TCPPort    int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
 	UDPPort    int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
-	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-description:"Path to the boot node's database"`
+	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
 	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
 }
 
@@ -164,7 +164,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, c
 }
 
 func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port int) (*enode.LocalNode, error) {
-	db, err := enode.OpenDB(filepath.Join(n.dbPath, "bootnode"))
+	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not open node's peer database")
 	}
