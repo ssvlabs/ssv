@@ -82,8 +82,9 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	nii := mock.NodeInfoIndex{
-		MockNodeInfo:   nil,
-		MockSelfSealed: []byte("something"),
+		MockNodeInfo:          nil,
+		MockSelfSealed:        []byte("something"),
+		MockAddNodeInfoResult: true,
 	}
 	ns := mock.NodeStates{
 		MockNodeState: peers.StateReady,
