@@ -83,11 +83,10 @@ spec:
               name: config-secrets
               key: config_path
         - name: BOOTNODES
-          # valueFrom:
-          #   secretKeyRef:
-          #     name: config-secrets
-          #     key: boot_node
-          value: "enr:-Li4QBoH15fXLV78y1_nmD5sODveptALORh568iWLS_eju3SUvF2ZfGE2j-nERKU1zb2g5KlS8L70SRLdRUJ-pHH-fmGAYgvh9oGh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO_tV3JP75ZUZPjhOgc2VqEu_FQEMeHc4AyOz6Lz33M2IN0Y3CCE4mDdWRwgg-h"
+          valueFrom:
+            secretKeyRef:
+              name: config-secrets
+              key: boot_node
         - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
