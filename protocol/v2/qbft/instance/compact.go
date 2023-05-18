@@ -29,9 +29,6 @@ func CompactCopy(state *specqbft.State, decidedMessage *specqbft.SignedMessage) 
 }
 
 func compact(state *specqbft.State, decidedMessage *specqbft.SignedMessage, compactContainer compactContainerFunc) {
-	// TODO: revert
-	return
-
 	state.ProposeContainer = compactContainer(state.ProposeContainer, state.Round, state.Decided)
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
