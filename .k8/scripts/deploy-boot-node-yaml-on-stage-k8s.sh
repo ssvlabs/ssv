@@ -144,3 +144,4 @@ fi
 
 #deploy
 kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/boot-node-deployment.yml || exit 1
+kubectl --context=$K8S_CONTEXT apply -f .k8/yamls-stage/boot-node-2-deployment.yml || exit 1
