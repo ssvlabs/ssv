@@ -84,7 +84,7 @@ spec:
               - key: kubernetes.io/role
                 operator: In
                 values:
-                - ssv-boot-node-2
+                - ssv-boot-node
       containers:
       - name: boot-node-2
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
