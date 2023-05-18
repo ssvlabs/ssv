@@ -135,7 +135,7 @@ spec:
         - name: BUILDER_PROPOSALS
           value: "true"
         - name: PERMISSIONED_ACTIVE_SLOT
-          value: "6464639"
+          value: "5657651"
         - name: PERMISSIONED_DEACTIVE_SLOT
           value: "7464639"
         volumeMounts:
