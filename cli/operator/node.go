@@ -24,8 +24,6 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
