@@ -92,6 +92,11 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 		if err != nil {
 			return nil, errors.Wrap(err, "could not parse bootnodes records")
 		}
+		var bootnodeStrs []string
+		for _, b := range bootnodes {
+			bootnodeStrs = append(bootnodeStrs, b.String())
+		}
+		zap.L().Debug("parsed bootnodes", zap.Int("bootnodes_len", len(bootnodes)), zap.Strings("bootnodes_str", bootnodeStrs), zap.Any("bootnodes", bootnodes))
 		dv5Cfg.Bootnodes = bootnodes
 	}
 
