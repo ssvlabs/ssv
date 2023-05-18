@@ -134,6 +134,10 @@ spec:
           value: "152834"
         - name: BUILDER_PROPOSALS
           value: "true"
+        - name: PERMISSIONED_ACTIVE_SLOT
+          value: "6464639"
+        - name: PERMISSIONED_DEACTIVE_SLOT
+          value: "7464639"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-9
