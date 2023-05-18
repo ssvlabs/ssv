@@ -99,7 +99,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: config-secrets
-                key: boot_node_private_key
+                key: boot_node_2_private_key
           - name: BOOT_NODE_EXTERNAL_IP
             valueFrom:
               secretKeyRef:
