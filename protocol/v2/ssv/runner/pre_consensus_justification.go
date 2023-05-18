@@ -118,7 +118,6 @@ func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner
 
 	cd := &spectypes.ConsensusData{}
 	if err := cd.Decode(msg.FullData); err != nil {
-		logger.Debug("TEMP could not decoded ConsensusData", zap.Any("msg", msg), zap.Error(err))
 		return errors.Wrap(err, "could not decoded ConsensusData")
 	}
 
