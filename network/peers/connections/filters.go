@@ -87,17 +87,19 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 
 		for _, key := range keysConfigWhitelist {
 			if key == string(sni.HandshakeData.SenderPubicKey) {
+
+				logger.Info("URU passing through filter; key whitelisted", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 				return nil
 			}
 		}
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
 		if !found || data != nil {
-			logger.Info("NOT passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+			logger.Info("URU NOT passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
 
-		logger.Info("passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+		logger.Info("URU passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 		return nil
 	}
 }
