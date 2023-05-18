@@ -6,14 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 func TestSyncEth1(t *testing.T) {
@@ -24,7 +25,7 @@ func TestSyncEth1(t *testing.T) {
 	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
-	rawOffset := DefaultSyncOffset().Uint64()
+	rawOffset := StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()
 	rawOffset += 10
 	go func() {
 		// wait 5 ms and start to push events
@@ -34,7 +35,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -52,12 +53,12 @@ func TestSyncEth1Error(t *testing.T) {
 	storage := syncStorageMock(ctrl)
 
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: DefaultSyncOffset().Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
@@ -76,12 +77,13 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 	go func() {
 		<-time.After(time.Millisecond * 25)
-		logs := []types.Log{{BlockNumber: DefaultSyncOffset().Uint64() - 1}, {BlockNumber: DefaultSyncOffset().Uint64()}}
+		blockNumber := StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()
+		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) ([]zap.Field, error) {
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
 	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
@@ -89,6 +91,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 func TestDetermineSyncOffset(t *testing.T) {
 	logger := logging.TestLogger(t)
+	beaconNetwork := spectypes.GetBeaconTestNetwork()
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -96,9 +99,9 @@ func TestDetermineSyncOffset(t *testing.T) {
 	t.Run("default sync offset", func(t *testing.T) {
 		storage := syncStorageMock(ctrl)
 
-		so := determineSyncOffset(logger, storage, nil)
+		so := determineSyncOffset(logger, storage, beaconNetwork, nil)
 		require.NotNil(t, so)
-		require.Equal(t, networkconfig.PraterV3TestnetNetwork.DefaultSyncOffset, so.Text(10))
+		require.Equal(t, beaconNetwork.DefaultSyncOffset, so.Text(10))
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {
@@ -107,7 +110,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 		persistedSyncOffset := "60e08f"
 		so.SetString(persistedSyncOffset, 16)
 		require.NoError(t, storage.SaveSyncOffset(so))
-		so = determineSyncOffset(logger, storage, nil)
+		so = determineSyncOffset(logger, storage, beaconNetwork, nil)
 		require.NotNil(t, so)
 		require.Equal(t, persistedSyncOffset, so.Text(16))
 	})
@@ -116,7 +119,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 		storage := syncStorageMock(ctrl)
 		soConfig := new(SyncOffset)
 		soConfig.SetString("61e08f", 16)
-		so := determineSyncOffset(logger, storage, soConfig)
+		so := determineSyncOffset(logger, storage, beaconNetwork, soConfig)
 		require.NotNil(t, so)
 		require.Equal(t, "61e08f", so.Text(16))
 	})

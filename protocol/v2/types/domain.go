@@ -6,7 +6,7 @@ import (
 
 // TODO: extract to network settings
 var (
-	domain = spectypes.V3Testnet
+	domain = spectypes.GenesisMainnet
 )
 
 // GetDefaultDomain returns the global domain used across the system

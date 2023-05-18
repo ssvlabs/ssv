@@ -7,8 +7,8 @@ import (
 )
 
 var SupportedConfigs = map[string]spectypes.BeaconNetwork{
-	PraterV3TestnetNetwork.Name: PraterV3TestnetNetwork,
 	MainNetwork.Name:            MainNetwork,
+	PraterV3TestnetNetwork.Name: PraterV3TestnetNetwork,
 }
 
 func GetNetworkByName(name string) (spectypes.BeaconNetwork, error) {

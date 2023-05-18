@@ -31,7 +31,7 @@ import (
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
 	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
 }
 
 // Node represents the behavior of boot node
