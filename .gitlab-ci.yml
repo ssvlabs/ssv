@@ -76,7 +76,7 @@ Deploy ssv nodes to blox-infra-stage cluster:
     # +--------------------+
     # |  Deploy SSV nodes  |
     # +--------------------+
-    # - .k8/scripts/deploy-ssv-nodes-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+    - .k8/scripts/deploy-ssv-nodes-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     # - .k8/scripts/deploy-ssv-node-v1-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
     # - .k8/scripts/deploy-ssv-node-v3-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     #
@@ -84,7 +84,7 @@ Deploy ssv nodes to blox-infra-stage cluster:
     # │  Deploy Bootnode  |
     # +-------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
-    - .k8/scripts/deploy-boot-node-yaml-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
+    # - .k8/scripts/deploy-boot-node-yaml-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
   only:
     - bootnode-configuration
 
