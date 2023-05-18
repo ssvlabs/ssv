@@ -138,6 +138,10 @@ spec:
           value: 'false'
         - name: GENESIS_EPOCH
           value: "152834"
+        - name: PERMISSIONED_ACTIVE_SLOT
+          value: "5657651"
+        - name: PERMISSIONED_DEACTIVE_SLOT
+          value: "7464639"
         - name: CLEAN_REGISTRY_DATA
           value: "false"
         - name: BUILDER_PROPOSALS

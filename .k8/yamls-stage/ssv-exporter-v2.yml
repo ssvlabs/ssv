@@ -174,6 +174,10 @@ spec:
               value: "true"
             - name: GENESIS_EPOCH
               value: "1"
+            - name: PERMISSIONED_ACTIVE_SLOT
+              value: "5657651"
+            - name: PERMISSIONED_DEACTIVE_SLOT
+              value: "7464639"
             - name: DISCOVERY_TRACE
               value: "false"
             - name: PUBSUB_TRACE
