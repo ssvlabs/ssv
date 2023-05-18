@@ -222,7 +222,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 
 	ipEntry := enr.IP(external)
 	udpEntry := enr.UDP(port)
-	tcpEntry := enr.TCP(5000)
+	tcpEntry := enr.TCP(n.tcpPort)
 
 	localNode.Set(ipEntry)
 	localNode.Set(udpEntry)
