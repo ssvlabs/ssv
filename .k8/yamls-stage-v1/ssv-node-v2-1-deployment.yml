@@ -87,7 +87,7 @@ spec:
           #   secretKeyRef:
           #     name: config-secrets
           #     key: boot_node
-          value: "enr:-Li4QBjmPlhKGVzOQ6u95xDX1Aw-VyH7yj_M44rBwvvSJn1yf5pyWdifL24Gsf2uRXUHK-k4ouzNcTyse3lbybjGyMuGAYguUVXjh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQKNW0Mf-xTXcevRSkZOvoN0Q0T9OkTjGZQyQeOl3bYU3YN0Y3CCE4iDdWRwgg-h"
+          value: "enr:-Li4QITHp1mpI8ok0Lx2dvI2hwc7Lyz5TUnWKumBRcHpFLC4UpLzqkbjeW2lXifLmBhc9CBnQEHr8YQNcqL7Wr9AvJSGAYgvYllAh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQKNW0Mf-xTXcevRSkZOvoN0Q0T9OkTjGZQyQeOl3bYU3YN0Y3CCE4mDdWRwgg-h"
         - name: REGISTRY_CONTRACT_ADDR_KEY
           valueFrom:
             secretKeyRef:
