@@ -1,6 +1,7 @@
 package networkconfig
 
 import (
+	"math/big"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -8,7 +9,7 @@ import (
 
 var MainNetwork = spectypes.BeaconNetwork{
 	Name:              "mainnet",
-	DefaultSyncOffset: "8661727",
+	DefaultSyncOffset: new(big.Int).SetInt64(8661727),
 	ForkVersion:       [4]byte{0, 0, 0, 0},
 	MinGenesisTime:    1606824023,
 	SlotDuration:      12 * time.Second,

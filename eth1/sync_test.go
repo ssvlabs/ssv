@@ -25,7 +25,7 @@ func TestSyncEth1(t *testing.T) {
 	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
-	rawOffset := StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()
+	rawOffset := spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()
 	rawOffset += 10
 	go func() {
 		// wait 5 ms and start to push events
@@ -53,7 +53,7 @@ func TestSyncEth1Error(t *testing.T) {
 	storage := syncStorageMock(ctrl)
 
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
@@ -77,7 +77,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 	go func() {
 		<-time.After(time.Millisecond * 25)
-		blockNumber := StringToSyncOffset(spectypes.GetBeaconTestNetwork().DefaultSyncOffset).Uint64()
+		blockNumber := spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()
 		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})

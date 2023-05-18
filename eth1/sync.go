@@ -122,7 +122,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNe
 		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
-	syncOffset = StringToSyncOffset(beaconNetwork.DefaultSyncOffset)
+	syncOffset = beaconNetwork.DefaultSyncOffset
 	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }
