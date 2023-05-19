@@ -13,6 +13,7 @@ var Jato = spectypes.BeaconNetwork{
 	ForkVersion:       [4]byte{0x00, 0x00, 0x10, 0x20},
 	MinGenesisTime:    1616508000,
 	SlotDuration:      12 * time.Second,
+	SlotsPerEpoch:     32,
 	CapellaForkEpoch:  162304, // Goerli taken from https://github.com/ethereum/execution-specs/blob/37a8f892341eb000e56e962a051a87e05a2e4443/network-upgrades/mainnet-upgrades/shanghai.md?plain=1#L18
 	Domain:            spectypes.V3Testnet,
 	BootNodes: []string{ // TODO: use

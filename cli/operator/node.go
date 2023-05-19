@@ -309,7 +309,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 
 	//types.SetDefaultDomain(beaconNetwork.Domain) // TODO: uncomment
 
-	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime)
+	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime) // TODO: get rid of cfg.ETH2Options.MinGenesisTime
 
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
