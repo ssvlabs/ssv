@@ -22,7 +22,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
-	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -125,7 +124,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.BeaconNetwork.Name))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -140,12 +139,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
-	beaconNetwork, err := networkconfig.GetNetworkByName(opt.Network)
-	if err != nil {
-		return nil, err
-	}
-
-	network := beaconprotocol.NewNetwork(beaconNetwork, opt.MinGenesisTime)
+	network := beaconprotocol.NewNetwork(opt.BeaconNetwork, opt.MinGenesisTime)
 
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)

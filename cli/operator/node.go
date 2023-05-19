@@ -106,7 +106,7 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, eth2Network.GenesisEpoch)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
+		el, cl := setupNodes(logger, operatorData.ID, eth2Network.BeaconNetwork, slotTicker)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -285,29 +285,12 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 }
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
-	domain := types.GetDefaultDomain()
-	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-		cfg.P2pNetworkConfig.NetworkID = format.DomainType(domain).String()
-	} else {
-		// we have some custom network id, overriding default domain
-		domainType, err := format.DomainTypeFromString(cfg.P2pNetworkConfig.NetworkID)
-		if err != nil {
-			logger.Fatal("failed to parse network id", zap.Error(err))
-		}
-		domain = spectypes.DomainType(domainType)
-		types.SetDefaultDomain(domain) // TODO: remove
-	}
-
-	logger.Info("using network", zap.Any("network", cfg.ETH2Options.Network)) // TODO: print in a user-friendly format
-
-	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.ETH2Options.Network)
+	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.P2pNetworkConfig.NetworkID)
 	if err != nil {
 		return beaconprotocol.Network{}, "", err
 	}
 
-	logger.Info("loaded network config", zap.Any("config", beaconNetwork))
-
-	//types.SetDefaultDomain(beaconNetwork.Domain) // TODO: uncomment
+	types.SetDefaultDomain(beaconNetwork.Domain)
 
 	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime) // TODO: get rid of cfg.ETH2Options.MinGenesisTime
 
@@ -316,7 +299,9 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 
 	logger.Info("setting ssv network", fields.Domain(types.GetDefaultDomain()),
 		fields.NetworkID(cfg.P2pNetworkConfig.NetworkID),
-		fields.Fork(forkVersion))
+		fields.Fork(forkVersion),
+		zap.Any("config", beaconNetwork), // TODO: print in a user-friendly format
+	)
 	return eth2Network, forkVersion, nil
 }
 
@@ -341,10 +326,16 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(
+	logger *zap.Logger,
+	operatorID spectypes.OperatorID,
+	beaconNetwork spectypes.BeaconNetwork,
+	slotTicker slot_ticker.Ticker,
+) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = validatorprotocol.DefaultGasLimit
+	cfg.ETH2Options.BeaconNetwork = beaconNetwork
 	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
