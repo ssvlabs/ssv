@@ -185,8 +185,6 @@ spec:
             value: "0xffffffffffffffffffffffffffffffff"
           - name: P2P_MAX_PEERS
             value: "300"
-          - name: GENESIS_EPOCH
-            value: "1"
         volumeMounts:
         - mountPath: /data
           name: ssv-exporter-2

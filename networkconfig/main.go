@@ -17,4 +17,5 @@ var Mainnet = spectypes.BeaconNetwork{
 	Domain:                 spectypes.GenesisMainnet,
 	DepositContractAddress: "0x00000000219ab540356cBB839Cbe05303d7705Fa",
 	GenesisValidatorsRoot:  "4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95",
+	GenesisEpoch:           1,
 }

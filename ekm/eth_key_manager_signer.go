@@ -44,6 +44,7 @@ type ethKeyManagerSigner struct {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
+// TODO: get domain from network
 func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, builderProposals bool) (spectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network, logger)
 	options := &eth2keymanager.KeyVaultOptions{}

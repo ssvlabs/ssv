@@ -128,8 +128,6 @@ spec:
           value: "15304"
         - name: ENABLE_PROFILE
           value: "true"
-        - name: GENESIS_EPOCH
-          value: "152834"
         - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:

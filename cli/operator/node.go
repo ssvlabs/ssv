@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -95,7 +94,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, types.GetDefaultDomain(), cfg.SSVOptions.ValidatorOptions.BuilderProposals)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, eth2Network.Domain, cfg.SSVOptions.ValidatorOptions.BuilderProposals)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -104,7 +103,7 @@ var StartNodeCmd = &cobra.Command{
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()
-		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
+		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, eth2Network.GenesisEpoch)
 
 		cfg.ETH2Options.Context = cmd.Context()
 		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
@@ -286,20 +285,24 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 }
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
+	domain := types.GetDefaultDomain()
 	if len(cfg.P2pNetworkConfig.NetworkID) == 0 {
-		cfg.P2pNetworkConfig.NetworkID = format.DomainType(types.GetDefaultDomain()).String()
+		cfg.P2pNetworkConfig.NetworkID = format.DomainType(domain).String()
 	} else {
 		// we have some custom network id, overriding default domain
 		domainType, err := format.DomainTypeFromString(cfg.P2pNetworkConfig.NetworkID)
 		if err != nil {
 			logger.Fatal("failed to parse network id", zap.Error(err))
 		}
-		types.SetDefaultDomain(spectypes.DomainType(domainType))
+		domain = spectypes.DomainType(domainType)
+		types.SetDefaultDomain(domain) // TODO: remove
 	}
 	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.ETH2Options.Network)
 	if err != nil {
 		return beaconprotocol.Network{}, "", err
 	}
+
+	//types.SetDefaultDomain(beaconNetwork.Domain) // TODO: uncomment
 
 	eth2Network := beaconprotocol.NewNetwork(beaconNetwork, cfg.ETH2Options.MinGenesisTime)
 

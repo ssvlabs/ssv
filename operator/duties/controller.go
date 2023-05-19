@@ -151,7 +151,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey, dc.ethNetwork.Domain)
 		if err != nil {
 			return err
 		}
@@ -171,7 +171,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -187,7 +187,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), pubKey.Serialize(), duty.Type),
+		MsgID:   spectypes.NewMsgID(domain, pubKey.Serialize(), duty.Type),
 		Data:    data,
 	}, nil
 }

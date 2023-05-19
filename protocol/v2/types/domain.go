@@ -2,11 +2,13 @@ package types
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 // TODO: extract to network settings
 var (
-	domain = spectypes.GenesisMainnet
+	domain = networkconfig.Mainnet.Domain
 )
 
 // GetDefaultDomain returns the global domain used across the system

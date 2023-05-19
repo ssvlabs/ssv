@@ -127,8 +127,6 @@ spec:
           value: ""
         - name: HOST_ADDRESS
           value: ""
-        - name: GENESIS_EPOCH
-          value: "1"
         - name: DB_PATH
           value: "./data/db-shifu-v3"
         - name: METRICS_API_PORT
