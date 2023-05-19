@@ -298,7 +298,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 		types.SetDefaultDomain(domain) // TODO: remove
 	}
 
-	logger.Info("using network", zap.Any("network", cfg.ETH2Options.Network))
+	logger.Info("using network", zap.Any("network", cfg.ETH2Options.Network)) // TODO: print in a user-friendly format
 
 	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.ETH2Options.Network)
 	if err != nil {
