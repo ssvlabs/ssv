@@ -9,9 +9,11 @@ import (
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	newRound := i.State.Round + 1
 	logger.Debug("⌛ round timed out", fields.Round(newRound))
-	i.bumpToRound(newRound)
-	i.State.ProposalAcceptedForCurrentRound = nil
-	i.config.GetTimer().TimeoutForRound(i.State.Round)
+	defer func() {
+		i.bumpToRound(newRound)
+		i.State.ProposalAcceptedForCurrentRound = nil
+		i.config.GetTimer().TimeoutForRound(i.State.Round)
+	}()
 
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
 	if err != nil {
