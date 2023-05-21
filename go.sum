@@ -1052,8 +1052,8 @@ github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9G
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826/go.mod h1:TaXosZuwdSHYgviHp1DAtfrULt5eUgsSMsZf+YrPgl8=
-github.com/moshe-blox/ssv-spec v0.0.0-20230521152438-f9921f003734 h1:kwVk7/F0uRJj9JmyJva19xmOU+rlCak5Z3EabIeKebU=
-github.com/moshe-blox/ssv-spec v0.0.0-20230521152438-f9921f003734/go.mod h1:8OAYKYxifYZ0ahWb4X+KZ6Rb49L2R3bm8lpqXt8u/2k=
+github.com/moshe-blox/ssv-spec v0.0.0-20230521155754-79016edc0974 h1:RomnneI75+wZZge4UkKSH1PidHPa1zXB2iiDt6GWiPY=
+github.com/moshe-blox/ssv-spec v0.0.0-20230521155754-79016edc0974/go.mod h1:8OAYKYxifYZ0ahWb4X+KZ6Rb49L2R3bm8lpqXt8u/2k=
 github.com/mr-tron/base58 v1.1.0/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.1/go.mod h1:xcD2VGqlgYjBdcBLw+TuYLr8afG+Hj8g2eTVqeSzSU8=
 github.com/mr-tron/base58 v1.1.2/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
