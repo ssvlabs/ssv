@@ -3,7 +3,6 @@ package runner
 import (
 	"sync"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -39,9 +38,9 @@ type Runner interface {
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(logger *zap.Logger, duty *spectypes.Duty) error
 }
@@ -68,11 +67,29 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 
 // setupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
-	b.State = NewRunnerState(b.Share.Quorum, duty)
+	state := NewRunnerState(b.Share.Quorum, duty)
+
+	b.mtx.Lock() // writes to b.State
+	b.State = state
+	b.mtx.Unlock()
 }
 
-func NewBaseRunner() *BaseRunner {
-	return &BaseRunner{}
+func NewBaseRunner(
+	state *State,
+	share *spectypes.Share,
+	controller *controller.Controller,
+	beaconNetwork spectypes.BeaconNetwork,
+	beaconRoleType spectypes.BeaconRole,
+	highestDecidedSlot spec.Slot,
+) *BaseRunner {
+	return &BaseRunner{
+		State:              state,
+		Share:              share,
+		QBFTController:     controller,
+		BeaconNetwork:      beaconNetwork,
+		BeaconRoleType:     beaconRoleType,
+		highestDecidedSlot: highestDecidedSlot,
+	}
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -83,11 +100,7 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 
 	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
 	// b.State but currently does not write to it
-	state := NewRunnerState(b.Share.Quorum, duty)
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
-
+	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
 }
 

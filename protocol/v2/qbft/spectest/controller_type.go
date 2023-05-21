@@ -149,7 +149,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Con
 	// test root
 	r, err := contr.GetRoot()
 	require.NoError(t, err)
-	require.EqualValues(t, runData.ControllerPostRoot, hex.EncodeToString(r))
+	require.EqualValues(t, runData.ControllerPostRoot, hex.EncodeToString(r[:]))
 
 	return lastErr
 }
