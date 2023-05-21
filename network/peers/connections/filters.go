@@ -94,12 +94,9 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 		}
 
 		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
-		if !found || data != nil {
-			logger.Info("URU NOT passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
+		if !found || data == nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
-
-		logger.Info("URU passing through filter", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 		return nil
 	}
 }

@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
@@ -181,6 +182,23 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
+	})
+
+	t.Run("pass through operators filter", func(t *testing.T) {
+		td := getTestingData(t)
+		td.Handshaker.Permissioned = true
+		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
+		require.NoError(t, err)
+		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
+
+		senderPublicKey, err := rsaencryption.ExtractPublicKey(td.SenderPrivateKey)
+		require.NoError(t, err)
+		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{senderPublicKey}}
+		td.Handshaker.filters = []HandshakeFilter{
+			RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{}),
+		}
+
+		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
 	})
 
 	t.Run("error add node info", func(t *testing.T) {
