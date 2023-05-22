@@ -125,7 +125,7 @@ spec:
         - name: DB_PATH
           value: "./data/db-v3-shifu"
         - name: NETWORK_ID
-          value: "prater"
+          value: "jato"
         - name: METRICS_API_PORT
           value: "15303"
         - name: ENABLE_PROFILE
