@@ -8,18 +8,18 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
-func (c *Controller) LoadHighestInstance(identifier []byte) error {
+func (c *Controller) LoadHighestInstance(identifier []byte) (*instance.Instance, error) {
 	highestInstance, err := c.getHighestInstance(identifier[:])
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if highestInstance == nil {
-		return nil
+		return nil, nil
 	}
 	c.Height = highestInstance.GetHeight()
 	c.StoredInstances.reset()
 	c.StoredInstances.addNewInstance(highestInstance)
-	return nil
+	return highestInstance, nil
 }
 
 func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, error) {

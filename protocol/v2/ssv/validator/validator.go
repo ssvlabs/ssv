@@ -88,7 +88,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
-		return errors.Errorf("duty type %s not supported", duty.Type.String())
+		return errors.Errorf("no runner for duty type %s", duty.Type.String())
 	}
 
 	// create the new dutyID for the new duty and update the dutyID map
