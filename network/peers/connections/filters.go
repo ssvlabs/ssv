@@ -87,8 +87,6 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 
 		for _, key := range keysConfigWhitelist {
 			if key == string(sni.HandshakeData.SenderPubicKey) {
-
-				logger.Info("URU passing through filter; key whitelisted", zap.String("operator", string(sni.HandshakeData.SenderPubicKey)), zap.Any("otherPeer", sni.HandshakeData.SenderPeerID.String()))
 				return nil
 			}
 		}
