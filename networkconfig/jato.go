@@ -9,7 +9,7 @@ import (
 )
 
 var Jato = spectypes.SSVNetwork{
-	Name: "jato", // TODO: consider having a nested struct just for ssv, just for beacon
+	Name: "jato",
 	SSV: spectypes.SSVParams{
 		DefaultSyncOffset: new(big.Int).SetInt64(8661727),
 		ForkVersion:       [4]byte{0x00, 0x00, 0x10, 0x20},
