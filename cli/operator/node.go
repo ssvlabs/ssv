@@ -109,7 +109,7 @@ var StartNodeCmd = &cobra.Command{
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()
-		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, eth2Network.GenesisEpoch) // TODO: get rid of passing genesis epoch
+		slotTicker := slot_ticker.NewTicker(ctx, eth2Network)
 
 		cfg.ETH2Options.Context = cmd.Context()
 		el, cl := setupNodes(logger, operatorData.ID, eth2Network.BeaconNetwork, slotTicker)

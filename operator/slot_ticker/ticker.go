@@ -31,12 +31,11 @@ type ticker struct {
 }
 
 // NewTicker returns Ticker struct pointer
-func NewTicker(ctx context.Context, ethNetwork beaconprotocol.Network, genesisEpoch phase0.Epoch) Ticker {
+func NewTicker(ctx context.Context, ethNetwork beaconprotocol.Network) Ticker {
 	return &ticker{
-		ctx:          ctx,
-		ethNetwork:   ethNetwork,
-		genesisEpoch: genesisEpoch,
-		feed:         &event.Feed{},
+		ctx:        ctx,
+		ethNetwork: ethNetwork,
+		feed:       &event.Feed{},
 	}
 }
 
@@ -66,14 +65,14 @@ func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 
 func (t *ticker) genesisEpochEffective(logger *zap.Logger) bool {
 	curSlot := t.ethNetwork.EstimatedCurrentSlot()
-	genSlot := t.ethNetwork.GetEpochFirstSlot(t.genesisEpoch)
+	genSlot := t.ethNetwork.GetEpochFirstSlot(t.ethNetwork.GenesisEpoch)
 	if curSlot < genSlot {
 		if t.ethNetwork.IsFirstSlotOfEpoch(curSlot) {
 			// wait until genesis epoch starts
 			curEpoch := t.ethNetwork.EstimatedCurrentEpoch()
 			gnsTime := t.ethNetwork.GetSlotStartTime(genSlot)
 			logger.Info("duties paused, will resume duties on genesis epoch",
-				zap.Uint64("genesis_epoch", uint64(t.genesisEpoch)),
+				zap.Uint64("genesis_epoch", uint64(t.ethNetwork.GenesisEpoch)),
 				zap.Uint64("current_epoch", uint64(curEpoch)),
 				zap.String("genesis_time", gnsTime.Format(time.UnixDate)))
 		}
