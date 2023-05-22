@@ -642,7 +642,7 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) (bool, error) {
 	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Share.BeaconMetadata, logger)
-	if v.Share.BeaconMetadata.Index == 0 {
+	if v.Share.BeaconMetadata.Index == 100 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(logger); err != nil {

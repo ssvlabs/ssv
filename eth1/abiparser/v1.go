@@ -53,6 +53,7 @@ type ValidatorAddedEvent struct {
 	OperatorIds     []uint64
 	PublicKey       []byte
 	Shares          []byte
+	Signature       []byte
 	SharePublicKeys [][]byte
 	EncryptedKeys   [][]byte
 	Cluster         Cluster
@@ -90,8 +91,8 @@ type Cluster struct {
 	ValidatorCount  uint32
 	NetworkFeeIndex uint64
 	Index           uint64
-	Balance         *big.Int
 	Active          bool
+	Balance         *big.Int
 }
 
 // AbiV1 parsing events from v1 abi contract
@@ -148,7 +149,8 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 	}
 
 	// the 2 first bytes are unnecessary for parsing
-	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := signatureOffset + len(event.OperatorIds)*phase0.PublicKeyLength
 	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
 
 	if sharesExpectedLength != len(event.Shares) {
@@ -157,7 +159,8 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
+	event.Signature = event.Shares[0:signatureOffset]
+	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
 	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
 
 	if len(log.Topics) < 2 {

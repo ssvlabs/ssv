@@ -183,8 +183,8 @@ services:
 
 networks:
   blox-docker:
-    driver: bridge
-    name: blox-docker
+    external: true
+    name: hamlet
 
 volumes:
   data_prometheus:

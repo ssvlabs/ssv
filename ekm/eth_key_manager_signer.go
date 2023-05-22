@@ -64,7 +64,7 @@ func NewETHKeyManagerSigner(db basedb.IDb, network beaconprotocol.Network, domai
 		}
 	}
 
-	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	slashingProtector := &slashingprotection.NoProtection{}
 	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Network)
 
 	return &ethKeyManagerSigner{
@@ -201,12 +201,12 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 }
 
 func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.AttestationData) error {
-	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
-		if err != nil {
-			return err
-		}
-		return errors.Errorf("slashable attestation (%s), not signing", val.Status)
-	}
+	//if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
+	//	if err != nil {
+	//		return err
+	//	}
+	//	return errors.Errorf("slashable attestation (%s), not signing", val.Status)
+	//}
 	return nil
 }
 
