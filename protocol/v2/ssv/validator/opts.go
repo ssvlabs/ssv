@@ -23,7 +23,7 @@ const (
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
-	BeaconNetwork     spectypes.BeaconNetwork
+	BeaconNetwork     spectypes.SSVNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            spectypes.KeyManager

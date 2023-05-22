@@ -151,7 +151,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 		return errors.Wrap(err, "failed to deserialize pubkey from duty")
 	}
 	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey, dc.ethNetwork.Domain)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey, dc.ethNetwork.SSV.Domain)
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot p
 
 		// if not passed first registration, should be registered within one epoch time in a corresponding slot
 		// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
-		registrationSlotInterval := dc.ethNetwork.SlotsPerEpoch
+		registrationSlotInterval := dc.ethNetwork.SlotsPerEpoch()
 		if _, ok := dc.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)]; ok {
 			registrationSlotInterval *= validatorRegistrationEpochInterval
 		}
@@ -322,7 +322,7 @@ func (dc *dutyController) handleSyncCommittee(logger *zap.Logger, slot phase0.Sl
 
 	// Get next period's sync committee duties, but wait until half-way through the epoch
 	// This allows us to set them up at a time when the beacon node should be less busy.
-	if uint64(slot)%dc.ethNetwork.SlotsPerEpoch == dc.ethNetwork.SlotsPerEpoch/2 {
+	if uint64(slot)%dc.ethNetwork.SlotsPerEpoch() == dc.ethNetwork.SlotsPerEpoch()/2 {
 		currentEpoch := dc.ethNetwork.EstimatedEpochAtSlot(slot)
 
 		// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.

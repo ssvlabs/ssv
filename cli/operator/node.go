@@ -112,7 +112,7 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, eth2Network)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, eth2Network.BeaconNetwork, slotTicker)
+		el, cl := setupNodes(logger, operatorData.ID, eth2Network.SSVNetwork, slotTicker)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -296,7 +296,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 		return beaconprotocol.Network{}, "", err
 	}
 
-	types.SetDefaultDomain(beaconNetwork.Domain)
+	types.SetDefaultDomain(beaconNetwork.SSV.Domain)
 
 	eth2Network := beaconprotocol.NewNetwork(beaconNetwork)
 
@@ -335,7 +335,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 func setupNodes(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork spectypes.SSVNetwork,
 	slotTicker slot_ticker.Ticker,
 ) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client

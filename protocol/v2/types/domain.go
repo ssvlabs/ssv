@@ -8,7 +8,7 @@ import (
 
 // TODO: get rid of singleton, pass domain as a parameter
 var (
-	domain = networkconfig.Mainnet.Domain
+	domain = networkconfig.Mainnet.SSV.Domain
 )
 
 // GetDefaultDomain returns the global domain used across the system

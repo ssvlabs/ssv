@@ -30,7 +30,7 @@ type SyncCommitteeAggregatorRunner struct {
 }
 
 func NewSyncCommitteeAggregatorRunner(
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork spectypes.SSVNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,

@@ -276,10 +276,10 @@ func (m *MockBeacon) EXPECT() *MockBeaconMockRecorder {
 }
 
 // GetBeaconNetwork mocks base method
-func (m *MockBeacon) GetBeaconNetwork() types.BeaconNetwork {
+func (m *MockBeacon) GetBeaconNetwork() types.SSVNetwork {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetBeaconNetwork")
-	ret0, _ := ret[0].(types.BeaconNetwork)
+	ret0, _ := ret[0].(types.SSVNetwork)
 	return ret0
 }
 

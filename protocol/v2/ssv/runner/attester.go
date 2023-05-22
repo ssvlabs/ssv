@@ -33,7 +33,7 @@ type AttesterRunner struct {
 }
 
 func NewAttesterRunnner(
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork spectypes.SSVNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,

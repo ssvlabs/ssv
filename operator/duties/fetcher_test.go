@@ -25,7 +25,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		expectedErr := errors.New("test duties")
 		mockClient := createBeaconDutiesClient(ctrl, nil, expectedErr)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.BeaconTestNetwork))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.TestNetwork))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.EqualError(t, err, "failed to get duties from beacon: test duties")
 		require.Len(t, duties, 0)
@@ -40,7 +40,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, beaconDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.BeaconTestNetwork))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.TestNetwork))
 
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
@@ -60,7 +60,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{205238})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.BeaconTestNetwork))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.TestNetwork))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 1)
@@ -82,7 +82,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 		}
 		mockClient := createBeaconDutiesClient(ctrl, fetchedDuties, nil)
 		mockFetcher := createIndexFetcher(ctrl, []phase0.ValidatorIndex{})
-		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.BeaconTestNetwork))
+		dm := newDutyFetcher(logger, mockClient, mockFetcher, beacon.NewNetwork(spectypes.TestNetwork))
 		duties, err := dm.GetDuties(logger, 893108)
 		require.NoError(t, err)
 		require.Len(t, duties, 0)
@@ -92,7 +92,7 @@ func TestDutyFetcher_GetDuties(t *testing.T) {
 func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 	df := dutyFetcher{
 		logger:     logging.TestLogger(t),
-		ethNetwork: beacon.NewNetwork(spectypes.BeaconTestNetwork),
+		ethNetwork: beacon.NewNetwork(spectypes.TestNetwork),
 	}
 	tests := []struct {
 		name string

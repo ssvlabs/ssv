@@ -52,7 +52,7 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     int
 	dbPath      string
-	network     spectypes.BeaconNetwork
+	network     spectypes.SSVNetwork
 }
 
 // New is the constructor of ssvNode
@@ -182,7 +182,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.ForkVersion
+	fVersion := n.network.ForkVersion()
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)

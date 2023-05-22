@@ -262,7 +262,7 @@ func (gc *goClient) registrationSubmitter(slots <-chan phase0.Slot) {
 }
 
 func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
-	slotsPerEpoch := gc.network.SlotsPerEpoch
+	slotsPerEpoch := gc.network.SlotsPerEpoch()
 
 	// Lock:
 	// - getting and updating last slot to avoid multiple submission (both should be an atomic action but cannot be done with CAS)

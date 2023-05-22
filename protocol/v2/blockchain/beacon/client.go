@@ -60,7 +60,7 @@ type Beacon interface {
 // Options for controller struct creation
 type Options struct {
 	Context        context.Context
-	BeaconNetwork  spectypes.BeaconNetwork
+	BeaconNetwork  spectypes.SSVNetwork
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
 	GasLimit       uint64 `yaml:"GasLimit" env:"GAS_LIMIT" env-default:"30000000" env-description:"Gas limit used for beacon node actions"`

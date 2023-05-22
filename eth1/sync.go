@@ -44,7 +44,7 @@ func SyncEth1Events(
 	logger *zap.Logger,
 	client Client,
 	storage SyncOffsetStorage,
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork spectypes.SSVNetwork,
 	syncOffset *SyncOffset,
 	handler SyncEventHandler,
 ) error {
@@ -109,7 +109,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 //  1. last saved sync offset
 //  2. provided value (from config)
 //  3. default sync offset (the genesis block of the contract)
-func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNetwork spectypes.BeaconNetwork, syncOffset *SyncOffset) *SyncOffset {
+func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNetwork spectypes.SSVNetwork, syncOffset *SyncOffset) *SyncOffset {
 	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
 	if err != nil {
 		logger.Warn("failed to get sync offset", zap.Error(err))
@@ -122,7 +122,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNe
 		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
-	syncOffset = beaconNetwork.DefaultSyncOffset
+	syncOffset = beaconNetwork.SSV.DefaultSyncOffset
 	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }

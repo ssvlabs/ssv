@@ -196,7 +196,7 @@ func (df *dutyFetcher) populateCache(entriesToAdd map[phase0.Slot]cacheEntry) {
 }
 
 func (df *dutyFetcher) addMissingSlots(entries map[phase0.Slot]cacheEntry) {
-	if len(entries) == int(df.ethNetwork.SlotsPerEpoch) {
+	if len(entries) == int(df.ethNetwork.SlotsPerEpoch()) {
 		// in case all slots exist -> do nothing
 		return
 	}
@@ -208,7 +208,7 @@ func (df *dutyFetcher) addMissingSlots(entries map[phase0.Slot]cacheEntry) {
 	}
 	epochFirstSlot := df.firstSlotOfEpoch(slot)
 	// add all missing slots
-	for i := 0; i < int(df.ethNetwork.SlotsPerEpoch); i++ {
+	for i := 0; i < int(df.ethNetwork.SlotsPerEpoch()); i++ {
 		s := phase0.Slot(epochFirstSlot + uint64(i))
 		if _, exist := entries[s]; !exist {
 			entries[s] = cacheEntry{[]spectypes.Duty{}}
@@ -217,7 +217,7 @@ func (df *dutyFetcher) addMissingSlots(entries map[phase0.Slot]cacheEntry) {
 }
 
 func (df *dutyFetcher) firstSlotOfEpoch(slot uint64) uint64 {
-	mod := slot % df.ethNetwork.SlotsPerEpoch
+	mod := slot % df.ethNetwork.SlotsPerEpoch()
 	return slot - mod
 }
 

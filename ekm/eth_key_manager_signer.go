@@ -66,14 +66,14 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconpro
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.BeaconNetwork.ETHNetworkName))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.SSVNetwork.ETH.NetworkName))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.Domain,
+		domain:            network.SSV.Domain,
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
 	}, nil

@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {
