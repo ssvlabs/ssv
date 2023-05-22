@@ -101,7 +101,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, beaconNetwork, nil)
 		require.NotNil(t, so)
-		require.Equal(t, beaconNetwork.DefaultSyncOffset, so.Text(10))
+		require.Equal(t, beaconNetwork.DefaultSyncOffset, so)
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {
