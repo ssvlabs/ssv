@@ -115,8 +115,6 @@ spec:
           value: "ssv/protocol*"
         - name: PUBSUB_TRACE
           value: "false"
-        - name: NETWORK
-          value: "prater"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS

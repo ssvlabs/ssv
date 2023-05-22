@@ -106,8 +106,6 @@ spec:
           value: "debug"
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
-        - name: NETWORK
-          value: "prater"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS

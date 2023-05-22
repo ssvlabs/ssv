@@ -108,8 +108,6 @@ spec:
           value: "ssv/*."
         - name: DISCOVERY_TYPE_KEY
           value: "discv5"
-        - name: NETWORK
-          value: "prater"
         - name: CONSENSUS_TYPE
           value: "validation"
         - name: HOST_DNS
