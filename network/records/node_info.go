@@ -65,6 +65,11 @@ func (ni *NodeInfo) Consume(data []byte) error {
 	return nil
 }
 
+// GetNodeInfo returns a value representation of the info
+func (ni *NodeInfo) GetNodeInfo() *NodeInfo {
+	return ni
+}
+
 // Domain is the "signature domain" used when signing and verifying an record.Record
 func (ni *NodeInfo) Domain() string {
 	return domain
@@ -101,10 +106,6 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
-	ni.ForkVersion = ""
-	ni.NetworkID = ""
-	ni.Metadata = new(NodeMetadata)
-
 	if len(ser.Entries) < 1 {
 		return errors.New("not enough entries in node info, fork version is required")
 	}
@@ -118,24 +119,11 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	if len(ser.Entries) < 3 {
 		return nil
 	}
+	ni.Metadata = new(NodeMetadata)
 	err := ni.Metadata.Decode([]byte(ser.Entries[2]))
 	if err != nil {
 		return errors.Wrap(err, "could not decode metadata")
 	}
 
 	return nil
-}
-
-// serializable is a struct that can be encoded w/o worries of different encoding implementations,
-// e.g. JSON where an unordered map can be different across environments.
-// it uses a slice of entries to keep ordered values
-// TODO: use SSZ
-type serializable struct {
-	Entries []string
-}
-
-func newSerializable(entries ...string) *serializable {
-	return &serializable{
-		Entries: entries,
-	}
 }

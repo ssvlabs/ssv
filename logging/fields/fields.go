@@ -3,6 +3,7 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/format"
 	"math/big"
 	"net"
 	"net/url"
@@ -25,7 +26,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (

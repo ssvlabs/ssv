@@ -1,12 +1,15 @@
 package peers
 
 import (
+	"crypto"
+	"crypto/rsa"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
@@ -23,7 +26,7 @@ const (
 type MaxPeersProvider func(topic string) int
 
 // NetworkKeyProvider is a function that provides the network private key
-type NetworkKeyProvider func() crypto.PrivKey
+type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
@@ -37,15 +40,13 @@ type peersIndex struct {
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
-	// selfSealed helps to cache the node info record instead of signing multiple times
-	selfSealed []byte
 
 	maxPeers MaxPeersProvider
 }
 
 // NewPeersIndex creates a new Index
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) Index {
+	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
 	return &peersIndex{
 		network:        network,
 		states:         newNodeStates(pruneTTL),
@@ -110,7 +111,6 @@ func (pi *peersIndex) UpdateSelfRecord(newSelf *records.NodeInfo) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	pi.selfSealed = nil
 	pi.self = newSelf
 }
 
@@ -118,19 +118,50 @@ func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
-func (pi *peersIndex) SelfSealed() ([]byte, error) {
+func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
 
-	if len(pi.selfSealed) == 0 {
-		sealed, err := pi.self.Seal(pi.netKeyProvider())
+	if permissioned {
+		publicKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
 		if err != nil {
 			return nil, err
 		}
-		pi.selfSealed = sealed
+
+		handshakeData := records.HandshakeData{
+			SenderPeerID:    sender,
+			RecipientPeerID: recipient,
+			Timestamp:       time.Now(),
+			SenderPublicKey: []byte(publicKey),
+		}
+		hash := handshakeData.Hash()
+
+		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return nil, err
+		}
+
+		signedNodeInfo := &records.SignedNodeInfo{
+			NodeInfo:      pi.self,
+			HandshakeData: handshakeData,
+			Signature:     signature,
+		}
+
+		sealed, err := signedNodeInfo.Seal(pi.netKeyProvider())
+		if err != nil {
+			return nil, err
+		}
+
+		return sealed, nil
 	}
 
-	return pi.selfSealed, nil
+	sealed, err := pi.self.Seal(pi.netKeyProvider())
+	if err != nil {
+		return nil, err
+	}
+
+	return sealed, nil
+
 }
 
 // AddNodeInfo adds a new node info
