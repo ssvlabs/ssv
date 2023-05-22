@@ -4,11 +4,13 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 var Mainnet = spectypes.BeaconNetwork{
 	Name:                   "mainnet",
+	ETHNetworkName:         string(core.MainNetwork),
 	DefaultSyncOffset:      new(big.Int).SetInt64(8661727),
 	ForkVersion:            [4]byte{0, 0, 0, 0},
 	MinGenesisTime:         1606824023,

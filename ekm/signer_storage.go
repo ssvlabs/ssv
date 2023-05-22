@@ -62,7 +62,7 @@ func (s *storage) CleanRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(s.network.BeaconNetwork.Name + obj)
+	return []byte(s.network.BeaconNetwork.ETHNetworkName + obj)
 }
 
 // Name returns storage name.
@@ -72,7 +72,7 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.BeaconNetwork.Name)
+	return core.Network(s.network.BeaconNetwork.ETHNetworkName)
 }
 
 // SaveWallet stores the given wallet.
