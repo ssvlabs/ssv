@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 )
 
-// TODO: extract to network settings
+// TODO: get rid of singleton, pass domain as a parameter
 var (
 	domain = networkconfig.Mainnet.Domain
 )
