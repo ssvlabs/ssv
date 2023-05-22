@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"log"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -17,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -80,7 +78,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	// randao is relevant only for block proposals, no need to check type
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
-		return errors.Wrap(err, "could not reconstruct randao sig")
+		return errors.Wrap(err, "could not reconstruct validator registration sig")
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
@@ -151,7 +149,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -218,7 +216,6 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
-	log.Printf("runner root: %v", string(marshaledRoot))
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }

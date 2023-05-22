@@ -23,9 +23,9 @@ variables:
   ECRLOGIN_INFRA_PROD: "aws ecr get-login --registry-ids $ACCOUNT_ID_INFRA_PROD --region $AWS_REGION_INFRA_PROD --no-include-email"
   PROD_HEALTH_CHECK_IMAGE: 764289642555.dkr.ecr.us-west-2.amazonaws.com/infra-prod-repo:ubuntu20
 
-# ---------
+# +-------+
 # | STAGE |
-# ---------
+# +-------+
 Build stage Docker image:
   image: docker:20.10.23
   stage: build
@@ -72,15 +72,25 @@ Deploy ssv nodes to blox-infra-stage cluster:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
     - chmod 755 kubectl
     - mv kubectl /usr/bin/
+    #
+    # +--------------------+
+    # |  Deploy SSV nodes  |
+    # +--------------------+
 #    - .k8/scripts/deploy-ssv-nodes-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     - .k8/scripts/deploy-ssv-node-v1-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
 #    - .k8/scripts/deploy-ssv-node-v3-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+    #
+    # +-------------------+
+    # │  Deploy Bootnode  |
+    # +-------------------+
+    # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
+    # - .k8/scripts/deploy-boot-node-yaml-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
   only:
     - network-configs
 
-# ---------
+# +-------+
 # | Prod  |
-# ---------
+# +-------+
 Build prod Docker image:
   image: docker:20.10.23
   stage: build
@@ -139,10 +149,9 @@ Deploy ssv-nodes to blox-infra-prod cluster:
 
 
 
-#---------------#
-#  Prod SSV V3  #
-#---------------#
-
+# +---------------+
+# |  Prod SSV V3  |
+# +---------------+
 Build prod Docker image:
   image: docker:20.10.23
   stage: build

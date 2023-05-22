@@ -184,6 +184,6 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/nkryuchkov/ssv-spec v0.0.0-20230519171740-c7886b1407b3 // network-configs
-
-//replace github.com/bloxapp/ssv-spec => ../ssv-spec
+replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230521155754-79016edc0974 // #mev-capella
+// replace github.com/bloxapp/ssv-spec => github.com/nkryuchkov/ssv-spec v0.0.0-20230519171740-c7886b1407b3 // network-configs
+// replace github.com/bloxapp/ssv-spec => ../ssv-spec

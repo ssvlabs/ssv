@@ -213,13 +213,13 @@ func (c *Controller) CanStartInstance() error {
 }
 
 // GetRoot returns the state's deterministic root
-func (c *Controller) GetRoot() ([]byte, error) {
+func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, errors.Wrap(err, "could not encode state")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }
 
 // Encode implementation

@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"path/filepath"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -30,7 +31,10 @@ import (
 // Options contains options to create the node
 type Options struct {
 	PrivateKey string `yaml:"PrivateKey" env:"BOOT_NODE_PRIVATE_KEY" env-description:"boot node private key (default will generate new)"`
-	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's IP' "`
+	ExternalIP string `yaml:"ExternalIP" env:"BOOT_NODE_EXTERNAL_IP" env-description:"Override boot node's external IP"`
+	TCPPort    int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
+	UDPPort    int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
+	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
 	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
 }
 
@@ -46,6 +50,8 @@ type bootNode struct {
 	discv5port  int
 	forkVersion []byte
 	externalIP  string
+	tcpPort     int
+	dbPath      string
 	network     spectypes.BeaconNetwork
 }
 
@@ -57,9 +63,11 @@ func New(opts Options) (Node, error) {
 	}
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
-		discv5port:  4000,
+		discv5port:  opts.UDPPort,
 		forkVersion: []byte{0x00, 0x00, 0x20, 0x09},
 		externalIP:  opts.ExternalIP,
+		tcpPort:     opts.TCPPort,
+		dbPath:      opts.DbPath,
 		network:     beaconNetwork,
 	}, nil
 }
@@ -117,7 +125,7 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 
 	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
 	// nolint: gosec
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", 5000), mux); err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", n.tcpPort), mux); err != nil {
 		log.Fatalf("Failed to start server %v", err)
 	}
 
@@ -162,7 +170,7 @@ func (n *bootNode) createListener(logger *zap.Logger, ipAddr string, port int, c
 }
 
 func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey, ipAddr net.IP, port int) (*enode.LocalNode, error) {
-	db, err := enode.OpenDB("")
+	db, err := enode.OpenDB(filepath.Join(n.dbPath, "enode"))
 	if err != nil {
 		return nil, errors.Wrap(err, "Could not open node's peer database")
 	}
@@ -220,7 +228,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 
 	ipEntry := enr.IP(external)
 	udpEntry := enr.UDP(port)
-	tcpEntry := enr.TCP(5000)
+	tcpEntry := enr.TCP(n.tcpPort)
 
 	localNode.Set(ipEntry)
 	localNode.Set(udpEntry)

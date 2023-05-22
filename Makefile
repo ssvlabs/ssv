@@ -13,12 +13,14 @@ ifndef $(BUILD_PATH)
     export BUILD_PATH
 endif
 
-# node command builder
+# Node command.
 NODE_COMMAND=--config=${CONFIG_PATH}
-
 ifneq ($(SHARE_CONFIG),)
   NODE_COMMAND+= --share-config=${SHARE_CONFIG}
 endif
+
+# Bootnode command.
+BOOTNODE_COMMAND=--config=${CONFIG_PATH}
 
 COV_CMD="-cover"
 ifeq ($(COVERAGE),true)
@@ -135,7 +137,7 @@ stop:
 .PHONY: start-boot-node
 start-boot-node:
 	@echo "Running start-boot-node"
-	${BUILD_PATH} start-boot-node
+	${BUILD_PATH} start-boot-node ${BOOTNODE_COMMAND}
 
 MONITOR_NODES=prometheus grafana
 .PHONY: docker-monitor
