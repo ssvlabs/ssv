@@ -14,7 +14,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -195,7 +194,6 @@ func TestSlashing(t *testing.T) {
 }
 
 func TestSignRoot(t *testing.T) {
-
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	km := testKeyManager(t)
@@ -223,7 +221,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.TestNetwork.SSV.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
@@ -252,7 +250,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, spectypes.TestNetwork.SSV.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
