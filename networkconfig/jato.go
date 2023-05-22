@@ -9,7 +9,7 @@ import (
 )
 
 var Jato = spectypes.BeaconNetwork{
-	Name: "jato", // TODO: also double-check and make sure that we don't need to have configure eth network correctly - check in slashing protection
+	Name: "jato", // TODO:  double-check and make sure that we don't need to have configure eth network correctly - check in slashing protection
 	// TODO: consider: add a beacon name, add a ssv network just to know what network is used by this config - check in slashing protection
 	// consider having a nested struct just for ssv, just for beacon
 	ETHNetworkName:    string(core.PraterNetwork),

@@ -148,8 +148,6 @@ spec:
               value: "ssv.*"
             - name: DISCOVERY_TYPE_KEY
               value: "discv5"
-            - name: NETWORK
-              value: "prater"
             - name: DB_PATH
               value: "./data/db-v3-shifu"
             - name: NETWORK_ID

@@ -159,8 +159,6 @@ spec:
             value: "false"
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
-          - name: NETWORK
-            value: "prater"
           - name: DB_PATH
             value: "./data/db-shifu-v3"
           - name: METRICS_API_PORT

@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"net/http"
 	"time"
@@ -24,6 +22,8 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -109,7 +109,7 @@ var StartNodeCmd = &cobra.Command{
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()
-		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, eth2Network.GenesisEpoch)
+		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, eth2Network.GenesisEpoch) // TODO: get rid of passing genesis epoch
 
 		cfg.ETH2Options.Context = cmd.Context()
 		el, cl := setupNodes(logger, operatorData.ID, eth2Network.BeaconNetwork, slotTicker)
