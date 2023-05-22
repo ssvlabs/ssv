@@ -33,7 +33,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(spectypes.GetBeaconTestNetwork(), 0), types.GetDefaultDomain(), true)
+	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(spectypes.GetBeaconTestNetwork()), types.GetDefaultDomain(), true)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

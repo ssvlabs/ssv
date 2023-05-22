@@ -139,15 +139,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
-	network := beaconprotocol.NewNetwork(opt.BeaconNetwork, opt.MinGenesisTime)
-
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
 
 	client := &goClient{
 		log:               logger,
 		ctx:               opt.Context,
-		network:           network,
+		network:           beaconprotocol.NewNetwork(opt.BeaconNetwork),
 		client:            httpClient.(*http.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,

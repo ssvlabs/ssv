@@ -10,12 +10,11 @@ import (
 // Network is a beacon chain network.
 type Network struct {
 	spectypes.BeaconNetwork
-	minGenesisTime uint64
 }
 
 // NewNetwork creates a new beacon chain network.
-func NewNetwork(network spectypes.BeaconNetwork, minGenesisTime uint64) Network {
-	return Network{network, minGenesisTime}
+func NewNetwork(network spectypes.BeaconNetwork) Network {
+	return Network{network}
 }
 
 // GetSlotStartTime returns the start time for the given slot
@@ -26,11 +25,7 @@ func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 }
 
 func (n Network) MinGenesisTime() uint64 {
-	if n.minGenesisTime > 0 {
-		return n.minGenesisTime
-	} else {
-		return n.BeaconNetwork.MinGenesisTime
-	}
+	return n.BeaconNetwork.MinGenesisTime
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
