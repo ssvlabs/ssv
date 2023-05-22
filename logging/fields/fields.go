@@ -3,6 +3,7 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/format"
 	"math/big"
 	"net"
 	"net/url"
