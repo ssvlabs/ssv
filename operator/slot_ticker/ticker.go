@@ -22,9 +22,8 @@ type Ticker interface {
 }
 
 type ticker struct {
-	ctx          context.Context
-	ethNetwork   beaconprotocol.Network
-	genesisEpoch phase0.Epoch
+	ctx        context.Context
+	ethNetwork beaconprotocol.Network
 
 	// chan
 	feed *event.Feed
