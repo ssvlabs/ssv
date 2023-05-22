@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"net/http"
 	"time"
@@ -24,8 +26,6 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -78,6 +78,7 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)
@@ -98,6 +99,11 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+		currentSlot := uint64(eth2Network.EstimatedCurrentSlot())
+		if currentSlot >= cfg.P2pNetworkConfig.PermissionedActivateSlot && currentSlot < cfg.P2pNetworkConfig.PermissionedDeactivateSlot {
+			cfg.P2pNetworkConfig.Permissioned = true
+			cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+		}
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()

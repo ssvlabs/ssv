@@ -59,6 +59,8 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		if errClose == nil {
 			metricsFilteredConnections.Inc()
 		}
+
+		logger.Debug("peer was disconnected", zap.String("selfPeer", conn.LocalPeer().String()), zap.String("otherPeer", id.String()))
 	}
 
 	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
@@ -123,11 +125,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 func (ch *connHandler) handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (bool, error) {
 	err := ch.handshaker.Handshake(logger, conn)
 	if err != nil {
-		switch err {
-		case peers.ErrIndexingInProcess, errHandshakeInProcess, peerstore.ErrNotFound:
+		switch {
+		case errors.Is(err, peers.ErrIndexingInProcess), errors.Is(err, errHandshakeInProcess), errors.Is(err, peerstore.ErrNotFound):
 			// ignored errors
 			return true, nil
-		case errPeerWasFiltered, errUnknownUserAgent:
+		case errors.Is(err, errPeerWasFiltered), errors.Is(err, errUnknownUserAgent):
 			// ignored errors but we still close connection
 			return false, nil
 		default:
