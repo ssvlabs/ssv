@@ -82,7 +82,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 
-				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK, spectypes.GetBeaconTestNetwork().Domain)
+				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK, spectypes.BeaconTestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)

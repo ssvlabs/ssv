@@ -43,7 +43,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 	dutyCtrl := &dutyController{
 		ctx:                    context.Background(),
-		ethNetwork:             beacon.NewNetwork(spectypes.GetBeaconTestNetwork()),
+		ethNetwork:             beacon.NewNetwork(spectypes.BeaconTestNetwork),
 		executor:               mockExecutor,
 		fetcher:                mockFetcher,
 		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
@@ -71,7 +71,7 @@ func TestDutyController_ListenToTicker(t *testing.T) {
 
 func TestDutyController_ShouldExecute(t *testing.T) {
 	logger := logging.TestLogger(t)
-	ctrl := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetBeaconTestNetwork())}
+	ctrl := dutyController{ethNetwork: beacon.NewNetwork(spectypes.BeaconTestNetwork)}
 	currentSlot := uint64(ctrl.ethNetwork.EstimatedCurrentSlot())
 
 	require.True(t, ctrl.shouldExecute(logger, &spectypes.Duty{Slot: phase0.Slot(currentSlot), PubKey: phase0.BLSPubKey{}}))
@@ -80,21 +80,21 @@ func TestDutyController_ShouldExecute(t *testing.T) {
 }
 
 func TestDutyController_GetSlotStartTime(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetBeaconTestNetwork())}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.BeaconTestNetwork)}
 
 	ts := d.ethNetwork.GetSlotStartTime(646523)
 	require.Equal(t, int64(1624266276), ts.Unix())
 }
 
 func TestDutyController_GetCurrentSlot(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetBeaconTestNetwork())}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.BeaconTestNetwork)}
 
 	slot := d.ethNetwork.EstimatedCurrentSlot()
 	require.Greater(t, slot, phase0.Slot(646855))
 }
 
 func TestDutyController_GetEpochFirstSlot(t *testing.T) {
-	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.GetBeaconTestNetwork())}
+	d := dutyController{ethNetwork: beacon.NewNetwork(spectypes.BeaconTestNetwork)}
 
 	slot := d.ethNetwork.GetEpochFirstSlot(20203)
 	require.EqualValues(t, 646496, slot)

@@ -43,7 +43,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, beaconprotocol.NewNetwork(spectypes.GetBeaconTestNetwork()), logger)
+	s := NewSignerStorage(db, beaconprotocol.NewNetwork(spectypes.BeaconTestNetwork), logger)
 	return s, func() {
 		db.Close(logging.TestLogger(t))
 	}

@@ -25,7 +25,7 @@ func TestSyncEth1(t *testing.T) {
 	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
-	rawOffset := spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()
+	rawOffset := spectypes.BeaconTestNetwork.DefaultSyncOffset.Uint64()
 	rawOffset += 10
 	go func() {
 		// wait 5 ms and start to push events
@@ -35,7 +35,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.BeaconTestNetwork, nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -53,12 +53,12 @@ func TestSyncEth1Error(t *testing.T) {
 	storage := syncStorageMock(ctrl)
 
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: spectypes.BeaconTestNetwork.DefaultSyncOffset.Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.BeaconTestNetwork, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
@@ -77,13 +77,13 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 	go func() {
 		<-time.After(time.Millisecond * 25)
-		blockNumber := spectypes.GetBeaconTestNetwork().DefaultSyncOffset.Uint64()
+		blockNumber := spectypes.BeaconTestNetwork.DefaultSyncOffset.Uint64()
 		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.GetBeaconTestNetwork(), nil, func(event Event) ([]zap.Field, error) {
+	err := SyncEth1Events(logger, eth1Client, storage, spectypes.BeaconTestNetwork, nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
 	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
@@ -91,7 +91,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 func TestDetermineSyncOffset(t *testing.T) {
 	logger := logging.TestLogger(t)
-	beaconNetwork := spectypes.GetBeaconTestNetwork()
+	beaconNetwork := spectypes.BeaconTestNetwork
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
