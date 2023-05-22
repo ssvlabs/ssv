@@ -68,6 +68,10 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 		return err
 	}
 
+	if len(ser.Entries) < 6 {
+		return errors.Errorf("unvalid message size")
+	}
+
 	senderPeerID, err := base64.StdEncoding.DecodeString(ser.Entries[0])
 	if err != nil {
 		return err
