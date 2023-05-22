@@ -54,7 +54,7 @@ var exportKeysCmd = &cobra.Command{
 
 		fmt.Println("Seed:", hex.EncodeToString(seed))
 		fmt.Println("Generating keys for index:", index)
-		// TODO: pass network from a configuration
+
 		path := core.Network(beaconNetwork.Name).FullPath(fmt.Sprintf("/%d/0/0", index))
 		key, err := util.PrivateKeyFromSeedAndPath(seed, path)
 		if err != nil {
