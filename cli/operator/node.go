@@ -94,7 +94,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, eth2Network.Domain, cfg.SSVOptions.ValidatorOptions.BuilderProposals)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, cfg.SSVOptions.ValidatorOptions.BuilderProposals)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
