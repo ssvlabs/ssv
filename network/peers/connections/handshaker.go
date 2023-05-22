@@ -29,7 +29,7 @@ var errUnknownUserAgent = errors.New("user agent is unknown")
 // example: the Node in NON-Permissoned mode receives SignedNodeInfo; the Node in Permissoned mode receives NodeInfo
 var errConsumingMessage = errors.New("error consuming message")
 
-// errConsumingMessage is thrown when remote peer is pruned
+// errPeerPruned is thrown when remote peer is pruned
 var errPeerPruned = errors.New("peer is pruned")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
