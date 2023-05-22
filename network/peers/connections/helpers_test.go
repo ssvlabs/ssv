@@ -66,7 +66,7 @@ func getTestingData(t *testing.T) TestData {
 		SenderPeerID:    peerID2,
 		RecipientPeerID: peerID1,
 		Timestamp:       time.Now(),
-		SenderPubicKey:  []byte(senderPublicKey),
+		SenderPublicKey: []byte(senderPublicKey),
 	}
 	hashed := handshakeData.Hash()
 

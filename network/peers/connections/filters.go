@@ -52,7 +52,7 @@ func SignatureCheckFilter() HandshakeFilter {
 		if !ok {
 			return fmt.Errorf("wrong format nodeinfo sent")
 		}
-		decodedPublicKey, err := base64.StdEncoding.DecodeString(string(sni.HandshakeData.SenderPubicKey))
+		decodedPublicKey, err := base64.StdEncoding.DecodeString(string(sni.HandshakeData.SenderPublicKey))
 		if err != nil {
 			return errors.Wrap(err, "failed to decode sender public key from signed node info")
 		}
@@ -81,17 +81,17 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 		if !ok {
 			return fmt.Errorf("wrong format nodeinfo sent")
 		}
-		if len(sni.HandshakeData.SenderPubicKey) == 0 {
-			return errors.New("empty SenderPubicKey")
+		if len(sni.HandshakeData.SenderPublicKey) == 0 {
+			return errors.New("empty SenderPublicKey")
 		}
 
 		for _, key := range keysConfigWhitelist {
-			if key == string(sni.HandshakeData.SenderPubicKey) {
+			if key == string(sni.HandshakeData.SenderPublicKey) {
 				return nil
 			}
 		}
 
-		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPubicKey)
+		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPublicKey)
 		if !found || data == nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}

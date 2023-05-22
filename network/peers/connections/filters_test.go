@@ -87,7 +87,7 @@ func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 	require.NoError(t, err)
 
 	wrongSenderPubKeyPem := td.HandshakeData
-	wrongSenderPubKeyPem.SenderPubicKey = []byte{'w', 'r', 'o', 'n', 'g'}
+	wrongSenderPubKeyPem.SenderPublicKey = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature})
 	require.Error(t, err)
 }
@@ -101,7 +101,7 @@ func TestRegisteredOperatorsFilter_ConfigWhitelist(t *testing.T) {
 	require.NoError(t, err)
 
 	wrongSenderPubKeyPem := td.HandshakeData
-	wrongSenderPubKeyPem.SenderPubicKey = []byte{'w', 'r', 'o', 'n', 'g'}
+	wrongSenderPubKeyPem.SenderPublicKey = []byte{'w', 'r', 'o', 'n', 'g'}
 	err = f("", &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: wrongSenderPubKeyPem, Signature: td.Signature})
 	require.Error(t, err)
 }

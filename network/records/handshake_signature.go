@@ -13,7 +13,7 @@ type HandshakeData struct {
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID
 	Timestamp       time.Time
-	SenderPubicKey  []byte
+	SenderPublicKey []byte
 }
 
 func (h *HandshakeData) Hash() [32]byte {
@@ -22,7 +22,7 @@ func (h *HandshakeData) Hash() [32]byte {
 	sb.WriteString(h.SenderPeerID.String())
 	sb.WriteString(h.RecipientPeerID.String())
 	sb.WriteString(strconv.FormatInt(h.Timestamp.Unix(), 10))
-	sb.Write(h.SenderPubicKey)
+	sb.Write(h.SenderPublicKey)
 
 	return sha256.Sum256([]byte(sb.String()))
 }

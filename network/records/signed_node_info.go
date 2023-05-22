@@ -48,7 +48,7 @@ func (sni *SignedNodeInfo) MarshalRecord() ([]byte, error) {
 		base64.StdEncoding.EncodeToString([]byte(sni.HandshakeData.SenderPeerID)),
 		base64.StdEncoding.EncodeToString([]byte(sni.HandshakeData.RecipientPeerID)),
 		strconv.FormatInt(sni.HandshakeData.Timestamp.Unix(), 10),
-		string(sni.HandshakeData.SenderPubicKey),
+		string(sni.HandshakeData.SenderPublicKey),
 		base64.StdEncoding.EncodeToString(sni.Signature),
 	}
 
@@ -89,7 +89,7 @@ func (sni *SignedNodeInfo) UnmarshalRecord(data []byte) error {
 
 	sni.HandshakeData.Timestamp = time.Unix(timeUnix, 0)
 
-	sni.HandshakeData.SenderPubicKey = []byte(ser.Entries[3])
+	sni.HandshakeData.SenderPublicKey = []byte(ser.Entries[3])
 
 	signature, err := base64.StdEncoding.DecodeString(ser.Entries[4])
 	if err != nil {

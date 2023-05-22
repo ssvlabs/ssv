@@ -20,7 +20,7 @@ func TestHandshakeData_Hash(t *testing.T) {
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Unix(1684228246, 0),
-		SenderPubicKey:  []byte("some key"),
+		SenderPublicKey: []byte("some key"),
 	}
 
 	actualHash := handshakeData.Hash()

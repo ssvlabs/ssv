@@ -41,7 +41,7 @@ func TestSignedNodeInfo_Seal_Consume(t *testing.T) {
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Now().Round(time.Second),
-		SenderPubicKey:  []byte(senderBase64PublicKeyPem),
+		SenderPublicKey: []byte(senderBase64PublicKeyPem),
 	}
 	hashed := handshakeData.Hash()
 
@@ -94,7 +94,7 @@ func TestSignedNodeInfo_Marshal_Unmarshal(t *testing.T) {
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Now().Round(time.Second),
-		SenderPubicKey:  []byte(senderBase64PublicKeyPem),
+		SenderPublicKey: []byte(senderBase64PublicKeyPem),
 	}
 	hashed := handshakeData.Hash()
 

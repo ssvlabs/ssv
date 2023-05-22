@@ -132,7 +132,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 			SenderPeerID:    sender,
 			RecipientPeerID: recipient,
 			Timestamp:       time.Now(),
-			SenderPubicKey:  []byte(publicKey),
+			SenderPublicKey: []byte(publicKey),
 		}
 		hash := handshakeData.Hash()
 
