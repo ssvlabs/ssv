@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 
@@ -35,25 +34,26 @@ type ClientOptions struct {
 	Ctx                  context.Context
 	NodeAddr             string
 	RegistryContractAddr string
+	AbiVersion           eth1.Version
 	ContractABI          string
 	ConnectionTimeout    time.Duration
 
-	AbiVersion eth1.Version
+	NonceHandler eth1.NonceHandler
 }
 
 // eth1Client is the internal implementation of Client
 type eth1Client struct {
-	ctx  context.Context
-	conn *ethclient.Client
+	ctx        context.Context
+	conn       *ethclient.Client
+	eventsFeed *event.Feed
 
 	nodeAddr             string
 	registryContractAddr string
+	abiVersion           eth1.Version
 	contractABI          string
 	connectionTimeout    time.Duration
 
-	eventsFeed *event.Feed
-
-	abiVersion eth1.Version
+	nonceHandler eth1.NonceHandler
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -69,6 +69,7 @@ func NewEth1Client(logger *zap.Logger, opts ClientOptions) (eth1.Client, error) 
 		connectionTimeout:    opts.ConnectionTimeout,
 		eventsFeed:           new(event.Feed),
 		abiVersion:           opts.AbiVersion,
+		nonceHandler:         opts.NonceHandler,
 	}
 
 	if err := ec.connect(logger); err != nil {
@@ -225,12 +226,18 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 			logger.Debug("received contract event from stream")
 			eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 			if err != nil {
-				logger.Warn("could not parse ongoing event, the event is malformed",
+				loggerWith := logger.With(
 					fields.EventName(eventName),
 					fields.BlockNumber(vLog.BlockNumber),
 					fields.TxHash(vLog.TxHash),
-					zap.Error(err),
 				)
+
+				handleNonceErr := eth1.HandleNonceSetter(eventName, vLog, ec.nonceHandler)
+				if handleNonceErr != nil {
+					loggerWith = loggerWith.With(zap.Error(errors.Wrap(handleNonceErr, "failed to handle nonce setter")))
+				}
+
+				loggerWith.With(zap.Error(err)).Warn("could not parse ongoing event, the event is malformed")
 				continue
 			}
 		}
@@ -329,6 +336,12 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 			)
 			var malformedEventErr *abiparser.MalformedEventError
 			if errors.As(err, &malformedEventErr) {
+				// todo(align-contract-v0.3.1-rc.0) nSuccess, should we decrease it here?
+				handleNonceErr := eth1.HandleNonceSetter(eventName, vLog, ec.nonceHandler)
+				if handleNonceErr != nil {
+					loggerWith = loggerWith.With(zap.Error(errors.Wrap(handleNonceErr, "failed to handle nonce setter")))
+				}
+
 				loggerWith.Warn("could not parse history sync event, the event is malformed")
 			} else {
 				loggerWith.Error("could not parse history sync event")
@@ -337,8 +350,7 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 			continue
 		}
 	}
-	logger.Debug("event logs were received and parsed successfully",
-		zap.Int("successCount", nSuccess))
+	logger.Debug("event logs were received and parsed successfully", zap.Int("successCount", nSuccess))
 
 	return logs, nSuccess, nil
 }
@@ -374,7 +386,16 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 		// skip
 		//ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorAdded:
-		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
+		// todo(align-contract-v0.3.1-rc.0) should we handle validatorAdded event only?
+		nonce, skip, err := eth1.HandleNonceGetter(vLog, ec.nonceHandler)
+		if err != nil {
+			return ev.Name, errors.Wrap(err, "failed to handle nonce getter")
+		}
+		if skip {
+			return ev.Name, nil
+		}
+
+		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi, nonce)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err

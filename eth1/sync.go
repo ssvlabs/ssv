@@ -5,11 +5,14 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/registry/storage"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
@@ -24,6 +27,15 @@ type SyncOffset = big.Int
 
 // SyncEventHandler handles a given event
 type SyncEventHandler func(Event) ([]zap.Field, error)
+
+// NonceHandler represents the interface for compatible storage
+// todo(align-contract-v0.3.1-rc.0) add proper place for the interface
+type NonceHandler interface {
+	GetEventData(txHash common.Hash) (*storage.EventData, bool, error)
+	SaveEventData(txHash common.Hash) error
+	GetNonce(owner common.Address) (storage.Nonce, error)
+	BumpNonce(owner common.Address) error
+}
 
 // SyncOffsetStorage represents the interface for compatible storage
 type SyncOffsetStorage interface {
@@ -49,7 +61,8 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
+// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the nonce handler interface
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, nonceHandler NonceHandler) error {
 	logger.Info("syncing eth1 contract events")
 
 	cn := make(chan *Event, 4096)
@@ -71,7 +84,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 			if handler != nil {
 				logFields, err := handler(*event)
-				errs = HandleEventResult(logger, *event, logFields, err, false)
+				errs = HandleEventResult(logger, *event, logFields, err, false, nonceHandler)
 			}
 		}
 	}()
@@ -130,7 +143,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 }
 
 // HandleEventResult handles the result of an event
-func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
+func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, nonceHandler NonceHandler) []error {
 	var errs []error
 	syncTitle := "history"
 	var showLog bool
@@ -163,5 +176,52 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
+	err = HandleNonceSetter(event.Name, event.Log, nonceHandler)
+	if err != nil {
+		errs = append(errs, errors.Wrap(err, "could not handle nonce setter"))
+	}
+
 	return errs
+}
+
+func HandleNonceGetter(log types.Log, nonceHandler NonceHandler) (storage.Nonce, bool, error) {
+	_, found, err := nonceHandler.GetEventData(log.TxHash)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "failed to get event data")
+	}
+	if found {
+		// skip
+		return 0, true, nil
+	}
+
+	// todo(align-contract-v0.3.1-rc.0) validate if is it safe to use vLog.Topics[1] to get the owner address for ValidatorAddedEvent only
+	// get nonce
+	owner := common.BytesToAddress(log.Topics[1].Bytes())
+	nonce, err := nonceHandler.GetNonce(owner)
+	if err != nil {
+		return 0, false, errors.Wrap(err, "failed to get nonce")
+	}
+	nonce++
+	return nonce, false, nil
+}
+
+// HandleNonceSetter should be atomic
+func HandleNonceSetter(eventName string, log types.Log, nonceHandler NonceHandler) error {
+	// todo(align-contract-v0.3.1-rc.0) should we store the tx hash for all events or for validatorAdded event only?
+	if eventName != abiparser.ValidatorAdded {
+		return nil
+	}
+
+	err := nonceHandler.SaveEventData(log.TxHash)
+	if err != nil {
+		return errors.Wrap(err, "failed to save event data")
+	}
+
+	owner := common.BytesToAddress(log.Topics[1].Bytes())
+	err = nonceHandler.BumpNonce(owner)
+	if err != nil {
+		return errors.Wrap(err, "failed to bump the nonce")
+	}
+
+	return nil
 }

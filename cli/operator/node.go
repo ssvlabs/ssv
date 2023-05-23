@@ -114,7 +114,7 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
+		el, cl := setupNodes(logger, operatorData.ID, slotTicker, nodeStorage)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -161,6 +161,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) > 0 {
+			// todo(align-contract-v0.3.1-rc.0) how the nonce effect the local events - regression?
 			if err := validator.LoadLocalEvents(
 				logger,
 				validatorCtrl.Eth1EventHandler(logger, false),
@@ -335,7 +336,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker, nonceHandler eth1.NonceHandler) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = validatorprotocol.DefaultGasLimit
@@ -360,6 +361,7 @@ func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker 
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 		RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
+		NonceHandler:         nonceHandler,
 	})
 	if err != nil {
 		logger.Fatal("failed to create eth1 client", zap.Error(err))
