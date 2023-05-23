@@ -34,6 +34,9 @@ type Queue interface {
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
+
+	// Len returns the number of messages in the queue.
+	Len() int
 }
 
 type priorityQueue struct {
@@ -177,6 +180,14 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 
 func (q *priorityQueue) Empty() bool {
 	return q.head == nil && len(q.inbox) == 0
+}
+
+func (q *priorityQueue) Len() int {
+	n := len(q.inbox)
+	for i := q.head; i != nil; i = i.next {
+		n++
+	}
+	return n
 }
 
 // item is a node in a linked list of DecodedSSVMessage.

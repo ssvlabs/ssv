@@ -129,6 +129,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
+		logger.Debug("📬 popped message from queue",
+			fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+			zap.Int("queue_len", q.Q.Len()))
 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {

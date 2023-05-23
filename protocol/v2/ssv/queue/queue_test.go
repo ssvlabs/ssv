@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
