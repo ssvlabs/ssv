@@ -58,14 +58,13 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 		if mm.Message.Height > state.Height {
 			return 1
 		}
-		// TODO
-		// } else if mm, ok := m.Body.(*ssv.SignedPartialSignatureMessage); ok {
-		// 	if mm.Message.Messages[0].Slot == state.Slot {
-		// 		return 0
-		// 	}
-		// 	if mm.Message.Messages[0].Slot > state.Slot {
-		// 		return 1
-		// 	}
+	} else if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
+		if mm.Message.Slot == state.Slot {
+			return 0
+		}
+		if mm.Message.Slot > state.Slot {
+			return 1
+		}
 	}
 	return -1
 }

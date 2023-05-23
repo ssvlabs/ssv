@@ -10,6 +10,9 @@ const (
 	inboxReadFrequency = 1 * time.Millisecond
 )
 
+// Filter is a function that returns true if the message should be popped.
+type Filter func(*DecodedSSVMessage) bool
+
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
 type Queue interface {
 	// Push blocks until the message is pushed to the queue.
