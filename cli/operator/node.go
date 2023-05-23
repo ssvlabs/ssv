@@ -316,7 +316,7 @@ func setupP2P(
 	operatorData *registrystorage.OperatorData,
 	db basedb.IDb,
 	logger *zap.Logger,
-	ssvNetwork spectypes.BeaconNetwork,
+	beaconNetwork spectypes.BeaconNetwork,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
@@ -334,7 +334,7 @@ func setupP2P(
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-	cfg.P2pNetworkConfig.BeaconNetwork = ssvNetwork
+	cfg.P2pNetworkConfig.BeaconNetwork = beaconNetwork
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
