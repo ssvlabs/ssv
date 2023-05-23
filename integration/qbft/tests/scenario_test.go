@@ -81,8 +81,9 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				time.Sleep(dutyProp.Delay)
 
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
-
-				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
+				var pk spec.BLSPubKey
+				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
+				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, pk)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)
