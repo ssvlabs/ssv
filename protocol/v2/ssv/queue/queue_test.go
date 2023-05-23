@@ -77,7 +77,6 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop 2nd message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		log.Printf("height: %d", msg.Body.(*qbft.SignedMessage).Message.Height)
 		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
 	})
 	require.NotNil(t, popped)

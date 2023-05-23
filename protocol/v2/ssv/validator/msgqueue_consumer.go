@@ -112,6 +112,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		filter := queue.FilterAny
 		if !state.HasRunningInstance {
 			filter = func(m *queue.DecodedSSVMessage) bool {
+				return true
+
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
