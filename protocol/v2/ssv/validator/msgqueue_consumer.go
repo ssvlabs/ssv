@@ -126,7 +126,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				return e.Type == types.ExecuteDuty
 			}
 		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-			// If no proposal was accepted for the current round, skip non-proposal consensus messages
+			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
 				sm, ok := m.Body.(*specqbft.SignedMessage)
@@ -136,7 +136,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
 					return true
 				}
-				return sm.Message.MsgType == specqbft.ProposalMsgType
+				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
 			}
 		}
 
