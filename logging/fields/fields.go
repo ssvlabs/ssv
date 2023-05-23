@@ -3,7 +3,6 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/format"
 	"math/big"
 	"net"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -38,6 +38,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldBuilderProposals    = "builder_proposals"
+	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
@@ -297,4 +298,8 @@ func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
+}
+
+func Config(val fmt.Stringer) zap.Field {
+	return zap.Stringer(FieldConfig, val)
 }

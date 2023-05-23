@@ -306,7 +306,7 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	logger.Info("setting ssv network", fields.Domain(types.GetDefaultDomain()),
 		fields.NetworkID(cfg.P2pNetworkConfig.NetworkID),
 		fields.Fork(forkVersion),
-		zap.Any("config", beaconNetwork), // TODO: print in a user-friendly format
+		fields.Config(beaconNetwork),
 	)
 	return eth2Network, forkVersion, nil
 }
