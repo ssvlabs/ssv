@@ -120,7 +120,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
+			v.logMsg(logger, msg, "❗ could not handle message",
+				fields.MessageType(msg.SSVMessage.MsgType), zap.Error(err))
 		}
 	}
 

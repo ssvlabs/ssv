@@ -324,6 +324,12 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
+
+	logger.Debug("🔏 signed & broadcasted partial randao signature",
+		fields.Slot(duty.Slot),
+		fields.Height(r.BaseRunner.QBFTController.Height),
+		fields.Round(r.GetState().RunningInstance.State.Round))
+
 	return nil
 }
 
