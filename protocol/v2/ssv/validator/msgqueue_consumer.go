@@ -110,7 +110,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 		// Pop only ExecuteDuty messages if there is no running instance.
 		filter := queue.FilterAny
-		if runner != nil && runner.HasRunningDuty() {
+		if runner != nil && !runner.HasRunningDuty() {
 			filter = func(m *queue.DecodedSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
