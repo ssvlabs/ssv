@@ -1,6 +1,7 @@
 package abiparser
 
 import (
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -8,7 +9,11 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 // MalformedEventError is returned when event is malformed
@@ -90,8 +95,8 @@ type Cluster struct {
 	ValidatorCount  uint32
 	NetworkFeeIndex uint64
 	Index           uint64
-	Balance         *big.Int
 	Active          bool
+	Balance         *big.Int
 }
 
 // AbiV1 parsing events from v1 abi contract
@@ -138,7 +143,7 @@ func (v1 *AbiV1) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
+func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI, nonce registrystorage.Nonce) (*ValidatorAddedEvent, error) {
 	var event ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorAdded, log.Data)
 	if err != nil {
@@ -147,9 +152,12 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	// the 2 first bytes are unnecessary for parsing
-	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
-	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
+	// Calculate the expected length of constructed shares based on the number of operator IDs,
+	// signature length, public key length, and encrypted key length.
+	operatorCount := len(event.OperatorIds)
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
+	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
 	if sharesExpectedLength != len(event.Shares) {
 		return nil, &MalformedEventError{
@@ -157,15 +165,24 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
-	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
+	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
+	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/operatorCount)
 
+	// todo(align-contract-v0.3.1-rc.0) false positive?
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
 			Err: errors.Errorf("%s event missing topics", ValidatorAdded),
 		}
 	}
 	event.Owner = common.HexToAddress(log.Topics[1].Hex())
+
+	sig := event.Shares[:signatureOffset]
+	err = verifySignature(&event, sig, nonce)
+	if err != nil {
+		return nil, &MalformedEventError{
+			Err: errors.Errorf("%s event signature verifcation failed", ValidatorAdded),
+		}
+	}
 
 	return &event, nil
 }
@@ -289,4 +306,27 @@ func splitBytes(buf []byte, lim int) [][]byte {
 		chunks = append(chunks, buf[:])
 	}
 	return chunks
+}
+
+// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
+// verify signature of the ValidatorAddedEvent shares data
+func verifySignature(event *ValidatorAddedEvent, sig []byte, nonce registrystorage.Nonce) error {
+	data := fmt.Sprintf("%s:%d", event.Owner.String(), nonce)
+	hash := crypto.Keccak256([]byte(data))
+
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(sig); err != nil {
+		return errors.Wrap(err, "failed to deserialize signature")
+	}
+
+	pk := &bls.PublicKey{}
+	if err := pk.Deserialize(event.PublicKey); err != nil {
+		return errors.Wrap(err, "failed to deserialize public key")
+	}
+
+	if res := sign.VerifyByte(pk, hash); !res {
+		return errors.New("failed to verify signature")
+	}
+
+	return nil
 }

@@ -59,7 +59,8 @@ func TestParseValidatorAddedEvent(t *testing.T) {
 	t.Run("validator added", func(t *testing.T) {
 		vLogValidatorAdded, contractAbi := unmarshalLog(t, rawValidatorAdded, V1)
 		abiParser := NewParser(logging.TestLogger(t), V1)
-		parsed, err := abiParser.ParseValidatorAddedEvent(*vLogValidatorAdded, contractAbi)
+		// todo(align-contract-v0.3.1-rc.0) handle nonce
+		parsed, err := abiParser.ParseValidatorAddedEvent(*vLogValidatorAdded, contractAbi, 0)
 		var malformedEventErr *abiparser.MalformedEventError
 		require.NoError(t, err)
 		require.NotNil(t, contractAbi)
