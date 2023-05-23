@@ -74,6 +74,11 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
+	logger.Debug("got partial RANDAO sig",
+		zap.Uint64s("signers", signedMsg.GetSigners()),
+		zap.Bool("quorum", quorum),
+	)
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil

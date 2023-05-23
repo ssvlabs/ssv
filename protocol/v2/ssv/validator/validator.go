@@ -91,24 +91,15 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())
 	}
 
-	// Attach duty ID to logger.
+	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
 	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
 
-	// Attach height and round to logger.
-	round := specqbft.NoRound
-	var height specqbft.Height
-	if baseRunner.State != nil && baseRunner.State.RunningInstance != nil {
-		round = baseRunner.State.RunningInstance.State.Round
-	}
+	// Log with height.
 	if baseRunner.QBFTController != nil {
-		height = baseRunner.QBFTController.Height
+		logger = logger.With(fields.Height(baseRunner.QBFTController.Height))
 	}
-	logger = logger.With(
-		fields.Height(height),
-		fields.Round(round),
-	)
 
 	logger.Info("ℹ️ starting duty processing")
 
