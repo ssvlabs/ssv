@@ -7,7 +7,6 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"

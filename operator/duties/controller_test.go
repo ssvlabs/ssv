@@ -7,16 +7,14 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
