@@ -106,7 +106,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.P2pNetworkConfig.Permissioned = true
 			cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
 		}
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
+		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, eth2Network.SSVNetwork)
 
 		ctx := cmd.Context()
 		slotTicker := slot_ticker.NewTicker(ctx, eth2Network)
@@ -311,7 +311,13 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	return eth2Network, forkVersion, nil
 }
 
-func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystorage.OperatorData, db basedb.IDb, logger *zap.Logger) network.P2PNetwork {
+func setupP2P(
+	forkVersion forksprotocol.ForkVersion,
+	operatorData *registrystorage.OperatorData,
+	db basedb.IDb,
+	logger *zap.Logger,
+	ssvNetwork spectypes.SSVNetwork,
+) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -328,6 +334,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+	cfg.P2pNetworkConfig.SSVNetwork = ssvNetwork
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }

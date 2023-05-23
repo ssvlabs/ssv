@@ -33,7 +33,7 @@ type AttesterRunner struct {
 }
 
 func NewAttesterRunnner(
-	beaconNetwork spectypes.SSVNetwork, // TODO: rename beaconNetwork to ssvNetwork project-wide
+	beaconNetwork spectypes.SSVNetwork, // TODO: rename beaconNetwork to ssvNetwork project-wide]
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
