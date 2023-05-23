@@ -40,37 +40,37 @@ var messagePriorityTests = []struct {
 			// 1.2. Events/Timeout
 			mockTimeoutMessage{Height: 98, Role: spectypes.BNRoleProposer},
 
-			// 1. Current height/slot:
-			// 1.1. Consensus
-			// 1.1.1. Consensus/Proposal
+			// 2. Current height/slot:
+			// 2.1. Consensus
+			// 2.1.1. Consensus/Proposal
 			mockConsensusMessage{Height: 100, Type: qbft.ProposalMsgType},
-			// 1.1.2. Consensus/Prepare
+			// 2.1.2. Consensus/Prepare
 			mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType},
-			// 1.1.3. Consensus/Commit
+			// 2.1.3. Consensus/Commit
 			mockConsensusMessage{Height: 100, Type: qbft.CommitMsgType},
-			// 1.1.4. Consensus/<Other>
+			// 2.1.4. Consensus/<Other>
 			mockConsensusMessage{Height: 100, Type: qbft.RoundChangeMsgType},
-			// 1.2. Pre-consensus
+			// 2.2. Pre-consensus
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.SelectionProofPartialSig},
-			// 1.3. Post-consensus
+			// 2.3. Post-consensus
 			mockNonConsensusMessage{Slot: 64, Type: spectypes.PostConsensusPartialSig},
 
-			// 2. Higher height/slot:
-			// 2.1 Decided
+			// 3. Higher height/slot:
+			// 3.1 Decided
 			mockConsensusMessage{Height: 101, Decided: true},
-			// 2.2. Pre-consensus
+			// 3.2. Pre-consensus
 			mockNonConsensusMessage{Slot: 65, Type: spectypes.SelectionProofPartialSig},
-			// 2.3. Consensus
+			// 3.3. Consensus
 			mockConsensusMessage{Height: 101},
-			// 2.4. Post-consensus
+			// 3.4. Post-consensus
 			mockNonConsensusMessage{Slot: 65, Type: spectypes.PostConsensusPartialSig},
 
-			// 3. Lower height/slot:
-			// 3.1 Decided
+			// 4. Lower height/slot:
+			// 4.1 Decided
 			mockConsensusMessage{Height: 99, Decided: true},
-			// 3.2. Commit
+			// 4.2. Commit
 			mockConsensusMessage{Height: 99, Type: qbft.CommitMsgType},
-			// 3.3. Pre-consensus
+			// 4.3. Pre-consensus
 			mockNonConsensusMessage{Slot: 63, Type: spectypes.SelectionProofPartialSig},
 		},
 	},
