@@ -121,7 +121,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {
 			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType), zap.Error(err))
+				fields.MessageType(msg.SSVMessage.MsgType),
+				zap.Error(err))
 		}
 	}
 
@@ -129,19 +130,25 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.SignedMessage)
-		fields = append(append([]zap.Field{}, zap.Int64("msg_height", int64(sm.Message.Height)),
+		baseFields = []zap.Field{
+			zap.Int64("msg_height", int64(sm.Message.Height)),
 			zap.Int64("msg_round", int64(sm.Message.Round)),
 			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-			zap.Any("signers", sm.Signers)), fields...)
+			zap.Any("signers", sm.Signers),
+		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-		fields = append([]zap.Field{zap.Int64("signer", int64(psm.Signer))}, fields...)
+		baseFields = []zap.Field{
+			zap.Int64("signer", int64(psm.Signer)),
+			fields.Slot(psm.Message.Slot),
+		}
 	}
-	logger.Debug(logMsg, fields...)
+	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
 
 // GetLastHeight returns the last height for the given identifier
