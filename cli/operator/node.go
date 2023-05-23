@@ -99,11 +99,15 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
-		currentSlot := uint64(eth2Network.EstimatedCurrentSlot())
-		if currentSlot >= cfg.P2pNetworkConfig.PermissionedActivateSlot && currentSlot < cfg.P2pNetworkConfig.PermissionedDeactivateSlot {
-			cfg.P2pNetworkConfig.Permissioned = true
-			cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+
+		permissioned := func() bool {
+			currentSlot := uint64(eth2Network.EstimatedCurrentSlot())
+			return currentSlot >= cfg.P2pNetworkConfig.PermissionedActivateSlot && currentSlot < cfg.P2pNetworkConfig.PermissionedDeactivateSlot
 		}
+
+		cfg.P2pNetworkConfig.Permissioned = permissioned
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()
