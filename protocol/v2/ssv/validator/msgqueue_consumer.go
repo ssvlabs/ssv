@@ -94,6 +94,8 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	logger.Debug("📬 queue consumer is running")
 
+	lens := make([]int, 0, 10)
+
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
@@ -147,9 +149,13 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
-		logger.Debug("📬 popped message from queue",
-			fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-			zap.Int("queue_len", q.Q.Len()))
+		lens = append(lens, q.Q.Len())
+		if len(lens) >= 10 {
+			logger.Debug("📬 popped message from queue",
+				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+				zap.Ints("queue_lens", lens))
+			lens = lens[:0]
+		}
 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {
