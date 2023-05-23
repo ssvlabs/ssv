@@ -150,7 +150,7 @@ spec:
               value: "discv5"
             - name: DB_PATH
               value: "./data/db-v3-shifu"
-            - name: NETWORK_ID
+            - name: NETWORK
               value: "jato"
             - name: DB_REPORTING
               value: "false"

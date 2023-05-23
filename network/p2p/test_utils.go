@@ -7,8 +7,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/bloxapp/ssv/network/peers/connections/mock"
+
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
@@ -17,8 +21,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p/core/host"
-	"github.com/libp2p/go-libp2p/core/peer"
 
 	"go.uber.org/zap"
 )
@@ -193,7 +195,6 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion f
 		OperatorID:        operatorID,
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
-		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
 	}
 }

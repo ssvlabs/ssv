@@ -53,8 +53,6 @@ type Config struct {
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
-	// NetworkID is the network of this node
-	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-default:"mainnet" env-description:"Network ID is the network of this node"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional

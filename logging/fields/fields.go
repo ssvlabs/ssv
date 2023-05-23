@@ -48,6 +48,7 @@ const (
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldErrors              = "errors"
+	FieldETHNetwork          = "eth_network"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
 	FieldFeeRecipient        = "fee_recipient"
@@ -59,7 +60,6 @@ const (
 	FieldMessageType         = "message_type"
 	FieldName                = "name"
 	FieldNetwork             = "network"
-	FieldNetworkID           = "network_id"
 	FieldOperatorId          = "operator_id"
 	FieldPeerID              = "peer_id"
 	FieldPrivateKey          = "privkey"
@@ -252,16 +252,16 @@ func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
 }
 
-func Network(val string) zap.Field {
-	return zap.String(FieldNetwork, val)
+func ETHNetwork(val string) zap.Field {
+	return zap.String(FieldETHNetwork, val)
 }
 
 func Domain(val spectypes.DomainType) zap.Field {
 	return zap.Stringer(FieldDomain, format.DomainType(val))
 }
 
-func NetworkID(val string) zap.Field {
-	return zap.String(FieldNetworkID, val)
+func Network(val string) zap.Field {
+	return zap.String(FieldNetwork, val)
 }
 
 func Fork(val forksprotocol.ForkVersion) zap.Field {

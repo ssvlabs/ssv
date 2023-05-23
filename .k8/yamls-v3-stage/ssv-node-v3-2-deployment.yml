@@ -120,7 +120,7 @@ spec:
           value: ""
         - name: DB_PATH
           value: "./data/db-v3-shifu"
-        - name: NETWORK_ID
+        - name: NETWORK
           value: "jato"
         - name: METRICS_API_PORT
           value: "15302"

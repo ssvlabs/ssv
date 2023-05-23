@@ -119,7 +119,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Beacon = el
 		cfg.SSVOptions.ETHNetwork = eth2Network
-		cfg.SSVOptions.Network = p2pNetwork
+		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
@@ -291,7 +291,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 }
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
-	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.P2pNetworkConfig.NetworkID)
+	beaconNetwork, err := networkconfig.GetNetworkByName(cfg.SSVOptions.Network)
 	if err != nil {
 		return beaconprotocol.Network{}, "", err
 	}
@@ -303,8 +303,9 @@ func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.
 	currentEpoch := eth2Network.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
-	logger.Info("setting ssv network", fields.Domain(types.GetDefaultDomain()),
-		fields.NetworkID(cfg.P2pNetworkConfig.NetworkID),
+	logger.Info("setting ssv network",
+		fields.Network(cfg.SSVOptions.Network),
+		fields.Domain(beaconNetwork.SSV.Domain),
 		fields.Fork(forkVersion),
 		fields.Config(beaconNetwork),
 	)

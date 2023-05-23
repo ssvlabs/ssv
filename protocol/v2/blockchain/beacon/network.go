@@ -60,11 +60,12 @@ func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch * 32)
+	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (n Network) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
+	// TODO: consider extracting EpochsPerSyncCommitteePeriod to config
 	return uint64(epoch) / 256 // EpochsPerSyncCommitteePeriod
 }
 

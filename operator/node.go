@@ -35,9 +35,11 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
+	// Network is the network name of this node
+	Network             string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
 	ETHNetwork          beaconprotocol.Network
 	Beacon              beaconprotocol.Beacon
-	Network             network.P2PNetwork
+	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
@@ -96,7 +98,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		validatorsCtrl: opts.ValidatorController,
 		ethNetwork:     opts.ETHNetwork,
 		beacon:         opts.Beacon,
-		net:            opts.Network,
+		net:            opts.P2PNetwork,
 		eth1Client:     opts.Eth1Client,
 		storage:        opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:    storageMap,
