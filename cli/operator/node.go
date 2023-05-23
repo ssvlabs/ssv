@@ -101,8 +101,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
 		permissioned := func() bool {
-			currentSlot := uint64(eth2Network.EstimatedCurrentSlot())
-			return currentSlot >= cfg.P2pNetworkConfig.PermissionedActivateSlot && currentSlot < cfg.P2pNetworkConfig.PermissionedDeactivateSlot
+			currentEpoch := uint64(eth2Network.EstimatedCurrentEpoch())
+			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
