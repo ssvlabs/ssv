@@ -98,7 +98,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 
 	// Attach height and round to logger.
 	round := specqbft.NoRound
-	if baseRunner.State.RunningInstance != nil {
+	if baseRunner.State != nil && baseRunner.State.RunningInstance != nil {
 		round = baseRunner.State.RunningInstance.State.Round
 	}
 	logger = logger.With(
