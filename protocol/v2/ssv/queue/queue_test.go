@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"sync"
 	"sync/atomic"
@@ -25,17 +26,16 @@ var mockState = &State{
 
 func TestPriorityQueue_TryPop(t *testing.T) {
 	queue := NewDefault()
-
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
-	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
 	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
 	require.False(t, queue.Empty())
 
 	// Pop 1st message.
 	popped := queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
-	require.Equal(t, msg, popped)
+	require.Equal(t, msg1, popped)
 
 	// Pop 2nd message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
@@ -45,6 +45,56 @@ func TestPriorityQueue_TryPop(t *testing.T) {
 
 	// Pop nil.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
+	require.Nil(t, popped)
+}
+
+func TestPriorityQueue_Filter(t *testing.T) {
+	queue := NewDefault()
+	require.True(t, queue.Empty())
+
+	// Push 1 message.
+	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	require.False(t, queue.Empty())
+
+	// Pop non-matching message.
+	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+	})
+	require.False(t, queue.Empty())
+	require.Nil(t, popped)
+
+	// Pop matching message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
+	require.True(t, queue.Empty())
+	require.NotNil(t, popped)
+	require.Equal(t, msg, popped)
+
+	// Push 2 messages.
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
+
+	// Pop 2nd message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		log.Printf("height: %d", msg.Body.(*qbft.SignedMessage).Message.Height)
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+	})
+	require.NotNil(t, popped)
+	require.Equal(t, msg2, popped)
+
+	// Pop 1st message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
+	require.True(t, queue.Empty())
+	require.NotNil(t, popped)
+	require.Equal(t, msg1, popped)
+
+	// Pop nil.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
 	require.Nil(t, popped)
 }
 

@@ -141,11 +141,11 @@ func (q *priorityQueue) readInbox() {
 
 func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
 	if q.head.next == nil {
-		m := q.head.message
-		if filter(m) {
+		if m := q.head.message; filter(m) {
 			q.head = nil
 			return m
 		}
+		return nil
 	}
 
 	// Remove the highest priority message and return it.
@@ -155,7 +155,7 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 		current = q.head
 	)
 	for {
-		if prioritizer.Prior(current.next.message, highest.message) {
+		if prioritizer.Prior(current.next.message, highest.message) && filter(current.next.message) {
 			highest = current.next
 			prior = current
 		}
