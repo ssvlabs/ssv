@@ -50,7 +50,7 @@ type BaseRunner struct {
 	State          *State
 	Share          *spectypes.Share
 	QBFTController *controller.Controller
-	BeaconNetwork  spectypes.SSVNetwork
+	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 
 	// implementation vars
@@ -78,7 +78,7 @@ func NewBaseRunner(
 	state *State,
 	share *spectypes.Share,
 	controller *controller.Controller,
-	beaconNetwork spectypes.SSVNetwork,
+	beaconNetwork spectypes.BeaconNetwork,
 	beaconRoleType spectypes.BeaconRole,
 	highestDecidedSlot spec.Slot,
 ) *BaseRunner {

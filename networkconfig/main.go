@@ -8,7 +8,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-var Mainnet = spectypes.SSVNetwork{
+var Mainnet = spectypes.BeaconNetwork{
 	Name: "mainnet",
 	SSV: spectypes.SSVParams{
 		Domain:                 spectypes.GenesisMainnet,

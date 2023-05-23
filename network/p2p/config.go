@@ -67,8 +67,8 @@ type Config struct {
 	ForkVersion forksprotocol.ForkVersion
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// SSVNetwork defines an SSV network configuration.
-	SSVNetwork spectypes.SSVNetwork
+	// BeaconNetwork defines a network configuration.
+	BeaconNetwork spectypes.BeaconNetwork
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
@@ -178,7 +178,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 func (c *Config) TransformBootnodes() []string {
 	items := strings.Split(c.Bootnodes, ";")
 	if len(items) == 0 {
-		items = append(items, c.SSVNetwork.SSV.BootNodes...)
+		items = append(items, c.BeaconNetwork.SSV.Bootnodes...)
 	}
 	return items
 }

@@ -52,7 +52,7 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     int
 	dbPath      string
-	network     spectypes.SSVNetwork
+	network     spectypes.BeaconNetwork
 }
 
 // New is the constructor of ssvNode

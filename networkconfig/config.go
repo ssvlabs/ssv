@@ -6,15 +6,15 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-var SupportedConfigs = map[string]spectypes.SSVNetwork{
+var SupportedConfigs = map[string]spectypes.BeaconNetwork{
 	Mainnet.Name: Mainnet,
 	Jato.Name:    Jato,
 }
 
-func GetNetworkByName(name string) (spectypes.SSVNetwork, error) {
+func GetNetworkByName(name string) (spectypes.BeaconNetwork, error) {
 	if network, ok := SupportedConfigs[name]; ok {
 		return network, nil
 	}
 
-	return spectypes.SSVNetwork{}, fmt.Errorf("network not supported: %v", name)
+	return spectypes.BeaconNetwork{}, fmt.Errorf("network not supported: %v", name)
 }

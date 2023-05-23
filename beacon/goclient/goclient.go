@@ -180,8 +180,8 @@ func (gc *goClient) HealthCheck() []string {
 }
 
 // GetBeaconNetwork returns the beacon network the node is on
-func (gc *goClient) GetBeaconNetwork() spectypes.SSVNetwork {
-	return gc.network.SSVNetwork
+func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
+	return gc.network.BeaconNetwork
 }
 
 // SlotStartTime returns the start time in terms of its unix epoch

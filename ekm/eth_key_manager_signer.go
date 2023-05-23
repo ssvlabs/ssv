@@ -66,7 +66,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconpro
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.SSVNetwork.ETH.NetworkName))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.BeaconNetwork.ETH.NetworkName))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,

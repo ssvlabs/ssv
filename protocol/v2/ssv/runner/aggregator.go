@@ -30,7 +30,7 @@ type AggregatorRunner struct {
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
-	beaconNetwork spectypes.SSVNetwork,
+	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
