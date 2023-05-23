@@ -12,6 +12,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -97,10 +98,14 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-		if runner != nil && runner.HasRunningDuty() {
-			inst := runner.GetBaseRunner().State.RunningInstance
-			if inst != nil {
-				decided, _ := inst.IsDecided()
+		if runner == nil {
+			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
+		}
+		var runningInstance *instance.Instance
+		if runner.HasRunningDuty() {
+			runningInstance = runner.GetBaseRunner().State.RunningInstance
+			if runningInstance != nil {
+				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
 			}
 		}
@@ -108,15 +113,28 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum
 
-		// Pop only ExecuteDuty messages if there is no running instance.
 		filter := queue.FilterAny
-		if runner != nil && !runner.HasRunningDuty() {
+		if !runner.HasRunningDuty() {
+			// If no duty is running, pop only ExecuteDuty messages.
 			filter = func(m *queue.DecodedSSVMessage) bool {
 				e, ok := m.Body.(*types.EventMsg)
 				if !ok {
 					return false
 				}
 				return e.Type == types.ExecuteDuty
+			}
+		} else if runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			// If no proposal was accepted for the current round, skip non-proposal consensus messages
+			// for the current height and round.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				sm, ok := m.Body.(*specqbft.SignedMessage)
+				if !ok {
+					return true
+				}
+				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+					return true
+				}
+				return sm.Message.MsgType == specqbft.ProposalMsgType
 			}
 		}
 
