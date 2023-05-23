@@ -13,7 +13,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -108,19 +107,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum
 
-		filter := queue.FilterAny
-		if !state.HasRunningInstance {
-			filter = func(m *queue.DecodedSSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
-			}
-		}
-
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
+		// logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 		if ctx.Err() != nil {
 			break
 		}

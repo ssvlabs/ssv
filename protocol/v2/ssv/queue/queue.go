@@ -13,9 +13,6 @@ const (
 // Filter is a function that returns true if the message should be popped.
 type Filter func(*DecodedSSVMessage) bool
 
-// FilterAny returns a Filter that returns true for any message.
-func FilterAny(*DecodedSSVMessage) bool { return true }
-
 // Queue is a queue of DecodedSSVMessage with dynamic (per-pop) prioritization.
 type Queue interface {
 	// Push blocks until the message is pushed to the queue.
@@ -27,10 +24,10 @@ type Queue interface {
 
 	// Pop returns and removes the next message in the queue, or blocks until a message is available.
 	// When the context is canceled, Pop returns immediately with any leftover message or nil.
-	Pop(context.Context, MessagePrioritizer, Filter) *DecodedSSVMessage
+	Pop(context.Context, MessagePrioritizer) *DecodedSSVMessage
 
 	// TryPop returns immediately with the next message in the queue, or nil if there is none.
-	TryPop(MessagePrioritizer, Filter) *DecodedSSVMessage
+	TryPop(MessagePrioritizer) *DecodedSSVMessage
 
 	// Empty returns true if the queue is empty.
 	Empty() bool
@@ -69,19 +66,19 @@ func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
 	}
 }
 
-func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox.
 	q.readInbox()
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		return q.pop(prioritizer, filter)
+		return q.pop(prioritizer)
 	}
 
 	return nil
 }
 
-func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	// Read any pending messages from the inbox, if enough time has passed.
 	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
 	// since reading the inbox is more expensive than just reading the head.
@@ -91,23 +88,13 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer,
 
 	// Try to pop immediately.
 	if q.head != nil {
-		if m := q.pop(prioritizer, filter); m != nil {
-			return m
-		}
+		return q.pop(prioritizer)
 	}
 
 	// Wait for a message to be pushed.
-Wait:
 	select {
 	case msg := <-q.inbox:
-		if q.head == nil {
-			q.head = &item{message: msg}
-		} else {
-			q.head = &item{message: msg, next: q.head}
-		}
-		if !filter(msg) {
-			goto Wait
-		}
+		q.head = &item{message: msg}
 	case <-ctx.Done():
 	}
 
@@ -116,7 +103,7 @@ Wait:
 
 	// Pop the highest priority message.
 	if q.head != nil {
-		return q.pop(prioritizer, filter)
+		return q.pop(prioritizer)
 	}
 
 	return nil
@@ -139,13 +126,11 @@ func (q *priorityQueue) readInbox() {
 	}
 }
 
-func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+func (q *priorityQueue) pop(prioritizer MessagePrioritizer) *DecodedSSVMessage {
 	if q.head.next == nil {
 		m := q.head.message
-		if filter(m) {
-			q.head = nil
-			return m
-		}
+		q.head = nil
+		return m
 	}
 
 	// Remove the highest priority message and return it.
@@ -169,10 +154,7 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 	} else {
 		prior.next = highest.next
 	}
-	if filter(highest.message) {
-		return highest.message
-	}
-	return nil
+	return highest.message
 }
 
 func (q *priorityQueue) Empty() bool {
