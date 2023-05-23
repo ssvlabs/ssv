@@ -3,6 +3,7 @@ package duties
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -146,12 +146,8 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
-	if err != nil {
-		return errors.Wrap(err, "failed to deserialize pubkey from duty")
-	}
-	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey, dc.ethNetwork.SSV.Domain)
+	if v, ok := dc.validatorController.GetValidator(hex.EncodeToString(pk[:])); ok {
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, dc.ethNetwork.SSV.Domain)
 		if err != nil {
 			return err
 		}
@@ -171,7 +167,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -187,7 +183,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey, domain sp
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, pubKey.Serialize(), duty.Type),
+		MsgID:   spectypes.NewMsgID(domain, pubKey[:], duty.Type),
 		Data:    data,
 	}, nil
 }
