@@ -125,7 +125,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 				}
 				return e.Type == types.ExecuteDuty
 			}
-		} else if runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 			// If no proposal was accepted for the current round, skip non-proposal consensus messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
