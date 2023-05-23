@@ -61,7 +61,6 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the nonce handler interface
 func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, nonceHandler NonceHandler) error {
 	logger.Info("syncing eth1 contract events")
 
@@ -143,6 +142,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 }
 
 // HandleEventResult handles the result of an event
+// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the nonce handler interface
 func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, nonceHandler NonceHandler) []error {
 	var errs []error
 	syncTitle := "history"
