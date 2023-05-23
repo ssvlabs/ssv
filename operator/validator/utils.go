@@ -137,7 +137,8 @@ func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path str
 	}
 	for _, ev := range parsedData {
 		logFields, err := handler(*ev)
-		errs := eth1.HandleEventResult(logger, *ev, logFields, err, false)
+		// todo(align-contract-v0.3.1-rc.0) handle nonce handler for local events
+		errs := eth1.HandleEventResult(logger, *ev, logFields, err, false, nil)
 		if len(errs) > 0 {
 			logger.Warn("could not handle some of the events during local events sync", zap.Any("errs", errs))
 			return errors.New("could not handle some of the events during local events sync")
