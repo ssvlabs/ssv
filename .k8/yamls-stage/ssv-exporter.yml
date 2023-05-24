@@ -149,9 +149,9 @@ spec:
             - name: DISCOVERY_TYPE_KEY
               value: "discv5"
             - name: DB_PATH
-              value: "./data/db-v3-shifu"
+              value: "./data/db-jato-v2"
             - name: NETWORK
-              value: "jato"
+              value: "jato-v2"
             - name: DB_REPORTING
               value: "false"
             - name: METRICS_API_PORT
