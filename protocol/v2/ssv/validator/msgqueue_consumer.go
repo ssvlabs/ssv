@@ -12,7 +12,9 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // MessageHandler process the msg. return error if exist
@@ -92,14 +94,20 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	logger.Debug("📬 queue consumer is running")
 
+	lens := make([]int, 0, 10)
+
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
 		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
-		if runner != nil && runner.HasRunningDuty() {
-			inst := runner.GetBaseRunner().State.RunningInstance
-			if inst != nil {
-				decided, _ := inst.IsDecided()
+		if runner == nil {
+			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
+		}
+		var runningInstance *instance.Instance
+		if runner.HasRunningDuty() {
+			runningInstance = runner.GetBaseRunner().State.RunningInstance
+			if runningInstance != nil {
+				decided, _ := runningInstance.IsDecided()
 				state.HasRunningInstance = !decided
 			}
 		}
@@ -107,9 +115,33 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		state.Round = v.GetLastRound(msgID)
 		state.Quorum = v.Share.Quorum
 
+		filter := queue.FilterAny
+		if !runner.HasRunningDuty() {
+			// If no duty is running, pop only ExecuteDuty messages.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				e, ok := m.Body.(*types.EventMsg)
+				if !ok {
+					return false
+				}
+				return e.Type == types.ExecuteDuty
+			}
+		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+			// If no proposal was accepted for the current round, skip prepare & commit messages
+			// for the current height and round.
+			filter = func(m *queue.DecodedSSVMessage) bool {
+				sm, ok := m.Body.(*specqbft.SignedMessage)
+				if !ok {
+					return true
+				}
+				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+					return true
+				}
+				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
+			}
+		}
+
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state))
-		// logger.Debug("📬 queue: pop message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
 		if ctx.Err() != nil {
 			break
 		}
@@ -117,10 +149,19 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
+		lens = append(lens, q.Q.Len())
+		if len(lens) >= 10 {
+			logger.Debug("📬 [TEMPORARY] queue statistics",
+				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+				zap.Ints("past_10_lengths", lens))
+			lens = lens[:0]
+		}
 
 		// Handle the message.
 		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message", zap.Any("type", msg.SSVMessage.MsgType), zap.Error(err))
+			v.logMsg(logger, msg, "❗ could not handle message",
+				fields.MessageType(msg.SSVMessage.MsgType),
+				zap.Error(err))
 		}
 	}
 
@@ -128,19 +169,25 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	return nil
 }
 
-func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, fields ...zap.Field) {
+func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, logMsg string, withFields ...zap.Field) {
+	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*specqbft.SignedMessage)
-		fields = append(append([]zap.Field{}, zap.Int64("msg_height", int64(sm.Message.Height)),
+		baseFields = []zap.Field{
+			zap.Int64("msg_height", int64(sm.Message.Height)),
 			zap.Int64("msg_round", int64(sm.Message.Round)),
 			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-			zap.Any("signers", sm.Signers)), fields...)
+			zap.Any("signers", sm.Signers),
+		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-		fields = append([]zap.Field{zap.Int64("signer", int64(psm.Signer))}, fields...)
+		baseFields = []zap.Field{
+			zap.Int64("signer", int64(psm.Signer)),
+			fields.Slot(psm.Message.Slot),
+		}
 	}
-	logger.Debug(logMsg, fields...)
+	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
 
 // GetLastHeight returns the last height for the given identifier

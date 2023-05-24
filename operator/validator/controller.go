@@ -754,7 +754,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
 			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
-			runners[role].(*runner.ValidatorRegistrationRunner).GasLimit = options.GasLimit // apply gas limit
 		}
 	}
 	return runners

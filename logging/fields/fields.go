@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bloxapp/ssv/utils/format"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -56,8 +58,8 @@ const (
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
-	FieldMessageID           = "message_id"
-	FieldMessageType         = "message_type"
+	FieldMessageID           = "msg_id"
+	FieldMessageType         = "msg_type"
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"

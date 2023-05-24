@@ -196,5 +196,8 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion f
 		ForkVersion:       forkVersion,
 		UserAgent:         ua,
 		Discovery:         discT,
+		Permissioned: func() bool {
+			return false
+		},
 	}
 }

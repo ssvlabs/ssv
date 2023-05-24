@@ -69,6 +69,8 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
 	state := NewRunnerState(b.Share.Quorum, duty)
 
+	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
+	// b.State but currently does not write to it
 	b.mtx.Lock() // writes to b.State
 	b.State = state
 	b.mtx.Unlock()
@@ -98,8 +100,6 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 		return err
 	}
 
-	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
 	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
 }
