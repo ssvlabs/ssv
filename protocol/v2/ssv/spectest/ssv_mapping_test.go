@@ -239,10 +239,6 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 		ret.(*runner.ProposerRunner).ProducesBlindedBlocks = blindedBlocks.(bool)
 	}
 
-	if gasLimit, ok := runnerMap["GasLimit"]; ok {
-		ret.(*runner.ValidatorRegistrationRunner).GasLimit = uint64(gasLimit.(float64))
-	}
-
 	if ret.GetBaseRunner().QBFTController != nil {
 		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {

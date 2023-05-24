@@ -3,12 +3,13 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/format"
 	"math/big"
 	"net"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/bloxapp/ssv/utils/format"
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -54,8 +55,8 @@ const (
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
-	FieldMessageID           = "message_id"
-	FieldMessageType         = "message_type"
+	FieldMessageID           = "msg_id"
+	FieldMessageType         = "msg_type"
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldNetworkID           = "network_id"

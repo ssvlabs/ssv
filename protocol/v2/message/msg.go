@@ -19,7 +19,7 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 	case spectypes.SSVConsensusMsgType:
 		return "consensus"
 	case spectypes.SSVPartialSignatureMsgType:
-		return "partialSignature"
+		return "partial_signature"
 	case spectypes.DKGMsgType:
 		return "dkg"
 	case SSVSyncMsgType:

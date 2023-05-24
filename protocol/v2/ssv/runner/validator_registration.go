@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -20,7 +20,6 @@ import (
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
-	GasLimit   uint64
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
@@ -158,15 +157,15 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2apiv1.ValidatorRegistration, error) {
+func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
-	return &eth2apiv1.ValidatorRegistration{
+	return &v1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     r.GasLimit,
+		GasLimit:     spectypes.DefaultGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
