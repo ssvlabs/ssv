@@ -101,17 +101,20 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer,
 
 	// Wait for a message to be pushed.
 Wait:
-	select {
-	case msg := <-q.inbox:
-		if q.head == nil {
-			q.head = &item{message: msg}
-		} else {
-			q.head = &item{message: msg, next: q.head}
+	for {
+		select {
+		case msg := <-q.inbox:
+			if q.head == nil {
+				q.head = &item{message: msg}
+			} else {
+				q.head = &item{message: msg, next: q.head}
+			}
+			if filter(msg) {
+				break Wait
+			}
+		case <-ctx.Done():
+			break Wait
 		}
-		if !filter(msg) {
-			goto Wait
-		}
-	case <-ctx.Done():
 	}
 
 	// Read any messages that were pushed while waiting.
