@@ -16,6 +16,7 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 		}
 		return result
 	}
+
 	tt := []struct {
 		name  string
 		event abiparser.ValidatorAddedEvent
@@ -54,7 +55,7 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 			event: abiparser.ValidatorAddedEvent{
 				OperatorIds: generateOperatorIDs(14),
 			},
-			err: "too many operator IDs: 14",
+			err: "too many operators (14)",
 		},
 		{
 			name: "0 operators",
@@ -96,9 +97,10 @@ func Test_validateValidatorAddedEvent(t *testing.T) {
 			event: abiparser.ValidatorAddedEvent{
 				OperatorIds: []uint64{1, 2, 3, 3},
 			},
-			err: "duplicated operator ID: 3",
+			err: "duplicated operator ID (3)",
 		},
 	}
+
 	for _, tc := range tt {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

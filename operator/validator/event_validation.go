@@ -12,7 +12,7 @@ func validateValidatorAddedEvent(event abiparser.ValidatorAddedEvent) error {
 	operatorCount := len(event.OperatorIds)
 
 	if operatorCount > maxOperators {
-		return fmt.Errorf("too many operator IDs: %d", operatorCount)
+		return fmt.Errorf("too many operators (%d)", operatorCount)
 	}
 
 	if operatorCount == 0 {
@@ -30,7 +30,7 @@ func validateValidatorAddedEvent(event abiparser.ValidatorAddedEvent) error {
 	seenOperators := map[uint64]struct{}{}
 	for _, operatorID := range event.OperatorIds {
 		if _, ok := seenOperators[operatorID]; ok {
-			return fmt.Errorf("duplicated operator ID: %d", operatorID)
+			return fmt.Errorf("duplicated operator ID (%d)", operatorID)
 		}
 		seenOperators[operatorID] = struct{}{}
 	}
