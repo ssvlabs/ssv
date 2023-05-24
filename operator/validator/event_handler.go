@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -123,6 +124,10 @@ func (c *controller) handleValidatorAddedEvent(
 	event abiparser.ValidatorAddedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
+	if err := validateValidatorAddedEvent(event); err != nil {
+		return nil, fmt.Errorf("malformed ValidatorAddedEvent: %w", err)
+	}
+
 	pubKey := hex.EncodeToString(event.PublicKey)
 	// TODO: check if need
 	if ongoingSync {
