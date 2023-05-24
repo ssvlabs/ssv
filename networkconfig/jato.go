@@ -13,8 +13,7 @@ var Jato = spectypes.BeaconNetwork{
 	SSV: spectypes.SSVParams{
 		DefaultSyncOffset: new(big.Int).SetInt64(8661727),
 		ForkVersion:       [4]byte{0x00, 0x00, 0x10, 0x20},
-		//Domain:            spectypes.V3Testnet,
-		Domain: [4]byte{0x00, 0x00, 0x30, 0x11}, // TODO: find out why this is was in the config instead of spectypes.V3Testnet
+		Domain:            [4]byte{0x00, 0x00, 0x30, 0x11},
 		Bootnodes: []string{ // TODO: check what nodes are needed here
 			// env-default from BOOTNODES config
 			// "enr:-Li4QO2k62g1tiwitaoFVMT8zN-sSNPp8cg8Kv-5lg6_6VLjVZREhxVMSmerOTptlKbBaO2iszi7rvKBYzbGf38HpcSGAYLoed50h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdWuKJc2VjcDI1NmsxoQITQ1OchoBl5XW9RfBembdN9Er1qNEOIc5ohrQ0rT9B-YN0Y3CCE4iDdWRwgg-g;enr:-Li4QAxqhjjQN2zMAAEtOF5wlcr2SFnPKINvvlwMXztJhClrfRYLrqNy2a_dMUwDPKcvM7bebq3uptRoGSV0LpYEJuyGAYRZG5n5h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQLbXMJi_Pq3imTq11EwH8MbxmXlHYvH2Drz_rsqP1rNyoN0Y3CCE4iDdWRwgg-g",
