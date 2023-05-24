@@ -185,6 +185,7 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 }
 
 // HandleNonceSetter should be atomic
+// todo(align-contract-v0.3.1-rc.0) must be atomic
 func HandleNonceSetter(eventName string, log types.Log, eventHandler EventHandler) error {
 	// todo(align-contract-v0.3.1-rc.0) should we store the tx hash for all events or for validatorAdded event only?
 	if eventName != abiparser.ValidatorAdded {
