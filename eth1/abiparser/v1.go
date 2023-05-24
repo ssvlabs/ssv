@@ -4,7 +4,6 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -31,9 +30,6 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
-// b64 encrypted key length is 256
-const encryptedKeyLength = 256
-
 // OperatorAddedEvent struct represents event received by the smart contract
 type OperatorAddedEvent struct {
 	OperatorId uint64         // indexed
@@ -52,6 +48,8 @@ type ValidatorAddedEvent struct {
 	Owner           common.Address // indexed
 	OperatorIds     []uint64
 	PublicKey       []byte
+	Signature       []byte
+	TxHash          common.Hash
 	Shares          []byte
 	SharePublicKeys [][]byte
 	EncryptedKeys   [][]byte
@@ -90,8 +88,8 @@ type Cluster struct {
 	ValidatorCount  uint32
 	NetworkFeeIndex uint64
 	Index           uint64
-	Balance         *big.Int
 	Active          bool
+	Balance         *big.Int
 }
 
 // AbiV1 parsing events from v1 abi contract
@@ -139,6 +137,7 @@ func (v1 *AbiV1) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
 func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
+	// NOTE: we are not incrementing the nonce on the below malformed events because they should never happen
 	var event ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorAdded, log.Data)
 	if err != nil {
@@ -147,25 +146,13 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*
 		}
 	}
 
-	// the 2 first bytes are unnecessary for parsing
-	pubKeysOffset := 2 + len(event.OperatorIds)*phase0.PublicKeyLength
-	sharesExpectedLength := pubKeysOffset + encryptedKeyLength*len(event.OperatorIds)
-
-	if sharesExpectedLength != len(event.Shares) {
-		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event shares length is not correct", ValidatorAdded),
-		}
-	}
-
-	event.SharePublicKeys = splitBytes(event.Shares[2:pubKeysOffset], phase0.PublicKeyLength)
-	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/len(event.OperatorIds))
-
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
 			Err: errors.Errorf("%s event missing topics", ValidatorAdded),
 		}
 	}
 	event.Owner = common.HexToAddress(log.Topics[1].Hex())
+	event.TxHash = log.TxHash
 
 	return &event, nil
 }
@@ -276,17 +263,4 @@ func unpackField(fieldBytes []byte) ([]byte, error) {
 func getOutAbi() (abi.ABI, error) {
 	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
 	return abi.JSON(strings.NewReader(def))
-}
-
-func splitBytes(buf []byte, lim int) [][]byte {
-	var chunk []byte
-	chunks := make([][]byte, 0, len(buf)/lim+1)
-	for len(buf) >= lim {
-		chunk, buf = buf[:lim], buf[lim:]
-		chunks = append(chunks, chunk)
-	}
-	if len(buf) > 0 {
-		chunks = append(chunks, buf[:])
-	}
-	return chunks
 }
