@@ -188,15 +188,18 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.subnets
 	}
 
-	filters := []connections.HandshakeFilter{
-		connections.NetworkIDFilter(n.cfg.NetworkID),
-	}
+	filters := func() []connections.HandshakeFilter {
+		filters := []connections.HandshakeFilter{
+			connections.NetworkIDFilter(n.cfg.NetworkID),
+		}
 
-	if n.cfg.Permissioned {
-		filters = append(filters,
-			connections.SenderRecipientIPsCheckFilter(n.host.ID()),
-			connections.SignatureCheckFilter(),
-			connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+		if n.cfg.Permissioned() {
+			filters = append(filters,
+				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
+				connections.SignatureCheckFilter(),
+				connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+		}
+		return filters
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
@@ -210,7 +213,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		SubnetsProvider: subnetsProvider,
 		NodeStorage:     n.nodeStorage,
 		Permissioned:    n.cfg.Permissioned,
-	}, filters...)
+	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")

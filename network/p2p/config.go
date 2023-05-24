@@ -78,10 +78,10 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateSlot   uint64 `yaml:"PermissionedActivateSlot" env:"PERMISSIONED_ACTIVE_SLOT" env-default:"99999999999999" env-description:"On which slot to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateSlot uint64 `yaml:"PermissionedDeactivateSlot" env:"PERMISSIONED_DEACTIVE_SLOT" env-default:"0" env-description:"On which slot to start accepting operators all peers"`
+	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
+	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start accepting operators all peers"`
 
-	Permissioned bool // this is not loaded from config file but set up in full node setup
+	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
 }
