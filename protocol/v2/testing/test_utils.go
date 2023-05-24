@@ -96,7 +96,7 @@ func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sk.SignByte(root), nil
+	return sk.SignByte(root[:]), nil
 }
 
 // MultiSignMsg signs a msg with multiple signers
