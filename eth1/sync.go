@@ -33,7 +33,7 @@ type SyncEventHandler func(Event) ([]zap.Field, error)
 type EventHandler interface {
 	GetEventData(txHash common.Hash) (*storage.EventData, bool, error)
 	SaveEventData(txHash common.Hash) error
-	GetNonce(owner common.Address) (storage.Nonce, error)
+	GetNextNonce(owner common.Address) (storage.Nonce, error)
 	BumpNonce(owner common.Address) error
 }
 
@@ -61,6 +61,7 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
+// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the event handler interface
 func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, eventHandler EventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
@@ -142,7 +143,6 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 }
 
 // HandleEventResult handles the result of an event
-// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the nonce handler interface
 func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, eventHandler EventHandler) []error {
 	var errs []error
 	syncTitle := "history"
@@ -182,27 +182,6 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 	}
 
 	return errs
-}
-
-func HandleNonceGetter(log types.Log, eventHandler EventHandler) (storage.Nonce, bool, error) {
-	_, found, err := eventHandler.GetEventData(log.TxHash)
-	if err != nil {
-		return 0, false, errors.Wrap(err, "failed to get event data")
-	}
-	if found {
-		// skip
-		return 0, true, nil
-	}
-
-	// todo(align-contract-v0.3.1-rc.0) validate if is it safe to use vLog.Topics[1] to get the owner address for ValidatorAddedEvent only
-	// get nonce
-	owner := common.BytesToAddress(log.Topics[1].Bytes())
-	nonce, err := eventHandler.GetNonce(owner)
-	if err != nil {
-		return 0, false, errors.Wrap(err, "failed to get nonce")
-	}
-	nonce++
-	return nonce, false, nil
 }
 
 // HandleNonceSetter should be atomic

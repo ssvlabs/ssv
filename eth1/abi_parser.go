@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (
@@ -61,8 +60,8 @@ func (ap AbiParser) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (ap AbiParser) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI, nonce registrystorage.Nonce) (*abiparser.ValidatorAddedEvent, error) {
-	return ap.Version.ParseValidatorAddedEvent(log, contractAbi, nonce)
+func (ap AbiParser) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error) {
+	return ap.Version.ParseValidatorAddedEvent(log, contractAbi)
 }
 
 // ParseValidatorRemovedEvent parses ValidatorRemovedEvent
@@ -89,7 +88,7 @@ func (ap AbiParser) ParseFeeRecipientAddressUpdatedEvent(log types.Log, contract
 type AbiVersion interface {
 	ParseOperatorAddedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.OperatorAddedEvent, error)
 	ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.OperatorRemovedEvent, error)
-	ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI, nonce registrystorage.Nonce) (*abiparser.ValidatorAddedEvent, error)
+	ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.ValidatorAddedEvent, error)
 	ParseValidatorRemovedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.ValidatorRemovedEvent, error)
 	ParseClusterLiquidatedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.ClusterLiquidatedEvent, error)
 	ParseClusterReactivatedEvent(log types.Log, contractAbi abi.ABI) (*abiparser.ClusterReactivatedEvent, error)

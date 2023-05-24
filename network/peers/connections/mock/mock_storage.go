@@ -33,7 +33,7 @@ func (m NodeStorage) SaveEventData(txHash common.Hash) error {
 	panic("implement me")
 }
 
-func (m NodeStorage) GetNonce(owner common.Address) (registrystorage.Nonce, error) {
+func (m NodeStorage) GetNextNonce(owner common.Address) (registrystorage.Nonce, error) {
 	//TODO implement me
 	panic("implement me")
 }

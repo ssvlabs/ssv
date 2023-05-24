@@ -1,7 +1,6 @@
 package abiparser
 
 import (
-	"fmt"
 	"math/big"
 	"strings"
 
@@ -9,11 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 // MalformedEventError is returned when event is malformed
@@ -57,6 +52,8 @@ type ValidatorAddedEvent struct {
 	Owner           common.Address // indexed
 	OperatorIds     []uint64
 	PublicKey       []byte
+	Signature       []byte
+	TxHash          common.Hash
 	Shares          []byte
 	SharePublicKeys [][]byte
 	EncryptedKeys   [][]byte
@@ -143,7 +140,7 @@ func (v1 *AbiV1) ParseOperatorRemovedEvent(log types.Log, contractAbi abi.ABI) (
 }
 
 // ParseValidatorAddedEvent parses ValidatorAddedEvent
-func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI, nonce registrystorage.Nonce) (*ValidatorAddedEvent, error) {
+func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI) (*ValidatorAddedEvent, error) {
 	var event ValidatorAddedEvent
 	err := contractAbi.UnpackIntoInterface(&event, ValidatorAdded, log.Data)
 	if err != nil {
@@ -165,24 +162,17 @@ func (v1 *AbiV1) ParseValidatorAddedEvent(log types.Log, contractAbi abi.ABI, no
 		}
 	}
 
+	event.Signature = event.Shares[:signatureOffset]
 	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
 	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/operatorCount)
+	event.TxHash = log.TxHash
 
-	// todo(align-contract-v0.3.1-rc.0) false positive?
 	if len(log.Topics) < 2 {
 		return nil, &MalformedEventError{
 			Err: errors.Errorf("%s event missing topics", ValidatorAdded),
 		}
 	}
 	event.Owner = common.HexToAddress(log.Topics[1].Hex())
-
-	sig := event.Shares[:signatureOffset]
-	err = verifySignature(&event, sig, nonce)
-	if err != nil {
-		return nil, &MalformedEventError{
-			Err: errors.Errorf("%s event signature verifcation failed", ValidatorAdded),
-		}
-	}
 
 	return &event, nil
 }
@@ -306,27 +296,4 @@ func splitBytes(buf []byte, lim int) [][]byte {
 		chunks = append(chunks, buf[:])
 	}
 	return chunks
-}
-
-// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-// verify signature of the ValidatorAddedEvent shares data
-func verifySignature(event *ValidatorAddedEvent, sig []byte, nonce registrystorage.Nonce) error {
-	data := fmt.Sprintf("%s:%d", event.Owner.String(), nonce)
-	hash := crypto.Keccak256([]byte(data))
-
-	sign := &bls.Sign{}
-	if err := sign.Deserialize(sig); err != nil {
-		return errors.Wrap(err, "failed to deserialize signature")
-	}
-
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(event.PublicKey); err != nil {
-		return errors.Wrap(err, "failed to deserialize public key")
-	}
-
-	if res := sign.VerifyByte(pk, hash); !res {
-		return errors.New("failed to verify signature")
-	}
-
-	return nil
 }

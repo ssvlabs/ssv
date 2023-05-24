@@ -36,7 +36,7 @@ type RecipientData struct {
 type Recipients interface {
 	GetRecipientData(owner common.Address) (*RecipientData, bool, error)
 	GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
-	GetNonce(owner common.Address) (Nonce, error)
+	GetNextNonce(owner common.Address) (Nonce, error)
 	BumpNonce(owner common.Address) error
 	SaveRecipientData(recipientData *RecipientData) (*RecipientData, error)
 	DeleteRecipientData(owner common.Address) error
@@ -108,15 +108,19 @@ func (s *recipientsStorage) GetRecipientDataMany(logger *zap.Logger, owners []co
 	return results, nil
 }
 
-func (s *recipientsStorage) GetNonce(owner common.Address) (Nonce, error) {
+func (s *recipientsStorage) GetNextNonce(owner common.Address) (Nonce, error) {
 	data, found, err := s.GetRecipientData(owner)
 	if err != nil {
 		return Nonce(0), errors.Wrap(err, "could not get recipient data")
 	}
 	if !found {
-		return Nonce(-1), nil
+		return Nonce(0), nil
 	}
-	return *data.Nonce, nil
+	if data.Nonce == nil {
+		return Nonce(0), errors.New("nonce data is nil")
+	}
+
+	return *data.Nonce + 1, nil
 }
 
 func (s *recipientsStorage) BumpNonce(owner common.Address) error {

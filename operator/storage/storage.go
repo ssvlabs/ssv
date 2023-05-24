@@ -125,8 +125,8 @@ func (s *storage) DeleteRecipientData(owner common.Address) error {
 	return s.recipientStore.DeleteRecipientData(owner)
 }
 
-func (s *storage) GetNonce(owner common.Address) (registrystorage.Nonce, error) {
-	return s.recipientStore.GetNonce(owner)
+func (s *storage) GetNextNonce(owner common.Address) (registrystorage.Nonce, error) {
+	return s.recipientStore.GetNextNonce(owner)
 }
 
 func (s *storage) BumpNonce(owner common.Address) error {

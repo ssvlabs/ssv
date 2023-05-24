@@ -43,18 +43,17 @@ type ClientOptions struct {
 
 // eth1Client is the internal implementation of Client
 type eth1Client struct {
-	ctx        context.Context
-	conn       *ethclient.Client
-	eventsFeed *event.Feed
+	ctx  context.Context
+	conn *ethclient.Client
 
 	nodeAddr             string
 	registryContractAddr string
-	abiVersion           eth1.Version
 	contractABI          string
 	connectionTimeout    time.Duration
 
-	eventHandler           eth1.EventHandler
-	controllerEventHandler eth1.SyncEventHandler
+	eventsFeed *event.Feed
+
+	abiVersion eth1.Version
 }
 
 // verifies that the client implements HealthCheckAgent
@@ -70,7 +69,6 @@ func NewEth1Client(logger *zap.Logger, opts ClientOptions) (eth1.Client, error) 
 		connectionTimeout:    opts.ConnectionTimeout,
 		eventsFeed:           new(event.Feed),
 		abiVersion:           opts.AbiVersion,
-		eventHandler:         opts.EventHandler,
 	}
 
 	if err := ec.connect(logger); err != nil {
@@ -79,10 +77,6 @@ func NewEth1Client(logger *zap.Logger, opts ClientOptions) (eth1.Client, error) 
 	}
 
 	return &ec, nil
-}
-
-func (ec *eth1Client) SetControllerEventHandler(handler eth1.SyncEventHandler) {
-	ec.controllerEventHandler = handler
 }
 
 // EventsFeed returns the contract events feed
@@ -237,11 +231,6 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 					fields.TxHash(vLog.TxHash),
 				)
 
-				handleNonceErr := eth1.HandleNonceSetter(eventName, vLog, ec.eventHandler)
-				if handleNonceErr != nil {
-					loggerWith = loggerWith.With(zap.Error(errors.Wrap(handleNonceErr, "failed to handle nonce setter")))
-				}
-
 				loggerWith.With(zap.Error(err)).Warn("could not parse ongoing event, the event is malformed")
 				continue
 			}
@@ -341,12 +330,6 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 			)
 			var malformedEventErr *abiparser.MalformedEventError
 			if errors.As(err, &malformedEventErr) {
-				// todo(align-contract-v0.3.1-rc.0) nSuccess, should we decrease it here?
-				handleNonceErr := eth1.HandleNonceSetter(eventName, vLog, ec.eventHandler)
-				if handleNonceErr != nil {
-					loggerWith = loggerWith.With(zap.Error(errors.Wrap(handleNonceErr, "failed to handle nonce setter")))
-				}
-
 				loggerWith.Warn("could not parse history sync event, the event is malformed")
 			} else {
 				loggerWith.Error("could not parse history sync event")
@@ -391,29 +374,12 @@ func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAb
 		// skip
 		//ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorAdded:
-		// todo(align-contract-v0.3.1-rc.0) should we handle validatorAdded event only?
-		nonce, skip, err := eth1.HandleNonceGetter(vLog, ec.eventHandler)
-		if err != nil {
-			return ev.Name, errors.Wrap(err, "failed to handle nonce getter")
-		}
-		if skip {
-			return ev.Name, nil
-		}
-
-		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi, nonce)
+		parsed, err := abiParser.ParseValidatorAddedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)
 		if err != nil {
 			return ev.Name, err
 		}
-
-		evv := &eth1.Event{Log: vLog, Name: ev.Name, Data: *parsed}
-		// Handle event immediately after parsing
-		if evv != nil && ec.controllerEventHandler != nil {
-			logFields, err := ec.controllerEventHandler(*evv)
-			eth1.HandleEventResult(logger, *evv, logFields, err, false, ec.eventHandler)
-		}
-
-		//ec.fireEvent(vLog, ev.Name, *parsed)
+		ec.fireEvent(vLog, ev.Name, *parsed)
 	case abiparser.ValidatorRemoved:
 		parsed, err := abiParser.ParseValidatorRemovedEvent(vLog, contractAbi)
 		reportSyncEvent(ev.Name, err)

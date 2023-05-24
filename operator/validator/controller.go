@@ -192,6 +192,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		sharesStorage:              options.RegistryStorage,
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
+		eventHandler:               options.RegistryStorage,
 		ibftStorageMap:             storageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,
