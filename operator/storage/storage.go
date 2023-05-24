@@ -28,7 +28,7 @@ var (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	eth1.SyncOffsetStorage
-	eth1.NonceHandler
+	eth1.EventHandler
 
 	registry.RegistryStore
 

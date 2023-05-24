@@ -28,9 +28,9 @@ type SyncOffset = big.Int
 // SyncEventHandler handles a given event
 type SyncEventHandler func(Event) ([]zap.Field, error)
 
-// NonceHandler represents the interface for compatible storage
+// EventHandler represents the interface for compatible storage
 // todo(align-contract-v0.3.1-rc.0) add proper place for the interface
-type NonceHandler interface {
+type EventHandler interface {
 	GetEventData(txHash common.Hash) (*storage.EventData, bool, error)
 	SaveEventData(txHash common.Hash) error
 	GetNonce(owner common.Address) (storage.Nonce, error)
@@ -61,7 +61,7 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, nonceHandler NonceHandler) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, eventHandler EventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
 	cn := make(chan *Event, 4096)
@@ -83,7 +83,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 			if handler != nil {
 				logFields, err := handler(*event)
-				errs = HandleEventResult(logger, *event, logFields, err, false, nonceHandler)
+				errs = HandleEventResult(logger, *event, logFields, err, false, eventHandler)
 			}
 		}
 	}()
@@ -143,7 +143,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 
 // HandleEventResult handles the result of an event
 // todo(align-contract-v0.3.1-rc.0) find a proper way to pass the nonce handler interface
-func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, nonceHandler NonceHandler) []error {
+func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, eventHandler EventHandler) []error {
 	var errs []error
 	syncTitle := "history"
 	var showLog bool
@@ -176,7 +176,7 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
-	err = HandleNonceSetter(event.Name, event.Log, nonceHandler)
+	err = HandleNonceSetter(event.Name, event.Log, eventHandler)
 	if err != nil {
 		errs = append(errs, errors.Wrap(err, "could not handle nonce setter"))
 	}
@@ -184,8 +184,8 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 	return errs
 }
 
-func HandleNonceGetter(log types.Log, nonceHandler NonceHandler) (storage.Nonce, bool, error) {
-	_, found, err := nonceHandler.GetEventData(log.TxHash)
+func HandleNonceGetter(log types.Log, eventHandler EventHandler) (storage.Nonce, bool, error) {
+	_, found, err := eventHandler.GetEventData(log.TxHash)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "failed to get event data")
 	}
@@ -197,7 +197,7 @@ func HandleNonceGetter(log types.Log, nonceHandler NonceHandler) (storage.Nonce,
 	// todo(align-contract-v0.3.1-rc.0) validate if is it safe to use vLog.Topics[1] to get the owner address for ValidatorAddedEvent only
 	// get nonce
 	owner := common.BytesToAddress(log.Topics[1].Bytes())
-	nonce, err := nonceHandler.GetNonce(owner)
+	nonce, err := eventHandler.GetNonce(owner)
 	if err != nil {
 		return 0, false, errors.Wrap(err, "failed to get nonce")
 	}
@@ -206,19 +206,19 @@ func HandleNonceGetter(log types.Log, nonceHandler NonceHandler) (storage.Nonce,
 }
 
 // HandleNonceSetter should be atomic
-func HandleNonceSetter(eventName string, log types.Log, nonceHandler NonceHandler) error {
+func HandleNonceSetter(eventName string, log types.Log, eventHandler EventHandler) error {
 	// todo(align-contract-v0.3.1-rc.0) should we store the tx hash for all events or for validatorAdded event only?
 	if eventName != abiparser.ValidatorAdded {
 		return nil
 	}
 
-	err := nonceHandler.SaveEventData(log.TxHash)
+	err := eventHandler.SaveEventData(log.TxHash)
 	if err != nil {
 		return errors.Wrap(err, "failed to save event data")
 	}
 
 	owner := common.BytesToAddress(log.Topics[1].Bytes())
-	err = nonceHandler.BumpNonce(owner)
+	err = eventHandler.BumpNonce(owner)
 	if err != nil {
 		return errors.Wrap(err, "failed to bump the nonce")
 	}

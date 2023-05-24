@@ -188,6 +188,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	logger.Info("starting operator node syncing with eth1")
 
 	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
+	n.eth1Client.SetControllerEventHandler(handler)
 	// sync past events
 	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, syncOffset, handler, n.storage); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")

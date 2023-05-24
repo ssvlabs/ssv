@@ -111,7 +111,7 @@ type Controller interface {
 type controller struct {
 	context context.Context
 
-	nonceHandler      eth1.NonceHandler
+	eventHandler      eth1.EventHandler
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage registrystorage.Recipients
@@ -367,7 +367,7 @@ func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
 		select {
 		case e := <-cn:
 			logFields, err := handler(*e)
-			_ = eth1.HandleEventResult(logger, *e, logFields, err, true, c.nonceHandler)
+			_ = eth1.HandleEventResult(logger, *e, logFields, err, true, c.eventHandler)
 		case err := <-sub.Err():
 			logger.Warn("event feed subscription error", zap.Error(err))
 		}

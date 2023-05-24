@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -336,7 +337,7 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker, nonceHandler eth1.NonceHandler) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker, eventHandler eth1.EventHandler) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = validatorprotocol.DefaultGasLimit
@@ -361,7 +362,7 @@ func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker 
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
 		RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
-		NonceHandler:         nonceHandler,
+		EventHandler:         eventHandler,
 	})
 	if err != nil {
 		logger.Fatal("failed to create eth1 client", zap.Error(err))
