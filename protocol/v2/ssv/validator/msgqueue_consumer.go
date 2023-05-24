@@ -151,9 +151,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		}
 		lens = append(lens, q.Q.Len())
 		if len(lens) >= 10 {
-			logger.Debug("📬 popped message from queue",
+			logger.Debug("📬 [TEMPORARY] queue statistics",
 				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("queue_lens", lens))
+				zap.Ints("past_10_lengths", lens))
 			lens = lens[:0]
 		}
 

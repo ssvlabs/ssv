@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -74,10 +75,10 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
-	logger.Debug("RVRT got partial RANDAO sig",
-		zap.Uint64s("signers", signedMsg.GetSigners()),
-		zap.Bool("quorum", quorum),
-	)
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got partial RANDAO signatures",
+		zap.Uint64("signer", signedMsg.Signer))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
@@ -94,10 +95,12 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "could not reconstruct randao sig")
 	}
 
-	duty := r.GetState().StartingDuty
+	logger.Debug("🧩 reconstructed partial RANDAO signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
+	var start = time.Now()
 	if r.ProducesBlindedBlocks {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
@@ -113,6 +116,9 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
 	}
+
+	logger.Debug("🧊 got beacon block",
+		zap.Duration("took", time.Since(start)))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -215,6 +221,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
+		start := time.Now()
 		decidedBlockIsBlinded := r.decidedBlindedBlock()
 		if decidedBlockIsBlinded {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
@@ -248,7 +255,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
-			fields.BuilderProposals(decidedBlockIsBlinded))
+			fields.BuilderProposals(decidedBlockIsBlinded),
+			zap.Duration("took", time.Since(start)))
 	}
 	r.GetState().Finished = true
 	return nil
