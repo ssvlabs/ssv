@@ -9,6 +9,7 @@ import (
 var SupportedConfigs = map[string]spectypes.BeaconNetwork{
 	Mainnet.Name: Mainnet,
 	Jato.Name:    Jato,
+	JatoV2.Name:  JatoV2,
 }
 
 func GetNetworkByName(name string) (spectypes.BeaconNetwork, error) {
