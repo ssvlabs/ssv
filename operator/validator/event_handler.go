@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -19,6 +19,22 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
+
+// b64 encrypted key length is 256
+const encryptedKeyLength = 256
+
+func splitBytes(buf []byte, lim int) [][]byte {
+	var chunk []byte
+	chunks := make([][]byte, 0, len(buf)/lim+1)
+	for len(buf) >= lim {
+		chunk, buf = buf[:lim], buf[lim:]
+		chunks = append(chunks, chunk)
+	}
+	if len(buf) > 0 {
+		chunks = append(chunks, buf[:])
+	}
+	return chunks
+}
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
@@ -136,10 +152,35 @@ func (c *controller) handleValidatorAddedEvent(
 	}
 
 	// get nonce
-	nonce, err := c.recipientsStorage.GetNextNonce(event.Owner)
+	nonce, err := c.eventHandler.GetNextNonce(event.Owner)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get nonce")
 	}
+
+	err = c.eventHandler.SaveEventData(event.TxHash)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to save event data")
+	}
+
+	err = c.eventHandler.BumpNonce(event.Owner)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to bump the nonce")
+	}
+
+	// Calculate the expected length of constructed shares based on the number of operator IDs,
+	// signature length, public key length, and encrypted key length.
+	operatorCount := len(event.OperatorIds)
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
+	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
+
+	if sharesExpectedLength != len(event.Shares) {
+		return nil, errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)
+	}
+
+	event.Signature = event.Shares[:signatureOffset]
+	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
+	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/operatorCount)
 
 	// verify sig
 	if err = verifySignature(event.Signature, event.Owner, event.PublicKey, nonce); err != nil {

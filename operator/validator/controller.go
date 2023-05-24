@@ -107,11 +107,20 @@ type Controller interface {
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
+// EventHandler represents the interface for compatible storage
+// todo(align-contract-v0.3.1-rc.0) add proper place for the interface
+type EventHandler interface {
+	GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error)
+	SaveEventData(txHash common.Hash) error
+	GetNextNonce(owner common.Address) (registrystorage.Nonce, error)
+	BumpNonce(owner common.Address) error
+}
+
 // controller implements Controller
 type controller struct {
 	context context.Context
 
-	eventHandler      eth1.EventHandler
+	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage registrystorage.Recipients
@@ -368,7 +377,7 @@ func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
 		select {
 		case e := <-cn:
 			logFields, err := handler(*e)
-			_ = eth1.HandleEventResult(logger, *e, logFields, err, true, c.eventHandler)
+			_ = eth1.HandleEventResult(logger, *e, logFields, err, true)
 		case err := <-sub.Err():
 			logger.Warn("event feed subscription error", zap.Error(err))
 		}

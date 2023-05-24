@@ -34,7 +34,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, nil, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestSyncEth1Error(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, nil, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
@@ -85,7 +85,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
 	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
-	}, nil)
+	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
 }
 

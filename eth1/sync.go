@@ -5,14 +5,11 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/registry/storage"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
@@ -27,15 +24,6 @@ type SyncOffset = big.Int
 
 // SyncEventHandler handles a given event
 type SyncEventHandler func(Event) ([]zap.Field, error)
-
-// EventHandler represents the interface for compatible storage
-// todo(align-contract-v0.3.1-rc.0) add proper place for the interface
-type EventHandler interface {
-	GetEventData(txHash common.Hash) (*storage.EventData, bool, error)
-	SaveEventData(txHash common.Hash) error
-	GetNextNonce(owner common.Address) (storage.Nonce, error)
-	BumpNonce(owner common.Address) error
-}
 
 // SyncOffsetStorage represents the interface for compatible storage
 type SyncOffsetStorage interface {
@@ -61,8 +49,7 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the event handler interface
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler, eventHandler EventHandler) error {
+func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
 	logger.Info("syncing eth1 contract events")
 
 	cn := make(chan *Event, 4096)
@@ -84,7 +71,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 			if handler != nil {
 				logFields, err := handler(*event)
-				errs = HandleEventResult(logger, *event, logFields, err, false, eventHandler)
+				errs = HandleEventResult(logger, *event, logFields, err, false)
 			}
 		}
 	}()
@@ -143,7 +130,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 }
 
 // HandleEventResult handles the result of an event
-func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool, eventHandler EventHandler) []error {
+func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, err error, ongoingSync bool) []error {
 	var errs []error
 	syncTitle := "history"
 	var showLog bool
@@ -176,32 +163,5 @@ func HandleEventResult(logger *zap.Logger, event Event, logFields []zap.Field, e
 		logger.Info(fmt.Sprintf("%s sync event was handled successfully", syncTitle))
 	}
 
-	err = HandleNonceSetter(event.Name, event.Log, eventHandler)
-	if err != nil {
-		errs = append(errs, errors.Wrap(err, "could not handle nonce setter"))
-	}
-
 	return errs
-}
-
-// HandleNonceSetter should be atomic
-// todo(align-contract-v0.3.1-rc.0) must be atomic
-func HandleNonceSetter(eventName string, log types.Log, eventHandler EventHandler) error {
-	// todo(align-contract-v0.3.1-rc.0) should we store the tx hash for all events or for validatorAdded event only?
-	if eventName != abiparser.ValidatorAdded {
-		return nil
-	}
-
-	err := eventHandler.SaveEventData(log.TxHash)
-	if err != nil {
-		return errors.Wrap(err, "failed to save event data")
-	}
-
-	owner := common.BytesToAddress(log.Topics[1].Bytes())
-	err = eventHandler.BumpNonce(owner)
-	if err != nil {
-		return errors.Wrap(err, "failed to bump the nonce")
-	}
-
-	return nil
 }
