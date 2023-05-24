@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/format"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
