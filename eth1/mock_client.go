@@ -50,18 +50,6 @@ func (mr *MockClientMockRecorder) EventsFeed() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventsFeed", reflect.TypeOf((*MockClient)(nil).EventsFeed))
 }
 
-// SetControllerEventHandler mocks base method.
-func (m *MockClient) SetControllerEventHandler(handler SyncEventHandler) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetControllerEventHandler", handler)
-}
-
-// SetControllerEventHandler indicates an expected call of SetControllerEventHandler.
-func (mr *MockClientMockRecorder) SetControllerEventHandler(handler interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetControllerEventHandler", reflect.TypeOf((*MockClient)(nil).SetControllerEventHandler), handler)
-}
-
 // Start mocks base method.
 func (m *MockClient) Start(logger *zap.Logger) error {
 	m.ctrl.T.Helper()

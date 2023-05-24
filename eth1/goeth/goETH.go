@@ -34,11 +34,10 @@ type ClientOptions struct {
 	Ctx                  context.Context
 	NodeAddr             string
 	RegistryContractAddr string
-	AbiVersion           eth1.Version
 	ContractABI          string
 	ConnectionTimeout    time.Duration
 
-	EventHandler eth1.EventHandler
+	AbiVersion eth1.Version
 }
 
 // eth1Client is the internal implementation of Client
@@ -225,13 +224,12 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 			logger.Debug("received contract event from stream")
 			eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 			if err != nil {
-				loggerWith := logger.With(
+				logger.Warn("could not parse ongoing event, the event is malformed",
 					fields.EventName(eventName),
 					fields.BlockNumber(vLog.BlockNumber),
 					fields.TxHash(vLog.TxHash),
+					zap.Error(err),
 				)
-
-				loggerWith.With(zap.Error(err)).Warn("could not parse ongoing event, the event is malformed")
 				continue
 			}
 		}
@@ -338,7 +336,8 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 			continue
 		}
 	}
-	logger.Debug("event logs were received and parsed successfully", zap.Int("successCount", nSuccess))
+	logger.Debug("event logs were received and parsed successfully",
+		zap.Int("successCount", nSuccess))
 
 	return logs, nSuccess, nil
 }
