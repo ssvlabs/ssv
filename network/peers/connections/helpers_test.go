@@ -126,8 +126,8 @@ func getTestingData(t *testing.T) TestData {
 		net:          net,
 		nodeStorage:  nst,
 		streams:      sc,
-		filters:      []HandshakeFilter{},
-		Permissioned: false,
+		filters:      func() []HandshakeFilter { return []HandshakeFilter{} },
+		Permissioned: func() bool { return false },
 	}
 
 	mockConn := mock.Conn{

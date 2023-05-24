@@ -123,7 +123,7 @@ func TestHandshakePermissionedFlow(t *testing.T) {
 
 	type test struct {
 		name            string
-		permissioned    bool
+		permissioned    func() bool
 		expectedErr     error
 		incomingMessage records.AnyNodeInfo
 	}
@@ -131,25 +131,25 @@ func TestHandshakePermissionedFlow(t *testing.T) {
 	testCases := []test{
 		{
 			name:            "non-permissioned happy flow",
-			permissioned:    false,
+			permissioned:    func() bool { return false },
 			expectedErr:     nil,
 			incomingMessage: td.NodeInfo,
 		},
 		{
 			name:            "permissioned happy flow",
-			permissioned:    true,
+			permissioned:    func() bool { return true },
 			expectedErr:     nil,
 			incomingMessage: td.SignedNodeInfo,
 		},
 		{
 			name:            "permissioned node receives non-permissioned message",
-			permissioned:    true,
+			permissioned:    func() bool { return true },
 			expectedErr:     errConsumingMessage,
 			incomingMessage: td.NodeInfo,
 		},
 		{
 			name:            "non-permissioned node receives permissioned message",
-			permissioned:    false,
+			permissioned:    func() bool { return false },
 			expectedErr:     errConsumingMessage,
 			incomingMessage: td.SignedNodeInfo,
 		},
@@ -177,8 +177,8 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 	t.Run("not pass through filters", func(t *testing.T) {
 		td := getTestingData(t)
 
-		td.Handshaker.filters = []HandshakeFilter{
-			SenderRecipientIPsCheckFilter("some-id"),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{SenderRecipientIPsCheckFilter("some-id")}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
@@ -186,7 +186,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 	t.Run("pass through operators filter", func(t *testing.T) {
 		td := getTestingData(t)
-		td.Handshaker.Permissioned = true
+		td.Handshaker.Permissioned = func() bool { return true }
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
@@ -194,8 +194,8 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		senderPublicKey, err := rsaencryption.ExtractPublicKey(td.SenderPrivateKey)
 		require.NoError(t, err)
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{senderPublicKey}}
-		td.Handshaker.filters = []HandshakeFilter{
-			RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{}),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
@@ -203,7 +203,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 	t.Run(" pass through operators filter", func(t *testing.T) {
 		td := getTestingData(t)
-		td.Handshaker.Permissioned = true
+		td.Handshaker.Permissioned = func() bool { return true }
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
@@ -212,8 +212,8 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}
 
-		td.Handshaker.filters = []HandshakeFilter{
-			RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{senderPublicKey}),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{senderPublicKey})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
@@ -221,14 +221,14 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 	t.Run("not pass through operators filter", func(t *testing.T) {
 		td := getTestingData(t)
-		td.Handshaker.Permissioned = true
+		td.Handshaker.Permissioned = func() bool { return true }
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}
-		td.Handshaker.filters = []HandshakeFilter{
-			RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{}),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
@@ -236,13 +236,13 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 	t.Run(" pass through peers filter", func(t *testing.T) {
 		td := getTestingData(t)
-		td.Handshaker.Permissioned = true
+		td.Handshaker.Permissioned = func() bool { return true }
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
-		td.Handshaker.filters = []HandshakeFilter{
-			SenderRecipientIPsCheckFilter(td.RecipientPeerID),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{SenderRecipientIPsCheckFilter(td.RecipientPeerID)}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
@@ -250,14 +250,14 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 	t.Run("not pass through peers filter", func(t *testing.T) {
 		td := getTestingData(t)
-		td.Handshaker.Permissioned = true
+		td.Handshaker.Permissioned = func() bool { return true }
 		td.Conn.MockPeerID = "otherpeer"
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
-		td.Handshaker.filters = []HandshakeFilter{
-			SenderRecipientIPsCheckFilter(td.RecipientPeerID),
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{SenderRecipientIPsCheckFilter(td.RecipientPeerID)}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
