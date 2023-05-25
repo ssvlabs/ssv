@@ -3,9 +3,8 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"log"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -17,12 +16,10 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
-	GasLimit   uint64
 
 	beacon   specssv.BeaconNode
 	eth1     NodeStatusChecker
@@ -83,7 +80,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	// randao is relevant only for block proposals, no need to check type
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
-		return errors.Wrap(err, "could not reconstruct randao sig")
+		return errors.Wrap(err, "could not reconstruct validator registration sig")
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
@@ -158,7 +155,7 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -167,15 +164,15 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*eth2apiv1.ValidatorRegistration, error) {
+func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
 
 	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
 
-	return &eth2apiv1.ValidatorRegistration{
+	return &v1.ValidatorRegistration{
 		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
-		GasLimit:     r.GasLimit,
+		GasLimit:     spectypes.DefaultGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
 	}, nil
@@ -225,7 +222,6 @@ func (r *ValidatorRegistrationRunner) GetRoot() ([32]byte, error) {
 	if err != nil {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
-	log.Printf("runner root: %v", string(marshaledRoot))
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
 }

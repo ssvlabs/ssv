@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/bloxapp/ssv/utils/format"
+
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -25,7 +27,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/format"
 )
 
 const (
@@ -54,8 +55,8 @@ const (
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
-	FieldMessageID           = "message_id"
-	FieldMessageType         = "message_type"
+	FieldMessageID           = "msg_id"
+	FieldMessageType         = "msg_type"
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldNetworkID           = "network_id"

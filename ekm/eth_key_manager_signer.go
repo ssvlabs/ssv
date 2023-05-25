@@ -237,7 +237,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}
 
-	sig, err := account.ValidationKeySign(root)
+	sig, err := account.ValidationKeySign(root[:])
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign message")
 	}

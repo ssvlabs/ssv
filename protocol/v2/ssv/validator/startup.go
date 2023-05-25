@@ -33,10 +33,18 @@ func (v *Validator) Start(logger *zap.Logger) error {
 			}
 			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), r.GetBaseRunner().Share.ValidatorPubKey, role)
 			if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-				if err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
+				highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
+				if err != nil {
 					logger.Warn("❗failed to load highest instance",
 						fields.PubKey(identifier.GetPubKey()),
 						zap.Error(err))
+				} else if highestInstance != nil {
+					decidedValue := &spectypes.ConsensusData{}
+					if err := decidedValue.Decode(highestInstance.State.DecidedValue); err != nil {
+						logger.Warn("❗failed to decode decided value", zap.Error(err))
+					} else {
+						r.GetBaseRunner().SetHighestDecidedSlot(decidedValue.Duty.Slot)
+					}
 				}
 			}
 

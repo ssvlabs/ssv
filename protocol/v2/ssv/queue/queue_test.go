@@ -25,26 +25,74 @@ var mockState = &State{
 
 func TestPriorityQueue_TryPop(t *testing.T) {
 	queue := NewDefault()
-
 	require.True(t, queue.Empty())
 
 	// Push 2 messages.
-	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
 	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
 	require.False(t, queue.Empty())
 
 	// Pop 1st message.
-	popped := queue.TryPop(NewMessagePrioritizer(mockState))
-	require.Equal(t, msg, popped)
+	popped := queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
+	require.Equal(t, msg1, popped)
 
 	// Pop 2nd message.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState))
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop nil.
-	popped = queue.TryPop(NewMessagePrioritizer(mockState))
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), FilterAny)
+	require.Nil(t, popped)
+}
+
+func TestPriorityQueue_Filter(t *testing.T) {
+	queue := NewDefault()
+	require.True(t, queue.Empty())
+
+	// Push 1 message.
+	msg := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	require.False(t, queue.Empty())
+
+	// Pop non-matching message.
+	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+	})
+	require.False(t, queue.Empty())
+	require.Nil(t, popped)
+
+	// Pop matching message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
+	require.True(t, queue.Empty())
+	require.NotNil(t, popped)
+	require.Equal(t, msg, popped)
+
+	// Push 2 messages.
+	msg1 := decodeAndPush(t, queue, mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}, mockState)
+	msg2 := decodeAndPush(t, queue, mockConsensusMessage{Height: 101, Type: qbft.PrepareMsgType}, mockState)
+
+	// Pop 2nd message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+	})
+	require.NotNil(t, popped)
+	require.Equal(t, msg2, popped)
+
+	// Pop 1st message.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
+	require.True(t, queue.Empty())
+	require.NotNil(t, popped)
+	require.Equal(t, msg1, popped)
+
+	// Pop nil.
+	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
+		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+	})
 	require.Nil(t, popped)
 }
 
@@ -72,7 +120,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 	// Should pop everything immediately.
 	for i := 0; i < capacity; i++ {
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState), FilterAny)
 		require.Equal(t, msg, popped)
 	}
 	require.True(t, queue.Empty())
@@ -82,7 +130,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), contextTimeout)
 		defer cancel()
 		expectedEnd := time.Now().Add(contextTimeout)
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState), FilterAny)
 		require.Nil(t, popped)
 		require.WithinDuration(t, expectedEnd, time.Now(), precision)
 	}
@@ -98,7 +146,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	// Should wait for the messages to be pushed.
 	expectedEnd := time.Now().Add(pushDelay * time.Duration(capacity))
 	for i := 0; i < capacity; i++ {
-		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState))
+		popped := queue.Pop(ctx, NewMessagePrioritizer(mockState), FilterAny)
 		require.Equal(t, msg, popped)
 	}
 	require.True(t, queue.Empty())
@@ -128,7 +176,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 
 				// Pop messages from the queue and compare to the expected order.
 				for i, excepted := range messages {
-					actual := q.TryPop(NewMessagePrioritizer(test.state))
+					actual := q.TryPop(NewMessagePrioritizer(test.state), FilterAny)
 					require.Equal(t, excepted, actual, "incorrect message at index %d", i)
 				}
 			}
@@ -251,7 +299,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 			go func() {
 				defer poppersWg.Done()
 				for {
-					msg := queue.Pop(poppingCtx, NewMessagePrioritizer(mockState))
+					msg := queue.Pop(poppingCtx, NewMessagePrioritizer(mockState), FilterAny)
 					if msg == nil {
 						return
 					}
@@ -349,7 +397,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	go func() {
 		defer popperWg.Done()
 		for n := b.N; n > 0; n-- {
-			msg := queue.Pop(pushersCtx, prioritizer)
+			msg := queue.Pop(pushersCtx, prioritizer, FilterAny)
 			if msg == nil {
 				return
 			}

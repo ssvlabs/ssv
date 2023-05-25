@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -10,6 +11,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
+
+var TestingHighestDecidedSlot = phase0.Slot(0)
 
 var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
@@ -48,7 +51,6 @@ var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectesti
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	ret := baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
-	ret.(*runner.ValidatorRegistrationRunner).GasLimit = 1
 	return ret
 }
 
@@ -88,6 +90,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 	case spectypes.BNRoleAggregator:
 		return runner.NewAggregatorRunner(
@@ -99,6 +102,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 	case spectypes.BNRoleProposer:
 		return runner.NewProposerRunner(
@@ -110,6 +114,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 	case spectypes.BNRoleSyncCommittee:
 		return runner.NewSyncCommitteeRunner(
@@ -121,6 +126,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 	case spectypes.BNRoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
@@ -132,6 +138,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 	case spectypes.BNRoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
@@ -153,6 +160,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			net,
 			km,
 			valCheck,
+			TestingHighestDecidedSlot,
 		)
 		ret.(*runner.AttesterRunner).BaseRunner.BeaconRoleType = spectestingutils.UnknownDutyType
 		return ret
@@ -190,52 +198,6 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 //	}
 //
 //	return v.DutyRunners[spectypes.BNRoleAttester]
-//}
-//
-//var SSVDecidingMsgs = func(consensusData []byte, ks *spectestingutils.TestKeySet, role spectypes.BeaconRole) []*spectypes.SSVMessage {
-//	id := spectypes.NewMsgID(spectestingutils.TestingValidatorPubKey[:], role)
-//
-//	ssvMsgF := func(qbftMsg *specqbft.SignedMessage, partialSigMsg *specssv.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-//		var byts []byte
-//		var msgType spectypes.MsgType
-//		if partialSigMsg != nil {
-//			msgType = spectypes.SSVPartialSignatureMsgType
-//			byts, _ = partialSigMsg.Encode()
-//		} else {
-//			msgType = spectypes.SSVConsensusMsgType
-//			byts, _ = qbftMsg.Encode()
-//		}
-//
-//		return &spectypes.SSVMessage{
-//			MsgType: msgType,
-//			MsgID:   id,
-//			Data:    byts,
-//		}
-//	}
-//
-//	// pre consensus msgs
-//	base := make([]*spectypes.SSVMessage, 0)
-//	if role == spectypes.BNRoleProposer {
-//		for i := uint64(1); i <= ks.Threshold; i++ {
-//			base = append(base, ssvMsgF(nil, PreConsensusRandaoMsg(ks.Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i))))
-//		}
-//	}
-//	if role == spectypes.BNRoleAggregator {
-//		for i := uint64(1); i <= ks.Threshold; i++ {
-//			base = append(base, ssvMsgF(nil, PreConsensusSelectionProofMsg(ks.Shares[spectypes.OperatorID(i)], ks.Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), spectypes.OperatorID(i))))
-//		}
-//	}
-//	if role == spectypes.BNRoleSyncCommitteeContribution {
-//		for i := uint64(1); i <= ks.Threshold; i++ {
-//			base = append(base, ssvMsgF(nil, PreConsensusContributionProofMsg(ks.Shares[spectypes.OperatorID(i)], ks.Shares[spectypes.OperatorID(i)], spectypes.OperatorID(i), spectypes.OperatorID(i))))
-//		}
-//	}
-//
-//	qbftMsgs := DecidingMsgsForHeight(consensusData, id[:], specqbft.FirstHeight, ks)
-//	for _, msg := range qbftMsgs {
-//		base = append(base, ssvMsgF(msg, nil))
-//	}
-//	return base
 //}
 //
 //var DecidingMsgsForHeight = func(consensusData, msgIdentifier []byte, height specqbft.Height, keySet *spectestingutils.TestKeySet) []*specqbft.SignedMessage {

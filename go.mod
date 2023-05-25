@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155
+	github.com/attestantio/go-eth2-client v0.15.8
 	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
 	github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
@@ -184,4 +184,6 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/nkryuchkov/ssv-spec v0.0.0-20230510164359-d0730a175f45 // mev-support-on-21e97ea2ad3d
+replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 // #disable-preconsensus-liveness
+
+// replace github.com/bloxapp/ssv-spec => ../ssv-spec

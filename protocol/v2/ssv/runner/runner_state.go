@@ -45,13 +45,13 @@ func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, r
 }
 
 // GetRoot returns the root used for signing and verification
-func (pcs *State) GetRoot() ([]byte, error) {
+func (pcs *State) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := pcs.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode State")
+		return [32]byte{}, errors.Wrap(err, "could not encode State")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }
 
 // Encode returns the encoded struct in bytes or error
