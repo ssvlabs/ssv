@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 func TestSyncEth1(t *testing.T) {
@@ -32,6 +33,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
+	// todo(align-contract-v0.3.1-rc.0) handle event handler?
 	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
@@ -55,6 +57,7 @@ func TestSyncEth1Error(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
+	// todo(align-contract-v0.3.1-rc.0) handle event handler?
 	err := SyncEth1Events(logger, eth1Client, storage, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
@@ -79,6 +82,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
+	// todo(align-contract-v0.3.1-rc.0) handle event handler?
 	err := SyncEth1Events(logger, eth1Client, storage, nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
 	})

@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -161,6 +162,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) > 0 {
+			// todo(align-contract-v0.3.1-rc.0) how the nonce effect the local events - regression?
 			if err := validator.LoadLocalEvents(
 				logger,
 				validatorCtrl.Eth1EventHandler(logger, false),

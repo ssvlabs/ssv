@@ -5,8 +5,11 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -17,6 +20,22 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
+
+// b64 encrypted key length is 256
+const encryptedKeyLength = 256
+
+func splitBytes(buf []byte, lim int) [][]byte {
+	var chunk []byte
+	chunks := make([][]byte, 0, len(buf)/lim+1)
+	for len(buf) >= lim {
+		chunk, buf = buf[:lim], buf[lim:]
+		chunks = append(chunks, chunk)
+	}
+	if len(buf) > 0 {
+		chunks = append(chunks, buf[:])
+	}
+	return chunks
+}
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
@@ -126,6 +145,53 @@ func (c *controller) handleValidatorAddedEvent(
 ) ([]zap.Field, error) {
 	if err := validateValidatorAddedEvent(event); err != nil {
 		return nil, fmt.Errorf("malformed ValidatorAddedEvent: %w", err)
+	}
+
+	_, found, err := c.eventHandler.GetEventData(event.TxHash)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get event data")
+	}
+	if found {
+		// skip
+		return nil, nil
+	}
+
+	// get nonce
+	nonce, err := c.eventHandler.GetNextNonce(event.Owner)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get nonce")
+	}
+
+	err = c.eventHandler.SaveEventData(event.TxHash)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to save event data")
+	}
+
+	err = c.eventHandler.BumpNonce(event.Owner)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to bump the nonce")
+	}
+
+	// Calculate the expected length of constructed shares based on the number of operator IDs,
+	// signature length, public key length, and encrypted key length.
+	operatorCount := len(event.OperatorIds)
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
+	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
+
+	if sharesExpectedLength != len(event.Shares) {
+		return nil, errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)
+	}
+
+	event.Signature = event.Shares[:signatureOffset]
+	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
+	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/operatorCount)
+
+	// verify sig
+	if err = verifySignature(event.Signature, event.Owner, event.PublicKey, nonce); err != nil {
+		return nil, &abiparser.MalformedEventError{
+			Err: errors.Wrap(err, "failed to verify signature"),
+		}
 	}
 
 	pubKey := hex.EncodeToString(event.PublicKey)
@@ -374,4 +440,27 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	}
 
 	return logFields, nil
+}
+
+// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
+// verify signature of the ValidatorAddedEvent shares data
+func verifySignature(sig []byte, owner common.Address, pubKey []byte, nonce registrystorage.Nonce) error {
+	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
+	hash := crypto.Keccak256([]byte(data))
+
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(sig); err != nil {
+		return errors.Wrap(err, "failed to deserialize signature")
+	}
+
+	pk := &bls.PublicKey{}
+	if err := pk.Deserialize(pubKey); err != nil {
+		return errors.Wrap(err, "failed to deserialize public key")
+	}
+
+	if res := sign.VerifyByte(pk, hash); !res {
+		return errors.New("failed to verify signature")
+	}
+
+	return nil
 }

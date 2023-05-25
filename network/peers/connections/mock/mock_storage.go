@@ -6,13 +6,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var _ storage.Storage = NodeStorage{}
@@ -20,6 +21,31 @@ var _ storage.Storage = NodeStorage{}
 type NodeStorage struct {
 	MockGetPrivateKey               *rsa.PrivateKey
 	RegisteredOperatorPublicKeyPEMs []string
+}
+
+func (m NodeStorage) GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) SaveEventData(txHash common.Hash) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GetNextNonce(owner common.Address) (registrystorage.Nonce, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) BumpNonce(owner common.Address) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GetEventsPrefix() []byte {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (m NodeStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
