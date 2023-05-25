@@ -184,6 +184,6 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.3.1-0.20230525132552-dda5bfcde58f // network-configs-on-disable-preconsensus-liveness
+replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.3.1-0.20230525140533-85534c847398 // network-configs-on-disable-preconsensus-liveness
 
 // replace github.com/bloxapp/ssv-spec => ../ssv-spec
