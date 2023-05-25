@@ -125,11 +125,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
-	logger.Info("consensus client: connecting",
-		fields.Address(opt.BeaconNodeAddr),
-		fields.Network(opt.Network),
-		fields.GasLimit(opt.GasLimit),
-	)
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -142,11 +138,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger.Info("consensus client: connected",
-		fields.Name(httpClient.Name()),
-		fields.Address(httpClient.Address()),
-		fields.GasLimit(opt.GasLimit),
-	)
+	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
 	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
 

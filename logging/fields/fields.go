@@ -53,7 +53,6 @@ const (
 	FieldFeeRecipient        = "fee_recipient"
 	FieldFork                = "fork"
 	FieldFromBlock           = "from_block"
-	FieldGasLimit            = "gas_limit"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
 	FieldMessageID           = "msg_id"
@@ -299,8 +298,4 @@ func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 
 func Root(r [32]byte) zap.Field {
 	return zap.String("root", hex.EncodeToString(r[:]))
-}
-
-func GasLimit(gasLimit uint64) zap.Field {
-	return zap.Uint64(FieldGasLimit, gasLimit)
 }
