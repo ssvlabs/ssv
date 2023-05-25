@@ -121,9 +121,9 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db-v3-shifu"
+          value: "./data/db-jato-v2"
         - name: NETWORK_ID
-          value: "0x00003011"
+          value: "0x00003012"
         - name: METRICS_API_PORT
           value: "15302"
         - name: ENABLE_PROFILE

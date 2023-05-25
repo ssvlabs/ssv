@@ -3,9 +3,10 @@ package runner
 import (
 	"sync"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
@@ -37,9 +38,9 @@ type Runner interface {
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
 	ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
-	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error)
+	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
 	executeDuty(logger *zap.Logger, duty *spectypes.Duty) error
 }
@@ -54,10 +55,43 @@ type BaseRunner struct {
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
+
+	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
+	highestDecidedSlot spec.Slot
 }
 
-func NewBaseRunner() *BaseRunner {
-	return &BaseRunner{}
+// SetHighestDecidedSlot set highestDecidedSlot for base runner
+func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
+	b.highestDecidedSlot = slot
+}
+
+// setupForNewDuty is sets the runner for a new duty
+func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
+	state := NewRunnerState(b.Share.Quorum, duty)
+
+	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
+	// b.State but currently does not write to it
+	b.mtx.Lock() // writes to b.State
+	b.State = state
+	b.mtx.Unlock()
+}
+
+func NewBaseRunner(
+	state *State,
+	share *spectypes.Share,
+	controller *controller.Controller,
+	beaconNetwork spectypes.BeaconNetwork,
+	beaconRoleType spectypes.BeaconRole,
+	highestDecidedSlot spec.Slot,
+) *BaseRunner {
+	return &BaseRunner{
+		State:              state,
+		Share:              share,
+		QBFTController:     controller,
+		BeaconNetwork:      beaconNetwork,
+		BeaconRoleType:     beaconRoleType,
+		highestDecidedSlot: highestDecidedSlot,
+	}
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
@@ -66,13 +100,7 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 		return err
 	}
 
-	// potentially incomplete locking of b.State. runner.Execute(duty) has access to
-	// b.State but currently does not write to it
-	state := NewRunnerState(b.Share.Quorum, duty)
-	b.mtx.Lock() // writes to b.State
-	b.State = state
-	b.mtx.Unlock()
-
+	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
 }
 
@@ -102,6 +130,13 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
+	// TODO: revert after pre-consensus liveness is fixed
+	if false {
+		if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
+			return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
+		}
+	}
+
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
 	if err != nil {
@@ -109,8 +144,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
+	// do not return error if no running duty
 	if !b.hasRunningDuty() {
-		return false, nil, errors.New("no running duty")
+		return false, nil, nil
 	}
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
@@ -135,6 +171,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
+
+	// update the highest decided slot
+	b.highestDecidedSlot = decidedValue.Duty.Slot
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")

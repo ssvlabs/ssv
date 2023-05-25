@@ -1,3 +1,8 @@
+// TODO: replace ExtractPublicKeyPemBase64 it with ExtractPublicKeyPem
+// In fact, we never use base64 representation of public key except of case
+// when we use it as a key for database.
+// So PEM should be encrypted to base64 only and inside database layer
+
 package rsaencryption
 
 import (
@@ -70,6 +75,25 @@ func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 		return nil, errors.Wrap(err, "Failed to parse private key")
 	}
 	return parsedSk, nil
+}
+
+// ConvertPemToPublicKey return rsa public key from public key pem
+func ConvertPemToPublicKey(pubPem []byte) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode(pubPem)
+	if block == nil {
+		return nil, errors.New("failed to parse PEM block containing the public key")
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse DER encoded public key")
+	}
+
+	if pub, ok := pub.(*rsa.PublicKey); ok {
+		return pub, nil
+	} else {
+		return nil, errors.New("unknown type of public key")
+	}
 }
 
 // PrivateKeyToByte converts privateKey to []byte

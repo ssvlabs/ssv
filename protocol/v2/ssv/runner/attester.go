@@ -40,13 +40,15 @@ func NewAttesterRunnner(
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
+	highestDecidedSlot phase0.Slot,
 ) Runner {
 	return &AttesterRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleAttester,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
+			BeaconRoleType:     spectypes.BNRoleAttester,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
+			QBFTController:     qbftController,
+			highestDecidedSlot: highestDecidedSlot,
 		},
 
 		beacon:   beacon,
@@ -129,7 +131,10 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
-	logger.Debug("🧩 got partial signatures", zap.Any("signer", signedMsg.Signer), fields.Slot(r.GetState().DecidedValue.Duty.Slot))
+	duty := r.GetState().DecidedValue.Duty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got partial signatures",
+		zap.Uint64("signer", signedMsg.Signer))
 
 	if !quorum {
 		return nil
@@ -150,9 +155,8 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		duty := r.GetState().DecidedValue.Duty
-
-		logger.Debug("🧩 reconstructed partial signatures", zap.Any("signers", getPostConsensusSigners(r.GetState(), root)), fields.Slot(duty.Slot))
+		logger.Debug("🧩 reconstructed partial signatures",
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -167,7 +171,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		// Submit it to the BN.
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-			logger.Error("❌ failed to submit attestation", fields.Slot(duty.Slot), zap.Error(err))
+			logger.Error("❌ failed to submit attestation", zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
@@ -176,7 +180,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted attestation",
-			fields.Slot(duty.Slot),
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			fields.ConsensusTime(time.Since(r.started)),
 			fields.Height(r.BaseRunner.QBFTController.Height),

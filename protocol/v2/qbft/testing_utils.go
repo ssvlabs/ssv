@@ -25,7 +25,7 @@ var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message
 	sigType := types.QBFTSignatureType
 
 	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
-	sig := sk.SignByte(r)
+	sig := sk.SignByte(r[:])
 
 	return &specqbft.SignedMessage{
 		Message:   *msg,

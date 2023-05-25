@@ -85,7 +85,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage)
 	*/
 	if IsDecidedMsg(c.Share, msg) {
 		return c.UponDecided(logger, msg)
-	} else if msg.Message.Height > c.Height {
+	} else if c.isFutureMessage(msg) {
 		return c.UponFutureMsg(logger, msg)
 	} else {
 		return c.UponExistingInstanceMsg(logger, msg)
@@ -173,6 +173,15 @@ func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
 }
 
+// isFutureMessage returns true if message height is from a future instance.
+// It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
+func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
+	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
+		return true
+	}
+	return msg.Message.Height > c.Height
+}
+
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
@@ -204,13 +213,13 @@ func (c *Controller) CanStartInstance() error {
 }
 
 // GetRoot returns the state's deterministic root
-func (c *Controller) GetRoot() ([]byte, error) {
+func (c *Controller) GetRoot() ([32]byte, error) {
 	marshaledRoot, err := json.Marshal(c)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not encode state")
+		return [32]byte{}, errors.Wrap(err, "could not encode state")
 	}
 	ret := sha256.Sum256(marshaledRoot)
-	return ret[:], nil
+	return ret, nil
 }
 
 // Encode implementation

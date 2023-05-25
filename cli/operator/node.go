@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -24,8 +27,6 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
@@ -78,6 +79,7 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)
@@ -98,6 +100,15 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+
+		permissioned := func() bool {
+			currentEpoch := uint64(eth2Network.EstimatedCurrentEpoch())
+			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
+		}
+
+		cfg.P2pNetworkConfig.Permissioned = permissioned
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
 		ctx := cmd.Context()
@@ -151,6 +162,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) > 0 {
+			// todo(align-contract-v0.3.1-rc.0) how the nonce effect the local events - regression?
 			if err := validator.LoadLocalEvents(
 				logger,
 				validatorCtrl.Eth1EventHandler(logger, false),

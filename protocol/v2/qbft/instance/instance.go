@@ -66,10 +66,11 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 			fields.Round(i.State.Round),
 			fields.Height(i.State.Height))
 
-		logger.Debug("ℹ️ starting QBFT instance")
+		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
+		if proposerID == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -225,7 +226,7 @@ func (i *Instance) GetHeight() specqbft.Height {
 }
 
 // GetRoot returns the state's deterministic root
-func (i *Instance) GetRoot() ([]byte, error) {
+func (i *Instance) GetRoot() ([32]byte, error) {
 	return i.State.GetRoot()
 }
 

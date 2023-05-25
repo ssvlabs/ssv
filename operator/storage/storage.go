@@ -29,9 +29,11 @@ var (
 type Storage interface {
 	eth1.SyncOffsetStorage
 	registry.RegistryStore
+
 	registrystorage.Operators
 	registrystorage.Recipients
 	registrystorage.Shares
+	registrystorage.Events
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
 	SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
@@ -43,6 +45,7 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
+	eventStore     registrystorage.Events
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -52,6 +55,7 @@ func NewNodeStorage(db basedb.IDb) Storage {
 		operatorStore:  registrystorage.NewOperatorsStorage(db, storagePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(db, storagePrefix),
 		shareStore:     registrystorage.NewSharesStorage(db, storagePrefix),
+		eventStore:     registrystorage.NewEventsStorage(db, storagePrefix),
 	}
 }
 
@@ -119,8 +123,28 @@ func (s *storage) DeleteRecipientData(owner common.Address) error {
 	return s.recipientStore.DeleteRecipientData(owner)
 }
 
+func (s *storage) GetNextNonce(owner common.Address) (registrystorage.Nonce, error) {
+	return s.recipientStore.GetNextNonce(owner)
+}
+
+func (s *storage) BumpNonce(owner common.Address) error {
+	return s.recipientStore.BumpNonce(owner)
+}
+
 func (s *storage) GetRecipientsPrefix() []byte {
 	return s.recipientStore.GetRecipientsPrefix()
+}
+
+func (s *storage) GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error) {
+	return s.eventStore.GetEventData(txHash)
+}
+
+func (s *storage) SaveEventData(txHash common.Hash) error {
+	return s.eventStore.SaveEventData(txHash)
+}
+
+func (s *storage) GetEventsPrefix() []byte {
+	return s.eventStore.GetEventsPrefix()
 }
 
 func (s *storage) CleanRegistryData() error {
@@ -137,6 +161,11 @@ func (s *storage) CleanRegistryData() error {
 	err = s.cleanRecipients()
 	if err != nil {
 		return errors.Wrap(err, "could not clean recipients")
+	}
+
+	err = s.cleanEvents()
+	if err != nil {
+		return errors.Wrap(err, "could not clean events")
 	}
 	return nil
 }
@@ -158,6 +187,11 @@ func (s *storage) cleanOperators() error {
 func (s *storage) cleanRecipients() error {
 	recipientsPrefix := s.GetRecipientsPrefix()
 	return s.db.RemoveAllByCollection(append(storagePrefix, recipientsPrefix...))
+}
+
+func (s *storage) cleanEvents() error {
+	eventsPrefix := s.GetEventsPrefix()
+	return s.db.RemoveAllByCollection(append(storagePrefix, eventsPrefix...))
 }
 
 // GetSyncOffset returns the offset

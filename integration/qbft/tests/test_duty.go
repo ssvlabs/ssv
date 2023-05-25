@@ -3,6 +3,7 @@ package tests
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -30,7 +31,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	case spectypes.BNRoleAggregator:
 		testingDuty = spectestingutils.TestingAggregatorDuty
 	case spectypes.BNRoleProposer:
-		testingDuty = spectestingutils.TestingProposerDuty
+		testingDuty = *spectestingutils.TestingProposerDutyV(spec.DataVersionBellatrix)
 	case spectypes.BNRoleSyncCommittee:
 		testingDuty = spectestingutils.TestingSyncCommitteeDuty
 	case spectypes.BNRoleSyncCommitteeContribution:
