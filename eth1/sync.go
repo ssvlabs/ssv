@@ -122,7 +122,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNe
 		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
-	syncOffset = beaconNetwork.SSV.DefaultSyncOffset
+	syncOffset = beaconNetwork.SSV.ETH1SyncOffset
 	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }

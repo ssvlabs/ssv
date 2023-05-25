@@ -24,7 +24,7 @@ func TestSyncEth1(t *testing.T) {
 	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
-	rawOffset := spectypes.TestNetwork.SSV.DefaultSyncOffset.Uint64()
+	rawOffset := spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()
 	rawOffset += 10
 	go func() {
 		// wait 5 ms and start to push events
@@ -53,7 +53,7 @@ func TestSyncEth1Error(t *testing.T) {
 	storage := syncStorageMock(ctrl)
 
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: spectypes.TestNetwork.SSV.DefaultSyncOffset.Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
@@ -78,7 +78,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 	go func() {
 		<-time.After(time.Millisecond * 25)
-		blockNumber := spectypes.TestNetwork.SSV.DefaultSyncOffset.Uint64()
+		blockNumber := spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()
 		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
@@ -103,7 +103,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, beaconNetwork, nil)
 		require.NotNil(t, so)
-		require.Equal(t, beaconNetwork.SSV.DefaultSyncOffset, so)
+		require.Equal(t, beaconNetwork.SSV.ETH1SyncOffset, so)
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {

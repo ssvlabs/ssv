@@ -89,18 +89,7 @@ spec:
           valueFrom:
             secretKeyRef:
               name: config-secrets
-              key: bootnodes
-        - name: REGISTRY_CONTRACT_ADDR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: smart_contract_addr_key_v2
-        - name: ETH_1_SYNC_OFFSET
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: eth_1_sync_offset
-              optional: true
+              key: bootnodes_v2
         - name: ABI_VERSION
           valueFrom:
             secretKeyRef:

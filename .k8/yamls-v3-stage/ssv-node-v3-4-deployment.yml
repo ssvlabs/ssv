@@ -85,17 +85,6 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: boot_node
-        - name: REGISTRY_CONTRACT_ADDR_KEY
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: smart_contract_addr_key
-        - name: ETH_1_SYNC_OFFSET
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: eth_1_sync_offset
-              optional: true
         - name: ABI_VERSION
           valueFrom:
             secretKeyRef:
@@ -121,7 +110,7 @@ spec:
         - name: DB_PATH
           value: "./data/db-jato-v2"
         - name: NETWORK
-          value: "jato-v2"
+          value: "jato-v2-stage"
         - name: METRICS_API_PORT
           value: "15304"
         - name: ENABLE_PROFILE

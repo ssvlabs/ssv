@@ -172,7 +172,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("failed to load local events", zap.Error(err))
 			}
 		} else {
-			if err := operatorNode.StartEth1(logger, eth1.StringToSyncOffset(cfg.ETH1Options.ETH1SyncOffset)); err != nil {
+			if err := operatorNode.StartEth1(logger, eth2Network.SSV.ETH1SyncOffset); err != nil {
 				logger.Fatal("failed to start eth1", zap.Error(err))
 			}
 		}
@@ -362,7 +362,7 @@ func setupNodes(
 	}
 
 	// execution client
-	logger.Info("using registry contract address", fields.Address(cfg.ETH1Options.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", fields.Address(beaconNetwork.SSV.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -374,7 +374,7 @@ func setupNodes(
 		NodeAddr:             cfg.ETH1Options.ETH1Addr,
 		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
-		RegistryContractAddr: cfg.ETH1Options.RegistryContractAddr,
+		RegistryContractAddr: beaconNetwork.SSV.RegistryContractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
 	})
 	if err != nil {
