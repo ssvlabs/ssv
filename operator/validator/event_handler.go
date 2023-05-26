@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -41,25 +42,46 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 	return func(e eth1.Event) ([]zap.Field, error) {
 		switch e.Name {
 		case abiparser.OperatorAdded:
-			ev := e.Data.(abiparser.OperatorAddedEvent)
+			ev, ok := e.Data.(abiparser.OperatorAddedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.OperatorAddedEvent", e.Data)
+			}
 			return c.handleOperatorAddedEvent(logger, ev)
 		case abiparser.OperatorRemoved:
-			ev := e.Data.(abiparser.OperatorRemovedEvent)
+			ev, ok := e.Data.(abiparser.OperatorRemovedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.OperatorRemovedEvent", e.Data)
+			}
 			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorAdded:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
+			ev, ok := e.Data.(abiparser.ValidatorAddedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ValidatorAddedEvent", e.Data)
+			}
 			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorRemoved:
-			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+			ev, ok := e.Data.(abiparser.ValidatorRemovedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ValidatorRemovedEvent", e.Data)
+			}
 			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterLiquidated:
-			ev := e.Data.(abiparser.ClusterLiquidatedEvent)
+			ev, ok := e.Data.(abiparser.ClusterLiquidatedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ClusterLiquidatedEvent", e.Data)
+			}
 			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterReactivated:
-			ev := e.Data.(abiparser.ClusterReactivatedEvent)
+			ev, ok := e.Data.(abiparser.ClusterReactivatedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ClusterReactivatedEvent", e.Data)
+			}
 			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
 		case abiparser.FeeRecipientAddressUpdated:
-			ev := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
+			ev, ok := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
+			if !ok {
+				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.FeeRecipientAddressUpdatedEvent", e.Data)
+			}
 			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
 			logger.Debug("could not handle unknown event")
