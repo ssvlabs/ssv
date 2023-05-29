@@ -1,0 +1,31 @@
+name: Spec Alignment
+
+on:
+  push:
+    branches:
+      - "**"
+
+jobs:
+  run-differ:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.19'
+
+      - name: Tidy up dependencies
+        run: go mod tidy
+
+      - name: Get SSV-Spec path
+        id: get-path
+        run: echo "::set-output name=path::$(go mod download -json github.com/bloxapp/ssv-spec | jq -r .Dir)"
+
+      - name: Install Differ
+        run: go install github.com/bloxapp/ssv/scripts/differ@latest
+
+      - name: Run Differ
+        run: differ --left ./ --right ${{ steps.get-path.outputs.path }}
